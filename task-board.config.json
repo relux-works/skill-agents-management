@@ -27,6 +27,11 @@
         "claude",
         "codex"
       ]
+    },
+    "worktree_isolation": {
+      "validation": {
+        "commands": []
+      }
     }
   },
   "features": {
