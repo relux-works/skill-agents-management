@@ -1,10 +1,12 @@
 package agentic
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -130,6 +132,53 @@ import (
 // is what the System contract declares, and widening to arbitrary
 // identity-shaped accessors is false-positive surface on code that has nothing
 // to do with this invariant.
+//
+// # Scan scope
+//
+// The guard reports on the code THIS module's Go build compiles, and on nothing
+// else. That scope is not a convenience; it is what makes a report actionable.
+// A violation the toolchain never compiles is not a second binding in this
+// module, and reporting one makes the suite's colour depend on what happens to
+// be sitting on the developer's disk.
+//
+// It cost a red trunk to learn. The walk used to carry a denylist of specific
+// directory names — .git, .temp, .task-board, .claude, .codex — which is a list
+// of the machine-local trees somebody had thought of by then. A bootstrapped
+// checkout has agents-infra installed at .agents/, gitignored and absent from
+// every worktree, and its own
+// tools/agents-infra/internal/infra/child_launch_composition.go dispatches on
+// "codex" and "claude". The guard reported it, `go test ./...` went red on main
+// and stayed green everywhere else, and the difference was whose machine ran it.
+//
+// skipModuleDir therefore mirrors go/build's own rules rather than naming
+// directories:
+//
+//   - A directory whose name begins with "." or "_" is skipped, which is the
+//     toolchain's rule verbatim. This is what excludes .agents, and it excludes
+//     the next machine-local runtime nobody has installed yet without anyone
+//     editing a list.
+//   - A directory carrying its own go.mod is skipped with its whole subtree. A
+//     nested module is a different module; this module's build compiles none of
+//     it, and its bindings are its own registry's business.
+//   - vendor and node_modules are skipped by name. Neither begins with a dot,
+//     and both are dependency trees rather than this module's source.
+//   - testdata is skipped by name. This is a DECISION, not an inheritance: go
+//     build ignores testdata, so a binding planted there is not code this
+//     module runs, and a guard fixture that wants a violating source is better
+//     off writing it into a temp tree whose root it also controls — which is
+//     exactly what TestSingleSourceGuardScanScope does. The cost is that a
+//     genuine binding parked in testdata goes unreported; the benefit is that
+//     the scan set and the build set are the same set, with no third rule.
+//   - The module root is never skipped on its own name. A worktree under .temp/
+//     is an ordinary place for this checkout to live, and testing the root's
+//     name would scan zero files while reporting clean.
+//
+// TestSingleSourceGuardScanScope holds all of it in both directions over a
+// fixture tree: the SAME violating source planted inside a dot-directory, an
+// underscore-directory, a nested module, testdata and vendor is not reported,
+// the identical source in an ordinary package IS, and every planted copy is
+// first proven violating by scanning it directly — otherwise "not reported"
+// would be equally consistent with a fixture that violates nothing.
 
 const (
 	bindingClassTable    = "binding-table"
@@ -1058,17 +1107,81 @@ func moduleRoot(t *testing.T) string {
 func moduleSources(t *testing.T) map[string]string {
 	t.Helper()
 	root := moduleRoot(t)
-	skipDirs := map[string]bool{
-		".git": true, ".temp": true, ".task-board": true, ".claude": true,
-		".codex": true, "vendor": true, "node_modules": true, "testdata": true,
+	sources, err := walkModuleSources(root)
+	if err != nil {
+		t.Fatalf("walking %s: %v", root, err)
 	}
+	return sources
+}
+
+// moduleSkipDirs are the directory names excluded on top of the toolchain's own
+// dot/underscore rule. Each is a tree of code that is not this module's:
+// vendor and node_modules hold dependencies, and testdata is what go build
+// itself ignores. See the scan-scope section of this file's threat model.
+var moduleSkipDirs = map[string]bool{
+	"vendor":       true,
+	"node_modules": true,
+	"testdata":     true,
+}
+
+// skipModuleDir answers whether the walk refuses to descend into dir, which is
+// the one question that decides what "the whole module" means.
+//
+// It mirrors go/build's own exclusion rules rather than naming directories: a
+// denylist of specific dot-directories is what let .agents through, because a
+// list can only exclude the machine-local trees somebody thought of. A leading
+// "." or "_" is the toolchain's rule, and a directory carrying its own go.mod
+// is a different module — the Go build of THIS module compiles none of it, so
+// the guard has no standing to report it.
+//
+// root itself is never skipped. The module root is routinely a dot-nested path
+// (a worktree under .temp/, a checkout under .cache/), and testing its own name
+// would silently scan zero files while reporting clean.
+//
+// A stat that fails for a reason other than "not there" is propagated, not read
+// as absence: a directory the walk cannot inspect is an unknown, and answering
+// "no go.mod" for it would turn an unreadable tree into a silently unscanned
+// one. The guard fails loudly instead.
+func skipModuleDir(root, path, name string) (bool, error) {
+	if path == root {
+		return false, nil
+	}
+	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+		return true, nil
+	}
+	if moduleSkipDirs[name] {
+		return true, nil
+	}
+	switch _, err := os.Stat(filepath.Join(path, "go.mod")); {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	default:
+		return false, fmt.Errorf("deciding whether %s is a nested module: %w", path, err)
+	}
+}
+
+// walkModuleSources collects every non-test Go source under root that the Go
+// build of the module rooted there would compile, keyed by slash-separated path
+// relative to root.
+//
+// It takes root as an argument rather than finding it, so the exclusion rules
+// can be driven over a fixture tree with planted violations instead of only
+// over the real checkout, where a dot-directory may or may not exist depending
+// on whose machine is running the suite.
+func walkModuleSources(root string) (map[string]string, error) {
 	sources := map[string]string{}
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if path != root && skipDirs[entry.Name()] {
+			skip, err := skipModuleDir(root, path, entry.Name())
+			if err != nil {
+				return err
+			}
+			if skip {
 				return filepath.SkipDir
 			}
 			return nil
@@ -1089,9 +1202,9 @@ func moduleSources(t *testing.T) map[string]string {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("walking %s: %v", root, err)
+		return nil, err
 	}
-	return sources
+	return sources, nil
 }
 
 // The allowlist that used to live here — one file, permitted to hold a system

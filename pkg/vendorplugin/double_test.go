@@ -2,6 +2,8 @@ package vendorplugin
 
 import (
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -352,6 +354,11 @@ func TestVendorDoubleExistsOnlyInTests(t *testing.T) {
 // both are test-only, and Go has no way to share an unexported test helper
 // across packages. Sharing it through a production package would put test
 // scaffolding in the shipped module to save nine lines.
+//
+// Two copies of one rule drift, which is the failure this module's guard exists
+// to prevent, so the copy is held rather than trusted:
+// TestModuleScanScopeMatchesTheGuard plants the same fixture tree pkg/agentic's
+// TestSingleSourceGuardScanScope does and requires the same verdicts.
 func moduleSources(t *testing.T) map[string]string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -369,17 +376,71 @@ func moduleSources(t *testing.T) map[string]string {
 		}
 		root = parent
 	}
-	skipDirs := map[string]bool{
-		".git": true, ".temp": true, ".task-board": true, ".claude": true,
-		".codex": true, "vendor": true, "node_modules": true, "testdata": true,
+	sources, err := walkModuleSources(root)
+	if err != nil {
+		t.Fatalf("walking %s: %v", root, err)
 	}
+	if len(sources) < 6 {
+		t.Fatalf("scanned %d sources, which is too few for the claim to mean anything", len(sources))
+	}
+	return sources
+}
+
+// moduleSkipDirs are the directory names excluded on top of the toolchain's own
+// dot/underscore rule: dependency trees and the directory go build itself
+// ignores. See the scan-scope section of pkg/agentic's guard threat model,
+// which is where the decision is argued.
+var moduleSkipDirs = map[string]bool{
+	"vendor":       true,
+	"node_modules": true,
+	"testdata":     true,
+}
+
+// skipModuleDir answers whether the walk refuses to descend into dir, mirroring
+// go/build's own exclusion rules rather than naming directories.
+//
+// The rule it replaced was a denylist of specific dot-directory names, and a
+// bootstrapped checkout with agents-infra installed at .agents/ walked straight
+// past it. root itself is never skipped: this checkout habitually lives under
+// .temp/, and testing the root's own name would scan zero files while reporting
+// clean. A stat failing for any reason other than "not there" is propagated
+// rather than read as absence.
+func skipModuleDir(root, path, name string) (bool, error) {
+	if path == root {
+		return false, nil
+	}
+	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+		return true, nil
+	}
+	if moduleSkipDirs[name] {
+		return true, nil
+	}
+	switch _, err := os.Stat(filepath.Join(path, "go.mod")); {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	default:
+		return false, fmt.Errorf("deciding whether %s is a nested module: %w", path, err)
+	}
+}
+
+// walkModuleSources collects every non-test Go source under root that the Go
+// build of the module rooted there would compile, keyed by slash-separated path
+// relative to root. root is an argument so the exclusion rules can be driven
+// over a fixture tree rather than only over the real checkout.
+func walkModuleSources(root string) (map[string]string, error) {
 	sources := map[string]string{}
-	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if path != root && skipDirs[entry.Name()] {
+			skip, err := skipModuleDir(root, path, entry.Name())
+			if err != nil {
+				return err
+			}
+			if skip {
 				return filepath.SkipDir
 			}
 			return nil
@@ -400,12 +461,9 @@ func moduleSources(t *testing.T) map[string]string {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("walking %s: %v", root, err)
+		return nil, err
 	}
-	if len(sources) < 6 {
-		t.Fatalf("scanned %d sources, which is too few for the claim to mean anything", len(sources))
-	}
-	return sources
+	return sources, nil
 }
 
 // helpers shared by the refusal tests below.

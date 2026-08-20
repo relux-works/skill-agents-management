@@ -79,7 +79,17 @@ The agentic-system plugin contract and its registry.
   over an id nobody has declared yet while admitting `if id == "opencode"`, and
   four mutants now hold both rules to the same question. Seven further cases
   demonstrate the residual classes staying OPEN, so the threat model's list and
-  the test can be read against each other.
+  the test can be read against each other. Its SCAN SCOPE is the code this
+  module's Go build compiles and nothing else — dot-directories,
+  underscore-directories, `testdata`, `vendor`, `node_modules` and any subtree
+  carrying its own `go.mod` are excluded, mirroring `go/build`'s own rules —
+  because a denylist of directory names let a bootstrapped checkout's
+  machine-local `.agents/` redden `go test ./...` on main while every worktree
+  stayed green. `pkg/agentic/singlesource_scanscope_test.go` plants one
+  violating source in every excluded location AND in ordinary packages, and
+  proves that source violating before trusting any silence, so the scope can
+  neither miss the machine-local case nor quietly widen into ignoring real
+  code.
 
 No concrete system plugin ships yet. The contract is proven by one test double
 registered through the public API.
