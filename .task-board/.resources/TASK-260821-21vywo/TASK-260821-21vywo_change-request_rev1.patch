@@ -1,0 +1,3288 @@
+diff --git a/LOGBOOK.md b/LOGBOOK.md
+index 2dcfe50..2179989 100644
+--- a/LOGBOOK.md
++++ b/LOGBOOK.md
+@@ -5,6 +5,48 @@
+ 
+ ## 2026-08-21
+ 
++### 1812 — Single-source guard: structural rules outlive the id vocabulary
++- DECISION: The `pkg/agentic` guard detects a shadow binding two ways — structurally (`map[SystemID]T` as a TYPE EXPRESSION anywhere outside `registry.go`; a `switch sys.ID()`), and by a local vocabulary of known system ids resolved through const/var/funclit indirection.
++- NOTE: The structural half is what matters. This module has no concrete plugins yet, so the vocabulary half has zero live matches today and would have looked healthy while guarding nothing. `map[SystemID]T` and `switch sys.ID()` fire against ids nobody has declared — proven by a mutant that switches on `opencode` / `some-future-harness`.
++- NOTE: Detecting the TYPE EXPRESSION rather than the composite literal is what catches `make(map[SystemID]T)`, a struct field, and a var declaration with no literal anywhere. Narrowing it to composite literals only (mutant M5) leaves four spellings undetected.
++- SCOPE: `pkg/agentic/singlesource_guard_test.go`, 18 in-suite mutants in `singlesource_guard_mutants_test.go`.
++- STATUS: Resolved (TASK-260821-21vywo).
++
++### 1811 — A guard that scans a hardcoded directory list expires silently
++- FINDING: The extraction source's argv guard names its two package directories explicitly. A third package added later is unguarded and nothing says so.
++- FIX: `moduleSources` walks from `go.mod` and takes every non-test `.go` file. `TestSingleSourceGuardScansTheWholeModule` asserts named files were actually reached, so a clean result means "nothing found" rather than "nothing looked at".
++- NOTE: The companion is `TestSingleSourceGuardRulesFireOnRealCode` — it rescans the real tree with the allowlist EMPTY and requires the registry's own map to be reported. Without it, green is equally consistent with a rule that never matches anything.
++- STATUS: Resolved (TASK-260821-21vywo).
++
++### 1810 — "Every dispatch surface" has to be read off the interface, not listed
++- DECISION: `TestRegisteringOneSystemDrivesEveryDispatchSurface` enumerates `System`'s methods by reflection and requires the test double to have recorded a call on each after `BuildPlan` runs.
++- NOTE: The source repo's axolotl test lists its five dispatch sites in a comment. That list is correct exactly once. A method added to the contract and not wired into `BuildPlan` fails the reflection version on the next run and cannot fail the hand-written one.
++- SCOPE: `pkg/agentic/double_test.go`.
++- STATUS: Resolved (TASK-260821-21vywo).
++
++### 1809 — DryRunArgs was a seam, not a surface
++- DECISION: The source adapter's `DryRunArgs` becomes `Argv(req, LaunchModeDryRun)` rather than a sibling method.
++- NOTE: Its whole contract was "the same grammar as the real launch, minus side effects" — and the source paid for the gap: `BuildArgs` reported a hardcoded `codex`/`agy` while the real launch executed a managed-npm or preflighted binary. Two functions that must agree will eventually not. One function with a mode argument has nowhere to drift.
++- SCOPE: `pkg/agentic/system.go` (`LaunchMode`), `TestDryRunMirrorsTheRealLaunchBinary`.
++- STATUS: Resolved (TASK-260821-21vywo).
++
++### 1808 — CompositionGrammar as a core enum contradicts the plugin model
++- DECISION: `GrammarID` is an opaque string the plugin declares plus `System.ValidateComposition`, not a core enum with a core-side switch.
++- NOTE: The source's enum meant a harness with a novel composition shape required editing core — the opposite of what a plugin seam is for. `GrammarNone` is still refused by `BuildPlan` BEFORE the plugin's validator runs, so a permissive validator cannot admit a composition the system declared no grammar for.
++- STATUS: Resolved (TASK-260821-21vywo).
++
++### 1807 — DefaultHome in the source adapter dispatched nothing
++- FINDING: `Adapter.DefaultHome` was the literal string `"Config.ChildWorkDir()"` on all seven rows — documentation that `BuildCommand` overwrote `cmd.Dir` unconditionally after dispatch.
++- DECISION: `Capabilities.DefaultHome` + `HomeEnvVar` now carry the harness CONFIG home, which is what `docs/architecture.md` names and what invariant 2's `IdentityKey(provider, home)` is keyed by. The child working directory became an explicit `LaunchRequest.WorkDir` / `Plan.WorkDir`.
++- NOTE: Reusing the source's field name for a different fact would have been the worse option; the name is the same, the meaning is not, and it is called out in the task results.
++- STATUS: Resolved (TASK-260821-21vywo).
++
++### 1806 — The CLI's private plugin list WAS a second binding
++- FINDING: `cmd.registeredPlugins []string` (scaffolded in TASK-260821-3svtog as a deliberate placeholder) is a second source for "which systems exist", which is exactly what this task's guard forbids.
++- FIX: Deleted. `plugins` reads `agentic.Default` through a swappable `systemRegistry` var; the cmd test helper registers through the same public API a plugin's `init` would use.
++- NOTE: Wiring the CLI was optional in the brief. Leaving it was not neutral — the placeholder would have survived as a shadow table the guard does not scan for by vocabulary (it holds no system ids today) and would have drifted the moment the first plugin landed.
++- STATUS: Resolved (TASK-260821-21vywo).
++
+ ### 1717 — git check-ignore is index-aware; a guard naming tracked files goes vacuous
+ - FINDING: `git check-ignore` never reports a TRACKED file as ignored, whatever `.gitignore` says. `--no-index` is the flag that defeats the index lookup and reports the pattern truth.
+ - ANOMALY: `TestBuildOutputIsIgnoredAndSourcesAreNot` named six source paths that are untracked only while a Change Request is in flight. On an UNTRACKED tree the anchor-drop mutant is RED; on the same tree with those files TRACKED it is GREEN. The guard against the 1706 defect would have expired at the moment the work it guards landed.
+diff --git a/README.md b/README.md
+index a6970c0..974638e 100644
+--- a/README.md
++++ b/README.md
+@@ -46,6 +46,28 @@ declare which systems they support. See [docs/architecture.md](docs/architecture
+ for the contract, the layering rules, and the planned local-model plugin
+ (load/unload awareness, inference-busy state, memory-pressure sequencing).
+ 
++### Layer 1: `pkg/agentic`
++
++The agentic-system plugin contract and its registry.
++
++- `System` is the plugin interface: identity, a static `Capabilities`
++  declaration (launch modes, effort transport, goal/budget/service-tier
++  support, composition grammar, home, auth hint), and five dispatch surfaces —
++  `ResolveBinary`, `Argv`, `ChildEnv`, `Stdin`, `ValidateComposition`.
++- `Registry` is the only place a system binding may live. `Register` is the
++  only way one comes to exist, and it refuses a duplicate id, an id that does
++  not normalize, and a declaration that could never launch.
++- `BuildPlan` is the single dispatch site. It drives every surface through one
++  registry lookup and returns a `Plan` — binary, argv, environment, stdin bytes
++  — which is the parity surface a refactor has to reproduce. There is no
++  switch over system ids anywhere, and
++  `pkg/agentic/singlesource_guard_test.go` fails the build if one appears: a
++  go/ast scan of the whole module for a second binding table or an id switch,
++  with its threat model and its declared-open residuals documented in the file.
++
++No concrete system plugin ships yet — that is the next story. The contract is
++proven by one test double registered through the public API.
++
+ ## Status
+ 
+ Extraction in progress. The current scope is moving the vendors and agentic
+@@ -100,10 +122,16 @@ agents-management version          # build version, commit and build date
+ agents-management plugins [--json] # the plugins compiled into this binary
+ ```
+ 
+-`plugins` prints an empty list and exits 0 today. That is the answer, not a
+-stub: no plugin has been compiled in yet, which is a different fact from a
++`plugins` reads the `pkg/agentic` default registry — the same registry a
++plugin package registers into from its `init` — and prints the registered
++system ids. It prints an empty list and exits 0 today. That is the answer, not
++a stub: no plugin has been compiled in yet, which is a different fact from a
+ failure to look. `--json` renders the empty case as `[]`, never `null`.
+ 
++The command keeps no list of its own on purpose. A private one would be a
++second binding for the same fact, which is exactly what the single-source
++guard exists to prevent.
++
+ ## Tools
+ 
+ | Tool | Purpose | Entry point | Artifacts |
+diff --git a/pkg/agentic/contract_test.go b/pkg/agentic/contract_test.go
+new file mode 100644
+index 0000000..4e5fb40
+--- /dev/null
++++ b/pkg/agentic/contract_test.go
+@@ -0,0 +1,165 @@
++package agentic
++
++import (
++	"errors"
++	"fmt"
++	"testing"
++)
++
++// effortAdmission is a caller that holds NOTHING but the contract types: no
++// registry, no plugin, no vendor, no admission pass. AC4 asks whether the
++// contract exposes enough for such a caller to refuse a required-effort model
++// under a system that cannot carry effort, and this function is the answer —
++// it compiles against Capabilities and Model alone.
++//
++// The refusal that ships lives with admission, later. What has to be true now
++// is that the decision is derivable from the declaration, and it is.
++func effortAdmission(system SystemID, caps Capabilities, model Model) error {
++	if caps.EffortTransport.CanCarry(model.Effort) {
++		return nil
++	}
++	return fmt.Errorf("model %q requires a reasoning effort and system %q declares effort transport %s",
++		model.ID, system, caps.EffortTransport)
++}
++
++func TestEffortTransportIsDecidableFromTheContractAlone(t *testing.T) {
++	required := Model{ID: "pangolin-thinker", Effort: EffortSupportRequired}
++	effortless := Model{ID: "pangolin-flat", Effort: EffortSupportNone}
++
++	cases := []struct {
++		transport EffortTransport
++		model     Model
++		wantErr   bool
++	}{
++		{EffortTransportNone, required, true},
++		{EffortTransportNone, effortless, false},
++		{EffortTransportArgv, required, false},
++		{EffortTransportArgv, effortless, false},
++		{EffortTransportStdin, required, false},
++		{EffortTransportStdin, effortless, false},
++	}
++	for _, tc := range cases {
++		t.Run(fmt.Sprintf("%s/%s", tc.transport, tc.model.Effort), func(t *testing.T) {
++			err := effortAdmission("pangolin", Capabilities{EffortTransport: tc.transport}, tc.model)
++			if tc.wantErr && err == nil {
++				t.Fatalf("transport %s admitted a model with effort support %s", tc.transport, tc.model.Effort)
++			}
++			if !tc.wantErr && err != nil {
++				t.Fatalf("transport %s refused a launch it can carry: %v", tc.transport, err)
++			}
++		})
++	}
++}
++
++// An effort transport nobody defined must not be treated as one that works.
++// The default branch answers "cannot carry", which is the conservative side —
++// and the registry refuses the declaration outright, so this value can only
++// reach CanCarry through a caller that built Capabilities by hand.
++func TestCanCarryRefusesAnUndeclaredTransport(t *testing.T) {
++	if EffortTransport(42).CanCarry(EffortSupportRequired) {
++		t.Fatal("an undeclared transport claimed it can carry a required effort")
++	}
++}
++
++func TestNormalizeSystemIDAcceptsTheDeclaredSpellings(t *testing.T) {
++	cases := map[string]SystemID{
++		"claude-code":   "claude-code",
++		"codex":         "codex",
++		"qwen-code":     "qwen-code",
++		"gemini-cli":    "gemini-cli",
++		"antigravity":   "antigravity",
++		"muse":          "muse",
++		"  Codex  ":     "codex",
++		"QWEN-CODE":     "qwen-code",
++		"opencode2":     "opencode2",
++		"a":             "a",
++		"agy-2-preview": "agy-2-preview",
++	}
++	for raw, want := range cases {
++		got, err := NormalizeSystemID(raw)
++		if err != nil {
++			t.Errorf("NormalizeSystemID(%q): %v", raw, err)
++			continue
++		}
++		if got != want {
++			t.Errorf("NormalizeSystemID(%q) = %q, want %q", raw, got, want)
++		}
++	}
++}
++
++// Normalization must be idempotent, or the id that keys downstream state
++// depends on how many times it passed through the boundary.
++func TestNormalizeSystemIDIsIdempotent(t *testing.T) {
++	for _, raw := range []string{"  Claude-Code ", "CODEX", "muse"} {
++		once, err := NormalizeSystemID(raw)
++		if err != nil {
++			t.Fatalf("NormalizeSystemID(%q): %v", raw, err)
++		}
++		twice, err := NormalizeSystemID(string(once))
++		if err != nil {
++			t.Fatalf("NormalizeSystemID(%q): %v", once, err)
++		}
++		if once != twice {
++			t.Errorf("normalizing %q twice gave %q then %q", raw, once, twice)
++		}
++	}
++}
++
++func TestInvalidSystemIDErrorNamesTheRawSpelling(t *testing.T) {
++	_, err := NormalizeSystemID("Claude Code")
++	var invalid *InvalidSystemIDError
++	if !errors.As(err, &invalid) {
++		t.Fatalf("err = %v, want an InvalidSystemIDError", err)
++	}
++	if invalid.Raw != "Claude Code" {
++		t.Errorf("Raw = %q, want the spelling as it was written", invalid.Raw)
++	}
++}
++
++func TestSupportsModeAnswersOnlyForDeclaredModes(t *testing.T) {
++	caps := Capabilities{LaunchModes: []LaunchMode{LaunchModeExec, LaunchModeDryRun}}
++	if !caps.SupportsMode(LaunchModeExec) || !caps.SupportsMode(LaunchModeDryRun) {
++		t.Error("a declared mode was reported unsupported")
++	}
++	if caps.SupportsMode(LaunchModeManagedSession) {
++		t.Error("an undeclared mode was reported supported")
++	}
++	if (Capabilities{}).SupportsMode(LaunchModeExec) {
++		t.Error("a system declaring no modes reported support for one")
++	}
++}
++
++// Absence and emptiness are the same fact for a composition, and both are
++// different from a half-filled one — a prefix with no servers, or servers with
++// no prefix, is a caller bug that the plugin's validator must get to see.
++func TestCompositionIsZeroOnlyWhenNothingWasRequested(t *testing.T) {
++	if !(Composition{}).IsZero() {
++		t.Error("an empty composition did not report itself as absent")
++	}
++	if (Composition{Prefix: []string{"--mcp"}}).IsZero() {
++		t.Error("a prefix without servers reported itself as absent")
++	}
++	if (Composition{Servers: []CompositionServer{{Name: "jira"}}}).IsZero() {
++		t.Error("servers without a prefix reported themselves as absent")
++	}
++}
++
++// The String forms reach operators through refusal text, so an undeclared
++// value must render as itself rather than silently as a legitimate one.
++func TestUndeclaredEnumValuesRenderAsThemselves(t *testing.T) {
++	if got := LaunchMode(97).String(); got != "launch-mode(97)" {
++		t.Errorf("LaunchMode(97) = %q, want it to name the undeclared value", got)
++	}
++	if got := EffortTransport(42).String(); got != "effort-transport(42)" {
++		t.Errorf("EffortTransport(42) = %q, want it to name the undeclared value", got)
++	}
++	if got := EffortSupport(9).String(); got != "effort-support(9)" {
++		t.Errorf("EffortSupport(9) = %q, want it to name the undeclared value", got)
++	}
++	if !LaunchModeExec.Valid() || LaunchMode(97).Valid() {
++		t.Error("LaunchMode.Valid does not separate declared modes from undeclared ones")
++	}
++	if !EffortTransportNone.Valid() || EffortTransport(42).Valid() {
++		t.Error("EffortTransport.Valid does not separate declared transports from undeclared ones")
++	}
++}
+diff --git a/pkg/agentic/double_test.go b/pkg/agentic/double_test.go
+new file mode 100644
+index 0000000..25673d1
+--- /dev/null
++++ b/pkg/agentic/double_test.go
+@@ -0,0 +1,311 @@
++package agentic
++
++import (
++	"errors"
++	"fmt"
++	"reflect"
++	"sort"
++	"strings"
++	"testing"
++)
++
++// pangolinID names an agentic system that exists nowhere else in this module:
++// not in the registry, not in the CLI, not in any non-test source.
++// TestTestDoubleExistsOnlyInTests proves that rather than asserting it.
++//
++// It is the descendant of the source repository's axolotl adapter, which
++// proved the same property about the table this contract replaces: registering
++// a system the core has never heard of must drive every dispatch surface with
++// no edit anywhere except the registration call.
++const pangolinID SystemID = "pangolin"
++
++// pangolinSystem is the one test double in this package. Its fields configure
++// what it declares and what each surface answers, so a refusal test builds a
++// variant of the same double rather than introducing a second fake whose drift
++// from this one nobody would notice.
++type pangolinSystem struct {
++	id    SystemID
++	caps  Capabilities
++	calls map[string]int
++
++	binary        string
++	binaryErr     error
++	argvErr       error
++	envErr        error
++	stdinErr      error
++	compositionOK bool
++
++	// emptyBinary, detachedStdinBytes and unstableCaps make the double break
++	// the plugin contract on purpose, so BuildPlan's contract refusals have
++	// something real to refuse.
++	emptyBinary        bool
++	detachedStdinBytes bool
++}
++
++func newPangolin() *pangolinSystem {
++	return &pangolinSystem{
++		id: pangolinID,
++		caps: Capabilities{
++			LaunchModes:         []LaunchMode{LaunchModeExec, LaunchModeDryRun, LaunchModeManagedSession},
++			EffortTransport:     EffortTransportArgv,
++			SupportsGoal:        true,
++			SupportsBudget:      true,
++			SupportsServiceTier: true,
++			CompositionGrammar:  GrammarID("pangolin-json"),
++			HomeEnvVar:          "PANGOLIN_HOME",
++			DefaultHome:         "~/.pangolin",
++			AuthHint:            "run `pangolin login` and retry",
++		},
++		calls:         map[string]int{},
++		binary:        "/opt/pangolin/bin/pangolin",
++		compositionOK: true,
++	}
++}
++
++func (p *pangolinSystem) record(surface string) { p.calls[surface]++ }
++
++func (p *pangolinSystem) ID() SystemID {
++	p.record("ID")
++	return p.id
++}
++
++func (p *pangolinSystem) Capabilities() Capabilities {
++	p.record("Capabilities")
++	return p.caps
++}
++
++func (p *pangolinSystem) ResolveBinary(LaunchRequest) (string, error) {
++	p.record("ResolveBinary")
++	if p.binaryErr != nil {
++		return "", p.binaryErr
++	}
++	if p.emptyBinary {
++		return "   ", nil
++	}
++	return p.binary, nil
++}
++
++func (p *pangolinSystem) Argv(req LaunchRequest, mode LaunchMode) ([]string, error) {
++	p.record("Argv")
++	if p.argvErr != nil {
++		return nil, p.argvErr
++	}
++	argv := []string{"--mode", mode.String(), "--model", req.Model.ID}
++	if effort := strings.TrimSpace(req.Effort); effort != "" {
++		argv = append(argv, "--effort", effort)
++	}
++	if req.ServiceTier != "" {
++		argv = append(argv, "--tier", req.ServiceTier)
++	}
++	if req.Budget != nil {
++		argv = append(argv, "--budget-usd", fmt.Sprintf("%.2f", req.Budget.USD))
++	}
++	if req.Goal != nil {
++		argv = append(argv, "--goal", req.Goal.ID)
++	}
++	argv = append(argv, req.Composition.Prefix...)
++	switch mode {
++	case LaunchModeDryRun:
++		argv = append(argv, "<assignment-prompt-file>")
++	default:
++		argv = append(argv, req.PromptPath)
++	}
++	return argv, nil
++}
++
++func (p *pangolinSystem) ChildEnv(parent []string, req LaunchRequest) ([]string, error) {
++	p.record("ChildEnv")
++	if p.envErr != nil {
++		return nil, p.envErr
++	}
++	child := make([]string, 0, len(parent)+1)
++	for _, entry := range parent {
++		// The parent's own harness state is exactly what a child must not
++		// inherit; this is the double's stand-in for filterCodexRuntimeEnv.
++		if strings.HasPrefix(entry, "PANGOLIN_SESSION=") {
++			continue
++		}
++		child = append(child, entry)
++	}
++	home := req.Home
++	if home == "" {
++		home = p.caps.DefaultHome
++	}
++	return append(child, p.caps.HomeEnvVar+"="+home), nil
++}
++
++func (p *pangolinSystem) Stdin(req LaunchRequest) (StdinPayload, error) {
++	p.record("Stdin")
++	if p.stdinErr != nil {
++		return StdinPayload{}, p.stdinErr
++	}
++	if p.detachedStdinBytes {
++		return StdinPayload{Attached: false, Bytes: []byte("orphaned")}, nil
++	}
++	return StdinPayload{Attached: true, Bytes: req.Prompt}, nil
++}
++
++func (p *pangolinSystem) ValidateComposition(c Composition) error {
++	p.record("ValidateComposition")
++	if !p.compositionOK {
++		return errors.New("pangolin composition prefix is not pangolin-json")
++	}
++	if len(c.Prefix) == 0 {
++		return errors.New("pangolin requires a composition prefix when servers are declared")
++	}
++	return nil
++}
++
++// pangolinRequest is a fully populated launch request, so a test that wants to
++// exercise one refusal starts from a request that would otherwise succeed.
++func pangolinRequest() LaunchRequest {
++	return LaunchRequest{
++		System:      pangolinID,
++		Model:       Model{ID: "pangolin-large", Effort: EffortSupportRequired},
++		Effort:      "high",
++		PromptPath:  "/tmp/assignment.md",
++		Prompt:      []byte("do the thing"),
++		WorkDir:     "/work/story",
++		Env:         []string{"PATH=/usr/bin", "PANGOLIN_SESSION=parent-123", "HOME=/home/agent"},
++		Goal:        &Goal{ID: "GOAL-1", Objective: "ship the contract", Revision: 3},
++		Budget:      &Budget{USD: 12.5},
++		ServiceTier: "priority",
++		Composition: Composition{
++			Prefix:  []string{"--pangolin-mcp", `{"servers":{"jira":{"url":"https://jira.example/mcp"}}}`},
++			Servers: []CompositionServer{{Name: "jira", Transport: "http"}},
++		},
++	}
++}
++
++// registerPangolin is THE one edit. Nothing else in this package, the CLI, or
++// any production source knows the system exists.
++func registerPangolin(t *testing.T, sys *pangolinSystem) *Registry {
++	t.Helper()
++	registry := NewRegistry()
++	if err := registry.Register(sys); err != nil {
++		t.Fatalf("Register(pangolin): %v", err)
++	}
++	return registry
++}
++
++// TestRegisteringOneSystemDrivesEveryDispatchSurface is the seam proof.
++//
++// The set of surfaces is read off the System interface by reflection rather
++// than written out by hand: a method added to the contract and not driven from
++// BuildPlan fails this test on the next run, which is the only version of
++// "every dispatch surface" that survives the contract growing.
++func TestRegisteringOneSystemDrivesEveryDispatchSurface(t *testing.T) {
++	sys := newPangolin()
++	registry := registerPangolin(t, sys)
++
++	for _, mode := range sys.caps.LaunchModes {
++		if _, err := BuildPlan(registry, pangolinRequest(), mode); err != nil {
++			t.Fatalf("BuildPlan(pangolin, %s): %v", mode, err)
++		}
++	}
++
++	contract := reflect.TypeOf((*System)(nil)).Elem()
++	var undriven []string
++	for i := 0; i < contract.NumMethod(); i++ {
++		name := contract.Method(i).Name
++		if sys.calls[name] == 0 {
++			undriven = append(undriven, name)
++		}
++	}
++	sort.Strings(undriven)
++	if len(undriven) > 0 {
++		t.Fatalf("registering a system did not drive %v; those surfaces dispatch through something other than the registry, or through nothing at all", undriven)
++	}
++}
++
++// TestPlanCarriesTheDoublesObservableLaunchSurface pins the four things
++// invariant 1 of docs/architecture.md calls the parity bar — binary, argv,
++// environment, stdin — to what the plugin produced, so a refactor that changes
++// any of them cannot pass by producing an argv that merely reads the same.
++func TestPlanCarriesTheDoublesObservableLaunchSurface(t *testing.T) {
++	sys := newPangolin()
++	registry := registerPangolin(t, sys)
++
++	plan, err := BuildPlan(registry, pangolinRequest(), LaunchModeExec)
++	if err != nil {
++		t.Fatalf("BuildPlan: %v", err)
++	}
++	if plan.Binary != "/opt/pangolin/bin/pangolin" {
++		t.Errorf("Binary = %q, want the plugin's resolved executable", plan.Binary)
++	}
++	wantArgv := []string{
++		"--mode", "exec", "--model", "pangolin-large", "--effort", "high",
++		"--tier", "priority", "--budget-usd", "12.50", "--goal", "GOAL-1",
++		"--pangolin-mcp", `{"servers":{"jira":{"url":"https://jira.example/mcp"}}}`,
++		"/tmp/assignment.md",
++	}
++	if fmt.Sprint(plan.Argv) != fmt.Sprint(wantArgv) {
++		t.Errorf("Argv  = %#v\nwant  = %#v", plan.Argv, wantArgv)
++	}
++	for _, entry := range plan.Env {
++		if strings.HasPrefix(entry, "PANGOLIN_SESSION=") {
++			t.Errorf("child env inherited the parent's harness session state: %q", entry)
++		}
++	}
++	if !containsEnv(plan.Env, "PANGOLIN_HOME=~/.pangolin") {
++		t.Errorf("child env = %v, want it to carry the declared default home", plan.Env)
++	}
++	if !plan.Stdin.Attached || string(plan.Stdin.Bytes) != "do the thing" {
++		t.Errorf("Stdin = %#v, want the prompt bytes attached", plan.Stdin)
++	}
++	if plan.WorkDir != "/work/story" {
++		t.Errorf("WorkDir = %q, want the request's child working directory", plan.WorkDir)
++	}
++	if plan.Home != "~/.pangolin" {
++		t.Errorf("Home = %q, want the declared default home", plan.Home)
++	}
++	if plan.System != pangolinID || plan.Mode != LaunchModeExec {
++		t.Errorf("plan identity = (%s, %s), want (%s, exec)", plan.System, plan.Mode, pangolinID)
++	}
++}
++
++// A dry run must mirror the real launch's binary rather than a display
++// placeholder. This is the exact bug the source repository's BuildArgs
++// carried: it printed a hardcoded name while the real launch ran a
++// managed-npm or preflighted executable, so the reported command was not the
++// command.
++func TestDryRunMirrorsTheRealLaunchBinary(t *testing.T) {
++	sys := newPangolin()
++	registry := registerPangolin(t, sys)
++
++	real, err := BuildPlan(registry, pangolinRequest(), LaunchModeExec)
++	if err != nil {
++		t.Fatalf("BuildPlan(exec): %v", err)
++	}
++	dry, err := BuildPlan(registry, pangolinRequest(), LaunchModeDryRun)
++	if err != nil {
++		t.Fatalf("BuildPlan(dry-run): %v", err)
++	}
++	if dry.Binary != real.Binary {
++		t.Errorf("dry-run binary = %q, real binary = %q; a dry run that names a different target is not a mirror", dry.Binary, real.Binary)
++	}
++	if fmt.Sprint(dry.Argv) == fmt.Sprint(real.Argv) {
++		t.Errorf("dry-run argv is byte-identical to the real argv; the double was supposed to substitute a placeholder for the prompt file")
++	}
++}
++
++// TestTestDoubleExistsOnlyInTests is the seam's other half: the double drives
++// every surface AND the module contains no trace of it. If supporting it had
++// required a second edit — a constant, a case, a table row — the id would
++// appear in a non-test source and this fails.
++func TestTestDoubleExistsOnlyInTests(t *testing.T) {
++	for name, src := range moduleSources(t) {
++		if strings.Contains(src, string(pangolinID)) {
++			t.Errorf("%s mentions the test double %q; registering a system must touch nothing but the registration call", name, pangolinID)
++		}
++	}
++}
++
++func containsEnv(env []string, want string) bool {
++	for _, entry := range env {
++		if entry == want {
++			return true
++		}
++	}
++	return false
++}
+diff --git a/pkg/agentic/plan.go b/pkg/agentic/plan.go
+new file mode 100644
+index 0000000..9018a82
+--- /dev/null
++++ b/pkg/agentic/plan.go
+@@ -0,0 +1,167 @@
++package agentic
++
++import (
++	"errors"
++	"fmt"
++	"strings"
++)
++
++// Plan is the observable launch surface: the binary, the argv, the child
++// environment and the stdin bytes, plus where the child runs and which
++// configuration home it reads.
++//
++// Invariant 1 of docs/architecture.md makes this the parity bar. A refactor
++// proves itself by producing an identical Plan, not by producing an argv
++// string that reads the same — which is why the environment and the stdin
++// bytes are fields here rather than side effects of a process start.
++type Plan struct {
++	System  SystemID
++	Mode    LaunchMode
++	Binary  string
++	Argv    []string
++	Env     []string
++	Stdin   StdinPayload
++	WorkDir string
++	Home    string
++}
++
++var (
++	// ErrUnknownSystem is returned when no plugin is registered for the
++	// requested identifier. It is a refusal, never a fallback: guessing a
++	// system is how a launch ends up on the wrong harness.
++	ErrUnknownSystem = errors.New("agentic: no system registered")
++	// ErrUnsupportedLaunchMode is returned when a system was not declared for
++	// the requested mode.
++	ErrUnsupportedLaunchMode = errors.New("agentic: system does not support launch mode")
++	// ErrEffortNotTransportable is returned when a model requires an explicit
++	// reasoning effort and the system's declared transport cannot carry one.
++	// The source repo's failure this closes is the silent one: the launch
++	// succeeded, the configured effort was dropped on the floor, and the cost
++	// and quality of the run were whatever the harness defaulted to.
++	ErrEffortNotTransportable = errors.New("agentic: system cannot carry the model's required reasoning effort")
++	// ErrEffortMissing is returned when a required-effort model was given no
++	// effort value. No default is injected anywhere: the vendor layer owns the
++	// vocabulary and the recommended value, and inventing one here would make
++	// a wrong-cost launch look like a configured one.
++	ErrEffortMissing = errors.New("agentic: model requires an explicit reasoning effort")
++	// ErrGoalUnsupported, ErrBudgetUnsupported and ErrServiceTierUnsupported
++	// refuse a launch parameter the system cannot honour. Each is a refusal
++	// rather than a drop for the same reason as effort: a dropped parameter
++	// produces a run that looks like the one that was asked for and is not.
++	ErrGoalUnsupported        = errors.New("agentic: system does not support goal-bound launches")
++	ErrBudgetUnsupported      = errors.New("agentic: system does not support a launch budget")
++	ErrServiceTierUnsupported = errors.New("agentic: system does not support a service tier")
++	// ErrCompositionUnsupported is returned when a composition is attached to
++	// a system declaring GrammarNone.
++	ErrCompositionUnsupported = errors.New("agentic: system declares no launch composition grammar")
++	// ErrPluginContract is returned when a plugin answers a dispatch surface
++	// with something the contract forbids — an empty binary reported as a
++	// success, or a stdin payload carrying bytes while claiming nothing is
++	// attached. A plugin bug surfaces as a refusal here rather than as a
++	// half-formed launch downstream.
++	ErrPluginContract = errors.New("agentic: system violated the plugin contract")
++)
++
++// BuildPlan resolves one launch through the registry.
++//
++// It is the single dispatch site for the System contract: every surface the
++// interface exposes is driven from here, by identifier lookup, with no switch
++// over system identifiers anywhere. Adding a system is a registration and
++// nothing else.
++//
++// The checks it performs are contract-level only — can this system, as it
++// declared itself, carry what this request contains. Vendor admission (is the
++// model available, is the provider rate-limited, is the pair admitted) is a
++// later layer and deliberately absent: BuildPlan answers "is this launch
++// expressible", not "is this launch allowed right now".
++func BuildPlan(r *Registry, req LaunchRequest, mode LaunchMode) (Plan, error) {
++	if r == nil {
++		return Plan{}, errors.New("agentic: cannot build a plan without a registry")
++	}
++	id, err := NormalizeSystemID(string(req.System))
++	if err != nil {
++		return Plan{}, fmt.Errorf("agentic: building plan: %w", err)
++	}
++	sys, ok := r.Lookup(id)
++	if !ok {
++		return Plan{}, fmt.Errorf("%w: %s", ErrUnknownSystem, id)
++	}
++	caps := sys.Capabilities()
++
++	if !mode.Valid() || !caps.SupportsMode(mode) {
++		return Plan{}, fmt.Errorf("%w: %s does not declare %s", ErrUnsupportedLaunchMode, id, mode)
++	}
++
++	effort := strings.TrimSpace(req.Effort)
++	if !caps.EffortTransport.CanCarry(req.Model.Effort) {
++		return Plan{}, fmt.Errorf("%w: %s declares effort transport %s and model %q requires an effort; register the model under a system whose transport is argv or stdin, or register it as effort-support none",
++			ErrEffortNotTransportable, id, caps.EffortTransport, req.Model.ID)
++	}
++	if req.Model.Effort == EffortSupportRequired && effort == "" {
++		return Plan{}, fmt.Errorf("%w: model %q under %s; supply the effort value from the model's own vocabulary", ErrEffortMissing, req.Model.ID, id)
++	}
++	if effort != "" && caps.EffortTransport == EffortTransportNone {
++		return Plan{}, fmt.Errorf("%w: %s declares effort transport none and cannot carry effort %q", ErrEffortNotTransportable, id, effort)
++	}
++
++	if req.Goal != nil && !caps.SupportsGoal {
++		return Plan{}, fmt.Errorf("%w: %s", ErrGoalUnsupported, id)
++	}
++	if req.Budget != nil && !caps.SupportsBudget {
++		return Plan{}, fmt.Errorf("%w: %s", ErrBudgetUnsupported, id)
++	}
++	if strings.TrimSpace(req.ServiceTier) != "" && !caps.SupportsServiceTier {
++		return Plan{}, fmt.Errorf("%w: %s", ErrServiceTierUnsupported, id)
++	}
++
++	if !req.Composition.IsZero() {
++		if caps.CompositionGrammar == GrammarNone {
++			return Plan{}, fmt.Errorf("%w: %s", ErrCompositionUnsupported, id)
++		}
++		if err := sys.ValidateComposition(req.Composition); err != nil {
++			return Plan{}, fmt.Errorf("agentic: %s rejected the launch composition for grammar %q: %w", id, caps.CompositionGrammar, err)
++		}
++	}
++
++	binary, err := sys.ResolveBinary(req)
++	if err != nil {
++		return Plan{}, fmt.Errorf("agentic: %s could not resolve its binary: %w", id, err)
++	}
++	if strings.TrimSpace(binary) == "" {
++		return Plan{}, fmt.Errorf("%w: %s resolved an empty binary with no error", ErrPluginContract, id)
++	}
++
++	argv, err := sys.Argv(req, mode)
++	if err != nil {
++		return Plan{}, fmt.Errorf("agentic: %s could not build %s argv: %w", id, mode, err)
++	}
++
++	env, err := sys.ChildEnv(req.Env, req)
++	if err != nil {
++		return Plan{}, fmt.Errorf("agentic: %s could not build the child environment: %w", id, err)
++	}
++
++	stdin, err := sys.Stdin(req)
++	if err != nil {
++		return Plan{}, fmt.Errorf("agentic: %s could not build its stdin payload: %w", id, err)
++	}
++	if !stdin.Attached && len(stdin.Bytes) > 0 {
++		return Plan{}, fmt.Errorf("%w: %s returned %d stdin bytes while reporting nothing attached", ErrPluginContract, id, len(stdin.Bytes))
++	}
++
++	home := strings.TrimSpace(req.Home)
++	if home == "" {
++		home = caps.DefaultHome
++	}
++
++	return Plan{
++		System:  id,
++		Mode:    mode,
++		Binary:  binary,
++		Argv:    argv,
++		Env:     env,
++		Stdin:   stdin,
++		WorkDir: req.WorkDir,
++		Home:    home,
++	}, nil
++}
+diff --git a/pkg/agentic/plan_test.go b/pkg/agentic/plan_test.go
+new file mode 100644
+index 0000000..bb9694b
+--- /dev/null
++++ b/pkg/agentic/plan_test.go
+@@ -0,0 +1,342 @@
++package agentic
++
++import (
++	"errors"
++	"strings"
++	"testing"
++)
++
++// Every test in this file is a negative one. BuildPlan's whole job beyond
++// dispatch is refusing launches the system it dispatched to could not honour,
++// and a gate is worth exactly what it rejects. The positive path lives in
++// double_test.go, where it proves the gate is reachable — which is a different
++// claim.
++
++func TestBuildPlanRefusesUnknownSystem(t *testing.T) {
++	registry := registerPangolin(t, newPangolin())
++	req := pangolinRequest()
++	req.System = "opencode"
++
++	_, err := BuildPlan(registry, req, LaunchModeExec)
++	if !errors.Is(err, ErrUnknownSystem) {
++		t.Fatalf("err = %v, want ErrUnknownSystem", err)
++	}
++	if !strings.Contains(err.Error(), "opencode") {
++		t.Errorf("refusal %q does not name the system that was asked for", err)
++	}
++}
++
++func TestBuildPlanRefusesUnnormalizableSystemID(t *testing.T) {
++	registry := registerPangolin(t, newPangolin())
++	req := pangolinRequest()
++	req.System = "pango lin"
++
++	_, err := BuildPlan(registry, req, LaunchModeExec)
++	var invalid *InvalidSystemIDError
++	if !errors.As(err, &invalid) {
++		t.Fatalf("err = %v, want an InvalidSystemIDError", err)
++	}
++}
++
++func TestBuildPlanRefusesUndeclaredLaunchMode(t *testing.T) {
++	sys := newPangolin()
++	sys.caps.LaunchModes = []LaunchMode{LaunchModeExec}
++	registry := registerPangolin(t, sys)
++
++	for _, mode := range []LaunchMode{LaunchModeDryRun, LaunchModeManagedSession, LaunchMode(97)} {
++		_, err := BuildPlan(registry, pangolinRequest(), mode)
++		if !errors.Is(err, ErrUnsupportedLaunchMode) {
++			t.Errorf("BuildPlan(%s) err = %v, want ErrUnsupportedLaunchMode", mode, err)
++		}
++	}
++	if sys.calls["Argv"] != 0 {
++		t.Errorf("Argv was called %d times for undeclared modes; the refusal must come before dispatch, or a plugin has to defend itself against modes it never declared", sys.calls["Argv"])
++	}
++}
++
++// AC4, at the launch site. A system whose transport is none, combined with a
++// model that requires an effort, must be refused rather than launched with the
++// effort dropped — the silent wrong-cost launch the source repository's
++// EffortTransport was introduced to close.
++func TestBuildPlanRefusesRequiredEffortUnderTransportNone(t *testing.T) {
++	sys := newPangolin()
++	sys.caps.EffortTransport = EffortTransportNone
++	registry := registerPangolin(t, sys)
++
++	req := pangolinRequest()
++	req.Model = Model{ID: "pangolin-thinker", Effort: EffortSupportRequired}
++	req.Effort = "high"
++
++	_, err := BuildPlan(registry, req, LaunchModeExec)
++	if !errors.Is(err, ErrEffortNotTransportable) {
++		t.Fatalf("err = %v, want ErrEffortNotTransportable", err)
++	}
++	for _, fragment := range []string{"pangolin", "none", "pangolin-thinker"} {
++		if !strings.Contains(err.Error(), fragment) {
++			t.Errorf("refusal %q does not name %q; the operator cannot tell which pair to fix", err, fragment)
++		}
++	}
++	if sys.calls["Argv"] != 0 {
++		t.Error("argv was built for a launch that cannot carry its own effort")
++	}
++}
++
++// The mirror of the case above: even a model with no effort axis must not have
++// an operator-supplied effort quietly discarded.
++func TestBuildPlanRefusesAnEffortValueUnderTransportNone(t *testing.T) {
++	sys := newPangolin()
++	sys.caps.EffortTransport = EffortTransportNone
++	registry := registerPangolin(t, sys)
++
++	req := pangolinRequest()
++	req.Model = Model{ID: "pangolin-flat", Effort: EffortSupportNone}
++	req.Effort = "xhigh"
++
++	_, err := BuildPlan(registry, req, LaunchModeExec)
++	if !errors.Is(err, ErrEffortNotTransportable) {
++		t.Fatalf("err = %v, want ErrEffortNotTransportable", err)
++	}
++	if !strings.Contains(err.Error(), "xhigh") {
++		t.Errorf("refusal %q does not quote the effort value that would have been dropped", err)
++	}
++}
++
++// Effort is required per model and no default is injected anywhere. A
++// required-effort model launched with no value is a configuration error, and
++// substituting a recommended value here would make a wrong-cost launch
++// indistinguishable from a configured one.
++func TestBuildPlanRefusesRequiredEffortWithNoValue(t *testing.T) {
++	registry := registerPangolin(t, newPangolin())
++
++	for _, effort := range []string{"", "   "} {
++		req := pangolinRequest()
++		req.Effort = effort
++		_, err := BuildPlan(registry, req, LaunchModeExec)
++		if !errors.Is(err, ErrEffortMissing) {
++			t.Fatalf("BuildPlan with effort %q err = %v, want ErrEffortMissing", effort, err)
++		}
++	}
++}
++
++// A transport that CAN carry effort must still admit a model that needs none;
++// otherwise the gate is refusing a class it was never meant to cover.
++func TestBuildPlanAdmitsAnEffortlessModelUnderEveryTransport(t *testing.T) {
++	for _, transport := range []EffortTransport{EffortTransportNone, EffortTransportArgv, EffortTransportStdin} {
++		sys := newPangolin()
++		sys.caps.EffortTransport = transport
++		registry := registerPangolin(t, sys)
++
++		req := pangolinRequest()
++		req.Model = Model{ID: "pangolin-flat", Effort: EffortSupportNone}
++		req.Effort = ""
++
++		if _, err := BuildPlan(registry, req, LaunchModeExec); err != nil {
++			t.Errorf("BuildPlan under transport %s refused a model with no effort axis: %v", transport, err)
++		}
++	}
++}
++
++func TestBuildPlanRefusesUnsupportedLaunchParameters(t *testing.T) {
++	cases := []struct {
++		name    string
++		disable func(*Capabilities)
++		mutate  func(*LaunchRequest)
++		want    error
++	}{
++		{
++			name:    "goal",
++			disable: func(c *Capabilities) { c.SupportsGoal = false },
++			mutate:  func(r *LaunchRequest) { r.Goal = &Goal{ID: "GOAL-1"} },
++			want:    ErrGoalUnsupported,
++		},
++		{
++			name:    "budget",
++			disable: func(c *Capabilities) { c.SupportsBudget = false },
++			mutate:  func(r *LaunchRequest) { r.Budget = &Budget{USD: 5} },
++			want:    ErrBudgetUnsupported,
++		},
++		{
++			name:    "service tier",
++			disable: func(c *Capabilities) { c.SupportsServiceTier = false },
++			mutate:  func(r *LaunchRequest) { r.ServiceTier = "priority" },
++			want:    ErrServiceTierUnsupported,
++		},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			sys := newPangolin()
++			tc.disable(&sys.caps)
++			registry := registerPangolin(t, sys)
++
++			req := pangolinRequest()
++			req.Goal, req.Budget, req.ServiceTier = nil, nil, ""
++			tc.mutate(&req)
++
++			if _, err := BuildPlan(registry, req, LaunchModeExec); !errors.Is(err, tc.want) {
++				t.Fatalf("err = %v, want %v", err, tc.want)
++			}
++		})
++	}
++}
++
++// The same parameters must go through when the system declares support, or the
++// refusals above would be indistinguishable from a gate that rejects
++// everything.
++func TestBuildPlanAdmitsSupportedLaunchParameters(t *testing.T) {
++	registry := registerPangolin(t, newPangolin())
++	if _, err := BuildPlan(registry, pangolinRequest(), LaunchModeExec); err != nil {
++		t.Fatalf("BuildPlan with goal, budget, tier and composition all declared supported: %v", err)
++	}
++}
++
++// A system declaring GrammarNone is refused at the contract level, before its
++// own validator runs. Two lines of defence on purpose: the plugin's validator
++// is where grammar-specific shape is judged, and this is where "no grammar at
++// all" is, so a plugin cannot accidentally admit a composition by writing a
++// permissive validator.
++func TestBuildPlanRefusesCompositionUnderGrammarNone(t *testing.T) {
++	sys := newPangolin()
++	sys.caps.CompositionGrammar = GrammarNone
++	sys.compositionOK = true
++	registry := registerPangolin(t, sys)
++
++	_, err := BuildPlan(registry, pangolinRequest(), LaunchModeExec)
++	if !errors.Is(err, ErrCompositionUnsupported) {
++		t.Fatalf("err = %v, want ErrCompositionUnsupported", err)
++	}
++	if sys.calls["ValidateComposition"] != 0 {
++		t.Error("a system declaring no grammar was asked to validate a composition")
++	}
++}
++
++func TestBuildPlanPropagatesThePluginsCompositionRefusal(t *testing.T) {
++	sys := newPangolin()
++	sys.compositionOK = false
++	registry := registerPangolin(t, sys)
++
++	_, err := BuildPlan(registry, pangolinRequest(), LaunchModeExec)
++	if err == nil {
++		t.Fatal("a composition the plugin rejected produced a plan")
++	}
++	if !strings.Contains(err.Error(), "pangolin-json") {
++		t.Errorf("refusal %q does not name the grammar the composition was measured against", err)
++	}
++}
++
++// No composition means the validator is not called at all. A system with no
++// composition attached must not have to answer for one.
++func TestBuildPlanSkipsCompositionValidationWhenNoneIsAttached(t *testing.T) {
++	sys := newPangolin()
++	registry := registerPangolin(t, sys)
++
++	req := pangolinRequest()
++	req.Composition = Composition{}
++	if _, err := BuildPlan(registry, req, LaunchModeExec); err != nil {
++		t.Fatalf("BuildPlan without a composition: %v", err)
++	}
++	if sys.calls["ValidateComposition"] != 0 {
++		t.Error("ValidateComposition was called for a launch with no composition")
++	}
++}
++
++// A plugin that answers a surface with something the contract forbids must
++// surface as a refusal here, not as a half-formed launch downstream. An empty
++// binary reported as a success is the shape that would otherwise exec whatever
++// the shell resolves.
++func TestBuildPlanRefusesPluginContractViolations(t *testing.T) {
++	t.Run("empty binary with no error", func(t *testing.T) {
++		sys := newPangolin()
++		sys.emptyBinary = true
++		registry := registerPangolin(t, sys)
++
++		_, err := BuildPlan(registry, pangolinRequest(), LaunchModeExec)
++		if !errors.Is(err, ErrPluginContract) {
++			t.Fatalf("err = %v, want ErrPluginContract", err)
++		}
++	})
++
++	t.Run("stdin bytes while reporting nothing attached", func(t *testing.T) {
++		sys := newPangolin()
++		sys.detachedStdinBytes = true
++		registry := registerPangolin(t, sys)
++
++		_, err := BuildPlan(registry, pangolinRequest(), LaunchModeExec)
++		if !errors.Is(err, ErrPluginContract) {
++			t.Fatalf("err = %v, want ErrPluginContract", err)
++		}
++	})
++}
++
++// An attached but empty stdin stream is legitimate and different from no
++// stdin: the child sees EOF rather than a closed descriptor. The contract
++// refusal above must not swallow it.
++func TestBuildPlanAdmitsAnAttachedEmptyStdin(t *testing.T) {
++	registry := registerPangolin(t, newPangolin())
++	req := pangolinRequest()
++	req.Prompt = nil
++
++	plan, err := BuildPlan(registry, req, LaunchModeExec)
++	if err != nil {
++		t.Fatalf("BuildPlan with an empty prompt: %v", err)
++	}
++	if !plan.Stdin.Attached || len(plan.Stdin.Bytes) != 0 {
++		t.Errorf("Stdin = %#v, want an attached empty stream", plan.Stdin)
++	}
++}
++
++// Each surface's own failure must reach the caller naming the system and the
++// surface, rather than collapsing into one opaque "could not plan".
++func TestBuildPlanPropagatesEachSurfaceFailure(t *testing.T) {
++	boom := errors.New("preflight has not run")
++	cases := []struct {
++		name    string
++		mutate  func(*pangolinSystem)
++		mention string
++	}{
++		{"ResolveBinary", func(s *pangolinSystem) { s.binaryErr = boom }, "binary"},
++		{"Argv", func(s *pangolinSystem) { s.argvErr = boom }, "argv"},
++		{"ChildEnv", func(s *pangolinSystem) { s.envErr = boom }, "environment"},
++		{"Stdin", func(s *pangolinSystem) { s.stdinErr = boom }, "stdin"},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			sys := newPangolin()
++			tc.mutate(sys)
++			registry := registerPangolin(t, sys)
++
++			_, err := BuildPlan(registry, pangolinRequest(), LaunchModeExec)
++			if !errors.Is(err, boom) {
++				t.Fatalf("err = %v, want it to wrap the plugin's own failure", err)
++			}
++			if !strings.Contains(err.Error(), "pangolin") || !strings.Contains(err.Error(), tc.mention) {
++				t.Errorf("err = %q, want it to name the system and the %s surface", err, tc.mention)
++			}
++		})
++	}
++}
++
++func TestBuildPlanRefusesANilRegistry(t *testing.T) {
++	if _, err := BuildPlan(nil, pangolinRequest(), LaunchModeExec); err == nil {
++		t.Fatal("BuildPlan produced a plan without a registry to dispatch through")
++	}
++}
++
++// An explicit home overrides the declared default. On-disk limit state is
++// keyed by (provider, home), so the value that reaches the plan is the value
++// that names the state file.
++func TestBuildPlanPrefersAnExplicitHomeOverTheDeclaredDefault(t *testing.T) {
++	registry := registerPangolin(t, newPangolin())
++	req := pangolinRequest()
++	req.Home = "/tmp/alt-pangolin-home"
++
++	plan, err := BuildPlan(registry, req, LaunchModeExec)
++	if err != nil {
++		t.Fatalf("BuildPlan: %v", err)
++	}
++	if plan.Home != "/tmp/alt-pangolin-home" {
++		t.Errorf("Home = %q, want the request's explicit home", plan.Home)
++	}
++	if !containsEnv(plan.Env, "PANGOLIN_HOME=/tmp/alt-pangolin-home") {
++		t.Errorf("child env = %v, want the explicit home exported to the child", plan.Env)
++	}
++}
+diff --git a/pkg/agentic/registry.go b/pkg/agentic/registry.go
+new file mode 100644
+index 0000000..e4f7c97
+--- /dev/null
++++ b/pkg/agentic/registry.go
+@@ -0,0 +1,159 @@
++package agentic
++
++import (
++	"errors"
++	"fmt"
++	"sort"
++	"sync"
++)
++
++// This file is the ONLY place an agentic system binding may live.
++//
++// Invariant 5 of docs/architecture.md, carried from the extraction source:
++// one adapter table, one registry, one normalization per identifier. The
++// source repo paid repeatedly for shadow tables — a second map from system id
++// to behaviour, or a switch over system ids, that drifted out of step with the
++// first and was found only when a launch misbehaved in production.
++//
++// singlesource_guard_test.go enforces it mechanically: a `map[SystemID]T`
++// type expression anywhere outside this file, a composite literal keyed by a
++// known system id, or a switch/if-else chain dispatching on system id values,
++// fails the test. The guard's threat model and its declared-open residuals are
++// documented there.
++
++// Registry maps system identifiers to the plugins that implement them.
++// Registration is the only way a binding comes to exist; there is no
++// construction path that takes a system by value, and no dispatch anywhere in
++// this module reaches a plugin except through a lookup here.
++type Registry struct {
++	mu      sync.RWMutex
++	systems map[SystemID]System
++}
++
++// NewRegistry returns an empty registry. An empty registry is a valid state,
++// not a failure: a binary with no plugins compiled in answers "nothing
++// registered", which is a different fact from a lookup that broke.
++func NewRegistry() *Registry {
++	return &Registry{systems: map[SystemID]System{}}
++}
++
++// Default is the registry plugin packages register into from their init
++// functions, and the one the CLI reads. A caller that needs isolation — every
++// test in this package, for one — builds its own with NewRegistry.
++var Default = NewRegistry()
++
++var (
++	// ErrNilSystem is returned when Register is handed no plugin at all.
++	ErrNilSystem = errors.New("agentic: cannot register a nil system")
++	// ErrDuplicateSystem is returned when a system id is registered twice.
++	//
++	// Same-binding idempotency is deliberately NOT offered: a plugin whose
++	// init runs twice, or two plugins claiming one id, is a build-time bug,
++	// and silently accepting the second registration is how a shadow binding
++	// gets in without anyone reading a diff. Runtime declaration policy —
++	// where re-declaring an identical thing may legitimately be a no-op — is a
++	// different layer with a different rule.
++	ErrDuplicateSystem = errors.New("agentic: system already registered")
++	// ErrNoLaunchModes is returned when a system declares no launch mode. It
++	// could never launch, so the declaration is a bug rather than a
++	// restriction to honour.
++	ErrNoLaunchModes = errors.New("agentic: system declares no launch modes")
++	// ErrInvalidLaunchMode is returned when a declared mode is not one this
++	// contract defines.
++	ErrInvalidLaunchMode = errors.New("agentic: system declares an unknown launch mode")
++	// ErrInvalidEffortTransport is returned when a declared effort transport
++	// is not one this contract defines. Admitting it would make
++	// EffortTransport.CanCarry answer for a transport nobody can implement.
++	ErrInvalidEffortTransport = errors.New("agentic: system declares an unknown effort transport")
++)
++
++// Register adds a system to the registry, refusing anything that could not
++// launch or that would create a second binding for one identifier.
++//
++// The identifier is normalized first, so "Codex" and "codex" are one
++// registration and the second is reported as a duplicate rather than admitted
++// under a second spelling.
++func (r *Registry) Register(sys System) error {
++	if r == nil {
++		return errors.New("agentic: cannot register into a nil registry")
++	}
++	if sys == nil {
++		return ErrNilSystem
++	}
++	id, err := NormalizeSystemID(string(sys.ID()))
++	if err != nil {
++		return fmt.Errorf("agentic: registering system: %w", err)
++	}
++	caps := sys.Capabilities()
++	if len(caps.LaunchModes) == 0 {
++		return fmt.Errorf("%w: %s", ErrNoLaunchModes, id)
++	}
++	for _, mode := range caps.LaunchModes {
++		if !mode.Valid() {
++			return fmt.Errorf("%w: %s declares %s", ErrInvalidLaunchMode, id, mode)
++		}
++	}
++	if !caps.EffortTransport.Valid() {
++		return fmt.Errorf("%w: %s declares %s", ErrInvalidEffortTransport, id, caps.EffortTransport)
++	}
++
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	if r.systems == nil {
++		r.systems = map[SystemID]System{}
++	}
++	if _, exists := r.systems[id]; exists {
++		return fmt.Errorf("%w: %s", ErrDuplicateSystem, id)
++	}
++	r.systems[id] = sys
++	return nil
++}
++
++// Lookup returns the system registered under id, normalizing the identifier
++// first. An id that does not normalize cannot name a registration, so it
++// reports not-found rather than an error — the caller's next move is the same
++// either way, and BuildPlan turns it into a refusal that names the id.
++func (r *Registry) Lookup(id SystemID) (System, bool) {
++	if r == nil {
++		return nil, false
++	}
++	normalized, err := NormalizeSystemID(string(id))
++	if err != nil {
++		return nil, false
++	}
++	r.mu.RLock()
++	defer r.mu.RUnlock()
++	sys, ok := r.systems[normalized]
++	return sys, ok
++}
++
++// IDs returns the registered identifiers in sorted order. The slice is freshly
++// built on every call: a caller that sorts, appends to or overwrites the
++// answer must not be able to reorder or grow the registry through it.
++func (r *Registry) IDs() []SystemID {
++	if r == nil {
++		return []SystemID{}
++	}
++	r.mu.RLock()
++	defer r.mu.RUnlock()
++	ids := make([]SystemID, 0, len(r.systems))
++	for id := range r.systems {
++		ids = append(ids, id)
++	}
++	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
++	return ids
++}
++
++// Len reports how many systems are registered.
++func (r *Registry) Len() int {
++	if r == nil {
++		return 0
++	}
++	r.mu.RLock()
++	defer r.mu.RUnlock()
++	return len(r.systems)
++}
++
++// Register adds a system to the default registry. It is what a plugin
++// package's init function calls.
++func Register(sys System) error { return Default.Register(sys) }
+diff --git a/pkg/agentic/registry_test.go b/pkg/agentic/registry_test.go
+new file mode 100644
+index 0000000..b4832e5
+--- /dev/null
++++ b/pkg/agentic/registry_test.go
+@@ -0,0 +1,209 @@
++package agentic
++
++import (
++	"errors"
++	"fmt"
++	"strings"
++	"sync"
++	"testing"
++)
++
++// withID builds a variant of the one test double rather than a second fake,
++// so a refusal test and the seam test are measuring the same implementation.
++func withID(id SystemID) *pangolinSystem {
++	sys := newPangolin()
++	sys.id = id
++	return sys
++}
++
++// An empty registry is a state, not a failure: a binary with no plugins
++// compiled in must be able to say so.
++func TestEmptyRegistryAnswersNothingRegistered(t *testing.T) {
++	registry := NewRegistry()
++	if registry.Len() != 0 {
++		t.Errorf("Len = %d, want 0", registry.Len())
++	}
++	if ids := registry.IDs(); len(ids) != 0 || ids == nil {
++		t.Errorf("IDs = %#v, want a non-nil empty slice so a caller need not special-case the empty registry", ids)
++	}
++	if _, ok := registry.Lookup("codex"); ok {
++		t.Error("Lookup found a system in an empty registry")
++	}
++}
++
++// Duplicate registration is a bug, not a no-op. Same-binding idempotency is
++// deliberately not offered here: silently accepting the second registration is
++// how a shadow binding gets in without anyone reading a diff.
++func TestRegisterRefusesDuplicateID(t *testing.T) {
++	registry := NewRegistry()
++	if err := registry.Register(newPangolin()); err != nil {
++		t.Fatalf("first Register: %v", err)
++	}
++	err := registry.Register(newPangolin())
++	if !errors.Is(err, ErrDuplicateSystem) {
++		t.Fatalf("second Register err = %v, want ErrDuplicateSystem", err)
++	}
++	if !strings.Contains(err.Error(), string(pangolinID)) {
++		t.Errorf("duplicate error %q does not name the id that collided", err)
++	}
++	if registry.Len() != 1 {
++		t.Errorf("Len = %d after a refused duplicate, want 1", registry.Len())
++	}
++}
++
++// A second spelling of one id must collide rather than register beside it.
++// Without normalization at the registration boundary, "Codex" and "codex"
++// would be two bindings for one harness — the shadow table the invariant
++// exists to prevent, spelled in the id instead of in a map.
++func TestRegisterNormalizesBeforeCheckingForDuplicates(t *testing.T) {
++	registry := NewRegistry()
++	if err := registry.Register(withID("Pangolin")); err != nil {
++		t.Fatalf("Register(\"Pangolin\"): %v", err)
++	}
++	if err := registry.Register(withID("  PANGOLIN  ")); !errors.Is(err, ErrDuplicateSystem) {
++		t.Fatalf("Register(\"  PANGOLIN  \") err = %v, want ErrDuplicateSystem", err)
++	}
++	if _, ok := registry.Lookup("pangolin"); !ok {
++		t.Error("Lookup(\"pangolin\") missed the registration made under \"Pangolin\"")
++	}
++	ids := registry.IDs()
++	if len(ids) != 1 || ids[0] != pangolinID {
++		t.Errorf("IDs = %v, want exactly [%s] in the normalized spelling", ids, pangolinID)
++	}
++}
++
++func TestRegisterRefusesNilSystem(t *testing.T) {
++	if err := NewRegistry().Register(nil); !errors.Is(err, ErrNilSystem) {
++		t.Fatalf("Register(nil) err = %v, want ErrNilSystem", err)
++	}
++}
++
++// Every spelling below would key downstream state — digests, limit-state
++// filenames — under something no other component would reproduce.
++func TestRegisterRefusesUnnormalizableIDs(t *testing.T) {
++	cases := []struct {
++		id     SystemID
++		reason string
++	}{
++		{"", "empty"},
++		{"   ", "whitespace only"},
++		{"claude code", "an inner space"},
++		{"claude_code", "an underscore"},
++		{"claude--code", "an empty segment"},
++		{"-codex", "a leading hyphen"},
++		{"codex-", "a trailing hyphen"},
++		{"claude.code", "a dot"},
++		{"claudé", "a non-ASCII letter"},
++		{"claude/code", "a path separator"},
++	}
++	for _, tc := range cases {
++		t.Run(string(tc.id)+" ("+tc.reason+")", func(t *testing.T) {
++			err := NewRegistry().Register(withID(tc.id))
++			var invalid *InvalidSystemIDError
++			if !errors.As(err, &invalid) {
++				t.Fatalf("Register(%q) err = %v, want an InvalidSystemIDError", tc.id, err)
++			}
++			if !strings.Contains(err.Error(), "claude-code") {
++				t.Errorf("refusal %q does not show an accepted spelling; an agent hitting this mid-run cannot fix the declaration from the error text", err)
++			}
++		})
++	}
++}
++
++// A system that declares no launch mode can never launch. Admitting it defers
++// the failure to the first launch attempt, where the cause is much further
++// from the declaration that caused it.
++func TestRegisterRefusesSystemWithNoLaunchModes(t *testing.T) {
++	sys := newPangolin()
++	sys.caps.LaunchModes = nil
++	if err := NewRegistry().Register(sys); !errors.Is(err, ErrNoLaunchModes) {
++		t.Fatalf("Register err = %v, want ErrNoLaunchModes", err)
++	}
++}
++
++func TestRegisterRefusesUnknownLaunchMode(t *testing.T) {
++	sys := newPangolin()
++	sys.caps.LaunchModes = []LaunchMode{LaunchModeExec, LaunchMode(97)}
++	err := NewRegistry().Register(sys)
++	if !errors.Is(err, ErrInvalidLaunchMode) {
++		t.Fatalf("Register err = %v, want ErrInvalidLaunchMode", err)
++	}
++	if !strings.Contains(err.Error(), "launch-mode(97)") {
++		t.Errorf("refusal %q does not name the undeclared mode", err)
++	}
++}
++
++// An undeclared transport would make CanCarry answer for something no plugin
++// can implement, and the answer it gives — the default branch — is "cannot
++// carry", which is a decided no derived from a value nobody defined.
++func TestRegisterRefusesUnknownEffortTransport(t *testing.T) {
++	sys := newPangolin()
++	sys.caps.EffortTransport = EffortTransport(42)
++	if err := NewRegistry().Register(sys); !errors.Is(err, ErrInvalidEffortTransport) {
++		t.Fatalf("Register err = %v, want ErrInvalidEffortTransport", err)
++	}
++}
++
++func TestLookupNormalizesAndRefusesGarbage(t *testing.T) {
++	registry := registerPangolin(t, newPangolin())
++	if _, ok := registry.Lookup("  PanGolin "); !ok {
++		t.Error("Lookup did not normalize the identifier it was handed")
++	}
++	if _, ok := registry.Lookup("pango lin"); ok {
++		t.Error("Lookup accepted an identifier that cannot name any registration")
++	}
++	if _, ok := registry.Lookup("pangolin-2"); ok {
++		t.Error("Lookup matched a different identifier")
++	}
++}
++
++func TestIDsAreSortedAndDoNotAliasTheRegistry(t *testing.T) {
++	registry := NewRegistry()
++	for _, id := range []SystemID{"muse", "codex", "claude-code"} {
++		if err := registry.Register(withID(id)); err != nil {
++			t.Fatalf("Register(%s): %v", id, err)
++		}
++	}
++	ids := registry.IDs()
++	want := "[claude-code codex muse]"
++	if fmt.Sprint(ids) != want {
++		t.Fatalf("IDs = %v, want %s", ids, want)
++	}
++	ids[0] = "mutated"
++	if fmt.Sprint(registry.IDs()) != want {
++		t.Errorf("IDs aliased the registry: a caller overwrote a registration through the returned slice")
++	}
++}
++
++// The registry is read by concurrent callers and written by plugin init; the
++// race detector is what makes this assertion mean anything, so this test earns
++// its keep under `go test -race` and costs almost nothing without it.
++func TestRegistryIsSafeForConcurrentUse(t *testing.T) {
++	registry := NewRegistry()
++	var wg sync.WaitGroup
++	for i := 0; i < 8; i++ {
++		wg.Add(1)
++		go func(i int) {
++			defer wg.Done()
++			_ = registry.Register(withID(SystemID(fmt.Sprintf("system-%d", i))))
++			_, _ = registry.Lookup("system-0")
++			_ = registry.IDs()
++			_ = registry.Len()
++		}(i)
++	}
++	wg.Wait()
++	if registry.Len() != 8 {
++		t.Errorf("Len = %d after 8 concurrent registrations, want 8", registry.Len())
++	}
++}
++
++// The package-level Default exists so a plugin can register from init. It must
++// be a real registry rather than a nil that every caller has to check.
++func TestDefaultRegistryIsUsable(t *testing.T) {
++	if Default == nil {
++		t.Fatal("Default is nil; a plugin's init has nothing to register into")
++	}
++	if err := Default.Register(nil); !errors.Is(err, ErrNilSystem) {
++		t.Errorf("Register(nil) through the package-level helper err = %v, want ErrNilSystem", err)
++	}
++}
+diff --git a/pkg/agentic/singlesource_guard_mutants_test.go b/pkg/agentic/singlesource_guard_mutants_test.go
+new file mode 100644
+index 0000000..b647474
+--- /dev/null
++++ b/pkg/agentic/singlesource_guard_mutants_test.go
+@@ -0,0 +1,459 @@
++package agentic
++
++import (
++	"strings"
++	"testing"
++)
++
++// The mutants below are the guard's own negative tests. Each plants one
++// spelling of a second binding into a synthetic corpus and requires the
++// scanner to report it; TestSingleSourceGuardAcceptsOrdinaryCode is the
++// control that keeps the whole set from being satisfied by a scanner that
++// reports everything.
++//
++// A guard is only worth what its author failed to defeat, so the spellings go
++// well past the obvious one: the alias type, the make() call, the struct
++// field, the const-hidden key, the var-hidden case, the function literal
++// inside a call argument, and the switch on ID() that names no known id at
++// all. Every one of these walked through some revision of the source
++// repository's guard.
++
++// mutantRegistrySource stands in for the real registry file: it is the one
++// file the allowlist permits to hold a binding, so a mutant elsewhere has to
++// be found on its own merits rather than because the corpus contains no
++// legitimate map at all.
++const mutantRegistrySource = `package agentic
++
++type SystemID string
++
++type System interface{ ID() SystemID }
++
++type Registry struct {
++	systems map[SystemID]System
++}
++
++func NewRegistry() *Registry { return &Registry{systems: map[SystemID]System{}} }
++`
++
++func scanMutant(t *testing.T, filename, src string) []bindingViolation {
++	t.Helper()
++	violations, err := scanSingleSource(map[string]string{
++		"pkg/agentic/registry.go": mutantRegistrySource,
++		filename:                  src,
++	}, registryAllowlist)
++	if err != nil {
++		t.Fatalf("scanSingleSource: %v", err)
++	}
++	return violations
++}
++
++func requireClass(t *testing.T, mutant string, violations []bindingViolation, class string) {
++	t.Helper()
++	for _, v := range violations {
++		if v.Class == class {
++			return
++		}
++	}
++	rendered := make([]string, len(violations))
++	for i, v := range violations {
++		rendered[i] = v.String()
++	}
++	t.Fatalf("mutant %q was not reported as %s; the guard admits this spelling. violations:\n  %s",
++		mutant, class, strings.Join(rendered, "\n  "))
++}
++
++func TestSingleSourceGuardCatchesShadowTables(t *testing.T) {
++	mutants := []struct {
++		name string
++		file string
++		src  string
++	}{
++		{
++			name: "the obvious one: a second package-level map keyed by SystemID",
++			file: "pkg/launcher/shadow.go",
++			src: `package launcher
++
++import "github.com/relux-works/skill-agents-management/pkg/agentic"
++
++type builder func() []string
++
++var shadow = map[agentic.SystemID]builder{}
++`,
++		},
++		{
++			name: "behind a named map type declared in the shadow file",
++			file: "pkg/launcher/alias.go",
++			src: `package launcher
++
++import "github.com/relux-works/skill-agents-management/pkg/agentic"
++
++type builder func() []string
++
++type shadowTable map[agentic.SystemID]builder
++
++var shadow = shadowTable{}
++`,
++		},
++		{
++			name: "instantiating a binding table type declared inside the allowed file",
++			file: "pkg/launcher/instantiate.go",
++			src: `package agentic
++
++type bindings map[SystemID]System
++
++func boot() bindings { return bindings{} }
++`,
++		},
++		{
++			name: "built with make() inside a function body rather than a literal",
++			file: "pkg/launcher/make.go",
++			src: `package launcher
++
++import "github.com/relux-works/skill-agents-management/pkg/agentic"
++
++type builder func() []string
++
++func boot() {
++	table := make(map[agentic.SystemID]builder, 4)
++	_ = table
++}
++`,
++		},
++		{
++			name: "a struct field, never a literal anywhere",
++			file: "pkg/launcher/field.go",
++			src: `package launcher
++
++import "github.com/relux-works/skill-agents-management/pkg/agentic"
++
++type builder func() []string
++
++type cache struct {
++	byID map[agentic.SystemID]builder
++}
++`,
++		},
++		{
++			name: "through a SystemID alias, so the key type is not spelled SystemID",
++			file: "pkg/launcher/sidalias.go",
++			src: `package agentic
++
++type sid = SystemID
++
++type builder func() []string
++
++var shadow = map[sid]builder{}
++`,
++		},
++		{
++			name: "a map[string]T whose keys are system ids, avoiding the SystemID type entirely",
++			file: "pkg/launcher/stringkeys.go",
++			src: `package launcher
++
++type builder func() []string
++
++var shadow = map[string]builder{
++	"claude-code": nil,
++	"codex":       nil,
++}
++`,
++		},
++		{
++			name: "keys moved behind package-level constants",
++			file: "pkg/launcher/constkeys.go",
++			src: `package launcher
++
++type builder func() []string
++
++const (
++	claudeID = "claude-code"
++	codexID  = "codex"
++)
++
++var shadow = map[string]builder{
++	claudeID: nil,
++	codexID:  nil,
++}
++`,
++		},
++		{
++			name: "keys assembled by constant concatenation",
++			file: "pkg/launcher/concatkeys.go",
++			src: `package launcher
++
++type builder func() []string
++
++const (
++	family   = "gemini"
++	suffix   = "-cli"
++	geminiID = family + suffix
++)
++
++var shadow = map[string]builder{geminiID: nil}
++`,
++		},
++	}
++
++	for _, mutant := range mutants {
++		t.Run(mutant.name, func(t *testing.T) {
++			requireClass(t, mutant.name, scanMutant(t, mutant.file, mutant.src), bindingClassTable)
++		})
++	}
++}
++
++func TestSingleSourceGuardCatchesIDSwitches(t *testing.T) {
++	mutants := []struct {
++		name string
++		file string
++		src  string
++	}{
++		{
++			name: "the obvious one: a switch over id literals",
++			file: "pkg/launcher/idswitch.go",
++			src: `package launcher
++
++func argv(id string) []string {
++	switch id {
++	case "claude-code":
++		return []string{"-p"}
++	case "codex":
++		return []string{"exec"}
++	}
++	return nil
++}
++`,
++		},
++		{
++			name: "an if-else chain, which is a switch spelled differently",
++			file: "pkg/launcher/ifchain.go",
++			src: `package launcher
++
++func argv(id string) []string {
++	if id == "codex" {
++		return []string{"exec"}
++	} else if id == "muse" {
++		return []string{"run"}
++	}
++	return nil
++}
++`,
++		},
++		{
++			name: "a negated comparison, which is the same chain inverted",
++			file: "pkg/launcher/negated.go",
++			src: `package launcher
++
++func argv(id string) []string {
++	if id != "gemini-cli" {
++		return nil
++	}
++	return []string{"-p"}
++}
++`,
++		},
++		{
++			name: "case values moved behind package-level constants",
++			file: "pkg/launcher/constcase.go",
++			src: `package launcher
++
++const claudeID = "claude-code"
++
++func argv(id string) []string {
++	switch id {
++	case claudeID:
++		return []string{"-p"}
++	}
++	return nil
++}
++`,
++		},
++		{
++			name: "case values moved behind a package-level var",
++			file: "pkg/launcher/varcase.go",
++			src: `package launcher
++
++var agyID = "antigravity"
++
++func argv(id string) []string {
++	switch id {
++	case agyID:
++		return []string{"--headless"}
++	}
++	return nil
++}
++`,
++		},
++		{
++			name: "case values indexed out of a package-level slice",
++			file: "pkg/launcher/varindexcase.go",
++			src: `package launcher
++
++var supported = []string{"gemini-cli", "muse"}
++
++func argv(id string) []string {
++	switch id {
++	case supported[1]:
++		return []string{"--headless"}
++	}
++	return nil
++}
++`,
++		},
++		{
++			name: "a var-held id compared directly",
++			file: "pkg/launcher/varcompare.go",
++			src: `package launcher
++
++var qwenID = "qwen-code"
++
++func argv(id string) []string {
++	if id == qwenID {
++		return []string{"--yolo"}
++	}
++	return nil
++}
++`,
++		},
++		{
++			name: "inside a function literal passed as a call argument",
++			file: "pkg/launcher/funclit.go",
++			src: `package launcher
++
++type builder func(id string) []string
++
++func register(b builder) builder { return b }
++
++var boot = register(func(id string) []string {
++	switch id {
++	case "gemini-cli":
++		return []string{"-p"}
++	}
++	return nil
++})
++`,
++		},
++		{
++			name: "a switch on ID() naming ids nobody has declared yet",
++			file: "pkg/launcher/idcall.go",
++			src: `package launcher
++
++import "github.com/relux-works/skill-agents-management/pkg/agentic"
++
++func argv(sys agentic.System) []string {
++	switch sys.ID() {
++	case "opencode":
++		return []string{"run"}
++	case "some-future-harness":
++		return []string{"go"}
++	}
++	return nil
++}
++`,
++		},
++	}
++
++	for _, mutant := range mutants {
++		t.Run(mutant.name, func(t *testing.T) {
++			requireClass(t, mutant.name, scanMutant(t, mutant.file, mutant.src), bindingClassIDSwitch)
++		})
++	}
++}
++
++// TestSingleSourceGuardAcceptsOrdinaryCode is the control. Without it every
++// mutant above is equally satisfied by a scanner that reports every file, and
++// a guard that cries wolf on ordinary code is a guard that gets deleted.
++func TestSingleSourceGuardAcceptsOrdinaryCode(t *testing.T) {
++	clean := `package launcher
++
++import "github.com/relux-works/skill-agents-management/pkg/agentic"
++
++var counts = map[string]int{"launches": 0, "refusals": 0}
++
++func label(mode agentic.LaunchMode) string {
++	switch mode {
++	case agentic.LaunchModeExec:
++		return "exec"
++	case agentic.LaunchModeDryRun:
++		return "dry-run"
++	}
++	return "other"
++}
++
++func describe(id agentic.SystemID) string {
++	if id == "" {
++		return "unregistered"
++	}
++	return "codex exec is the launch mode this harness owns end to end"
++}
++
++func plan(r *agentic.Registry, req agentic.LaunchRequest) (agentic.Plan, error) {
++	return agentic.BuildPlan(r, req, agentic.LaunchModeExec)
++}
++`
++	violations := scanMutant(t, "pkg/launcher/clean.go", clean)
++	for _, v := range violations {
++		if v.File == "pkg/launcher/clean.go" {
++			t.Errorf("ordinary code was reported as a second binding: %s", v)
++		}
++	}
++}
++
++// TestSingleSourceGuardResidualGaps demonstrates the three classes the threat
++// model on singlesource_guard_test.go declares open, rather than asserting
++// them in prose. Each spelling below is NOT reported, and that is recorded
++// here so the boundary is a known quantity instead of an undiscovered one. If
++// a future change closes one of these, this test fails and the threat model
++// gets updated with it — which is the point.
++func TestSingleSourceGuardResidualGaps(t *testing.T) {
++	gaps := []struct {
++		name string
++		src  string
++	}{
++		{
++			name: "a call-wrapped literal key",
++			src: `package launcher
++
++type builder func() []string
++
++var shadow = map[string]builder{string([]byte("claude-code")): nil}
++`,
++		},
++		{
++			name: "a cross-package const referenced by selector",
++			src: `package launcher
++
++import "example.com/ids"
++
++type builder func() []string
++
++var shadow = map[string]builder{ids.Codex: nil}
++`,
++		},
++		{
++			name: "ids assembled at runtime",
++			src: `package launcher
++
++import "strings"
++
++type builder func() []string
++
++func boot(parts []string) map[string]builder {
++	table := map[string]builder{}
++	table[strings.Join(parts, "-")] = nil
++	return table
++}
++`,
++		},
++	}
++
++	for _, gap := range gaps {
++		t.Run(gap.name, func(t *testing.T) {
++			violations := scanMutant(t, "pkg/launcher/residual.go", gap.src)
++			for _, v := range violations {
++				if v.File == "pkg/launcher/residual.go" {
++					t.Fatalf("this residual is no longer open: %s. Update the threat model on singlesource_guard_test.go and move this case into the mutant set.", v)
++				}
++			}
++		})
++	}
++}
+diff --git a/pkg/agentic/singlesource_guard_test.go b/pkg/agentic/singlesource_guard_test.go
+new file mode 100644
+index 0000000..b8c5d9a
+--- /dev/null
++++ b/pkg/agentic/singlesource_guard_test.go
+@@ -0,0 +1,700 @@
++package agentic
++
++import (
++	"fmt"
++	"go/ast"
++	"go/parser"
++	"go/token"
++	"os"
++	"path/filepath"
++	"sort"
++	"strconv"
++	"strings"
++	"testing"
++)
++
++// This file is the mechanical enforcement of invariant 5 in
++// docs/architecture.md: the registry is the only place an agentic system
++// binding may live.
++//
++// # Why it is written this way
++//
++// The extraction source's first single-source guard grepped its own sources
++// for a field name. A one-line shadow table that did not spell that field
++// walked straight through it, and the guard was rewritten over go/ast. The
++// rewritten guard then failed four review rounds because minimal spellings
++// still walked through: a single literal where the threshold wanted two, a
++// literal moved behind a package-level const, a literal moved behind a
++// package-level var, and a literal moved inside a function literal. This
++// guard starts at the end of that history rather than the beginning — const
++// and var indirection resolve, function literals are walked wherever they
++// appear, and the structural rules do not depend on a literal being spelled
++// at all.
++//
++// # Threat model
++//
++// This is a static, syntactic scan for ORDINARY Go spellings. It exists to
++// catch an honest colleague reintroducing a second binding during ordinary
++// work — the failure that cost the source repository a whole task to unwind.
++// It is deliberately NOT a security boundary against an author trying to
++// defeat it: someone who wants to hide a string from an AST scan has
++// unbounded room (assemble it at runtime, decode it from bytes, route it
++// through reflection, wrap it in a call this scanner does not evaluate), and
++// chasing every one of those adds false-positive surface to a gate whose whole
++// value is catching the mistake.
++//
++// Three residual classes are therefore DECLARED OPEN rather than left for a
++// reader to discover, and TestSingleSourceGuardResidualGaps demonstrates each
++// one staying open rather than asserting it in prose:
++//
++//   - Call-wrapped literals: string([]byte("codex")), strings.TrimSpace("codex"),
++//     fmt.Sprintf with no verbs. Neither foldStringConst nor
++//     collectStringLiterals evaluates a call expression.
++//   - Cross-package references: a const or var declared outside the scanned
++//     source set and referenced through a qualified selector (other.CodexID).
++//     Only the files handed to the scanner are resolved.
++//   - Runtime assembly: a map built by appending or assigning in a loop from
++//     values computed at runtime, or ids assembled from runes.
++//
++// The structural rules — a map keyed by SystemID, a switch on a value's ID()
++// — remain live against all three, which is why they carry the weight and the
++// id vocabulary is a second net rather than the only one.
++
++const (
++	bindingClassTable    = "binding-table"
++	bindingClassIDSwitch = "id-switch"
++)
++
++// knownSystemIDs is the identifier vocabulary a reintroduced binding would
++// spell. It holds the agentic system ids docs/architecture.md names and the
++// frozen runtime ids that feed admitted-pair digests and limit-state
++// filenames.
++//
++// Matching is EXACT on the trimmed, lowercased value rather than by substring.
++// Substring matching would flag ordinary prose that happens to contain "codex"
++// or "muse" — a guard with that many false positives is a guard somebody
++// deletes — while an accidental reintroduction spells the id exactly, because
++// it has to for the lookup to work.
++var knownSystemIDs = map[string]bool{
++	"claude-code": true,
++	"codex":       true,
++	"qwen-code":   true,
++	"gemini-cli":  true,
++	"antigravity": true,
++	"muse":        true,
++	"claude":      true,
++	"qwen":        true,
++	"gemini":      true,
++	"agy":         true,
++	"qwen-codex":  true,
++}
++
++// bindingViolation is one place a second binding was found.
++type bindingViolation struct {
++	File   string
++	Where  string
++	Line   int
++	Class  string
++	Detail string
++}
++
++func (v bindingViolation) String() string {
++	return fmt.Sprintf("%s:%d [%s] %s: %s", v.File, v.Line, v.Class, v.Where, v.Detail)
++}
++
++// scanSingleSource parses every source and reports each second binding it
++// finds. sources maps a display filename to Go source text, so the same
++// scanner runs over the real tree and over synthetic mutant corpora.
++//
++// allowFiles names the display filenames permitted to hold a binding table —
++// the registry, and nothing else. It does not exempt a file from the id-switch
++// rules: the registry has no business dispatching on identifiers either.
++func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]bindingViolation, error) {
++	fset := token.NewFileSet()
++	names := make([]string, 0, len(sources))
++	parsed := make(map[string]*ast.File, len(sources))
++	for name, src := range sources {
++		file, err := parser.ParseFile(fset, name, src, 0)
++		if err != nil {
++			return nil, fmt.Errorf("parsing %s: %w", name, err)
++		}
++		names = append(names, name)
++		parsed[name] = file
++	}
++	sort.Strings(names)
++
++	all := make([]*ast.File, 0, len(parsed))
++	for _, name := range names {
++		all = append(all, parsed[name])
++	}
++	consts := resolveConstStrings(all)
++	vars := resolveVarStrings(all, consts)
++	systemIDTypes := resolveSystemIDTypeNames(all)
++	bindingTypes := resolveBindingTableTypeNames(all, systemIDTypes)
++
++	var violations []bindingViolation
++	seen := map[string]bool{}
++	record := func(file, where string, pos token.Pos, class, detail string) {
++		line := fset.Position(pos).Line
++		key := fmt.Sprintf("%s\x00%d\x00%s", file, line, class)
++		if seen[key] {
++			return
++		}
++		seen[key] = true
++		violations = append(violations, bindingViolation{File: file, Where: where, Line: line, Class: class, Detail: detail})
++	}
++
++	for _, name := range names {
++		file := parsed[name]
++		tableAllowed := allowFiles[name]
++		for _, decl := range file.Decls {
++			where := declName(decl)
++			ast.Inspect(decl, func(n ast.Node) bool {
++				switch node := n.(type) {
++				case *ast.MapType:
++					if !tableAllowed && isSystemIDRef(node.Key, systemIDTypes) {
++						record(name, where, node.Pos(), bindingClassTable,
++							"a map keyed by SystemID; the registry is the only place a system binding may live")
++					}
++				case *ast.CompositeLit:
++					if !tableAllowed && node.Type != nil && isBindingTableRef(node.Type, bindingTypes) {
++						record(name, where, node.Pos(), bindingClassTable,
++							"a composite literal of a named type whose underlying type maps SystemID to behaviour")
++					}
++					if tableAllowed {
++						return true
++					}
++					for _, elt := range node.Elts {
++						target, position := elt, "element"
++						if kv, ok := elt.(*ast.KeyValueExpr); ok {
++							target, position = kv.Key, "key"
++						}
++						if id, ok := knownSystemIDOf(target, consts, vars); ok {
++							record(name, where, node.Pos(), bindingClassTable,
++								fmt.Sprintf("a composite literal with the system id %q as a %s; the registry is the only place the set of systems may be spelled", id, position))
++						}
++					}
++				case *ast.SwitchStmt:
++					if node.Tag != nil && isIDCall(node.Tag) && node.Body != nil && len(node.Body.List) > 0 {
++						record(name, where, node.Pos(), bindingClassIDSwitch,
++							"a switch on a system's ID(); dispatch belongs in the registry, not in a switch")
++					}
++					if node.Body == nil {
++						return true
++					}
++					for _, stmt := range node.Body.List {
++						clause, ok := stmt.(*ast.CaseClause)
++						if !ok {
++							continue
++						}
++						for _, value := range clause.List {
++							if id, ok := knownSystemIDOf(value, consts, vars); ok {
++								record(name, where, node.Pos(), bindingClassIDSwitch,
++									fmt.Sprintf("a switch case on the system id %q", id))
++							}
++						}
++					}
++				case *ast.BinaryExpr:
++					if node.Op != token.EQL && node.Op != token.NEQ {
++						return true
++					}
++					for _, side := range []ast.Expr{node.X, node.Y} {
++						if id, ok := knownSystemIDOf(side, consts, vars); ok {
++							record(name, where, node.Pos(), bindingClassIDSwitch,
++								fmt.Sprintf("a comparison against the system id %q; an if-else chain over ids is a switch spelled differently", id))
++						}
++					}
++				}
++				return true
++			})
++		}
++	}
++	sort.Slice(violations, func(i, j int) bool {
++		if violations[i].File != violations[j].File {
++			return violations[i].File < violations[j].File
++		}
++		if violations[i].Line != violations[j].Line {
++			return violations[i].Line < violations[j].Line
++		}
++		return violations[i].Class < violations[j].Class
++	})
++	return violations, nil
++}
++
++// declName labels a violation with the declaration it was found in, so a
++// report points at a name a reader can grep for rather than only a line.
++func declName(decl ast.Decl) string {
++	switch d := decl.(type) {
++	case *ast.FuncDecl:
++		if d.Recv != nil && len(d.Recv.List) > 0 {
++			return "method " + d.Name.Name
++		}
++		return "func " + d.Name.Name
++	case *ast.GenDecl:
++		for _, spec := range d.Specs {
++			switch s := spec.(type) {
++			case *ast.ValueSpec:
++				if len(s.Names) > 0 {
++					return d.Tok.String() + " " + s.Names[0].Name
++				}
++			case *ast.TypeSpec:
++				if s.Name != nil {
++					return "type " + s.Name.Name
++				}
++			}
++		}
++		return d.Tok.String() + " declaration"
++	default:
++		return "declaration"
++	}
++}
++
++// isSystemIDRef reports whether a type expression denotes SystemID, directly
++// or through a name declared to be it. The qualified spelling is accepted on
++// the selector name alone: only this module declares SystemID, and a scan that
++// insisted on resolving the qualifier would miss `agentic.SystemID` in every
++// file that imports the package under any name.
++func isSystemIDRef(expr ast.Expr, systemIDTypes map[string]bool) bool {
++	switch typed := expr.(type) {
++	case *ast.Ident:
++		return typed.Name == "SystemID" || systemIDTypes[typed.Name]
++	case *ast.SelectorExpr:
++		return typed.Sel != nil && typed.Sel.Name == "SystemID"
++	case *ast.ParenExpr:
++		return isSystemIDRef(typed.X, systemIDTypes)
++	default:
++		return false
++	}
++}
++
++// isBindingTableRef reports whether a type expression names a type whose
++// underlying type maps SystemID to something — the alias spelling of a shadow
++// table, where the map type itself is declared once (possibly in the allowed
++// file) and instantiated elsewhere.
++func isBindingTableRef(expr ast.Expr, bindingTypes map[string]bool) bool {
++	switch typed := expr.(type) {
++	case *ast.Ident:
++		return bindingTypes[typed.Name]
++	case *ast.ParenExpr:
++		return isBindingTableRef(typed.X, bindingTypes)
++	default:
++		return false
++	}
++}
++
++// isIDCall reports whether an expression is a call to a method named ID —
++// `sys.ID()`, `plugin.ID()`. It is the structural half of the id-switch rule
++// and, unlike the vocabulary half, keeps working for system ids nobody has
++// declared yet.
++func isIDCall(expr ast.Expr) bool {
++	switch typed := expr.(type) {
++	case *ast.ParenExpr:
++		return isIDCall(typed.X)
++	case *ast.CallExpr:
++		if len(typed.Args) != 0 {
++			return false
++		}
++		selector, ok := typed.Fun.(*ast.SelectorExpr)
++		return ok && selector.Sel != nil && selector.Sel.Name == "ID"
++	default:
++		return false
++	}
++}
++
++// resolveSystemIDTypeNames collects the package-level type names that ARE
++// SystemID, whether defined (`type sid SystemID`) or aliased
++// (`type sid = SystemID`), as a bounded fixpoint so a chain of them resolves
++// regardless of declaration order.
++func resolveSystemIDTypeNames(files []*ast.File) map[string]bool {
++	type pending struct {
++		name string
++		expr ast.Expr
++	}
++	var queue []pending
++	for _, file := range files {
++		for _, decl := range file.Decls {
++			gen, ok := decl.(*ast.GenDecl)
++			if !ok || gen.Tok != token.TYPE {
++				continue
++			}
++			for _, spec := range gen.Specs {
++				ts, ok := spec.(*ast.TypeSpec)
++				if !ok || ts.Name == nil || ts.Type == nil {
++					continue
++				}
++				queue = append(queue, pending{ts.Name.Name, ts.Type})
++			}
++		}
++	}
++	names := map[string]bool{}
++	for pass := 0; pass <= len(queue); pass++ {
++		changed := false
++		for _, item := range queue {
++			if names[item.name] {
++				continue
++			}
++			if isSystemIDRef(item.expr, names) {
++				names[item.name] = true
++				changed = true
++			}
++		}
++		if !changed {
++			break
++		}
++	}
++	return names
++}
++
++// resolveBindingTableTypeNames collects the package-level type names whose
++// underlying type maps SystemID to something, following named types to their
++// declarations as a bounded fixpoint.
++func resolveBindingTableTypeNames(files []*ast.File, systemIDTypes map[string]bool) map[string]bool {
++	type pending struct {
++		name string
++		expr ast.Expr
++	}
++	var queue []pending
++	for _, file := range files {
++		for _, decl := range file.Decls {
++			gen, ok := decl.(*ast.GenDecl)
++			if !ok || gen.Tok != token.TYPE {
++				continue
++			}
++			for _, spec := range gen.Specs {
++				ts, ok := spec.(*ast.TypeSpec)
++				if !ok || ts.Name == nil || ts.Type == nil {
++					continue
++				}
++				queue = append(queue, pending{ts.Name.Name, ts.Type})
++			}
++		}
++	}
++	names := map[string]bool{}
++	for pass := 0; pass <= len(queue); pass++ {
++		changed := false
++		for _, item := range queue {
++			if names[item.name] {
++				continue
++			}
++			switch typed := item.expr.(type) {
++			case *ast.MapType:
++				if isSystemIDRef(typed.Key, systemIDTypes) {
++					names[item.name] = true
++					changed = true
++				}
++			case *ast.Ident:
++				if names[typed.Name] {
++					names[item.name] = true
++					changed = true
++				}
++			}
++		}
++		if !changed {
++			break
++		}
++	}
++	return names
++}
++
++// knownSystemIDOf resolves an expression to a system id from the vocabulary,
++// through a string literal, a package-level const, a package-level var, or a
++// concatenation of those. It is the indirection layer four review rounds in
++// the source repository were spent adding.
++func knownSystemIDOf(expr ast.Expr, consts map[string]string, vars map[string][]string) (string, bool) {
++	if value, ok := foldStringConst(expr, consts); ok {
++		if id := normalizeCandidate(value); knownSystemIDs[id] {
++			return id, true
++		}
++	}
++	// A bare identifier reads as any string its package-level var can hold;
++	// an index into one — supported[0] — reads the same way, because the
++	// index is exactly the spelling that hides which element was taken.
++	var name string
++	switch typed := expr.(type) {
++	case *ast.Ident:
++		name = typed.Name
++	case *ast.IndexExpr:
++		if base, ok := typed.X.(*ast.Ident); ok {
++			name = base.Name
++		}
++	case *ast.ParenExpr:
++		return knownSystemIDOf(typed.X, consts, vars)
++	}
++	if name == "" {
++		return "", false
++	}
++	for _, value := range vars[name] {
++		if id := normalizeCandidate(value); knownSystemIDs[id] {
++			return id, true
++		}
++	}
++	return "", false
++}
++
++func normalizeCandidate(value string) string {
++	return strings.ToLower(strings.TrimSpace(value))
++}
++
++// resolveConstStrings folds every package-level string const across the given
++// files, in either declaration order and across grouped blocks, so a literal
++// hidden behind a named constant reads the same as a literal spelled inline.
++func resolveConstStrings(files []*ast.File) map[string]string {
++	type pending struct {
++		name string
++		expr ast.Expr
++	}
++	var queue []pending
++	for _, file := range files {
++		for _, decl := range file.Decls {
++			gen, ok := decl.(*ast.GenDecl)
++			if !ok || gen.Tok != token.CONST {
++				continue
++			}
++			for _, spec := range gen.Specs {
++				vs, ok := spec.(*ast.ValueSpec)
++				if !ok || len(vs.Names) != len(vs.Values) {
++					continue
++				}
++				for i, name := range vs.Names {
++					queue = append(queue, pending{name.Name, vs.Values[i]})
++				}
++			}
++		}
++	}
++	consts := map[string]string{}
++	for pass := 0; pass <= len(queue); pass++ {
++		changed := false
++		for _, item := range queue {
++			if _, done := consts[item.name]; done {
++				continue
++			}
++			if value, ok := foldStringConst(item.expr, consts); ok {
++				consts[item.name] = value
++				changed = true
++			}
++		}
++		if !changed {
++			break
++		}
++	}
++	return consts
++}
++
++// foldStringConst resolves an expression to one compile-time string when it is
++// a literal, a reference to an already-folded const, or a `+` chain of those.
++// It stops at anything else — a call, a non-ADD operator, an index, a selector
++// — which is the declared boundary: this folds literal aliasing, not dataflow.
++func foldStringConst(expr ast.Expr, consts map[string]string) (string, bool) {
++	switch typed := expr.(type) {
++	case *ast.BasicLit:
++		if typed.Kind != token.STRING {
++			return "", false
++		}
++		value, err := strconv.Unquote(typed.Value)
++		return value, err == nil
++	case *ast.Ident:
++		value, ok := consts[typed.Name]
++		return value, ok
++	case *ast.ParenExpr:
++		return foldStringConst(typed.X, consts)
++	case *ast.BinaryExpr:
++		if typed.Op != token.ADD {
++			return "", false
++		}
++		left, ok := foldStringConst(typed.X, consts)
++		if !ok {
++			return "", false
++		}
++		right, ok := foldStringConst(typed.Y, consts)
++		if !ok {
++			return "", false
++		}
++		return left + right, true
++	default:
++		return "", false
++	}
++}
++
++// resolveVarStrings extends const resolution to package-level vars: every
++// string reachable inside a var's initializer is attributed to that var's
++// name, so a case clause or a map key written as a bare identifier reads as
++// the values that identifier can hold.
++func resolveVarStrings(files []*ast.File, consts map[string]string) map[string][]string {
++	vars := map[string][]string{}
++	for _, file := range files {
++		for _, decl := range file.Decls {
++			gen, ok := decl.(*ast.GenDecl)
++			if !ok || gen.Tok != token.VAR {
++				continue
++			}
++			for _, spec := range gen.Specs {
++				vs, ok := spec.(*ast.ValueSpec)
++				if !ok || len(vs.Names) != len(vs.Values) {
++					continue
++				}
++				for i, name := range vs.Names {
++					if values := collectStringLiterals(vs.Values[i], consts); len(values) > 0 {
++						vars[name.Name] = append(vars[name.Name], values...)
++					}
++				}
++			}
++		}
++	}
++	return vars
++}
++
++// collectStringLiterals walks an initializer structurally for the strings it
++// contains: slice and array elements, map and struct keys and values, and both
++// sides of a concatenation that did not fold whole. It does not evaluate calls
++// or index expressions — the first of the declared-open residuals.
++func collectStringLiterals(expr ast.Expr, consts map[string]string) []string {
++	if value, ok := foldStringConst(expr, consts); ok {
++		return []string{value}
++	}
++	var out []string
++	switch typed := expr.(type) {
++	case *ast.ParenExpr:
++		out = append(out, collectStringLiterals(typed.X, consts)...)
++	case *ast.BinaryExpr:
++		out = append(out, collectStringLiterals(typed.X, consts)...)
++		out = append(out, collectStringLiterals(typed.Y, consts)...)
++	case *ast.CompositeLit:
++		for _, elt := range typed.Elts {
++			if kv, ok := elt.(*ast.KeyValueExpr); ok {
++				out = append(out, collectStringLiterals(kv.Key, consts)...)
++				out = append(out, collectStringLiterals(kv.Value, consts)...)
++				continue
++			}
++			out = append(out, collectStringLiterals(elt, consts)...)
++		}
++	}
++	return out
++}
++
++// moduleRoot walks up from the test's working directory to the directory
++// holding go.mod. A guard that scanned only its own package directory would
++// leave every other package unguarded, which is how a shadow table gets in.
++func moduleRoot(t *testing.T) string {
++	t.Helper()
++	dir, err := os.Getwd()
++	if err != nil {
++		t.Fatalf("Getwd: %v", err)
++	}
++	for {
++		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
++			return dir
++		}
++		parent := filepath.Dir(dir)
++		if parent == dir {
++			t.Fatalf("no go.mod above the test working directory; the guard has nothing to scan")
++		}
++		dir = parent
++	}
++}
++
++// moduleSources reads every non-test Go source in the module, discovered by
++// walking rather than from a list of directories: a package added later must
++// not be silently unscanned, and a hardcoded list is exactly how that happens.
++func moduleSources(t *testing.T) map[string]string {
++	t.Helper()
++	root := moduleRoot(t)
++	skipDirs := map[string]bool{
++		".git": true, ".temp": true, ".task-board": true, ".claude": true,
++		".codex": true, "vendor": true, "node_modules": true, "testdata": true,
++	}
++	sources := map[string]string{}
++	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
++		if err != nil {
++			return err
++		}
++		if entry.IsDir() {
++			if path != root && skipDirs[entry.Name()] {
++				return filepath.SkipDir
++			}
++			return nil
++		}
++		name := entry.Name()
++		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
++			return nil
++		}
++		data, err := os.ReadFile(path)
++		if err != nil {
++			return err
++		}
++		relative, err := filepath.Rel(root, path)
++		if err != nil {
++			return err
++		}
++		sources[filepath.ToSlash(relative)] = string(data)
++		return nil
++	})
++	if err != nil {
++		t.Fatalf("walking %s: %v", root, err)
++	}
++	return sources
++}
++
++// registryAllowlist names the one file permitted to hold a system binding.
++// It is a single entry on purpose; the moment it needs a second, the
++// invariant it enforces has changed and the change should be argued in a
++// review, not absorbed here.
++var registryAllowlist = map[string]bool{"pkg/agentic/registry.go": true}
++
++// TestSingleSourceGuardScansTheWholeModule proves the scan reaches what it
++// claims to, so a clean result means "nothing found" rather than "nothing
++// looked at". A guard that silently scans zero files reports clean forever.
++func TestSingleSourceGuardScansTheWholeModule(t *testing.T) {
++	sources := moduleSources(t)
++	for _, required := range []string{
++		"pkg/agentic/registry.go",
++		"pkg/agentic/plan.go",
++		"pkg/agentic/system.go",
++		"tools/agents-management/cmd/plugins.go",
++		"tools/agents-management/cmd/root.go",
++		"tools/agents-management/main.go",
++	} {
++		if _, ok := sources[required]; !ok {
++			t.Errorf("the module scan did not reach %s; a file the guard never reads is a file it never guards", required)
++		}
++	}
++	if len(sources) < 6 {
++		t.Fatalf("scanned %d sources, which is too few for the guard's claim to mean anything", len(sources))
++	}
++}
++
++// TestSingleSourceGuardFindsNoSecondBinding is the guard itself.
++func TestSingleSourceGuardFindsNoSecondBinding(t *testing.T) {
++	violations, err := scanSingleSource(moduleSources(t), registryAllowlist)
++	if err != nil {
++		t.Fatalf("scanSingleSource: %v", err)
++	}
++	if len(violations) == 0 {
++		return
++	}
++	lines := make([]string, len(violations))
++	for i, v := range violations {
++		lines[i] = v.String()
++	}
++	t.Fatalf("a second agentic system binding exists outside the registry:\n  %s", strings.Join(lines, "\n  "))
++}
++
++// TestSingleSourceGuardRulesFireOnRealCode narrows the gate instead of
++// deleting it: the same real sources are rescanned with the allowlist empty,
++// and the registry's own map must then be reported. Without this, a green
++// result above is equally consistent with "the rule never matches anything",
++// and the guard would be worth nothing while looking healthy.
++func TestSingleSourceGuardRulesFireOnRealCode(t *testing.T) {
++	violations, err := scanSingleSource(moduleSources(t), map[string]bool{})
++	if err != nil {
++		t.Fatalf("scanSingleSource: %v", err)
++	}
++	found := false
++	for _, v := range violations {
++		if v.File == "pkg/agentic/registry.go" && v.Class == bindingClassTable {
++			found = true
++		}
++	}
++	if !found {
++		t.Fatalf("with an empty allowlist the registry's own binding map was not reported; the binding-table rule does not fire on real code, so its silence on everything else proves nothing. violations=%v", violations)
++	}
++}
+diff --git a/pkg/agentic/system.go b/pkg/agentic/system.go
+new file mode 100644
+index 0000000..c191e7e
+--- /dev/null
++++ b/pkg/agentic/system.go
+@@ -0,0 +1,444 @@
++// Package agentic is Layer 1 of agents-management: the contract an agentic
++// system plugin implements, and the registry that is the only place a system
++// binding may live.
++//
++// An agentic system is the harness that runs a turn — Claude Code, Codex,
++// Qwen Code, Gemini CLI, Antigravity, Muse. It owns the binary, the argv
++// grammar per launch mode, the environment contract, the stdin protocol, the
++// launch composition, the default configuration home and the authentication
++// hint. Everything a concrete harness knows lives in its plugin; this package
++// knows only the shape of the declaration and how to dispatch through it.
++//
++// Nothing about a vendor — models, effort vocabularies, authentication, quota
++// — lives here. The one vendor-shaped fact this layer needs is whether a model
++// requires a reasoning effort at all (EffortSupport), because a system whose
++// declared transport cannot carry effort can never launch such a model, and
++// that has to be decidable by a caller holding only these types.
++//
++// # Provenance
++//
++// The shape mirrors the adapter table proven in skill-project-management
++// (internal/spawn/adapter.go). Deliberate reshapes are named on the
++// declarations they affect rather than left for a reader to discover.
++package agentic
++
++import (
++	"fmt"
++	"strings"
++)
++
++// SystemID is the stable identifier of an agentic system plugin, normalized
++// to one spelling. Downstream state — admitted-pair digests, limit-state
++// filenames, free-text records — is keyed by these, so two spellings of one
++// system silently orphan state. NormalizeSystemID is the single normalization
++// and every entry point into this package runs identifiers through it.
++type SystemID string
++
++// String renders the identifier for error text and CLI output.
++func (id SystemID) String() string { return string(id) }
++
++// InvalidSystemIDError says why an identifier was refused, naming the raw
++// spelling and the rule it broke. The refusal text has to be enough for an
++// agent to fix the declaration from the error alone.
++type InvalidSystemIDError struct {
++	Raw    string
++	Reason string
++}
++
++func (e *InvalidSystemIDError) Error() string {
++	return fmt.Sprintf("invalid agentic system id %q: %s; ids are lowercase ASCII segments of letters and digits joined by single hyphens, for example \"claude-code\"", e.Raw, e.Reason)
++}
++
++// NormalizeSystemID is the single normalization for agentic system
++// identifiers: surrounding whitespace is dropped and ASCII letters are
++// lowercased, then the result must be one or more segments of [a-z0-9]
++// joined by single hyphens.
++//
++// Normalizing before validating is what makes "Codex" and "codex" the same
++// registration rather than two — the registry reports the second as a
++// duplicate instead of admitting a shadow binding under a different spelling.
++func NormalizeSystemID(raw string) (SystemID, error) {
++	trimmed := strings.TrimSpace(raw)
++	if trimmed == "" {
++		return "", &InvalidSystemIDError{Raw: raw, Reason: "it is empty"}
++	}
++	lowered := strings.Map(func(r rune) rune {
++		if r >= 'A' && r <= 'Z' {
++			return r + ('a' - 'A')
++		}
++		return r
++	}, trimmed)
++	for _, segment := range strings.Split(lowered, "-") {
++		if segment == "" {
++			return "", &InvalidSystemIDError{Raw: raw, Reason: "it has an empty hyphen-separated segment"}
++		}
++		for _, r := range segment {
++			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
++				continue
++			}
++			return "", &InvalidSystemIDError{Raw: raw, Reason: fmt.Sprintf("it contains %q, which is not a lowercase ASCII letter, a digit or a hyphen", string(r))}
++		}
++	}
++	return SystemID(lowered), nil
++}
++
++// LaunchMode selects which argv grammar a system builds. A harness does not
++// have one argv shape: the extraction source's codex adapter already had two
++// (a one-shot `codex exec` process the launcher owns end to end, and a
++// provider-args fragment handed to an external session composer), plus a
++// third dry-run mirror that had to reproduce the exec grammar exactly.
++//
++// Reshape from the source adapter: DryRunArgs was a separate function value
++// whose whole contract was "the same grammar as BuildCommand, without side
++// effects". Making it a mode instead of a sibling method removes the seam the
++// two could drift across — the drift the source paid for when BuildArgs
++// hardcoded a display binary the real launch never used.
++type LaunchMode int
++
++const (
++	// LaunchModeExec is the one-shot child process this tool owns end to end.
++	LaunchModeExec LaunchMode = iota
++	// LaunchModeDryRun is the side-effect-free mirror of LaunchModeExec: the
++	// same argv grammar, with readable placeholders wherever a real launch
++	// would read a file that does not exist yet. It must never resolve
++	// anything a real launch would resolve by performing work — no preflight,
++	// no process start, no file creation.
++	LaunchModeDryRun
++	// LaunchModeManagedSession is the provider-args fragment fed to an
++	// external composer that owns the PTY, rather than a complete argv this
++	// tool executes.
++	LaunchModeManagedSession
++)
++
++// Valid reports whether m is one of the declared modes. A mode value outside
++// the set is a programming error in a plugin's declaration, not an input to
++// interpret.
++func (m LaunchMode) Valid() bool {
++	switch m {
++	case LaunchModeExec, LaunchModeDryRun, LaunchModeManagedSession:
++		return true
++	default:
++		return false
++	}
++}
++
++func (m LaunchMode) String() string {
++	switch m {
++	case LaunchModeExec:
++		return "exec"
++	case LaunchModeDryRun:
++		return "dry-run"
++	case LaunchModeManagedSession:
++		return "managed-session"
++	default:
++		return fmt.Sprintf("launch-mode(%d)", int(m))
++	}
++}
++
++// EffortTransport names how a system carries an explicit reasoning-effort
++// value to its harness. This is TRANSPORT, not vocabulary: which effort words
++// a model accepts is a per-model fact owned by the vendor layer, and no plugin
++// at this layer may enumerate them.
++type EffortTransport int
++
++const (
++	// EffortTransportNone means the system has no mechanism to carry an
++	// effort value at all. It is the zero value deliberately: a system that
++	// has not declared a transport carries nothing, and BuildPlan refuses the
++	// launch rather than dropping the operator's configured effort silently —
++	// the wrong-cost launch the source repo's EffortTransport exists to close.
++	EffortTransportNone EffortTransport = iota
++	// EffortTransportArgv means the system appends an argv flag or config
++	// override carrying the value.
++	EffortTransportArgv
++	// EffortTransportStdin means the system encodes the value into a field of
++	// its stdin payload.
++	EffortTransportStdin
++)
++
++// Valid reports whether t is one of the declared transports.
++func (t EffortTransport) Valid() bool {
++	switch t {
++	case EffortTransportNone, EffortTransportArgv, EffortTransportStdin:
++		return true
++	default:
++		return false
++	}
++}
++
++func (t EffortTransport) String() string {
++	switch t {
++	case EffortTransportArgv:
++		return "argv"
++	case EffortTransportStdin:
++		return "stdin"
++	case EffortTransportNone:
++		return "none"
++	default:
++		return fmt.Sprintf("effort-transport(%d)", int(t))
++	}
++}
++
++// EffortSupport is the per-model effort axis, reduced to the one bit this
++// layer needs. The vendor layer owns the model row, the vocabulary and the
++// recommended value; a system plugin never sees any of them.
++type EffortSupport int
++
++const (
++	// EffortSupportNone means the model has no reasoning-effort axis.
++	EffortSupportNone EffortSupport = iota
++	// EffortSupportRequired means an explicit effort must be chosen for this
++	// model. There is no third "optional" state on purpose: the extraction
++	// source established effort as required-or-absent precisely so that no
++	// default is ever injected anywhere.
++	EffortSupportRequired
++)
++
++func (s EffortSupport) String() string {
++	switch s {
++	case EffortSupportRequired:
++		return "required"
++	case EffortSupportNone:
++		return "none"
++	default:
++		return fmt.Sprintf("effort-support(%d)", int(s))
++	}
++}
++
++// CanCarry reports whether a system declaring this transport can carry a
++// model with the given effort requirement.
++//
++// This is the whole of what AC4 asks the contract to expose: a caller holding
++// nothing but these two types can decide that a required-effort model under
++// EffortTransportNone is unlaunchable, without a registry, a vendor plugin or
++// an admission pass. BuildPlan is the production caller; the decision is
++// available to any other caller that only has the contract.
++func (t EffortTransport) CanCarry(s EffortSupport) bool {
++	if s == EffortSupportRequired {
++		return t == EffortTransportArgv || t == EffortTransportStdin
++	}
++	return true
++}
++
++// GrammarID names the argv shape a system's launch-composition prefix takes,
++// so callers can group systems that share one and so an operator can see which
++// grammar a refusal was measured against.
++//
++// Reshape from the source adapter: CompositionGrammar was a core enum, which
++// meant a new grammar was a core edit. Here it is an opaque identifier the
++// plugin declares and the plugin validates (System.ValidateComposition), so a
++// harness with a novel composition shape is a plugin, not a core change.
++type GrammarID string
++
++// GrammarNone is the declaration of a system that supports no launch
++// composition at all. A system declaring it must refuse every non-zero
++// Composition; BuildPlan refuses before dispatching, so the plugin's own
++// refusal is a second line rather than the only one.
++const GrammarNone GrammarID = ""
++
++// CompositionServer is one MCP server named by a launch composition.
++type CompositionServer struct {
++	Name      string
++	Transport string
++}
++
++// Composition is the validated provider argv prefix that composes MCP servers
++// into a launch, together with the servers it claims to carry. The prefix is
++// already composed by the caller; a system validates that its shape matches
++// the grammar the system declares.
++type Composition struct {
++	Prefix  []string
++	Servers []CompositionServer
++}
++
++// IsZero reports whether no composition was requested. Absence and an empty
++// composition are the same fact here — a prefix of no arguments carrying no
++// servers changes nothing about the launch — but a prefix without servers, or
++// servers without a prefix, is neither, and a plugin's validator sees it.
++func (c Composition) IsZero() bool {
++	return len(c.Prefix) == 0 && len(c.Servers) == 0
++}
++
++// StdinPayload is what the child receives on standard input.
++//
++// Attached distinguishes "this launch attaches no stdin" from "this launch
++// attaches an empty stream": a harness that reads its prompt from stdin sees
++// EOF on an empty attached stream and a closed descriptor on no stdin at all,
++// and those produce different child behaviour. An absence and an empty read
++// are different facts, and a single nil slice cannot say which one happened.
++type StdinPayload struct {
++	Attached bool
++	Bytes    []byte
++}
++
++// Model is the vendor-layer fact this layer needs, and nothing more: which
++// model was selected, and whether it requires an effort. The vocabulary, the
++// ranking, the pricing and the availability all stay with the vendor plugin.
++type Model struct {
++	ID     string
++	Effort EffortSupport
++}
++
++// Goal is the immutable objective snapshot a launch is bound to. Only its
++// identity and text matter at this layer; ownership, revision policy and
++// routing stay with the caller that produced it.
++type Goal struct {
++	ID        string
++	Objective string
++	Revision  int
++}
++
++// Budget is the spend ceiling a launch is bound to, in the unit the harness
++// itself accepts. The source adapter carried a USD figure for Claude and
++// nothing for anyone else, which is exactly what SupportsBudget gates.
++type Budget struct {
++	USD float64
++}
++
++// LaunchRequest is everything a caller supplies for one launch. It is the
++// input to every dispatch surface, so a plugin never reaches for ambient
++// state: what is not here is not available to it.
++type LaunchRequest struct {
++	// System selects the plugin. It is normalized on the way in.
++	System SystemID
++
++	// Model is the selected model and its effort requirement. Effort is the
++	// chosen effort value, in the vendor's per-model vocabulary; this layer
++	// never inspects the word, only whether one is present and whether the
++	// system can carry it.
++	Model  Model
++	Effort string
++
++	// PromptPath is the assignment prompt file on disk, and Prompt is its
++	// bytes for a system whose transport is stdin. A system declares which it
++	// reads; supplying neither to a system that needs one is the plugin's
++	// refusal to make, not this layer's.
++	PromptPath string
++	Prompt     []byte
++
++	// WorkDir is the child's working directory.
++	//
++	// Reshape from the source adapter: DefaultHome there was a documentation
++	// string recording that every adapter's cmd.Dir resolved to one value.
++	// Here the child working directory is an explicit request field and
++	// Capabilities.DefaultHome carries the thing the architecture actually
++	// names — the harness configuration home.
++	WorkDir string
++
++	// Home overrides the harness configuration home for this launch. Empty
++	// means the system's declared DefaultHome. On-disk limit state is keyed by
++	// (provider, home), so this value is load-bearing beyond the launch.
++	Home string
++
++	// Env is the parent environment the child inherits from, before the
++	// system's own filtering. It is passed in rather than read from the
++	// process so a launch is reproducible and testable without mutating the
++	// ambient environment.
++	Env []string
++
++	Goal        *Goal
++	Budget      *Budget
++	ServiceTier string
++	Composition Composition
++}
++
++// System is the agentic-system plugin contract. Every capability the
++// extraction source's adapter table declared is expressible here; see the
++// package documentation for the reshapes.
++//
++// Every method must be free of side effects other than reading the
++// environment it was handed: BuildPlan calls all of them to produce a
++// dry-run plan, and a dry run that preflights, writes a file or starts a
++// process is the drift the source repo's BuildArgs bug was made of.
++type System interface {
++	// ID is the plugin's identity. It must be stable forever and must
++	// normalize to itself.
++	ID() SystemID
++
++	// Capabilities is the static declaration: launch modes, effort transport,
++	// goal/budget/service-tier support, composition grammar, default home and
++	// auth hint. It must not vary between calls.
++	Capabilities() Capabilities
++
++	// ResolveBinary returns the exact executable this launch will run —
++	// including a managed-npm path, a native shim or a preflighted
++	// executable. Resolution logic is entirely the plugin's; the contract only
++	// requires that the dry-run mode report the same target the real launch
++	// would use, so no display placeholder can drift from the launch target.
++	ResolveBinary(req LaunchRequest) (string, error)
++
++	// Argv builds the argument vector for one launch mode, excluding the
++	// binary itself. A mode the system did not declare must be refused.
++	Argv(req LaunchRequest, mode LaunchMode) ([]string, error)
++
++	// ChildEnv is the environment contract: what the child must and must not
++	// inherit. It receives the parent environment and returns the child's,
++	// which is the only shape that expresses both halves — stripping parent
++	// runtime state the child must not see, and injecting what it must.
++	//
++	// Reshape from the source adapter: the source expressed this inside
++	// BuildCommand, where it was observable only by launching. Here it is its
++	// own surface, so environment parity is assertable without a process.
++	ChildEnv(parent []string, req LaunchRequest) ([]string, error)
++
++	// Stdin is the stdin transport: the bytes the child reads, and whether
++	// anything is attached at all.
++	Stdin(req LaunchRequest) (StdinPayload, error)
++
++	// ValidateComposition refuses a composition whose shape does not match the
++	// grammar this system declares. A system declaring GrammarNone must refuse
++	// every non-zero composition.
++	ValidateComposition(c Composition) error
++}
++
++// Capabilities is a system's static declaration. It is a value, not an
++// interface: these are facts a plugin states once, and a caller must be able
++// to read them without the risk of a method that computes a different answer
++// on the second call.
++type Capabilities struct {
++	// LaunchModes are the modes this system builds argv for. It must be
++	// non-empty — a system that declares no mode can never launch, and
++	// registering one is a bug the registry reports rather than a
++	// configuration to tolerate.
++	LaunchModes []LaunchMode
++
++	// EffortTransport is how an explicit reasoning effort reaches the harness.
++	EffortTransport EffortTransport
++
++	// SupportsGoal, SupportsBudget and SupportsServiceTier gate the three
++	// optional launch parameters. A request carrying one a system does not
++	// support is refused, not dropped.
++	SupportsGoal        bool
++	SupportsBudget      bool
++	SupportsServiceTier bool
++
++	// CompositionGrammar names the launch-composition argv shape, or
++	// GrammarNone when the system supports none.
++	CompositionGrammar GrammarID
++
++	// HomeEnvVar is the environment variable the harness reads to find its
++	// configuration home, empty when it has none. DefaultHome is where it
++	// looks when that variable is unset. Both are declarations for the
++	// caller's benefit — the plugin's ChildEnv is what actually sets the
++	// variable — and on-disk limit state is keyed by the resulting home, so
++	// neither may move without a demonstrated migration.
++	HomeEnvVar  string
++	DefaultHome string
++
++	// AuthHint is the operator remediation surfaced when this system's
++	// authentication fails. Empty is a legitimate declaration: it means no
++	// authentication failure has been captured through this system's path
++	// yet, which is different from asserting a remediation that has never
++	// been observed to work.
++	AuthHint string
++}
++
++// SupportsMode reports whether the system declared this launch mode.
++func (c Capabilities) SupportsMode(m LaunchMode) bool {
++	for _, declared := range c.LaunchModes {
++		if declared == m {
++			return true
++		}
++	}
++	return false
++}
+diff --git a/tools/agents-management/cmd/cmd_test.go b/tools/agents-management/cmd/cmd_test.go
+index bcd432a..437a193 100644
+--- a/tools/agents-management/cmd/cmd_test.go
++++ b/tools/agents-management/cmd/cmd_test.go
+@@ -2,7 +2,10 @@ package cmd
+ 
+ import (
+ 	"bytes"
++	"errors"
+ 	"testing"
++
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
+ )
+ 
+ // runRoot drives the real root command the way main() does, and restores the
+@@ -27,12 +30,52 @@ func runRoot(t *testing.T, args ...string) (stdout, stderr string, err error) {
+ 	return out.String(), errOut.String(), err
+ }
+ 
+-// withRegisteredPlugins swaps the compiled-in plugin set for the duration of
+-// a test. There is no registry type yet on purpose; the plugin contracts are
+-// follow-up work.
+-func withRegisteredPlugins(t *testing.T, names ...string) {
++// withRegisteredPlugins swaps this binary's registry for an isolated one
++// holding the named systems, for the duration of a test. It registers through
++// the same public API a real plugin's init would use — there is no test-only
++// path into the registry, so what these tests exercise is what ships.
++func withRegisteredPlugins(t *testing.T, ids ...string) *agentic.Registry {
+ 	t.Helper()
+-	previous := registeredPlugins
+-	registeredPlugins = names
+-	t.Cleanup(func() { registeredPlugins = previous })
++	registry := agentic.NewRegistry()
++	for _, id := range ids {
++		if err := registry.Register(stubSystem{id: agentic.SystemID(id)}); err != nil {
++			t.Fatalf("Register(%s): %v", id, err)
++		}
++	}
++	previous := systemRegistry
++	systemRegistry = registry
++	t.Cleanup(func() { systemRegistry = previous })
++	return registry
++}
++
++// stubSystem is a minimal agentic.System. Its second job is to prove the
++// contract is implementable from outside its own package: an interface with an
++// unexported method could not be satisfied here, and a plugin living in
++// another repository would discover that far later than this test does.
++type stubSystem struct{ id agentic.SystemID }
++
++func (s stubSystem) ID() agentic.SystemID { return s.id }
++
++func (s stubSystem) Capabilities() agentic.Capabilities {
++	return agentic.Capabilities{LaunchModes: []agentic.LaunchMode{agentic.LaunchModeExec}}
++}
++
++func (s stubSystem) ResolveBinary(agentic.LaunchRequest) (string, error) {
++	return "/usr/bin/" + s.id.String(), nil
++}
++
++func (s stubSystem) Argv(agentic.LaunchRequest, agentic.LaunchMode) ([]string, error) {
++	return nil, nil
++}
++
++func (s stubSystem) ChildEnv(parent []string, _ agentic.LaunchRequest) ([]string, error) {
++	return parent, nil
++}
++
++func (s stubSystem) Stdin(agentic.LaunchRequest) (agentic.StdinPayload, error) {
++	return agentic.StdinPayload{}, nil
++}
++
++func (s stubSystem) ValidateComposition(agentic.Composition) error {
++	return errors.New("stub system declares no composition grammar")
+ }
+diff --git a/tools/agents-management/cmd/plugins.go b/tools/agents-management/cmd/plugins.go
+index 0922499..ddb1cee 100644
+--- a/tools/agents-management/cmd/plugins.go
++++ b/tools/agents-management/cmd/plugins.go
+@@ -3,16 +3,20 @@ package cmd
+ import (
+ 	"encoding/json"
+ 	"fmt"
+-	"sort"
+ 
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
+ 	"github.com/spf13/cobra"
+ )
+ 
+-// registeredPlugins names the plugins compiled into this binary. It is empty
+-// today and that is a valid answer, not a failure: the plugin contracts land
+-// in follow-up work, and a consumer asking an unpopulated binary what it
+-// carries deserves an empty list and exit 0, never an error.
+-var registeredPlugins []string
++// systemRegistry is where this binary reads its plugins from. It points at the
++// package-level default registry that plugin packages register into from their
++// init functions, so the command has no list of its own.
++//
++// A private list here would be a second binding for the same fact — the exact
++// shadow table docs/architecture.md's invariant 5 forbids and
++// pkg/agentic/singlesource_guard_test.go fails the build over. The variable
++// exists only so a test can swap in an isolated registry.
++var systemRegistry = agentic.Default
+ 
+ var pluginsJSON bool
+ 
+@@ -41,14 +45,16 @@ var pluginsCmd = &cobra.Command{
+ 	},
+ }
+ 
+-// pluginNames returns the registered plugin names in a stable order. The
+-// result is always non-nil so the JSON encoding of "nothing registered" is
+-// [] and never null — a consumer ranging over the answer must not have to
++// pluginNames returns the registered agentic system ids in a stable order. The
++// result is always non-nil so the JSON encoding of "nothing registered" is []
++// and never null — a consumer ranging over the answer must not have to
+ // special-case the empty case.
+ func pluginNames() []string {
+-	names := make([]string, 0, len(registeredPlugins))
+-	names = append(names, registeredPlugins...)
+-	sort.Strings(names)
++	ids := systemRegistry.IDs()
++	names := make([]string, 0, len(ids))
++	for _, id := range ids {
++		names = append(names, id.String())
++	}
+ 	return names
+ }
+ 
+diff --git a/tools/agents-management/cmd/plugins_test.go b/tools/agents-management/cmd/plugins_test.go
+index 0a41684..1fab84a 100644
+--- a/tools/agents-management/cmd/plugins_test.go
++++ b/tools/agents-management/cmd/plugins_test.go
+@@ -87,16 +87,33 @@ func TestPluginsCommandJSONListsRegisteredNamesSorted(t *testing.T) {
+ 	}
+ }
+ 
+-// pluginNames hands out a copy: a caller that sorts or appends to the answer
+-// must not be able to reorder or grow the compiled-in set.
++// pluginNames hands out a copy: a caller that sorts, appends to or overwrites
++// the answer must not be able to reorder or grow the compiled-in set.
+ func TestPluginNamesDoesNotAliasRegistry(t *testing.T) {
+-	withRegisteredPlugins(t, "vendor-openai", "claude-code")
++	registry := withRegisteredPlugins(t, "vendor-openai", "claude-code")
+ 
+ 	names := pluginNames()
+ 	names[0] = "mutated"
+ 
+-	if registeredPlugins[0] != "vendor-openai" {
+-		t.Errorf("registeredPlugins[0] = %q, want %q: pluginNames aliased the registry",
+-			registeredPlugins[0], "vendor-openai")
++	if got := registry.IDs(); len(got) != 2 || got[0] != "claude-code" || got[1] != "vendor-openai" {
++		t.Errorf("registry ids = %v after mutating pluginNames' result; the answer aliased the registry", got)
++	}
++	if again := pluginNames(); again[0] != "claude-code" {
++		t.Errorf("pluginNames() = %v on the second call; the first caller's write survived", again)
++	}
++}
++
++// The command reports what the registry holds, so a system registered through
++// the public API — the only way a binding exists — comes back out under its
++// normalized id.
++func TestPluginsCommandReportsWhatTheRegistryHolds(t *testing.T) {
++	withRegisteredPlugins(t, "Claude-Code", "codex")
++
++	stdout, _, err := runRoot(t, "plugins")
++	if err != nil {
++		t.Fatalf("plugins command failed: %v", err)
++	}
++	if stdout != "claude-code\ncodex\n" {
++		t.Errorf("stdout = %q, want the normalized ids in sorted order", stdout)
+ 	}
+ }

@@ -1,0 +1,166 @@
+{
+ "review": "TASK-260821-atcotl rev 2 re-review",
+ "candidate_tree": "e6beb5b6bd51f15c29a0974685f04d3dbcc6261e",
+ "rev1_tree": "01251f9786ee82cb721f589d27c6e0cdecd33273",
+ "base": "6223c283d36018b3cf1c7e1c1256e6964b4e3360",
+ "scratch": "/tmp/atcotl-s2",
+ "command": "env -u TASK_BOARD_DIR go test -mod=mod ./... -count=1",
+ "rev1_reviewer_mutants_rerun": [
+  {
+   "id": "M1",
+   "mutation": "zero-value Availability becomes healthy",
+   "result": "KILLED",
+   "killed_by": "TestCheckAvailabilityDoesNotConvertAPluginErrorIntoUnknown, TestTheZeroVerdictIsUnknownAndNotServiceable"
+  },
+  {
+   "id": "M2",
+   "mutation": "rank evidence Source blank check narrowed to == \"\"",
+   "result": "KILLED",
+   "killed_by": "TestRegisterRefusesARankWithNoEvidence"
+  },
+  {
+   "id": "M2b",
+   "mutation": "rank evidence Observation blank check narrowed to == \"\"",
+   "result": "KILLED",
+   "killed_by": "TestRegisterRefusesARankWithNoEvidence"
+  },
+  {
+   "id": "M3",
+   "mutation": "effort vocabulary widened to EqualFold",
+   "result": "KILLED",
+   "killed_by": "TestBuildLaunchDoesNotFoldTheEffortVocabulary, TestEffortVocabularyMembershipIsExactOnTheTrimmedWord"
+  },
+  {
+   "id": "M4",
+   "mutation": "duplicate rank position admitted",
+   "result": "KILLED",
+   "killed_by": "TestRegisterRefusesTwoModelsAtOneRank"
+  },
+  {
+   "id": "M5",
+   "mutation": "ErrRuntimeVendorUnresolved aliased to ErrRuntimeVendorUnregistered",
+   "result": "KILLED",
+   "killed_by": "TestResolutionRefusalsAreDistinctFacts"
+  },
+  {
+   "id": "M6",
+   "mutation": "CheckAvailability validates state only",
+   "result": "KILLED",
+   "killed_by": "TestCheckAvailabilityRefusesAVendorsDishonestVerdict"
+  },
+  {
+   "id": "M7",
+   "mutation": "bindingHomes flattened to a flat allowlist",
+   "result": "KILLED",
+   "killed_by": "TestSingleSourceGuardFindsNoSecondBinding, TestSingleSourceGuardHomesAreDistinctFacts"
+  },
+  {
+   "id": "M9",
+   "mutation": "unresolved check moved below the vendor lookup",
+   "result": "KILLED",
+   "killed_by": "TestResolutionRefusalsAreDistinctFacts, TestResolvingAnUnresolvedVendorRuntimeIsRefusedOnItsOwnTerms"
+  },
+  {
+   "id": "M10",
+   "mutation": "unknown may carry a clear time",
+   "result": "KILLED",
+   "killed_by": "TestValidateRefusesVerdictsThatContradictTheirEvidence"
+  },
+  {
+   "id": "M8",
+   "mutation": "Broker.Checked blank check narrowed to == \"\"",
+   "result": "KILLED",
+   "killed_by": "TestRuntimeDeclarationValidation"
+  }
+ ],
+ "rev2_generality_probes": [
+  {
+   "id": "P1a",
+   "mutation": "collapse ErrUnknownRuntime into ErrRuntimeVendorUnresolved (pair NOT used in rev1)",
+   "result": "KILLED",
+   "killed_by": "TestResolutionRefusalsAreDistinctFacts || TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel; TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/never_declared; TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/the_frozen_muse_binding_was_never_established"
+  },
+  {
+   "id": "P1b",
+   "mutation": "collapse ErrRuntimeSystemUnregistered into ErrUnknownRuntime (pair NOT used in rev1)",
+   "result": "KILLED",
+   "killed_by": "TestResolutionRefusalsAreDistinctFacts || TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel; TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/never_declared; TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/the_system_plugin_is_not_compiled_in"
+  },
+  {
+   "id": "P1c",
+   "mutation": "collapse ErrVendorNotRegistered into ErrRuntimeVendorUnregistered (pair NOT used in rev1)",
+   "result": "KILLED",
+   "killed_by": "TestResolutionRefusalsAreDistinctFacts || TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel; TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/the_vendor_plugin_is_not_compiled_in"
+  },
+  {
+   "id": "P1d",
+   "mutation": "collapse ErrRuntimeVendorUnregistered into ErrUnknownRuntime (pair NOT used in rev1)",
+   "result": "KILLED",
+   "killed_by": "TestResolutionRefusalsAreDistinctFacts || TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel; TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/never_declared; TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/the_vendor_plugin_is_not_compiled_in"
+  },
+  {
+   "id": "P3",
+   "mutation": "BuildLaunch (resolveEffort) stops trimming -> accepted-spellings half must red",
+   "result": "KILLED",
+   "killed_by": "TestBuildLaunchDoesNotFoldTheEffortVocabulary, TestBuildLaunchRefusesAMissingEffortAndNamesTheVocabulary || "
+  },
+  {
+   "id": "P4",
+   "mutation": "Accepts stops trimming -> Accepts-level test must red",
+   "result": "KILLED",
+   "killed_by": "TestEffortVocabularyMembershipIsExactOnTheTrimmedWord || "
+  },
+  {
+   "id": "M7f",
+   "mutation": "bindingHomes semantics flattened: any home file may bind ANY key type",
+   "result": "KILLED",
+   "killed_by": "TestSingleSourceGuardCatchesCrossLayerBindings || TestSingleSourceGuardCatchesCrossLayerBindings/a_runtime_binding_inside_the_agentic_registry; TestSingleSourceGuardCatchesCrossLayerBindings/a_system_binding_inside_the_vendor_registry; TestSingleSourceGuardCatchesCrossLayerBindings/a_vendor_binding_inside_the_agentic_registry"
+  }
+ ],
+ "fresh_attacks": [
+  {
+   "id": "X1",
+   "mutation": "rank Position bound narrowed < 1 -> < 0",
+   "result": "KILLED",
+   "killed_by": "TestRegisterRefusesARankWithNoEvidence"
+  },
+  {
+   "id": "X2",
+   "mutation": "basis emptiness narrowed len()==0 -> ==nil",
+   "result": "KILLED",
+   "killed_by": "TestRegisterRefusesARankWithNoEvidence"
+  },
+  {
+   "id": "X3",
+   "mutation": "frozen muse row given a guessed anthropic vendor",
+   "result": "KILLED",
+   "killed_by": "TestMusesBrokerIsCarriedAsCheckedAndEmpty, TestResolutionRefusalsAreDistinctFacts, TestRuntimesCommandListsTheFrozenDeclarations, TestRuntimesJSONCarriesTheUnresolvedBrokerHonestly, TestTheSixHistoricalRuntimesAreSeededWithTheirFrozenBindings"
+  },
+  {
+   "id": "X4",
+   "mutation": "unresolved check deleted outright",
+   "result": "KILLED",
+   "killed_by": "TestResolutionRefusalsAreDistinctFacts, TestResolvingAnUnresolvedVendorRuntimeIsRefusedOnItsOwnTerms"
+  },
+  {
+   "id": "X5",
+   "mutation": "muse provenance claims a Found while staying unresolved",
+   "result": "REFUSED BY PRODUCTION at package init",
+   "killed_by": "registry.go init panic: an unresolved broker is a checked-and-EMPTY finding"
+  }
+ ],
+ "totals": {
+  "rev1_mutants_rerun": 11,
+  "rev1_survivors": 0,
+  "generality_probes": 7,
+  "probe_survivors": 0,
+  "fresh_attacks": 5,
+  "fresh_survivors": 0
+ },
+ "gates": {
+  "make vet": 0,
+  "make build": 0,
+  "go test ./... -count=1": 0,
+  "gofmt -l pkg/ tools/ internal/": "0, no output"
+ }
+}

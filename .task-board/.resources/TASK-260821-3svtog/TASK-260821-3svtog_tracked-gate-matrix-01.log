@@ -1,0 +1,58 @@
+== A-tracked-bare-fixed | sources=tracked | expect=RED | got=RED (exit=1) | OK
+   --- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.07s)
+       build_integration_test.go:279: tools/agents-management/main.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: tools/agents-management/cmd/root.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: tools/agents-management/cmd/version.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: tools/agents-management/cmd/plugins.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: tools/agents-management/cmd/future_command.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: pkg/agents-management/foo.go is git-ignored; it would never reach a commit
+   FAIL
+   FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	0.481s
+   FAIL
+
+== B-tracked-bare-noflag | sources=tracked | expect=RED | got=RED (exit=1) | OK
+   --- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.07s)
+       build_integration_test.go:279: tools/agents-management/cmd/future_command.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: pkg/agents-management/foo.go is git-ignored; it would never reach a commit
+   FAIL
+   FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	0.482s
+   FAIL
+
+== C-tracked-clean-fixed | sources=tracked | expect=GREEN | got=GREEN (exit=0) | OK
+   ok  	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	0.484s
+
+== D-untracked-bare-fixed | sources=untracked | expect=RED | got=RED (exit=1) | OK
+   --- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.07s)
+       build_integration_test.go:279: tools/agents-management/main.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: tools/agents-management/cmd/root.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: tools/agents-management/cmd/version.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: tools/agents-management/cmd/plugins.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: tools/agents-management/cmd/future_command.go is git-ignored; it would never reach a commit
+       build_integration_test.go:279: pkg/agents-management/foo.go is git-ignored; it would never reach a commit
+   FAIL
+   FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	0.490s
+   FAIL
+
+== E-tracked-pkgdir-fixed | sources=tracked | expect=RED | got=RED (exit=1) | OK
+   --- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.07s)
+       build_integration_test.go:279: pkg/agents-management/foo.go is git-ignored; it would never reach a commit
+   FAIL
+   FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	0.481s
+   FAIL
+
+== F-tracked-pkgdir-oldpaths | sources=tracked | expect=GREEN | got=GREEN (exit=0) | OK
+   ok  	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	0.471s
+
+== G-tracked-bare-noflag-oldpaths | sources=tracked | expect=GREEN | got=GREEN (exit=0) | OK
+   ok  	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	0.482s
+
+== H-tracked-bare-fixed-oldpaths | sources=tracked | expect=RED | got=RED (exit=1) | OK
+   --- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.05s)
+       build_integration_test.go:277: tools/agents-management/main.go is git-ignored; it would never reach a commit
+       build_integration_test.go:277: tools/agents-management/cmd/root.go is git-ignored; it would never reach a commit
+       build_integration_test.go:277: tools/agents-management/cmd/version.go is git-ignored; it would never reach a commit
+       build_integration_test.go:277: tools/agents-management/cmd/plugins.go is git-ignored; it would never reach a commit
+   FAIL
+   FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	0.465s
+   FAIL
+

@@ -1,0 +1,41 @@
+### M1 zero-value Availability becomes healthy
+    KILLED: exit 1
+    red: TestCheckAvailabilityDoesNotConvertAPluginErrorIntoUnknown, TestTheZeroVerdictIsUnknownAndNotServiceable
+### M2a rank evidence source blank check narrowed to == ""
+    KILLED: exit 1
+    red: TestRegisterRefusesARankWithNoEvidence, TestRegisterRefusesARankWithNoEvidence/a_source_that_is_only_whitespace
+### M2b rank evidence observation blank check narrowed to == ""
+    KILLED: exit 1
+    red: TestRegisterRefusesARankWithNoEvidence, TestRegisterRefusesARankWithNoEvidence/an_observation_that_is_whitespace
+### M3 effort vocabulary widened to EqualFold
+    KILLED: exit 1
+    red: TestBuildLaunchDoesNotFoldTheEffortVocabulary, TestEffortVocabularyMembershipIsExactOnTheTrimmedWord
+### M4 duplicate rank position admitted
+    KILLED: exit 1
+    red: TestRegisterRefusesTwoModelsAtOneRank
+### M5 ErrRuntimeVendorUnresolved aliased to ...Unregistered
+    KILLED: exit 1
+    red: TestResolutionRefusalsAreDistinctFacts, TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel, TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/the_frozen_muse_binding_was_never_established, TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/the_vendor_plugin_is_not_compiled_in
+### M6 CheckAvailability validates state only
+    KILLED: exit 1
+    red: TestCheckAvailabilityRefusesAVendorsDishonestVerdict
+### M7 bindingHomes flattened to a flat allowlist
+    KILLED: exit 1
+    red: TestSingleSourceGuardCatchesCrossLayerBindings, TestSingleSourceGuardCatchesCrossLayerBindings/a_runtime_binding_inside_the_agentic_registry, TestSingleSourceGuardCatchesCrossLayerBindings/a_system_binding_inside_the_vendor_registry, TestSingleSourceGuardCatchesCrossLayerBindings/a_vendor_binding_inside_the_agentic_registry
+### M8 Broker.Checked blank check narrowed to == ""
+    KILLED: exit 1
+    red: TestRuntimeDeclarationValidation, TestRuntimeDeclarationValidation/a_blank_checked_source
+### M9 unresolved check moved below the vendor lookup
+    KILLED: exit 1
+    red: TestResolutionRefusalsAreDistinctFacts, TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel, TestResolutionRefusalsAreDistinctFacts/no_refusal_answers_to_another_refusal's_sentinel/the_frozen_muse_binding_was_never_established, TestResolvingAnUnresolvedVendorRuntimeIsRefusedOnItsOwnTerms
+### M11 Accepts stops trimming (the exported half of the rule)
+    KILLED: exit 1
+    red: TestEffortVocabularyMembershipIsExactOnTheTrimmedWord
+### M12 BuildLaunch stops trimming the requested effort
+    KILLED: exit 1
+    red: TestBuildLaunchDoesNotFoldTheEffortVocabulary, TestBuildLaunchRefusesAMissingEffortAndNamesTheVocabulary
+### M10 unknown may carry a clear time
+    KILLED: exit 1
+    red: TestValidateRefusesVerdictsThatContradictTheirEvidence, TestValidateRefusesVerdictsThatContradictTheirEvidence/unknown_carrying_a_clear_time
+
+TOTAL 13 mutants, 13 KILLED, 0 SURVIVORS

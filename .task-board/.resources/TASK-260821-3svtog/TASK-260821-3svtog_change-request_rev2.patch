@@ -1,0 +1,912 @@
+diff --git a/.gitignore b/.gitignore
+index 03e481d..28bb207 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,6 +1,8 @@
+-# Build outputs
+-agents-management
+-tools/*/agents-management
++# Build outputs. Anchored on purpose: an unanchored `agents-management`
++# pattern matches directories too, and would silently ignore the entire
++# tools/agents-management source tree.
++/agents-management
++/tools/agents-management/agents-management
+ dist/
+ 
+ # Temporary utilities, logs, worktrees, smoke artifacts
+diff --git a/LOGBOOK.md b/LOGBOOK.md
+new file mode 100644
+index 0000000..2dcfe50
+--- /dev/null
++++ b/LOGBOOK.md
+@@ -0,0 +1,41 @@
++# Flight Logbook
++
++> Institutional memory. Concise, factual, high-signal.
++> Newest entries first. One block per insight.
++
++## 2026-08-21
++
++### 1717 — git check-ignore is index-aware; a guard naming tracked files goes vacuous
++- FINDING: `git check-ignore` never reports a TRACKED file as ignored, whatever `.gitignore` says. `--no-index` is the flag that defeats the index lookup and reports the pattern truth.
++- ANOMALY: `TestBuildOutputIsIgnoredAndSourcesAreNot` named six source paths that are untracked only while a Change Request is in flight. On an UNTRACKED tree the anchor-drop mutant is RED; on the same tree with those files TRACKED it is GREEN. The guard against the 1706 defect would have expired at the moment the work it guards landed.
++- NOTE: The failure class is a NEW file being silently swallowed, so a guard that only names files already in the index can never observe it. Assert at least one path that does not exist yet.
++- FIX: `--no-index` on the `git check-ignore` invocation, `tools/agents-management/cmd/build_integration_test.go:236`; added the non-existent paths `tools/agents-management/cmd/future_command.go` and `pkg/agents-management/foo.go` to the not-ignored list.
++- NOTE: The two halves of the fix are independently load-bearing against different mutants, not redundant. On a TRACKED tree with the anchor dropped: `--no-index` alone is RED, the non-existent paths alone are RED, neither alone is GREEN — but against a `pkg/agents-management/` ignore rule, `--no-index` with the old six-path list is GREEN and only the `pkg/` path catches it.
++- SCOPE: `tools/agents-management/cmd/build_integration_test.go`. This file is the template later extraction tasks copy; the rationale is commented at the invocation so it is not simplified away.
++- STATUS: Resolved (TASK-260821-3svtog, review rev1 blocking finding).
++
++### 1706 — Unanchored .gitignore pattern hid the entire CLI source tree
++- FINDING: `.gitignore:2` carried a bare `agents-management` pattern. Slash-free patterns match directories, so git ignored `tools/agents-management/` itself, not just the built binary.
++- ANOMALY: Every gate stayed green against invisible files — `make build`, `make vet`, `go test ./...` all passed on a tree git would have carried as empty. Only `git status` showed nothing to add.
++- FIX: Anchored both build-output patterns: `/agents-management` and `/tools/agents-management/agents-management` (`.gitignore:4-5`).
++- SCOPE: `TestBuildOutputIsIgnoredAndSourcesAreNot` in `tools/agents-management/cmd/build_integration_test.go` asserts both directions — sources not ignored, binary ignored.
++- NOTE: Caught before the first Change Request. Would have shipped a CR containing config and README changes only.
++- STATUS: Resolved (TASK-260821-3svtog).
++
++### 1705 — Go linker silently ignores a stale -X target
++- FINDING: `go build -ldflags "-X <pkg>.Var=v"` naming a package or variable that does not exist produces no error and no warning; the binary just keeps its default.
++- NOTE: Consequence — ldflags injection cannot be verified from inside `go test`, which is not built with those flags. The only observation point is running the real build and reading the binary's output.
++- SCOPE: `TestMakeBuildInjectsVersionMetadata` invokes `make build` with sentinel VERSION/COMMIT/BUILD_DATE rather than duplicating the ldflags string, so it binds to the shipped Makefile. `TestBuildWithoutLdflagsReportsDefaults` is its narrowing partner against hardcoded sentinels.
++- STATUS: Resolved (TASK-260821-3svtog).
++
++### 1704 — One root Go module, not module-per-tool
++- DECISION: Single module `github.com/relux-works/skill-agents-management` at the repository root; CLI `main` at `tools/agents-management`, shared packages to come under `pkg/`.
++- NOTE: The extraction source (skill-project-management) splits every tool and every `pkg/` package into its own module wired by `replace`. That earns its keep there because `pkg/board`, `pkg/remoteconfig` and `pkg/providerlimits` have independent consumers that must not inherit the CLI's dependency set.
++- NOTE: Here `pkg/` is empty until the plugin contracts exist, so the split would be `replace` bookkeeping around nothing. One module keeps `go vet ./...` and `go test ./...` honest repo-wide from one directory. Splitting later is additive.
++- SCOPE: `go.mod`, `Makefile`, `spawn.worktree_isolation.validation.commands` in `task-board.config.json` (gate runs from the repo root, not from `tools/agents-management`).
++- STATUS: Resolved (TASK-260821-3svtog).
++
++### 1703 — make install copies rather than symlinks
++- DECISION: `make install` copies the binary to `~/.local/bin/agents-management`.
++- NOTE: A symlink into `tools/agents-management/agents-management` dangles the moment `make clean` runs. Matches the extraction source's `_install-cli`.
++- STATUS: Resolved (TASK-260821-3svtog).
+diff --git a/Makefile b/Makefile
+new file mode 100644
+index 0000000..3aaaf61
+--- /dev/null
++++ b/Makefile
+@@ -0,0 +1,49 @@
++.PHONY: all build test vet install clean
++
++ROOT_DIR := $(shell pwd)
++CLI_DIR  := $(ROOT_DIR)/tools/agents-management
++BIN_DIR  := $(HOME)/.local/bin
++
++# Output path of `make build`. Overridable so a caller (a test, a release job)
++# can build into a scratch directory without touching the checkout.
++BIN ?= $(CLI_DIR)/agents-management
++
++# Version metadata from git. Overridable so a caller can build with known
++# values and assert they reached the binary.
++VERSION    ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
++COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
++BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
++
++CLI_PKG := github.com/relux-works/skill-agents-management/tools/agents-management/cmd
++
++LDFLAGS := -X $(CLI_PKG).Version=$(VERSION) \
++           -X $(CLI_PKG).Commit=$(COMMIT) \
++           -X $(CLI_PKG).BuildDate=$(BUILD_DATE)
++
++# -mod=mod is explicit everywhere: Go auto-enables -mod=vendor the moment a
++# vendor/modules.txt exists, and a stale vendor tree then fails every build.
++# The extraction source dropped vendoring for exactly that reason
++# (skill-project-management TASK-260819-3vr8j3).
++GOFLAGS_MOD := -mod=mod
++
++all: build
++
++build:
++	@go build $(GOFLAGS_MOD) -ldflags '$(LDFLAGS)' -o $(BIN) ./tools/agents-management
++
++test:
++	@go test $(GOFLAGS_MOD) ./... -count=1
++
++vet:
++	@go vet $(GOFLAGS_MOD) ./...
++
++install: build
++	@mkdir -p $(BIN_DIR)
++	@rm -f $(BIN_DIR)/agents-management
++	@cp $(BIN) $(BIN_DIR)/agents-management
++	@chmod +x $(BIN_DIR)/agents-management
++	@echo "Installed agents-management -> $(BIN_DIR)/agents-management"
++
++clean:
++	@rm -f $(CLI_DIR)/agents-management
++	@echo "Cleaned."
+diff --git a/README.md b/README.md
+index 323f20f..a6970c0 100644
+--- a/README.md
++++ b/README.md
+@@ -60,9 +60,54 @@ Work is tracked on this repository's own board (`.task-board/`) through the
+ `task-board` CLI — see the `project-management` skill. Go test authoring
+ follows the `go-testing-tools` skill.
+ 
++### Build
++
++One Go module at the repository root, module path
++`github.com/relux-works/skill-agents-management`. The CLI's `main` package
++lives in `tools/agents-management`; shared packages will land under `pkg/`
++as the extraction moves plugin contracts across.
++
++```
++make build     # build tools/agents-management/agents-management
++make test      # go test ./... -count=1
++make vet       # go vet ./...
++make install   # copy the binary to ~/.local/bin/agents-management
++make clean     # remove the built binary
++```
++
++`make build` injects `VERSION`, `COMMIT` and `BUILD_DATE` through `-ldflags`;
++all three are overridable on the command line, which is how the build tests
++assert that the injection actually reaches the binary. `BIN=` redirects the
++output path so a build can avoid touching the checkout.
++
++Every Go invocation passes `-mod=mod` explicitly. Go silently switches to
++`-mod=vendor` as soon as a `vendor/modules.txt` exists, and a stale vendor
++tree then fails every build — the extraction source dropped vendoring for
++that reason.
++
++`make vet`, `make build` and the test command are also this repository's
++landing gate: `spawn.worktree_isolation.validation.commands` in
++`task-board.config.json` runs exactly that list before a Change Request may
++land, so its evidence is bound to the tree being integrated.
++
++### Current CLI surface
++
++Deliberately two commands of its own, because this stage is about seams
++rather than features (cobra contributes `help` and `completion`):
++
++```
++agents-management version          # build version, commit and build date
++agents-management plugins [--json] # the plugins compiled into this binary
++```
++
++`plugins` prints an empty list and exits 0 today. That is the answer, not a
++stub: no plugin has been compiled in yet, which is a different fact from a
++failure to look. `--json` renders the empty case as `[]`, never `null`.
++
+ ## Tools
+ 
+ | Tool | Purpose | Entry point | Artifacts |
+ | --- | --- | --- | --- |
+ | `task-board` | board tracking for this repo's work | `task-board q/m/spawn ...` | `.task-board/` |
+-| `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (planned) | binary in repo root, `.temp/` logs |
++| `make` | build, test, vet and install the CLI | `make build` / `test` / `vet` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
++| `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
+diff --git a/go.mod b/go.mod
+new file mode 100644
+index 0000000..a735c4d
+--- /dev/null
++++ b/go.mod
+@@ -0,0 +1,10 @@
++module github.com/relux-works/skill-agents-management
++
++go 1.25.5
++
++require github.com/spf13/cobra v1.10.2
++
++require (
++	github.com/inconshreveable/mousetrap v1.1.0 // indirect
++	github.com/spf13/pflag v1.0.9 // indirect
++)
+diff --git a/go.sum b/go.sum
+new file mode 100644
+index 0000000..a6ee3e0
+--- /dev/null
++++ b/go.sum
+@@ -0,0 +1,10 @@
++github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
++github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
++github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
++github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
++github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
++github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
++github.com/spf13/pflag v1.0.9 h1:9exaQaMOCwffKiiiYk6/BndUBv+iRViNW+4lEMi0PvY=
++github.com/spf13/pflag v1.0.9/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
++go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
++gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+diff --git a/pkg/.gitkeep b/pkg/.gitkeep
+new file mode 100644
+index 0000000..ea6a1b5
+--- /dev/null
++++ b/pkg/.gitkeep
+@@ -0,0 +1,3 @@
++Shared packages land here as the extraction moves plugin contracts out of
++skill-project-management. Deliberately empty until the contract tasks define
++what a plugin is.
+diff --git a/task-board.config.json b/task-board.config.json
+index 5e62dd3..14fe5a6 100644
+--- a/task-board.config.json
++++ b/task-board.config.json
+@@ -30,7 +30,11 @@
+     },
+     "worktree_isolation": {
+       "validation": {
+-        "commands": []
++        "commands": [
++          "make vet",
++          "make build",
++          "env -u TASK_BOARD_DIR go test -mod=mod ./... -count=1"
++        ]
+       }
+     }
+   },
+diff --git a/tools/agents-management/cmd/build_integration_test.go b/tools/agents-management/cmd/build_integration_test.go
+new file mode 100644
+index 0000000..98d04e5
+--- /dev/null
++++ b/tools/agents-management/cmd/build_integration_test.go
+@@ -0,0 +1,292 @@
++package cmd
++
++import (
++	"bytes"
++	"errors"
++	"fmt"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"strings"
++	"sync"
++	"testing"
++)
++
++// These tests drive the production entry point end to end: `make build`
++// produces the binary main() lives in, and the binary is executed. Nothing
++// here calls an in-process helper, because the property under test — that the
++// Makefile's -X targets actually reach the variables in this package — cannot
++// be observed from inside a `go test` binary, which is not built with those
++// ldflags. A wrong -X path is silently ignored by the Go linker, so only the
++// output of a real build can catch the drift.
++
++const (
++	probeVersion   = "9.9.9-ldflags-probe"
++	probeCommit    = "c0ffee1"
++	probeBuildDate = "2026-01-02T03:04:05Z"
++)
++
++var testTempDir string
++
++func TestMain(m *testing.M) {
++	dir, err := os.MkdirTemp("", "agents-management-test")
++	if err != nil {
++		fmt.Fprintf(os.Stderr, "creating test temp dir: %v\n", err)
++		os.Exit(1)
++	}
++	testTempDir = dir
++	code := m.Run()
++	_ = os.RemoveAll(dir)
++	os.Exit(code)
++}
++
++// repoRoot walks up from the test's working directory to the module root.
++func repoRoot() (string, error) {
++	dir, err := os.Getwd()
++	if err != nil {
++		return "", err
++	}
++	start := dir
++	for {
++		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
++			return dir, nil
++		}
++		parent := filepath.Dir(dir)
++		if parent == dir {
++			return "", fmt.Errorf("no go.mod found at or above %s", start)
++		}
++		dir = parent
++	}
++}
++
++var (
++	probeBinOnce sync.Once
++	probeBinPath string
++	probeBinErr  error
++)
++
++// probeBinary builds the CLI through the real `make build` target with known
++// version metadata, so the assertions bind to the Makefile the repository
++// actually ships rather than to a duplicated ldflags string.
++func probeBinary(t *testing.T) string {
++	t.Helper()
++	probeBinOnce.Do(func() {
++		root, err := repoRoot()
++		if err != nil {
++			probeBinErr = err
++			return
++		}
++		bin := filepath.Join(testTempDir, "agents-management-probe")
++		build := exec.Command("make", "build",
++			"BIN="+bin,
++			"VERSION="+probeVersion,
++			"COMMIT="+probeCommit,
++			"BUILD_DATE="+probeBuildDate,
++		)
++		build.Dir = root
++		if out, err := build.CombinedOutput(); err != nil {
++			probeBinErr = fmt.Errorf("make build failed: %v\n%s", err, out)
++			return
++		}
++		probeBinPath = bin
++	})
++	if probeBinErr != nil {
++		t.Fatalf("building probe binary: %v", probeBinErr)
++	}
++	return probeBinPath
++}
++
++func run(t *testing.T, bin string, args ...string) (stdout, stderr string, exitCode int) {
++	t.Helper()
++	var out, errOut bytes.Buffer
++	c := exec.Command(bin, args...)
++	c.Stdout = &out
++	c.Stderr = &errOut
++	if err := c.Run(); err != nil {
++		var exitErr *exec.ExitError
++		if !errors.As(err, &exitErr) {
++			t.Fatalf("running %s %v: %v", bin, args, err)
++		}
++		exitCode = exitErr.ExitCode()
++	}
++	return out.String(), errOut.String(), exitCode
++}
++
++// The gate: `make build` must inject version, commit and build date into the
++// binary. If the Makefile drops the -ldflags, or an -X target names a package
++// or variable that no longer exists, the binary falls back to its defaults and
++// this test goes red.
++func TestMakeBuildInjectsVersionMetadata(t *testing.T) {
++	bin := probeBinary(t)
++
++	stdout, stderr, code := run(t, bin, "version")
++	if code != 0 {
++		t.Fatalf("version exited %d, stderr: %s", code, stderr)
++	}
++	want := fmt.Sprintf("agents-management version %s (commit %s, built %s)\n",
++		probeVersion, probeCommit, probeBuildDate)
++	if stdout != want {
++		t.Errorf("stdout = %q, want %q", stdout, want)
++	}
++	for _, sentinel := range []string{probeVersion, probeCommit, probeBuildDate} {
++		if !strings.Contains(stdout, sentinel) {
++			t.Errorf("stdout %q is missing injected value %q: ldflags did not reach the binary", stdout, sentinel)
++		}
++	}
++}
++
++// Cobra's own --version flag must report the same string as the subcommand;
++// they are two entry points onto one fact.
++func TestMakeBuildInjectsVersionMetadataIntoVersionFlag(t *testing.T) {
++	bin := probeBinary(t)
++
++	stdout, stderr, code := run(t, bin, "--version")
++	if code != 0 {
++		t.Fatalf("--version exited %d, stderr: %s", code, stderr)
++	}
++	want := fmt.Sprintf("agents-management version %s (commit %s, built %s)\n",
++		probeVersion, probeCommit, probeBuildDate)
++	if stdout != want {
++		t.Errorf("stdout = %q, want %q", stdout, want)
++	}
++}
++
++// The narrowing partner of TestMakeBuildInjectsVersionMetadata: a build with
++// no ldflags must report the compiled-in defaults. Without this, hardcoding
++// the sentinel values into the source would satisfy the injection test.
++func TestBuildWithoutLdflagsReportsDefaults(t *testing.T) {
++	root, err := repoRoot()
++	if err != nil {
++		t.Fatalf("locating repo root: %v", err)
++	}
++	bin := filepath.Join(testTempDir, "agents-management-plain")
++	build := exec.Command("go", "build", "-mod=mod", "-o", bin, "./tools/agents-management")
++	build.Dir = root
++	if out, err := build.CombinedOutput(); err != nil {
++		t.Fatalf("go build failed: %v\n%s", err, out)
++	}
++
++	stdout, stderr, code := run(t, bin, "version")
++	if code != 0 {
++		t.Fatalf("version exited %d, stderr: %s", code, stderr)
++	}
++	if stdout != "agents-management version dev\n" {
++		t.Errorf("stdout = %q, want %q", stdout, "agents-management version dev\n")
++	}
++	for _, sentinel := range []string{probeVersion, probeCommit, probeBuildDate} {
++		if strings.Contains(stdout, sentinel) {
++			t.Errorf("stdout %q carries %q without ldflags: the value is hardcoded, not injected", stdout, sentinel)
++		}
++	}
++}
++
++// The gate: the shipped binary answers `plugins` with an empty list and exit
++// 0. If the empty case starts erroring — or starts writing a complaint to
++// stderr that a consumer would read as a failure — this goes red.
++func TestBuiltBinaryListsEmptyPluginsWithoutError(t *testing.T) {
++	bin := probeBinary(t)
++
++	stdout, stderr, code := run(t, bin, "plugins")
++	if code != 0 {
++		t.Errorf("plugins exited %d, want 0; stderr: %s", code, stderr)
++	}
++	if stdout != "" {
++		t.Errorf("stdout = %q, want empty", stdout)
++	}
++	if stderr != "" {
++		t.Errorf("stderr = %q, want empty: an empty registry is an answer, not a diagnostic", stderr)
++	}
++}
++
++func TestBuiltBinaryEncodesEmptyPluginsAsEmptyArray(t *testing.T) {
++	bin := probeBinary(t)
++
++	stdout, stderr, code := run(t, bin, "plugins", "--json")
++	if code != 0 {
++		t.Errorf("plugins --json exited %d, want 0; stderr: %s", code, stderr)
++	}
++	if stdout != "[]\n" {
++		t.Errorf("stdout = %q, want %q", stdout, "[]\n")
++	}
++}
++
++// An unknown subcommand must still fail: exit 0 on `plugins` has to mean the
++// command ran, not that this binary exits 0 for everything.
++func TestBuiltBinaryFailsOnUnknownCommand(t *testing.T) {
++	bin := probeBinary(t)
++
++	_, _, code := run(t, bin, "definitely-not-a-command")
++	if code == 0 {
++		t.Error("unknown command exited 0, want non-zero")
++	}
++}
++
++// gitIgnored reports whether the .gitignore rules ignore path, relative to the
++// repo root — regardless of whether git already tracks it.
++func gitIgnored(t *testing.T, root, path string) bool {
++	t.Helper()
++	// --no-index is load-bearing; do not helpfully simplify it away. Without
++	// it, check-ignore consults the index first and never reports a TRACKED
++	// file as ignored, whatever .gitignore says. The source paths asserted
++	// below are untracked only while a Change Request is in flight; the moment
++	// it lands they become tracked, the not-ignored half of the assertion goes
++	// unconditionally true, and this guard expires at exactly the moment it
++	// starts mattering. --no-index reports the pattern truth either way, which
++	// is also what lets us assert paths that do not exist yet.
++	c := exec.Command("git", "check-ignore", "-q", "--no-index", "--", path)
++	c.Dir = root
++	err := c.Run()
++	if err == nil {
++		return true
++	}
++	var exitErr *exec.ExitError
++	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
++		return false
++	}
++	t.Fatalf("git check-ignore %s: %v", path, err)
++	return false
++}
++
++// A .gitignore pattern with no slash matches directories as well as files, so
++// an unanchored `agents-management` entry — meant for the built binary —
++// silently swallows the whole tools/agents-management source tree. Nothing
++// else notices: the build and the tests keep passing against files git will
++// never carry, and the change lands empty. Both directions are asserted, so
++// deleting the ignore rules cannot make this pass.
++func TestBuildOutputIsIgnoredAndSourcesAreNot(t *testing.T) {
++	root, err := repoRoot()
++	if err != nil {
++		t.Fatalf("locating repo root: %v", err)
++	}
++
++	// The last two do not exist yet, and that is deliberate: the class under
++	// test is a new file being swallowed by a pattern nobody re-read, and a
++	// list of paths that already exist can never observe it. pkg/ is the one
++	// that bites hardest — a future package directory named after the binary
++	// is the same unanchored-pattern bug waiting to happen.
++	notIgnored := []string{
++		"Makefile",
++		"go.mod",
++		"tools/agents-management/main.go",
++		"tools/agents-management/cmd/root.go",
++		"tools/agents-management/cmd/version.go",
++		"tools/agents-management/cmd/plugins.go",
++		"tools/agents-management/cmd/future_command.go",
++		"pkg/agents-management/foo.go",
++	}
++	for _, path := range notIgnored {
++		if gitIgnored(t, root, path) {
++			t.Errorf("%s is git-ignored; it would never reach a commit", path)
++		}
++	}
++
++	ignored := []string{
++		"agents-management",
++		"tools/agents-management/agents-management",
++	}
++	for _, path := range ignored {
++		if !gitIgnored(t, root, path) {
++			t.Errorf("%s is not git-ignored; the build output would be committed", path)
++		}
++	}
++}
+diff --git a/tools/agents-management/cmd/cmd_test.go b/tools/agents-management/cmd/cmd_test.go
+new file mode 100644
+index 0000000..bcd432a
+--- /dev/null
++++ b/tools/agents-management/cmd/cmd_test.go
+@@ -0,0 +1,38 @@
++package cmd
++
++import (
++	"bytes"
++	"testing"
++)
++
++// runRoot drives the real root command the way main() does, and restores the
++// package-level command state afterwards so tests stay order-independent.
++func runRoot(t *testing.T, args ...string) (stdout, stderr string, err error) {
++	t.Helper()
++
++	var out, errOut bytes.Buffer
++	rootCmd.SetOut(&out)
++	rootCmd.SetErr(&errOut)
++	rootCmd.SetArgs(args)
++
++	t.Cleanup(func() {
++		rootCmd.SetOut(nil)
++		rootCmd.SetErr(nil)
++		rootCmd.SetArgs(nil)
++		pluginsJSON = false
++		_ = pluginsCmd.Flags().Set("json", "false")
++	})
++
++	err = rootCmd.Execute()
++	return out.String(), errOut.String(), err
++}
++
++// withRegisteredPlugins swaps the compiled-in plugin set for the duration of
++// a test. There is no registry type yet on purpose; the plugin contracts are
++// follow-up work.
++func withRegisteredPlugins(t *testing.T, names ...string) {
++	t.Helper()
++	previous := registeredPlugins
++	registeredPlugins = names
++	t.Cleanup(func() { registeredPlugins = previous })
++}
+diff --git a/tools/agents-management/cmd/plugins.go b/tools/agents-management/cmd/plugins.go
+new file mode 100644
+index 0000000..0922499
+--- /dev/null
++++ b/tools/agents-management/cmd/plugins.go
+@@ -0,0 +1,58 @@
++package cmd
++
++import (
++	"encoding/json"
++	"fmt"
++	"sort"
++
++	"github.com/spf13/cobra"
++)
++
++// registeredPlugins names the plugins compiled into this binary. It is empty
++// today and that is a valid answer, not a failure: the plugin contracts land
++// in follow-up work, and a consumer asking an unpopulated binary what it
++// carries deserves an empty list and exit 0, never an error.
++var registeredPlugins []string
++
++var pluginsJSON bool
++
++var pluginsCmd = &cobra.Command{
++	Use:   "plugins",
++	Short: "List the plugins registered in this binary",
++	Long: "List the plugins registered in this binary, one name per line.\n\n" +
++		"An empty list is a valid answer and exits 0: it means no plugin has\n" +
++		"been compiled in yet, which is different from a failure to look.",
++	Args: cobra.NoArgs,
++	RunE: func(cmd *cobra.Command, _ []string) error {
++		names := pluginNames()
++		out := cmd.OutOrStdout()
++		if pluginsJSON {
++			encoded, err := json.Marshal(names)
++			if err != nil {
++				return fmt.Errorf("encoding plugin list: %w", err)
++			}
++			fmt.Fprintf(out, "%s\n", encoded)
++			return nil
++		}
++		for _, name := range names {
++			fmt.Fprintln(out, name)
++		}
++		return nil
++	},
++}
++
++// pluginNames returns the registered plugin names in a stable order. The
++// result is always non-nil so the JSON encoding of "nothing registered" is
++// [] and never null — a consumer ranging over the answer must not have to
++// special-case the empty case.
++func pluginNames() []string {
++	names := make([]string, 0, len(registeredPlugins))
++	names = append(names, registeredPlugins...)
++	sort.Strings(names)
++	return names
++}
++
++func init() {
++	pluginsCmd.Flags().BoolVar(&pluginsJSON, "json", false, "Emit the list as a JSON array")
++	rootCmd.AddCommand(pluginsCmd)
++}
+diff --git a/tools/agents-management/cmd/plugins_test.go b/tools/agents-management/cmd/plugins_test.go
+new file mode 100644
+index 0000000..0a41684
+--- /dev/null
++++ b/tools/agents-management/cmd/plugins_test.go
+@@ -0,0 +1,102 @@
++package cmd
++
++import (
++	"encoding/json"
++	"strings"
++	"testing"
++)
++
++// An unpopulated binary must answer "nothing registered" and exit 0. Treating
++// the empty set as a failure would make every consumer unable to tell "no
++// plugins compiled in" from "the lookup broke".
++func TestPluginsCommandEmptyListSucceeds(t *testing.T) {
++	withRegisteredPlugins(t)
++
++	stdout, stderr, err := runRoot(t, "plugins")
++	if err != nil {
++		t.Fatalf("plugins command errored on an empty registry: %v", err)
++	}
++	if stdout != "" {
++		t.Errorf("stdout = %q, want empty", stdout)
++	}
++	if stderr != "" {
++		t.Errorf("stderr = %q, want empty", stderr)
++	}
++}
++
++// json.Marshal of a nil slice is `null`, of an empty slice `[]`. A consumer
++// ranging over the answer must not have to special-case the empty registry,
++// so the empty answer is pinned to `[]`.
++func TestPluginsCommandEmptyListEncodesAsEmptyArray(t *testing.T) {
++	withRegisteredPlugins(t)
++
++	stdout, _, err := runRoot(t, "plugins", "--json")
++	if err != nil {
++		t.Fatalf("plugins --json errored on an empty registry: %v", err)
++	}
++	if stdout != "[]\n" {
++		t.Fatalf("stdout = %q, want %q", stdout, "[]\n")
++	}
++
++	var decoded []string
++	if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
++		t.Fatalf("decoding %q: %v", stdout, err)
++	}
++	if decoded == nil {
++		t.Error("decoded to nil; the empty registry must encode as [] and never null")
++	}
++	if len(decoded) != 0 {
++		t.Errorf("decoded = %v, want empty", decoded)
++	}
++}
++
++// The empty answer must mean "the registry is empty", not "this command
++// always prints nothing" — so a populated registry has to come back out.
++func TestPluginsCommandListsRegisteredNamesSorted(t *testing.T) {
++	withRegisteredPlugins(t, "vendor-openai", "claude-code", "vendor-anthropic")
++
++	stdout, _, err := runRoot(t, "plugins")
++	if err != nil {
++		t.Fatalf("plugins command failed: %v", err)
++	}
++	want := "claude-code\nvendor-anthropic\nvendor-openai\n"
++	if stdout != want {
++		t.Errorf("stdout = %q, want %q", stdout, want)
++	}
++}
++
++func TestPluginsCommandJSONListsRegisteredNamesSorted(t *testing.T) {
++	withRegisteredPlugins(t, "vendor-openai", "claude-code")
++
++	stdout, _, err := runRoot(t, "plugins", "--json")
++	if err != nil {
++		t.Fatalf("plugins --json failed: %v", err)
++	}
++	var decoded []string
++	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &decoded); err != nil {
++		t.Fatalf("decoding %q: %v", stdout, err)
++	}
++	want := []string{"claude-code", "vendor-openai"}
++	if len(decoded) != len(want) {
++		t.Fatalf("decoded = %v, want %v", decoded, want)
++	}
++	for i := range want {
++		if decoded[i] != want[i] {
++			t.Fatalf("decoded = %v, want %v", decoded, want)
++		}
++	}
++}
++
++// pluginNames hands out a copy: a caller that sorts or appends to the answer
++// must not be able to reorder or grow the compiled-in set.
++func TestPluginNamesDoesNotAliasRegistry(t *testing.T) {
++	withRegisteredPlugins(t, "vendor-openai", "claude-code")
++
++	names := pluginNames()
++	names[0] = "mutated"
++
++	if registeredPlugins[0] != "vendor-openai" {
++		t.Errorf("registeredPlugins[0] = %q, want %q: pluginNames aliased the registry",
++			registeredPlugins[0], "vendor-openai")
++	}
++}
+diff --git a/tools/agents-management/cmd/root.go b/tools/agents-management/cmd/root.go
+new file mode 100644
+index 0000000..b0381a7
+--- /dev/null
++++ b/tools/agents-management/cmd/root.go
+@@ -0,0 +1,61 @@
++// Package cmd holds the agents-management command tree.
++//
++// The tool spawns and describes heterogeneous agentic systems and the model
++// vendors behind them. Everything a concrete harness or vendor knows lives in
++// a plugin; this package owns only the command surface.
++package cmd
++
++import (
++	"fmt"
++	"os"
++
++	"github.com/spf13/cobra"
++)
++
++// Version info — overridden via ldflags at build time by the Makefile's
++// `build` target. The -X targets name this package, so moving or renaming
++// these variables silently strips the version metadata unless the Makefile
++// moves with them; TestMakeBuildInjectsVersionMetadata guards that binding.
++var (
++	Version   = "dev"
++	Commit    = ""
++	BuildDate = ""
++)
++
++var rootCmd = &cobra.Command{
++	Use:   "agents-management",
++	Short: "Spawn and manage heterogeneous agentic systems",
++	Long: "Spawn and manage heterogeneous agentic systems and the model vendors\n" +
++		"behind them. Runtimes are (agentic system x vendor) pairs contributed by\n" +
++		"plugins; this binary owns registration, admission and observation only.",
++	SilenceErrors: true,
++	SilenceUsage:  true,
++}
++
++// Execute runs the root command and maps any failure onto exit status 1.
++func Execute() {
++	if err := rootCmd.Execute(); err != nil {
++		fmt.Fprintln(os.Stderr, err)
++		os.Exit(1)
++	}
++}
++
++func init() {
++	rootCmd.Version = formatVersion()
++	rootCmd.SetVersionTemplate("{{.Version}}\n")
++}
++
++// formatVersion renders the build metadata carried by the binary. Commit and
++// build date are only present in a release build, so they are omitted rather
++// than printed empty.
++func formatVersion() string {
++	v := fmt.Sprintf("agents-management version %s", Version)
++	if Commit != "" {
++		v += fmt.Sprintf(" (commit %s", Commit)
++		if BuildDate != "" {
++			v += fmt.Sprintf(", built %s", BuildDate)
++		}
++		v += ")"
++	}
++	return v
++}
+diff --git a/tools/agents-management/cmd/version.go b/tools/agents-management/cmd/version.go
+new file mode 100644
+index 0000000..771b8d4
+--- /dev/null
++++ b/tools/agents-management/cmd/version.go
+@@ -0,0 +1,22 @@
++package cmd
++
++import (
++	"fmt"
++
++	"github.com/spf13/cobra"
++)
++
++var versionCmd = &cobra.Command{
++	Use:   "version",
++	Short: "Print build version, commit and build date",
++	Args:  cobra.NoArgs,
++	RunE: func(cmd *cobra.Command, _ []string) error {
++		// OutOrStdout, not cobra's Print helpers: those fall back to stderr.
++		fmt.Fprintln(cmd.OutOrStdout(), formatVersion())
++		return nil
++	},
++}
++
++func init() {
++	rootCmd.AddCommand(versionCmd)
++}
+diff --git a/tools/agents-management/cmd/version_test.go b/tools/agents-management/cmd/version_test.go
+new file mode 100644
+index 0000000..df0e6ae
+--- /dev/null
++++ b/tools/agents-management/cmd/version_test.go
+@@ -0,0 +1,48 @@
++package cmd
++
++import "testing"
++
++func withVersionMetadata(t *testing.T, version, commit, buildDate string) {
++	t.Helper()
++	pv, pc, pd := Version, Commit, BuildDate
++	Version, Commit, BuildDate = version, commit, buildDate
++	t.Cleanup(func() { Version, Commit, BuildDate = pv, pc, pd })
++}
++
++func TestVersionCommandReportsInjectedMetadata(t *testing.T) {
++	withVersionMetadata(t, "1.2.3", "abc1234", "2026-01-02T03:04:05Z")
++
++	stdout, stderr, err := runRoot(t, "version")
++	if err != nil {
++		t.Fatalf("version command failed: %v", err)
++	}
++	want := "agents-management version 1.2.3 (commit abc1234, built 2026-01-02T03:04:05Z)\n"
++	if stdout != want {
++		t.Errorf("stdout = %q, want %q", stdout, want)
++	}
++	if stderr != "" {
++		t.Errorf("stderr = %q, want empty: version metadata belongs on stdout", stderr)
++	}
++}
++
++// The build date is absent from a plain `go build`; an empty one must be
++// omitted rather than printed as "built ".
++func TestFormatVersionOmitsAbsentMetadata(t *testing.T) {
++	cases := []struct {
++		name                      string
++		version, commit, buildDte string
++		want                      string
++	}{
++		{"no commit, no date", "dev", "", "", "agents-management version dev"},
++		{"commit without date", "dev", "abc1234", "", "agents-management version dev (commit abc1234)"},
++		{"date without commit", "dev", "", "2026-01-02T03:04:05Z", "agents-management version dev"},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			withVersionMetadata(t, tc.version, tc.commit, tc.buildDte)
++			if got := formatVersion(); got != tc.want {
++				t.Errorf("formatVersion() = %q, want %q", got, tc.want)
++			}
++		})
++	}
++}
+diff --git a/tools/agents-management/main.go b/tools/agents-management/main.go
+new file mode 100644
+index 0000000..1d723cb
+--- /dev/null
++++ b/tools/agents-management/main.go
+@@ -0,0 +1,7 @@
++package main
++
++import "github.com/relux-works/skill-agents-management/tools/agents-management/cmd"
++
++func main() {
++	cmd.Execute()
++}

@@ -1,0 +1,465 @@
+package vendorplugin
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/relux-works/skill-agents-management/pkg/agentic"
+)
+
+// ---------- ATTACK 1: the dependency direction and its seams ----------
+
+func TestAttackVendorMutatedAfterRegistrationToGainASystem(t *testing.T) {
+	systems := agentic.NewRegistry()
+	if err := systems.Register(newPangolinSystem()); err != nil {
+		t.Fatalf("register pangolin: %v", err)
+	}
+	registry := NewRegistry(systems)
+	vendor := newNarwhal()
+	if err := registry.Register(vendor); err != nil {
+		t.Fatalf("register narwhal: %v", err)
+	}
+	if err := registry.DeclareRuntime(tuskDeclaration()); err != nil {
+		t.Fatalf("declare tusk: %v", err)
+	}
+
+	vendor.models[0].Systems = append(vendor.models[0].Systems, agentic.SystemID("opencode"))
+
+	err := registry.DeclareRuntime(RuntimeDeclaration{
+		ID:     "smuggled",
+		System: "opencode",
+		Vendor: narwhalID,
+		Broker: BrokerProvenance{Checked: []string{"the attack"}, Found: "the attack declared it"},
+	})
+	if err != nil {
+		t.Fatalf("declaring a runtime on an unregistered system was refused: %v", err)
+	}
+	req := narwhalRequest()
+	req.Runtime = "smuggled"
+	_, err = BuildLaunch(registry, req, agentic.LaunchModeExec)
+	if err == nil {
+		t.Fatal("BYPASS: a vendor mutated after registration launched on an agentic system nobody registered")
+	}
+	if !errors.Is(err, ErrRuntimeSystemUnregistered) {
+		t.Errorf("refused, but not on the dependency direction: %v", err)
+	}
+	t.Logf("post-mutation launch refused with: %v", err)
+
+	vendor.models[0].Description = "   "
+	vendor.models[0].Rank.Basis = nil
+	plan, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+	if err != nil {
+		t.Logf("a post-mutation invalid model row was refused at launch: %v", err)
+	} else {
+		t.Logf("OBSERVED: a model row Register would refuse (blank description, rank with no evidence) reached a plan: argv=%v", plan.Argv)
+	}
+}
+
+func TestAttackRegistrationOrderVendorBeforeSystem(t *testing.T) {
+	systems := agentic.NewRegistry()
+	registry := NewRegistry(systems)
+	vendor := newNarwhal()
+	err := registry.Register(vendor)
+	requireErrorIs(t, err, ErrUnknownAgenticSystem, "vendor registered before its system")
+	requireMentions(t, err, "narwhal", "pangolin")
+
+	if err := systems.Register(newPangolinSystem()); err != nil {
+		t.Fatalf("register pangolin: %v", err)
+	}
+	if err := registry.Register(vendor); err != nil {
+		t.Fatalf("after the system arrived, the vendor was still refused: %v", err)
+	}
+	if _, ok := registry.Lookup(narwhalID); !ok {
+		t.Fatal("the refused-then-accepted vendor is not in the registry")
+	}
+}
+
+func TestAttackRuntimeNamingAnUnregisteredVendor(t *testing.T) {
+	systems := agentic.NewRegistry()
+	if err := systems.Register(newPangolinSystem()); err != nil {
+		t.Fatalf("register pangolin: %v", err)
+	}
+	registry := NewRegistry(systems)
+	err := registry.DeclareRuntime(RuntimeDeclaration{
+		ID:     "ghost",
+		System: pangolinID,
+		Vendor: "nobody",
+		Broker: BrokerProvenance{Checked: []string{"the attack"}, Found: "the attack named it"},
+	})
+	if err != nil {
+		t.Fatalf("a declaration naming an unregistered vendor was refused: %v", err)
+	}
+	_, err = registry.ResolveRuntime("ghost")
+	requireErrorIs(t, err, ErrRuntimeVendorUnregistered, "resolving a runtime whose vendor is not compiled in")
+	if errors.Is(err, ErrRuntimeVendorUnresolved) {
+		t.Error("COLLAPSE: not-registered and never-established are the same error")
+	}
+}
+
+// ---------- ATTACK 2: availability semantics ----------
+
+func TestAttackZeroValueAvailabilityIsNeverHealthy(t *testing.T) {
+	var zero Availability
+	if zero.State == AvailabilityHealthy {
+		t.Fatal("FAIL-OPEN: the zero-value verdict is healthy")
+	}
+	if zero.Serviceable() {
+		t.Fatal("FAIL-OPEN: the zero-value verdict is serviceable")
+	}
+	if zero.State != AvailabilityUnknown {
+		t.Fatalf("the zero value is %s, not unknown", zero.State)
+	}
+	if err := zero.Validate(); err != nil {
+		t.Fatalf("the zero value must be a LEGAL unknown (nobody looked): %v", err)
+	}
+	if len(zero.Checked) != 0 {
+		t.Fatal("the zero value claims a source was checked")
+	}
+}
+
+func TestAttackMintedHealthyVerdictThroughTheProductionPath(t *testing.T) {
+	forged := []struct {
+		name    string
+		verdict Availability
+	}{
+		{"healthy with nothing checked", Availability{State: AvailabilityHealthy}},
+		{"healthy over a failed read", Availability{
+			State:    AvailabilityHealthy,
+			Checked:  []string{"quota headers"},
+			Failures: []ReadFailure{{Source: "quota headers", Reason: "connection reset"}},
+		}},
+		{"limited with no clear time", Availability{
+			State:    AvailabilityLimited,
+			Observed: []Observation{{Source: "headers", Detail: "429"}},
+		}},
+		{"limited with no observation", Availability{State: AvailabilityLimited, Until: time.Unix(1e9, 0)}},
+		{"unknown carrying a clear time", Availability{State: AvailabilityUnknown, Until: time.Unix(1e9, 0)}},
+		{"unreachable with nothing behind it", Availability{State: AvailabilityUnreachable}},
+		{"healthy with a blank checked source", Availability{State: AvailabilityHealthy, Checked: []string{"  "}}},
+		{"an undeclared state", Availability{State: AvailabilityState(99), Checked: []string{"x"}}},
+	}
+	for _, tc := range forged {
+		t.Run(tc.name, func(t *testing.T) {
+			vendor := newNarwhal()
+			vendor.availability = tc.verdict
+			registry := registerNarwhal(t, vendor)
+			got, err := CheckAvailability(registry, narwhalID, AvailabilityQuery{})
+			if err == nil {
+				t.Fatalf("the production path admitted a forged verdict: %+v", got)
+			}
+			requireErrorIs(t, err, ErrVendorContract, "forged verdict")
+			if got.Serviceable() {
+				t.Fatal("a refused verdict came back serviceable")
+			}
+		})
+	}
+}
+
+func TestAttackLocalPlaneAnswersAreExpressibleNow(t *testing.T) {
+	clear := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+	cases := map[string]Availability{
+		"loaded and idle": Healthy("resource plane /models"),
+		"busy until the running turn finishes": LimitedUntil(clear,
+			Observation{Source: "resource plane /models", Detail: "one turn in flight, eta 40s"}),
+		"waiting on an eviction": LimitedUntil(clear,
+			Observation{Source: "resource plane /memory", Detail: "another model must be evicted first"}),
+		"the daemon is not running": Unreachable(nil,
+			[]ReadFailure{{Source: "resource plane socket", Reason: "connection refused"}}),
+		"the plane was asked and could not tell": {
+			State:    AvailabilityUnknown,
+			Checked:  []string{"resource plane /models"},
+			Failures: []ReadFailure{{Source: "resource plane /models", Reason: "504"}},
+		},
+	}
+	for name, verdict := range cases {
+		if err := verdict.Validate(); err != nil {
+			t.Errorf("%q is not expressible today: %v", name, err)
+		}
+		if name == "loaded and idle" {
+			if !verdict.Serviceable() {
+				t.Error("loaded and idle is not serviceable")
+			}
+			continue
+		}
+		if verdict.Serviceable() {
+			t.Errorf("%q reported serviceable", name)
+		}
+	}
+	couldNotTell := cases["the plane was asked and could not tell"]
+	if len(couldNotTell.Checked) == 0 {
+		t.Error("could-not-tell is indistinguishable from never-looked")
+	}
+	if len(Unchecked().Checked) != 0 {
+		t.Error("never-looked claims a checked source")
+	}
+	if len(UnknownAfterCheck("a").Checked) == 0 {
+		t.Error("checked-and-empty records no source")
+	}
+}
+
+// ---------- ATTACK 3: muse and the unknown vendor ----------
+
+func TestAttackMuseRefusalIsATypedDifference(t *testing.T) {
+	systems := agentic.NewRegistry()
+	if err := systems.Register(&renamedPangolin{inner: newPangolinSystem(), id: "muse"}); err != nil {
+		t.Fatalf("register a muse harness double: %v", err)
+	}
+	registry := NewRegistry(systems)
+	if err := SeedFrozenRuntimes(registry); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	_, err := registry.ResolveRuntime("muse")
+	requireErrorIs(t, err, ErrRuntimeVendorUnresolved, "resolving muse")
+	if errors.Is(err, ErrRuntimeVendorUnregistered) {
+		t.Error("COLLAPSE: muse's unresolved broker is reported as a missing plugin")
+	}
+	if errors.Is(err, ErrVendorNotRegistered) {
+		t.Error("COLLAPSE: muse's unresolved broker is reported as an unregistered vendor")
+	}
+	requireMentions(t, err, "muse", "runtimeid")
+}
+
+func TestAttackTheSixFrozenSeedsAreExactlyTheSourceTable(t *testing.T) {
+	want := []struct {
+		id, system, vendor string
+		resolved           bool
+	}{
+		{"agy", "antigravity", "google", true},
+		{"claude", "claude-code", "anthropic", true},
+		{"codex", "codex", "openai", true},
+		{"gemini", "gemini-cli", "google", true},
+		{"muse", "muse", "", false},
+		{"qwen", "qwen-code", "alibaba", true},
+	}
+	got := NewRegistry(agentic.NewRegistry())
+	if err := SeedFrozenRuntimes(got); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	declarations := got.RuntimeDeclarations()
+	if len(declarations) != len(want) {
+		t.Fatalf("seeded %d runtimes, want %d: %+v", len(declarations), len(want), declarations)
+	}
+	for i, w := range want {
+		d := declarations[i]
+		if string(d.ID) != w.id || string(d.System) != w.system || string(d.Vendor) != w.vendor {
+			t.Errorf("seed %d = (%s, %s, %s), want (%s, %s, %s)", i, d.ID, d.System, d.Vendor, w.id, w.system, w.vendor)
+		}
+		if d.VendorResolved() != w.resolved {
+			t.Errorf("%s resolved = %v, want %v", d.ID, d.VendorResolved(), w.resolved)
+		}
+		if len(d.Broker.Checked) == 0 {
+			t.Errorf("%s records no provenance", d.ID)
+		}
+	}
+}
+
+func TestAttackF2OnAFrozenID(t *testing.T) {
+	registry := NewRegistry(agentic.NewRegistry())
+	if err := SeedFrozenRuntimes(registry); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := registry.DeclareRuntime(RuntimeDeclaration{
+		ID: "claude", System: "claude-code", Vendor: "anthropic",
+		Broker: BrokerProvenance{Checked: []string{"a completely different source"}, Found: "worded another way entirely"},
+	}); err != nil {
+		t.Fatalf("a matching redeclaration was refused: %v", err)
+	}
+	err := registry.DeclareRuntime(RuntimeDeclaration{
+		ID: "claude", System: "codex", Vendor: "openai",
+		Broker: BrokerProvenance{Checked: []string{"the attack"}, Found: "the attack rebound it"},
+	})
+	requireErrorIs(t, err, ErrRuntimeConflict, "rebinding a frozen runtime id")
+	requireMentions(t, err, "claude", "claude-code", "anthropic", "codex", "openai")
+	d, ok := registry.RuntimeDeclarationOf("claude")
+	if !ok || string(d.System) != "claude-code" || string(d.Vendor) != "anthropic" {
+		t.Fatalf("the refused rebind changed the table: %+v", d)
+	}
+	err = registry.DeclareRuntime(RuntimeDeclaration{
+		ID: "agy", System: "antigravity", Vendor: "anthropic",
+		Broker: BrokerProvenance{Checked: []string{"the attack"}, Found: "the attack rebound the vendor half"},
+	})
+	requireErrorIs(t, err, ErrRuntimeConflict, "rebinding only the vendor half")
+	err = registry.DeclareRuntime(RuntimeDeclaration{
+		ID: "muse", System: "muse", Vendor: "google",
+		Broker: BrokerProvenance{Checked: []string{"the attack"}, Found: "the attack guessed"},
+	})
+	requireErrorIs(t, err, ErrRuntimeConflict, "guessing muse's vendor over the frozen unresolved binding")
+}
+
+func TestAttackTheFrozenTableCannotBeEditedThroughItsAnswers(t *testing.T) {
+	first := FrozenRuntimes()
+	first[0].ID = "hijacked"
+	first[0].System = "hijacked"
+	first[0].Vendor = "hijacked"
+	if len(first[0].Broker.Checked) > 0 {
+		first[0].Broker.Checked[0] = "hijacked provenance"
+	}
+	second := FrozenRuntimes()
+	if string(second[0].ID) == "hijacked" || string(second[0].System) == "hijacked" {
+		t.Fatal("the frozen table was edited through FrozenRuntimes()")
+	}
+	if len(second[0].Broker.Checked) > 0 && second[0].Broker.Checked[0] == "hijacked provenance" {
+		t.Fatal("the frozen table's provenance shares a backing array with its answer")
+	}
+
+	registry := NewRegistry(agentic.NewRegistry())
+	if err := SeedFrozenRuntimes(registry); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	listed := registry.RuntimeDeclarations()
+	listed[0].Vendor = "hijacked"
+	if len(listed[0].Broker.Checked) > 0 {
+		listed[0].Broker.Checked[0] = "hijacked"
+	}
+	again, _ := registry.RuntimeDeclarationOf(listed[0].ID)
+	if string(again.Vendor) == "hijacked" || (len(again.Broker.Checked) > 0 && again.Broker.Checked[0] == "hijacked") {
+		t.Fatal("the registry's binding table is editable through RuntimeDeclarations()")
+	}
+
+	decl := RuntimeDeclaration{
+		ID: "leaky", System: "claude-code", Vendor: "anthropic",
+		Broker: BrokerProvenance{Checked: []string{"original"}, Found: "original"},
+	}
+	if err := registry.DeclareRuntime(decl); err != nil {
+		t.Fatalf("declare leaky: %v", err)
+	}
+	decl.Broker.Checked[0] = "mutated after declaring"
+	stored, _ := registry.RuntimeDeclarationOf("leaky")
+	if stored.Broker.Checked[0] == "mutated after declaring" {
+		t.Fatal("a caller edited a stored declaration through the slice it passed in")
+	}
+}
+
+// ---------- ATTACK 4: rank and description without observation ----------
+
+func TestAttackRankAndDescriptionWhitespaceAndRange(t *testing.T) {
+	good := func() Model {
+		return Model{
+			ID:          "narwhal-deep",
+			Description: "long-horizon reasoning",
+			Rank: CapabilityRank{Position: 1, Basis: []RankEvidence{
+				{Source: "eval", Observation: "41/50"},
+			}},
+			Effort:  EffortDeclaration{Support: agentic.EffortSupportNone},
+			Systems: []agentic.SystemID{pangolinID},
+		}
+	}
+	cases := map[string]func(*Model){
+		"description whitespace only":  func(m *Model) { m.Description = "   \t\n " },
+		"description empty":            func(m *Model) { m.Description = "" },
+		"rank position zero":           func(m *Model) { m.Rank.Position = 0 },
+		"rank position negative":       func(m *Model) { m.Rank.Position = -1 },
+		"rank basis nil":               func(m *Model) { m.Rank.Basis = nil },
+		"rank basis empty slice":       func(m *Model) { m.Rank.Basis = []RankEvidence{} },
+		"rank source whitespace only":  func(m *Model) { m.Rank.Basis[0].Source = "   " },
+		"rank observation whitespace":  func(m *Model) { m.Rank.Basis[0].Observation = "\t" },
+		"rank source empty":            func(m *Model) { m.Rank.Basis[0].Source = "" },
+		"model id whitespace only":     func(m *Model) { m.ID = "   " },
+		"model id with inner space":    func(m *Model) { m.ID = "narwhal deep" },
+		"no systems at all":            func(m *Model) { m.Systems = nil },
+		"unnormalized system spelling": func(m *Model) { m.Systems = []agentic.SystemID{"Pangolin"} },
+		"the same system twice":        func(m *Model) { m.Systems = []agentic.SystemID{pangolinID, pangolinID} },
+	}
+	for name, breakIt := range cases {
+		t.Run(name, func(t *testing.T) {
+			model := good()
+			breakIt(&model)
+			if err := model.Validate(); err == nil {
+				t.Fatal("Model.Validate admitted what it must reject")
+			}
+			vendor := newNarwhal()
+			vendor.models = []Model{model}
+			systems := agentic.NewRegistry()
+			if err := systems.Register(newPangolinSystem()); err != nil {
+				t.Fatalf("register pangolin: %v", err)
+			}
+			registry := NewRegistry(systems)
+			if err := registry.Register(vendor); err == nil {
+				t.Fatal("Registry.Register admitted a model row Model.Validate rejects")
+			}
+		})
+	}
+}
+
+func TestAttackDuplicateRankPositionsWithinOneVendor(t *testing.T) {
+	vendor := newNarwhal()
+	vendor.models[1].Rank.Position = vendor.models[0].Rank.Position
+	systems := agentic.NewRegistry()
+	if err := systems.Register(newPangolinSystem()); err != nil {
+		t.Fatalf("register pangolin: %v", err)
+	}
+	registry := NewRegistry(systems)
+	err := registry.Register(vendor)
+	requireErrorIs(t, err, ErrDuplicateRank, "two models at one rank")
+	requireMentions(t, err, "narwhal-deep", "narwhal-flat")
+}
+
+func TestAttackEffortVocabularyIsNotFolded(t *testing.T) {
+	registry := registerNarwhal(t, newNarwhal())
+	for _, word := range []string{"Deep", "DEEP", "de ep", "medium"} {
+		req := narwhalRequest()
+		req.Effort = word
+		if _, err := BuildLaunch(registry, req, agentic.LaunchModeExec); err == nil {
+			t.Errorf("BYPASS: effort %q was admitted; the vocabulary is [shallow deep]", word)
+		}
+	}
+	for _, word := range []string{"deep ", " deep"} {
+		req := narwhalRequest()
+		req.Effort = word
+		if _, err := BuildLaunch(registry, req, agentic.LaunchModeExec); err != nil {
+			t.Errorf("a surrounding-whitespace effort %q was refused: %v", word, err)
+		}
+	}
+}
+
+func TestAttackRecommendedEffortIsNeverSubstituted(t *testing.T) {
+	vendor := newNarwhal()
+	registry := registerNarwhal(t, vendor)
+	before := vendor.calls["Spawn"]
+	req := narwhalRequest()
+	req.Effort = ""
+	_, err := BuildLaunch(registry, req, agentic.LaunchModeExec)
+	requireErrorIs(t, err, ErrEffortMissing, "a required effort left blank")
+	requireMentions(t, err, "shallow", "deep")
+	if vendor.calls["Spawn"] != before {
+		t.Fatal("the vendor was reached with no admitted effort")
+	}
+}
+
+// ---------- ATTACK 6: scope ----------
+
+func TestAttackBuildLaunchProducesDataOnly(t *testing.T) {
+	registry := registerNarwhal(t, newNarwhal())
+	plan, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch: %v", err)
+	}
+	if len(plan.Argv) == 0 {
+		t.Fatal("a plan with no argv")
+	}
+	t.Logf("plan is data only: binary=%q argv=%v", plan.Binary, plan.Argv)
+}
+
+type renamedPangolin struct {
+	inner *pangolinSystem
+	id    agentic.SystemID
+}
+
+func (r *renamedPangolin) ID() agentic.SystemID               { return r.id }
+func (r *renamedPangolin) Capabilities() agentic.Capabilities { return r.inner.Capabilities() }
+func (r *renamedPangolin) ValidateComposition(c agentic.Composition) error {
+	return r.inner.ValidateComposition(c)
+}
+func (r *renamedPangolin) ResolveBinary(req agentic.LaunchRequest) (string, error) {
+	return r.inner.ResolveBinary(req)
+}
+func (r *renamedPangolin) Argv(req agentic.LaunchRequest, m agentic.LaunchMode) ([]string, error) {
+	return r.inner.Argv(req, m)
+}
+func (r *renamedPangolin) ChildEnv(p []string, req agentic.LaunchRequest) ([]string, error) {
+	return r.inner.ChildEnv(p, req)
+}
+func (r *renamedPangolin) Stdin(req agentic.LaunchRequest) (agentic.StdinPayload, error) {
+	return r.inner.Stdin(req)
+}

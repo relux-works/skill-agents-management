@@ -1,0 +1,155 @@
+=== M1 planted shadow table in tools/agents-management/cmd/shadow_binding.go
+exit=1
+--- FAIL: TestSingleSourceGuardFindsNoSecondBinding (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.407s
+FAIL
+
+=== M2 planted ID-switch in tools/agents-management/cmd/id_switch.go
+exit=1
+--- FAIL: TestSingleSourceGuardFindsNoSecondBinding (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.403s
+FAIL
+
+=== M0 control: tree restored, guard green
+exit=0
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	0.415s
+
+=== M3 guard narrowed: const indirection no longer resolved
+exit=1
+--- FAIL: TestSingleSourceGuardCatchesShadowTables (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/keys_moved_behind_package-level_constants (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/keys_assembled_by_constant_concatenation (0.00s)
+--- FAIL: TestSingleSourceGuardCatchesIDSwitches (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_package-level_constants (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.496s
+FAIL
+
+=== M4 guard narrowed: package-level var indirection no longer resolved
+exit=1
+--- FAIL: TestSingleSourceGuardCatchesIDSwitches (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_a_package-level_var (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesIDSwitches/case_values_indexed_out_of_a_package-level_slice (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesIDSwitches/a_var-held_id_compared_directly (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.559s
+FAIL
+
+=== M5 guard narrowed: map[SystemID]T detected only inside composite literals
+exit=1
+--- FAIL: TestSingleSourceGuardCatchesShadowTables (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/the_obvious_one:_a_second_package-level_map_keyed_by_SystemID (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/built_with_make()_inside_a_function_body_rather_than_a_literal (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/a_struct_field,_never_a_literal_anywhere (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/through_a_SystemID_alias,_so_the_key_type_is_not_spelled_SystemID (0.00s)
+--- FAIL: TestSingleSourceGuardRulesFireOnRealCode (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.504s
+FAIL
+
+=== M6 guard narrowed: switch-on-ID() structural rule removed
+exit=1
+--- FAIL: TestSingleSourceGuardCatchesIDSwitches (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesIDSwitches/a_switch_on_ID()_naming_ids_nobody_has_declared_yet (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.510s
+FAIL
+
+=== M7 guard narrowed: allowlist widened to every file
+exit=1
+--- FAIL: TestSingleSourceGuardCatchesShadowTables (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/the_obvious_one:_a_second_package-level_map_keyed_by_SystemID (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/behind_a_named_map_type_declared_in_the_shadow_file (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/instantiating_a_binding_table_type_declared_inside_the_allowed_file (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/built_with_make()_inside_a_function_body_rather_than_a_literal (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/a_struct_field,_never_a_literal_anywhere (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/through_a_SystemID_alias,_so_the_key_type_is_not_spelled_SystemID (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/a_map[string]T_whose_keys_are_system_ids,_avoiding_the_SystemID_type_entirely (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/keys_moved_behind_package-level_constants (0.00s)
+    --- FAIL: TestSingleSourceGuardCatchesShadowTables/keys_assembled_by_constant_concatenation (0.00s)
+--- FAIL: TestSingleSourceGuardRulesFireOnRealCode (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.499s
+FAIL
+
+=== M8 gate narrowed: Register no longer refuses a duplicate id
+exit=1
+--- FAIL: TestRegisterRefusesDuplicateID (0.00s)
+--- FAIL: TestRegisterNormalizesBeforeCheckingForDuplicates (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.525s
+FAIL
+
+=== M9 gate narrowed: Register skips id normalization
+exit=1
+--- FAIL: TestRegisterNormalizesBeforeCheckingForDuplicates (0.00s)
+--- FAIL: TestRegisterRefusesUnnormalizableIDs (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/_(empty) (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/____(whitespace_only) (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/claude_code_(an_inner_space) (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/claude_code_(an_underscore) (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/claude--code_(an_empty_segment) (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/-codex_(a_leading_hyphen) (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/codex-_(a_trailing_hyphen) (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/claude.code_(a_dot) (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/claudé_(a_non-ASCII_letter) (0.00s)
+    --- FAIL: TestRegisterRefusesUnnormalizableIDs/claude/code_(a_path_separator) (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.517s
+
+=== M10 gate narrowed: Register admits a system declaring no launch modes
+exit=1
+--- FAIL: TestRegisterRefusesSystemWithNoLaunchModes (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.510s
+FAIL
+
+=== M11 gate narrowed: CanCarry admits every transport
+exit=1
+--- FAIL: TestEffortTransportIsDecidableFromTheContractAlone (0.00s)
+    --- FAIL: TestEffortTransportIsDecidableFromTheContractAlone/none/required (0.00s)
+--- FAIL: TestCanCarryRefusesAnUndeclaredTransport (0.00s)
+--- FAIL: TestBuildPlanRefusesRequiredEffortUnderTransportNone (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.527s
+FAIL
+
+=== M12 gate narrowed: BuildPlan admits a composition under GrammarNone
+exit=1
+--- FAIL: TestBuildPlanRefusesCompositionUnderGrammarNone (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.512s
+FAIL
+
+=== M13 gate narrowed: BuildPlan admits stdin bytes reported as detached
+exit=1
+--- FAIL: TestBuildPlanRefusesPluginContractViolations (0.00s)
+    --- FAIL: TestBuildPlanRefusesPluginContractViolations/stdin_bytes_while_reporting_nothing_attached (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.513s
+FAIL
+
+=== M14 gate narrowed: BuildPlan admits an empty resolved binary
+exit=1
+--- FAIL: TestBuildPlanRefusesPluginContractViolations (0.00s)
+    --- FAIL: TestBuildPlanRefusesPluginContractViolations/empty_binary_with_no_error (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.518s
+FAIL
+
+=== M15 gate narrowed: BuildPlan checks mode validity but not declared support
+exit=1
+--- FAIL: TestBuildPlanRefusesUndeclaredLaunchMode (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.509s
+FAIL
+
+=== M16 gate narrowed: BuildPlan admits a required-effort model with no effort value
+exit=1
+--- FAIL: TestBuildPlanRefusesRequiredEffortWithNoValue (0.00s)
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	0.525s
+FAIL
+

@@ -1,0 +1,278 @@
+=== RUN   TestEffortTransportIsDecidableFromTheContractAlone
+=== RUN   TestEffortTransportIsDecidableFromTheContractAlone/none/required
+=== RUN   TestEffortTransportIsDecidableFromTheContractAlone/none/none
+=== RUN   TestEffortTransportIsDecidableFromTheContractAlone/argv/required
+=== RUN   TestEffortTransportIsDecidableFromTheContractAlone/argv/none
+=== RUN   TestEffortTransportIsDecidableFromTheContractAlone/stdin/required
+=== RUN   TestEffortTransportIsDecidableFromTheContractAlone/stdin/none
+--- PASS: TestEffortTransportIsDecidableFromTheContractAlone (0.00s)
+    --- PASS: TestEffortTransportIsDecidableFromTheContractAlone/none/required (0.00s)
+    --- PASS: TestEffortTransportIsDecidableFromTheContractAlone/none/none (0.00s)
+    --- PASS: TestEffortTransportIsDecidableFromTheContractAlone/argv/required (0.00s)
+    --- PASS: TestEffortTransportIsDecidableFromTheContractAlone/argv/none (0.00s)
+    --- PASS: TestEffortTransportIsDecidableFromTheContractAlone/stdin/required (0.00s)
+    --- PASS: TestEffortTransportIsDecidableFromTheContractAlone/stdin/none (0.00s)
+=== RUN   TestCanCarryRefusesAnUndeclaredTransport
+--- PASS: TestCanCarryRefusesAnUndeclaredTransport (0.00s)
+=== RUN   TestNormalizeSystemIDAcceptsTheDeclaredSpellings
+--- PASS: TestNormalizeSystemIDAcceptsTheDeclaredSpellings (0.00s)
+=== RUN   TestNormalizeSystemIDIsIdempotent
+--- PASS: TestNormalizeSystemIDIsIdempotent (0.00s)
+=== RUN   TestInvalidSystemIDErrorNamesTheRawSpelling
+--- PASS: TestInvalidSystemIDErrorNamesTheRawSpelling (0.00s)
+=== RUN   TestSupportsModeAnswersOnlyForDeclaredModes
+--- PASS: TestSupportsModeAnswersOnlyForDeclaredModes (0.00s)
+=== RUN   TestCompositionIsZeroOnlyWhenNothingWasRequested
+--- PASS: TestCompositionIsZeroOnlyWhenNothingWasRequested (0.00s)
+=== RUN   TestUndeclaredEnumValuesRenderAsThemselves
+--- PASS: TestUndeclaredEnumValuesRenderAsThemselves (0.00s)
+=== RUN   TestRegisteringOneSystemDrivesEveryDispatchSurface
+--- PASS: TestRegisteringOneSystemDrivesEveryDispatchSurface (0.00s)
+=== RUN   TestPlanCarriesTheDoublesObservableLaunchSurface
+--- PASS: TestPlanCarriesTheDoublesObservableLaunchSurface (0.00s)
+=== RUN   TestDryRunMirrorsTheRealLaunchBinary
+--- PASS: TestDryRunMirrorsTheRealLaunchBinary (0.00s)
+=== RUN   TestTestDoubleExistsOnlyInTests
+--- PASS: TestTestDoubleExistsOnlyInTests (0.00s)
+=== RUN   TestBuildPlanRefusesUnknownSystem
+--- PASS: TestBuildPlanRefusesUnknownSystem (0.00s)
+=== RUN   TestBuildPlanRefusesUnnormalizableSystemID
+--- PASS: TestBuildPlanRefusesUnnormalizableSystemID (0.00s)
+=== RUN   TestBuildPlanRefusesUndeclaredLaunchMode
+--- PASS: TestBuildPlanRefusesUndeclaredLaunchMode (0.00s)
+=== RUN   TestBuildPlanRefusesRequiredEffortUnderTransportNone
+--- PASS: TestBuildPlanRefusesRequiredEffortUnderTransportNone (0.00s)
+=== RUN   TestBuildPlanRefusesAnEffortValueUnderTransportNone
+--- PASS: TestBuildPlanRefusesAnEffortValueUnderTransportNone (0.00s)
+=== RUN   TestBuildPlanRefusesRequiredEffortWithNoValue
+--- PASS: TestBuildPlanRefusesRequiredEffortWithNoValue (0.00s)
+=== RUN   TestBuildPlanAdmitsAnEffortlessModelUnderEveryTransport
+--- PASS: TestBuildPlanAdmitsAnEffortlessModelUnderEveryTransport (0.00s)
+=== RUN   TestBuildPlanRefusesUnsupportedLaunchParameters
+=== RUN   TestBuildPlanRefusesUnsupportedLaunchParameters/goal
+=== RUN   TestBuildPlanRefusesUnsupportedLaunchParameters/budget
+=== RUN   TestBuildPlanRefusesUnsupportedLaunchParameters/service_tier
+--- PASS: TestBuildPlanRefusesUnsupportedLaunchParameters (0.00s)
+    --- PASS: TestBuildPlanRefusesUnsupportedLaunchParameters/goal (0.00s)
+    --- PASS: TestBuildPlanRefusesUnsupportedLaunchParameters/budget (0.00s)
+    --- PASS: TestBuildPlanRefusesUnsupportedLaunchParameters/service_tier (0.00s)
+=== RUN   TestBuildPlanAdmitsSupportedLaunchParameters
+--- PASS: TestBuildPlanAdmitsSupportedLaunchParameters (0.00s)
+=== RUN   TestBuildPlanRefusesCompositionUnderGrammarNone
+--- PASS: TestBuildPlanRefusesCompositionUnderGrammarNone (0.00s)
+=== RUN   TestBuildPlanPropagatesThePluginsCompositionRefusal
+--- PASS: TestBuildPlanPropagatesThePluginsCompositionRefusal (0.00s)
+=== RUN   TestBuildPlanSkipsCompositionValidationWhenNoneIsAttached
+--- PASS: TestBuildPlanSkipsCompositionValidationWhenNoneIsAttached (0.00s)
+=== RUN   TestBuildPlanRefusesPluginContractViolations
+=== RUN   TestBuildPlanRefusesPluginContractViolations/empty_binary_with_no_error
+=== RUN   TestBuildPlanRefusesPluginContractViolations/stdin_bytes_while_reporting_nothing_attached
+--- PASS: TestBuildPlanRefusesPluginContractViolations (0.00s)
+    --- PASS: TestBuildPlanRefusesPluginContractViolations/empty_binary_with_no_error (0.00s)
+    --- PASS: TestBuildPlanRefusesPluginContractViolations/stdin_bytes_while_reporting_nothing_attached (0.00s)
+=== RUN   TestBuildPlanAdmitsAnAttachedEmptyStdin
+--- PASS: TestBuildPlanAdmitsAnAttachedEmptyStdin (0.00s)
+=== RUN   TestBuildPlanPropagatesEachSurfaceFailure
+=== RUN   TestBuildPlanPropagatesEachSurfaceFailure/ResolveBinary
+=== RUN   TestBuildPlanPropagatesEachSurfaceFailure/Argv
+=== RUN   TestBuildPlanPropagatesEachSurfaceFailure/ChildEnv
+=== RUN   TestBuildPlanPropagatesEachSurfaceFailure/Stdin
+--- PASS: TestBuildPlanPropagatesEachSurfaceFailure (0.00s)
+    --- PASS: TestBuildPlanPropagatesEachSurfaceFailure/ResolveBinary (0.00s)
+    --- PASS: TestBuildPlanPropagatesEachSurfaceFailure/Argv (0.00s)
+    --- PASS: TestBuildPlanPropagatesEachSurfaceFailure/ChildEnv (0.00s)
+    --- PASS: TestBuildPlanPropagatesEachSurfaceFailure/Stdin (0.00s)
+=== RUN   TestBuildPlanRefusesANilRegistry
+--- PASS: TestBuildPlanRefusesANilRegistry (0.00s)
+=== RUN   TestBuildPlanPrefersAnExplicitHomeOverTheDeclaredDefault
+--- PASS: TestBuildPlanPrefersAnExplicitHomeOverTheDeclaredDefault (0.00s)
+=== RUN   TestEmptyRegistryAnswersNothingRegistered
+--- PASS: TestEmptyRegistryAnswersNothingRegistered (0.00s)
+=== RUN   TestRegisterRefusesDuplicateID
+--- PASS: TestRegisterRefusesDuplicateID (0.00s)
+=== RUN   TestRegisterRefusesAnIDThatDoesNotNormalizeToItself
+=== RUN   TestRegisterRefusesAnIDThatDoesNotNormalizeToItself/Pangolin
+=== RUN   TestRegisterRefusesAnIDThatDoesNotNormalizeToItself/__PANGOLIN__
+=== RUN   TestRegisterRefusesAnIDThatDoesNotNormalizeToItself/pangolin_
+--- PASS: TestRegisterRefusesAnIDThatDoesNotNormalizeToItself (0.00s)
+    --- PASS: TestRegisterRefusesAnIDThatDoesNotNormalizeToItself/Pangolin (0.00s)
+    --- PASS: TestRegisterRefusesAnIDThatDoesNotNormalizeToItself/__PANGOLIN__ (0.00s)
+    --- PASS: TestRegisterRefusesAnIDThatDoesNotNormalizeToItself/pangolin_ (0.00s)
+=== RUN   TestRegisterAcceptsTheNormalizedSpellingOfTheSameID
+--- PASS: TestRegisterAcceptsTheNormalizedSpellingOfTheSameID (0.00s)
+=== RUN   TestRegisterRefusesAnUnstableID
+--- PASS: TestRegisterRefusesAnUnstableID (0.00s)
+=== RUN   TestRegisterAcceptsTheSameDoubleWhenItsIDIsStable
+--- PASS: TestRegisterAcceptsTheSameDoubleWhenItsIDIsStable (0.00s)
+=== RUN   TestRegisterCannotSeeAnIDThatFlipsAfterRegistration
+--- PASS: TestRegisterCannotSeeAnIDThatFlipsAfterRegistration (0.00s)
+=== RUN   TestRegisterRefusesNilSystem
+--- PASS: TestRegisterRefusesNilSystem (0.00s)
+=== RUN   TestRegisterRefusesUnnormalizableIDs
+=== RUN   TestRegisterRefusesUnnormalizableIDs/_(empty)
+=== RUN   TestRegisterRefusesUnnormalizableIDs/____(whitespace_only)
+=== RUN   TestRegisterRefusesUnnormalizableIDs/claude_code_(an_inner_space)
+=== RUN   TestRegisterRefusesUnnormalizableIDs/claude_code_(an_underscore)
+=== RUN   TestRegisterRefusesUnnormalizableIDs/claude--code_(an_empty_segment)
+=== RUN   TestRegisterRefusesUnnormalizableIDs/-codex_(a_leading_hyphen)
+=== RUN   TestRegisterRefusesUnnormalizableIDs/codex-_(a_trailing_hyphen)
+=== RUN   TestRegisterRefusesUnnormalizableIDs/claude.code_(a_dot)
+=== RUN   TestRegisterRefusesUnnormalizableIDs/claudé_(a_non-ASCII_letter)
+=== RUN   TestRegisterRefusesUnnormalizableIDs/claude/code_(a_path_separator)
+--- PASS: TestRegisterRefusesUnnormalizableIDs (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/_(empty) (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/____(whitespace_only) (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/claude_code_(an_inner_space) (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/claude_code_(an_underscore) (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/claude--code_(an_empty_segment) (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/-codex_(a_leading_hyphen) (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/codex-_(a_trailing_hyphen) (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/claude.code_(a_dot) (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/claudé_(a_non-ASCII_letter) (0.00s)
+    --- PASS: TestRegisterRefusesUnnormalizableIDs/claude/code_(a_path_separator) (0.00s)
+=== RUN   TestRegisterRefusesSystemWithNoLaunchModes
+--- PASS: TestRegisterRefusesSystemWithNoLaunchModes (0.00s)
+=== RUN   TestRegisterRefusesUnknownLaunchMode
+--- PASS: TestRegisterRefusesUnknownLaunchMode (0.00s)
+=== RUN   TestRegisterRefusesUnknownEffortTransport
+--- PASS: TestRegisterRefusesUnknownEffortTransport (0.00s)
+=== RUN   TestLookupNormalizesAndRefusesGarbage
+--- PASS: TestLookupNormalizesAndRefusesGarbage (0.00s)
+=== RUN   TestIDsAreSortedAndDoNotAliasTheRegistry
+--- PASS: TestIDsAreSortedAndDoNotAliasTheRegistry (0.00s)
+=== RUN   TestRegistryIsSafeForConcurrentUse
+--- PASS: TestRegistryIsSafeForConcurrentUse (0.00s)
+=== RUN   TestDefaultRegistryIsUsable
+--- PASS: TestDefaultRegistryIsUsable (0.00s)
+=== RUN   TestSingleSourceGuardCatchesShadowTables
+=== RUN   TestSingleSourceGuardCatchesShadowTables/the_obvious_one:_a_second_package-level_map_keyed_by_SystemID
+=== RUN   TestSingleSourceGuardCatchesShadowTables/behind_a_named_map_type_declared_in_the_shadow_file
+=== RUN   TestSingleSourceGuardCatchesShadowTables/instantiating_a_binding_table_type_declared_inside_the_allowed_file
+=== RUN   TestSingleSourceGuardCatchesShadowTables/built_with_make()_inside_a_function_body_rather_than_a_literal
+=== RUN   TestSingleSourceGuardCatchesShadowTables/a_struct_field,_never_a_literal_anywhere
+=== RUN   TestSingleSourceGuardCatchesShadowTables/through_a_SystemID_alias,_so_the_key_type_is_not_spelled_SystemID
+=== RUN   TestSingleSourceGuardCatchesShadowTables/a_map[string]T_whose_keys_are_system_ids,_avoiding_the_SystemID_type_entirely
+=== RUN   TestSingleSourceGuardCatchesShadowTables/keys_moved_behind_package-level_constants
+=== RUN   TestSingleSourceGuardCatchesShadowTables/keys_assembled_by_constant_concatenation
+=== RUN   TestSingleSourceGuardCatchesShadowTables/assembled_key_by_key_from_an_init(),_never_a_literal
+=== RUN   TestSingleSourceGuardCatchesShadowTables/assembled_key_by_key_in_an_ordinary_function,_ids_behind_function-local_consts
+=== RUN   TestSingleSourceGuardCatchesShadowTables/a_value_of_a_binding-table_type_the_registry_legitimately_declares
+=== RUN   TestSingleSourceGuardCatchesShadowTables/assembled_key_by_key_through_a_method_receiver's_field
+--- PASS: TestSingleSourceGuardCatchesShadowTables (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/the_obvious_one:_a_second_package-level_map_keyed_by_SystemID (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/behind_a_named_map_type_declared_in_the_shadow_file (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/instantiating_a_binding_table_type_declared_inside_the_allowed_file (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/built_with_make()_inside_a_function_body_rather_than_a_literal (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/a_struct_field,_never_a_literal_anywhere (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/through_a_SystemID_alias,_so_the_key_type_is_not_spelled_SystemID (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/a_map[string]T_whose_keys_are_system_ids,_avoiding_the_SystemID_type_entirely (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/keys_moved_behind_package-level_constants (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/keys_assembled_by_constant_concatenation (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/assembled_key_by_key_from_an_init(),_never_a_literal (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/assembled_key_by_key_in_an_ordinary_function,_ids_behind_function-local_consts (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/a_value_of_a_binding-table_type_the_registry_legitimately_declares (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesShadowTables/assembled_key_by_key_through_a_method_receiver's_field (0.00s)
+=== RUN   TestSingleSourceGuardCatchesIDSwitches
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/the_obvious_one:_a_switch_over_id_literals
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/an_if-else_chain,_which_is_a_switch_spelled_differently
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/a_negated_comparison,_which_is_the_same_chain_inverted
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_package-level_constants
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_a_package-level_var
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/case_values_indexed_out_of_a_package-level_slice
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/a_var-held_id_compared_directly
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/inside_a_function_literal_passed_as_a_call_argument
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/a_switch_on_ID()_naming_ids_nobody_has_declared_yet
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/the_id_copied_into_a_local_first,_naming_ids_nobody_has_declared_yet
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/the_same_copy_declared_with_var_rather_than_:=,_undeclared_ids
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/the_copy_converted_on_the_way_out_of_ID(),_undeclared_ids
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/converted_inline_in_the_switch_tag,_undeclared_ids
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/the_copy_bound_outside_and_switched_on_inside_a_closure,_undeclared_ids
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/the_id_copied_into_a_local_first,_naming_a_known_id
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/compared_against_a_function-local_const
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_a_function-local_const
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_a_function-local_var
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/an_if-else_chain_on_ID()_naming_ids_nobody_has_declared_yet
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/the_id_copied_into_a_local_first,_then_compared,_undeclared_ids
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/the_same_comparison_negated,_over_a_converted_local,_undeclared_id
+=== RUN   TestSingleSourceGuardCatchesIDSwitches/a_local_copy_call-wrapped_in_the_switch_tag,_undeclared_ids
+--- PASS: TestSingleSourceGuardCatchesIDSwitches (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/the_obvious_one:_a_switch_over_id_literals (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/an_if-else_chain,_which_is_a_switch_spelled_differently (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/a_negated_comparison,_which_is_the_same_chain_inverted (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_package-level_constants (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_a_package-level_var (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/case_values_indexed_out_of_a_package-level_slice (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/a_var-held_id_compared_directly (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/inside_a_function_literal_passed_as_a_call_argument (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/a_switch_on_ID()_naming_ids_nobody_has_declared_yet (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/the_id_copied_into_a_local_first,_naming_ids_nobody_has_declared_yet (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/the_same_copy_declared_with_var_rather_than_:=,_undeclared_ids (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/the_copy_converted_on_the_way_out_of_ID(),_undeclared_ids (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/converted_inline_in_the_switch_tag,_undeclared_ids (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/the_copy_bound_outside_and_switched_on_inside_a_closure,_undeclared_ids (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/the_id_copied_into_a_local_first,_naming_a_known_id (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/compared_against_a_function-local_const (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_a_function-local_const (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/case_values_moved_behind_a_function-local_var (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/an_if-else_chain_on_ID()_naming_ids_nobody_has_declared_yet (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/the_id_copied_into_a_local_first,_then_compared,_undeclared_ids (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/the_same_comparison_negated,_over_a_converted_local,_undeclared_id (0.00s)
+    --- PASS: TestSingleSourceGuardCatchesIDSwitches/a_local_copy_call-wrapped_in_the_switch_tag,_undeclared_ids (0.00s)
+=== RUN   TestSingleSourceGuardAcceptsOrdinaryCode
+--- PASS: TestSingleSourceGuardAcceptsOrdinaryCode (0.00s)
+=== RUN   TestSingleSourceGuardResidualGaps
+=== RUN   TestSingleSourceGuardResidualGaps/a_call-wrapped_literal_key
+=== RUN   TestSingleSourceGuardResidualGaps/a_cross-package_const_referenced_by_selector
+=== RUN   TestSingleSourceGuardResidualGaps/ids_assembled_at_runtime
+=== RUN   TestSingleSourceGuardResidualGaps/an_id_variable_that_is_rewritten_before_the_switch
+=== RUN   TestSingleSourceGuardResidualGaps/a_two-hop_local:_the_id_copied,_then_copied_again
+=== RUN   TestSingleSourceGuardResidualGaps/a_two-hop_local_whose_second_hop_converts
+=== RUN   TestSingleSourceGuardResidualGaps/an_id_that_leaves_through_a_helper_function
+=== RUN   TestSingleSourceGuardResidualGaps/NON-GOAL:_a_switch_on_an_identity_accessor_that_is_not_ID()
+--- PASS: TestSingleSourceGuardResidualGaps (0.00s)
+    --- PASS: TestSingleSourceGuardResidualGaps/a_call-wrapped_literal_key (0.00s)
+    --- PASS: TestSingleSourceGuardResidualGaps/a_cross-package_const_referenced_by_selector (0.00s)
+    --- PASS: TestSingleSourceGuardResidualGaps/ids_assembled_at_runtime (0.00s)
+    --- PASS: TestSingleSourceGuardResidualGaps/an_id_variable_that_is_rewritten_before_the_switch (0.00s)
+    --- PASS: TestSingleSourceGuardResidualGaps/a_two-hop_local:_the_id_copied,_then_copied_again (0.00s)
+    --- PASS: TestSingleSourceGuardResidualGaps/a_two-hop_local_whose_second_hop_converts (0.00s)
+    --- PASS: TestSingleSourceGuardResidualGaps/an_id_that_leaves_through_a_helper_function (0.00s)
+    --- PASS: TestSingleSourceGuardResidualGaps/NON-GOAL:_a_switch_on_an_identity_accessor_that_is_not_ID() (0.00s)
+=== RUN   TestSingleSourceGuardAgainstReviewMutants
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R1:_a_SystemID_alias_used_as_the_map_key
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R2:_a_defined_type_over_SystemID_used_as_the_map_key
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R3:_an_if/else-if_chain_comparing_known_ids
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R4:_an_init()-assembled_map[string]T_with_literal_ids
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R5:_an_init()-assembled_map[SystemID]T
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R6:_a_switch_on_a_local_copy_of_ID(),_undeclared_ids
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R7:_a_switch_on_a_local_copy_of_ID(),_known_ids
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R8:_a_function-local_const_in_a_comparison
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R9:_a_local_slice_indirection_in_a_switch_case
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R10:_make()_of_a_binding-table_type_declared_in_the_allowed_file
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R11:_a_binding-table_type_declared_in_one_file,_held_in_another
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R12:_a_struct_field_typed_map[SystemID]T_outside_the_registry
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R13:_a_map[string]T_composite_literal_keyed_by_known_ids
+=== RUN   TestSingleSourceGuardAgainstReviewMutants/R14:_a_function-local_map_literal_keyed_by_a_known_id
+--- PASS: TestSingleSourceGuardAgainstReviewMutants (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R1:_a_SystemID_alias_used_as_the_map_key (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R2:_a_defined_type_over_SystemID_used_as_the_map_key (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R3:_an_if/else-if_chain_comparing_known_ids (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R4:_an_init()-assembled_map[string]T_with_literal_ids (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R5:_an_init()-assembled_map[SystemID]T (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R6:_a_switch_on_a_local_copy_of_ID(),_undeclared_ids (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R7:_a_switch_on_a_local_copy_of_ID(),_known_ids (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R8:_a_function-local_const_in_a_comparison (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R9:_a_local_slice_indirection_in_a_switch_case (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R10:_make()_of_a_binding-table_type_declared_in_the_allowed_file (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R11:_a_binding-table_type_declared_in_one_file,_held_in_another (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R12:_a_struct_field_typed_map[SystemID]T_outside_the_registry (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R13:_a_map[string]T_composite_literal_keyed_by_known_ids (0.00s)
+    --- PASS: TestSingleSourceGuardAgainstReviewMutants/R14:_a_function-local_map_literal_keyed_by_a_known_id (0.00s)
+=== RUN   TestSingleSourceGuardScansTheWholeModule
+--- PASS: TestSingleSourceGuardScansTheWholeModule (0.00s)
+=== RUN   TestSingleSourceGuardFindsNoSecondBinding
+--- PASS: TestSingleSourceGuardFindsNoSecondBinding (0.00s)
+=== RUN   TestSingleSourceGuardRulesFireOnRealCode
+--- PASS: TestSingleSourceGuardRulesFireOnRealCode (0.00s)
+PASS
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	0.928s

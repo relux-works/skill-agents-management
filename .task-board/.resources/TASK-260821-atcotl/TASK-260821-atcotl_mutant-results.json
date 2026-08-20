@@ -1,0 +1,207 @@
+[
+  {
+    "mutant": "ac2-delete",
+    "file": "pkg/vendorplugin/registry.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestRegisteringAVendorNamingAnUnknownSystemIsRefused (0.00s)",
+      "--- FAIL: TestRegisteringAVendorWhoseOnlySystemIsUnknownIsRefused (0.00s)",
+      "--- FAIL: TestTheDependencyDirectionIsCheckedForEveryModel (0.00s)"
+    ],
+    "count": 3
+  },
+  {
+    "mutant": "ac2-narrow-first-model-only",
+    "file": "pkg/vendorplugin/registry.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestTheDependencyDirectionIsCheckedForEveryModel (0.00s)"
+    ],
+    "count": 1
+  },
+  {
+    "mutant": "ac2-bypass-nil-agentic-registry",
+    "file": "pkg/vendorplugin/registry.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestARegistryWithNoAgenticRegistryAdmitsNoVendor (0.00s)"
+    ],
+    "count": 1
+  },
+  {
+    "mutant": "f2-conflict-admitted",
+    "file": "pkg/vendorplugin/registry.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestRuntimeDeclarationCollisionPolicy (0.00s)",
+      "    --- FAIL: TestRuntimeDeclarationCollisionPolicy/a_conflicting_vendor_is_refused (0.00s)",
+      "    --- FAIL: TestRuntimeDeclarationCollisionPolicy/a_conflicting_system_is_refused (0.00s)",
+      "    --- FAIL: TestRuntimeDeclarationCollisionPolicy/rebinding_a_frozen_id_is_refused (0.00s)"
+    ],
+    "count": 4
+  },
+  {
+    "mutant": "f2-match-refused",
+    "file": "pkg/vendorplugin/registry.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestRuntimeDeclarationCollisionPolicy (0.00s)",
+      "    --- FAIL: TestRuntimeDeclarationCollisionPolicy/a_matching_redeclaration_is_idempotent (0.00s)",
+      "    --- FAIL: TestRuntimeDeclarationCollisionPolicy/a_matching_redeclaration_with_different_provenance_wording_is_still_idempotent (0.00s)",
+      "    --- FAIL: TestRuntimeDeclarationCollisionPolicy/seeding_twice_is_the_idempotent_case (0.00s)"
+    ],
+    "count": 4
+  },
+  {
+    "mutant": "f2-last-write-wins",
+    "file": "pkg/vendorplugin/runtime.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestRuntimeDeclarationCollisionPolicy (0.00s)",
+      "    --- FAIL: TestRuntimeDeclarationCollisionPolicy/a_conflicting_vendor_is_refused (0.00s)",
+      "    --- FAIL: TestRuntimeDeclarationCollisionPolicy/a_conflicting_system_is_refused (0.00s)",
+      "    --- FAIL: TestRuntimeDeclarationCollisionPolicy/rebinding_a_frozen_id_is_refused (0.00s)"
+    ],
+    "count": 4
+  },
+  {
+    "mutant": "description-empty-admitted",
+    "file": "pkg/vendorplugin/vendor.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestRegisterRefusesAModelWithNoUsageDescription (0.00s)"
+    ],
+    "count": 1
+  },
+  {
+    "mutant": "description-narrowed-to-nil-only",
+    "file": "pkg/vendorplugin/vendor.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestRegisterRefusesAModelWithNoUsageDescription (0.00s)"
+    ],
+    "count": 1
+  },
+  {
+    "mutant": "rank-without-evidence-admitted",
+    "file": "pkg/vendorplugin/vendor.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestRegisterRefusesARankWithNoEvidence (0.00s)",
+      "    --- FAIL: TestRegisterRefusesARankWithNoEvidence/no_basis_at_all (0.00s)"
+    ],
+    "count": 2
+  },
+  {
+    "mutant": "availability-healthy-without-checking",
+    "file": "pkg/vendorplugin/availability.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestValidateRefusesVerdictsThatContradictTheirEvidence (0.00s)",
+      "    --- FAIL: TestValidateRefusesVerdictsThatContradictTheirEvidence/healthy_with_nothing_checked (0.00s)",
+      "--- FAIL: TestCheckAvailabilityRefusesAVendorsDishonestVerdict (0.00s)"
+    ],
+    "count": 3
+  },
+  {
+    "mutant": "availability-gate-not-called-from-production",
+    "file": "pkg/vendorplugin/spawn.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestCheckAvailabilityRefusesAVendorsDishonestVerdict (0.00s)"
+    ],
+    "count": 1
+  },
+  {
+    "mutant": "effort-recommended-substituted",
+    "file": "pkg/vendorplugin/spawn.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestBuildLaunchRefusesAMissingEffortAndNamesTheVocabulary (0.00s)",
+      "--- FAIL: TestAVendorNeverSeesAnUnadmittedEffort (0.00s)"
+    ],
+    "count": 2
+  },
+  {
+    "mutant": "effort-vocabulary-unchecked",
+    "file": "pkg/vendorplugin/spawn.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestAVendorNeverSeesAnUnadmittedEffort (0.00s)",
+      "--- FAIL: TestBuildLaunchRefusesAnEffortOutsideTheVocabulary (0.00s)"
+    ],
+    "count": 2
+  },
+  {
+    "mutant": "fidelity-not-checked",
+    "file": "pkg/vendorplugin/spawn.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch (0.00s)",
+      "    --- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch/no_agentic_system_at_all (0.00s)",
+      "    --- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch/a_different_model (0.00s)",
+      "    --- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch/the_budget_dropped (0.00s)",
+      "    --- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch/a_different_effort (0.00s)",
+      "    --- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch/a_different_effort_support (0.00s)",
+      "    --- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch/the_goal_dropped (0.00s)",
+      "    --- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch/a_different_service_tier (0.00s)"
+    ],
+    "count": 10
+  },
+  {
+    "mutant": "fidelity-narrowed-to-system-only",
+    "file": "pkg/vendorplugin/spawn.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch (0.00s)",
+      "    --- FAIL: TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch/a_different_model (0.00s)"
+    ],
+    "count": 2
+  },
+  {
+    "mutant": "model-system-pairing-unchecked",
+    "file": "pkg/vendorplugin/spawn.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestBuildLaunchRefusesAModelTheRuntimesSystemCannotDrive (0.00s)"
+    ],
+    "count": 1
+  },
+  {
+    "mutant": "unresolved-vendor-resolves",
+    "file": "pkg/vendorplugin/registry.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestResolvingAnUnresolvedVendorRuntimeIsRefusedOnItsOwnTerms (0.00s)"
+    ],
+    "count": 1
+  },
+  {
+    "mutant": "guard-extension-removed",
+    "file": "pkg/agentic/singlesource_guard_test.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestSingleSourceGuardCatchesVendorLayerBindings (0.00s)",
+      "    --- FAIL: TestSingleSourceGuardCatchesVendorLayerBindings/a_second_map_keyed_by_VendorID (0.00s)",
+      "    --- FAIL: TestSingleSourceGuardCatchesVendorLayerBindings/a_second_map_keyed_by_RuntimeID (0.00s)",
+      "    --- FAIL: TestSingleSourceGuardCatchesVendorLayerBindings/a_struct_field_typed_map[VendorID]T,_never_a_literal_anywhere (0.00s)",
+      "    --- FAIL: TestSingleSourceGuardCatchesVendorLayerBindings/a_value_of_a_vendor_binding-table_type_the_vendor_registry_legitimately_declares (0.00s)",
+      "--- FAIL: TestSingleSourceGuardCatchesCrossLayerBindings (0.00s)",
+      "    --- FAIL: TestSingleSourceGuardCatchesCrossLayerBindings/a_vendor_binding_inside_the_agentic_registry (0.00s)",
+      "    --- FAIL: TestSingleSourceGuardCatchesCrossLayerBindings/a_runtime_binding_inside_the_agentic_registry (0.00s)"
+    ],
+    "count": 10
+  },
+  {
+    "mutant": "guard-homes-flattened-to-an-allowlist",
+    "file": "pkg/agentic/singlesource_guard_test.go",
+    "exit": 1,
+    "failing_tests": [
+      "--- FAIL: TestSingleSourceGuardCatchesCrossLayerBindings (0.00s)",
+      "    --- FAIL: TestSingleSourceGuardCatchesCrossLayerBindings/a_vendor_binding_inside_the_agentic_registry (0.00s)",
+      "    --- FAIL: TestSingleSourceGuardCatchesCrossLayerBindings/a_runtime_binding_inside_the_agentic_registry (0.00s)",
+      "    --- FAIL: TestSingleSourceGuardCatchesCrossLayerBindings/a_system_binding_inside_the_vendor_registry (0.00s)"
+    ],
+    "count": 4
+  }
+]

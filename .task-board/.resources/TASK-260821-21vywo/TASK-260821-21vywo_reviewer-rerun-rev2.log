@@ -1,0 +1,48 @@
+# Reviewer re-run raw output — TASK-260821-21vywo rev2
+
+Candidate tree 8723bd2f9ddc63fb83cfd0eb727874ba01c6d0f9. rev1 tree reconstructed
+from TASK-260821-21vywo_change-request_rev1.patch over base ada4f024.
+Same harness file compiled into both trees.
+
+## Against rev 1 (/tmp/rev1-tree)
+```
+RESULT F1/R6 switch on a single-assignment local copy of ID(), undeclared ids   -> UNCAUGHT
+RESULT F2/R4 init()-assembled map[string]T, the adapterTable shape              -> UNCAUGHT
+RESULT F3/R8 function-local const in a comparison                               -> UNCAUGHT
+RESULT R10-as-rev1-wrote-it: mutant file REDECLARES the binding type            -> CAUGHT | pkg/agentic/r10.go:3 [binding-table] type bindings: a map keyed by SystemID; the registry is the only place a system binding may live
+RESULT R10-true: type declared ONLY in the allowed file, make() elsewhere       -> UNCAUGHT
+RESULT B1: bound once via := inside an if-init, switch inside the if body       -> UNCAUGHT
+RESULT B2: two-hop, id assigned from ANOTHER local that holds ID()              -> UNCAUGHT
+RESULT B3: switch tag is strings.TrimSpace(id) over a single-assignment local   -> UNCAUGHT
+RESULT B4: switch directly on strings.TrimSpace(string(sys.ID())), no local at all -> UNCAUGHT
+RESULT B5: local bound once, shadowed in an inner block, switch in the inner block -> UNCAUGHT
+RESULT B6: table keyed by a local copy of ID() -- assignment into a map at an id -> UNCAUGHT
+```
+
+## Against rev 2 (candidate)
+```
+RESULT P1 zero-value Registry.Register(unnormalized) -> REFUSED (agentic: system id is not the spelling it normalizes to: ID() returns "Pangolin" but normalizes to "pangolin"; System.ID must be stable and must already be its normalized spelling, or a caller holding the plugin and a caller reading the registry see two different names for one system)
+RESULT P2 package-level Register(unnormalized)         -> agentic: system id is not the spelling it normalizes to: ID() returns "Pangolin" but normalizes to "pangolin"; System.ID must be stable and must already be its normalized spelling, or a caller holding the plugin and a caller reading the registry see two different names for one system
+RESULT P3 Register(unstable ID) err                    -> <nil>
+RESULT P3 registry key=[pangolin] ; plugin now answers "Pangolin" ; lookup ok=true
+RESULT P3 -> BYPASS: one system, two names (registry "pangolin" vs plugin "Pangolin")
+RESULT P4 BuildPlan under an unstable plugin -> plan.System="pangolin" err=<nil>
+RESULT P5 second spelling after a good registration   -> agentic: system id is not the spelling it normalizes to: ID() returns "Pangolin" but normalizes to "pangolin"; System.ID must be stable and must already be its normalized spelling, or a caller holding the plugin and a caller reading the registry see two different names for one system (Len=1)
+RESULT C1: id := sys.ID(); key := string(id); switch key  [ordinary conversion hop] -> UNCAUGHT
+RESULT C2: if-else chain directly on sys.ID(), UNDECLARED ids             -> UNCAUGHT
+RESULT C3: if-else chain on a single-assignment local copy, UNDECLARED ids -> UNCAUGHT
+RESULT C4: if-else chain directly on sys.ID(), KNOWN ids (vocabulary net) -> CAUGHT | pkg/launcher/c4.go:6 [id-switch] func dispatch: a comparison against the system id "codex"; an if-else chain over ids is a switch spelled differently
+RESULT C5: switch on a struct field's ID(), undeclared ids                -> CAUGHT | pkg/launcher/c5.go:8 [id-switch] method dispatch: a switch on a system's ID(); dispatch belongs in the registry, not in a switch
+RESULT C6: map keyed by a local copy of ID(), undeclared ids, key-by-key  -> UNCAUGHT
+RESULT F1/R6 switch on a single-assignment local copy of ID(), undeclared ids   -> CAUGHT | pkg/launcher/f1.go:7 [id-switch] func dispatch: a switch on a system's ID(); dispatch belongs in the registry, not in a switch
+RESULT F2/R4 init()-assembled map[string]T, the adapterTable shape              -> CAUGHT | pkg/launcher/f2.go:9 [binding-table] func init: an assignment into a table at the system id "codex"; a table filled in key by key is a binding table spelled without a literal | pkg/launcher/f2.go:10 [binding-table] func init: an assignment into a table at the system id "claude-code"; a table filled in key by key is a binding table spelled without a literal
+RESULT F3/R8 function-local const in a comparison                               -> CAUGHT | pkg/launcher/f3.go:7 [id-switch] func pick: a comparison against the system id "codex"; an if-else chain over ids is a switch spelled differently
+RESULT R10-as-rev1-wrote-it: mutant file REDECLARES the binding type            -> CAUGHT | pkg/agentic/r10.go:3 [binding-table] type bindings: a map keyed by SystemID; the registry is the only place a system binding may live | pkg/agentic/r10.go:5 [binding-table] func boot: a field or signature of a named type whose underlying type maps SystemID to behaviour
+RESULT R10-true: type declared ONLY in the allowed file, make() elsewhere       -> CAUGHT | pkg/agentic/r10true.go:3 [binding-table] func boot: a field or signature of a named type whose underlying type maps SystemID to behaviour
+RESULT B1: bound once via := inside an if-init, switch inside the if body       -> CAUGHT | pkg/launcher/b1.go:7 [id-switch] func dispatch: a switch on a system's ID(); dispatch belongs in the registry, not in a switch
+RESULT B2: two-hop, id assigned from ANOTHER local that holds ID()              -> UNCAUGHT
+RESULT B3: switch tag is strings.TrimSpace(id) over a single-assignment local   -> UNCAUGHT
+RESULT B4: switch directly on strings.TrimSpace(string(sys.ID())), no local at all -> CAUGHT | pkg/launcher/b4.go:10 [id-switch] func dispatch: a switch on a system's ID(); dispatch belongs in the registry, not in a switch
+RESULT B5: local bound once, shadowed in an inner block, switch in the inner block -> UNCAUGHT
+RESULT B6: table keyed by a local copy of ID() -- assignment into a map at an id -> CAUGHT | pkg/launcher/b6.go:9 [binding-table] method warm: an assignment into a table at the system id "codex"; a table filled in key by key is a binding table spelled without a literal
+```
