@@ -1,0 +1,44 @@
+{
+  "mode": "local",
+  "local": {
+    "board_dir": ".task-board"
+  },
+  "version_control": {
+    "confirm": true,
+    "desired_commit_time": "backdated to previous day, after 20:00 MSK (evening) per owner policy"
+  },
+  "spawn": {
+    "enabled": true,
+    "max_parallel": 20,
+    "ceilings": {
+      "codex": {
+        "model": "gpt-5.6-sol",
+        "model_criterion": "less_or_equal",
+        "reasoning_effort": "medium"
+      },
+      "claude": {
+        "model": "claude-opus-5",
+        "model_criterion": "less_or_equal",
+        "reasoning_effort": "high"
+      }
+    },
+    "preferred_agentic_system": {
+      "mixed": [
+        "claude",
+        "codex"
+      ]
+    }
+  },
+  "features": {
+    "agent_context": {
+      "enabled": true,
+      "profile": "full"
+    },
+    "primary_session_goals": {
+      "enabled": true
+    },
+    "spawned_run_goals": {
+      "enabled": true
+    }
+  }
+}

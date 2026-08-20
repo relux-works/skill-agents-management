@@ -1,0 +1,25 @@
+# Build outputs
+agents-management
+tools/*/agents-management
+dist/
+
+# Temporary utilities, logs, worktrees, smoke artifacts
+.temp/
+
+# Local agent runtime (installed by agents-infra, machine-local)
+.agents/
+.local/
+.claude/settings.local.json
+
+# Editor / OS noise
+.DS_Store
+*.swp
+
+# Board runtime state that is not board content
+.task-board/.locks/
+.task-board/.runtime/
+
+# Go
+*.test
+*.out
+vendor/
