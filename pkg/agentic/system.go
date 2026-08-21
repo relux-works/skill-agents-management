@@ -230,6 +230,17 @@ const GrammarNone GrammarID = ""
 type CompositionServer struct {
 	Name      string
 	Transport string
+	// BearerTokenEnvVar is the environment variable the server's bearer token
+	// is read from, empty when it carries none.
+	//
+	// Reshape from the source (named by TASK-260822-hp5fb4): the source's
+	// validators check the composed prefix's bearer reference AGAINST this
+	// metadata — a prefix naming a different variable than the server declared
+	// is refused, and an http server whose bearer metadata and prefix disagree
+	// on presence is refused too. Without the field on this type a port can
+	// only drop those two checks, which is a validating gate quietly getting
+	// weaker across a move.
+	BearerTokenEnvVar string
 }
 
 // Composition is the validated provider argv prefix that composes MCP servers
@@ -276,6 +287,27 @@ type Goal struct {
 	ID        string
 	Objective string
 	Revision  int
+
+	// ProviderCondition is the success predicate a goal-aware harness is
+	// handed VERBATIM, in whatever form that harness's own goal mechanism
+	// takes. Empty means the caller supplied none.
+	//
+	// Reshape from the source adapter (named by TASK-260822-3u97y3): the
+	// source's claude adapter reads goal.ProviderCondition off the board's
+	// GoalContract and splices it into argv as `/goal <condition>`
+	// (ClaudeGoalDirective, spawn/claude_goal.go). The text is RENDERED by the
+	// board layer (pkgboard.RenderGoalProviderCondition) and the board
+	// validates a stored contract against a re-render, so the renderer is a
+	// single source elsewhere. Without this field a plugin could only invent a
+	// second renderer here — two spellings of one predicate, with the board
+	// rejecting whichever one it did not produce — or drop the binding
+	// entirely and launch a goal-bound child bound to nothing.
+	//
+	// It is deliberately NOT the Objective. The objective is the operator's
+	// intent text; the provider condition is the machine-checkable predicate,
+	// and the claude goldens record the second reaching argv while the first
+	// reaches nothing.
+	ProviderCondition string
 }
 
 // Budget is the spend ceiling a launch is bound to, in the unit the harness
@@ -326,10 +358,55 @@ type LaunchRequest struct {
 	// ambient environment.
 	Env []string
 
+	// Run is the caller's tracked-run context: the identifiers the child is
+	// told to act under, and the board directory it is routed at.
+	//
+	// Reshape from the source adapter (named by TASK-260822-hp5fb4): the
+	// source read these off *spawn.Config inside withSpawnEnv, which every
+	// adapter shared. A plugin here reaches for nothing ambient, so the same
+	// facts have to arrive on the request or no plugin can inject them — and
+	// the codex goldens record all four of them in env_added and env_removed,
+	// so this is not a hypothetical need.
+	Run RunContext
+
+	// Profile is the harness-side named configuration profile a launch runs
+	// under, empty when the caller selected none. It is a harness fact rather
+	// than a vendor one — codex spells it `-p <profile>` in exec mode and
+	// `--profile <profile>` in a managed session — and no default is invented
+	// for it anywhere.
+	Profile string
+
 	Goal        *Goal
 	Budget      *Budget
 	ServiceTier string
 	Composition Composition
+}
+
+// RunContext is the caller's identity for one tracked run, carried to the
+// child as environment.
+//
+// Every field is OPAQUE to this package: it copies the values it is given and
+// never parses, validates or defaults one. The names of the variables they are
+// exported under are the caller's convention, spelled once in runcontext.go
+// rather than in each of six plugins.
+type RunContext struct {
+	// RunID and TaskID identify the run and the unit of work it was launched
+	// for.
+	RunID  string
+	TaskID string
+	// BoardDir is the task directory the child is routed at. A child that
+	// inherited none would resolve one relative to its own working directory,
+	// which is the failure the source repository's absolute-path export closed.
+	BoardDir string
+	// ContextID is the writable context the run may act on. A run that
+	// inherited a base context is deliberately not told the base's id: the
+	// child is given the one identity it may mutate.
+	ContextID string
+}
+
+// IsZero reports whether no run context was supplied at all.
+func (c RunContext) IsZero() bool {
+	return c.RunID == "" && c.TaskID == "" && c.BoardDir == "" && c.ContextID == ""
 }
 
 // System is the agentic-system plugin contract. Every capability the

@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/relux-works/skill-agents-management/internal/gosources"
 )
 
 // This file holds the guard's SCAN SCOPE — which directories the walk descends
@@ -269,7 +271,7 @@ func TestSingleSourceGuardScanScopeNarrowed(t *testing.T) {
 						excludedBy = "dot-directory"
 					case strings.HasPrefix(part, "_"):
 						excludedBy = "underscore-directory"
-					case moduleSkipDirs[part]:
+					case gosources.SkipDirNames[part]:
 						excludedBy = "named directory " + part
 					default:
 						excludedBy = "nested go.mod"

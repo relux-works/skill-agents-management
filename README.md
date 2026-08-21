@@ -91,8 +91,237 @@ The agentic-system plugin contract and its registry.
   neither miss the machine-local case nor quietly widen into ignoring real
   code.
 
-No concrete system plugin ships yet. The contract is proven by one test double
-registered through the public API.
+All six concrete system plugins ship: `pkg/agentic/systems/{codex,claude,qwen,gemini,muse,agy}`.
+Every one of them is proven against the launch-surface goldens its system has,
+through the real `Registry` and `BuildPlan`. See below.
+
+The contract is also proven by one test double registered through the public
+API, so the interface stays exercisable without any plugin compiled in.
+
+### The codex plugin: `pkg/agentic/systems/codex`
+
+The Codex CLI, ported from `skill-project-management`'s spawn adapter and
+proven against all four codex launch-surface goldens through the real
+`Registry` and `BuildPlan`.
+
+- **Three binary-resolution paths**, in order: the managed npm package named by
+  `CODEX_MANAGED_PACKAGE_ROOT`, the npm shim on `PATH` unwrapped to the native
+  binary beside it, and the `PATH` entry itself. Each step that could resolve
+  is confirmed with a stat before it is returned, so a layout that is named but
+  not installed falls through instead of producing a path to nothing. All three
+  are covered by a golden and again by hermetic stub layouts that attack the
+  ORDER between them.
+- **One argv construction site.** `args.go`'s `Args` is the only place codex CLI
+  flags are spelled, for both the `codex exec` grammar (shared verbatim by the
+  dry-run mirror) and the managed-session provider-args fragment.
+  `argvguard_test.go` scans every non-test Go file in the module and fails if a
+  second site appears; it narrows itself onto the real `Args` to prove it can
+  fire, holds nine mutant spellings, and demonstrates its three declared-open
+  residuals staying open.
+- **Effort transport is argv** — a `-c model_reasoning_effort="..."` override —
+  and the vocabulary stays with the vendor layer. The service-tier override
+  travels the same way.
+- **Environment filtering by EXACT KEY**, never by prefix, including two
+  pointers whose VALUES name the credential variables to block. The parity
+  package's two permanent negatives — a whole-environment wipe and a
+  family-prefix strip — are re-run against this plugin rather than against a
+  probe, each with the narrowing that shows which seeded key catches it.
+- **Managed-session mode has no golden** (the source's capture harness could not
+  reach that surface), so it is proven the source's way instead: against a
+  frozen copy of the pre-refactor construction across every combination of
+  profile, effort and tier.
+
+Three behaviours are carried over from the source deliberately and pinned by
+tests that assert the CURRENT behaviour rather than a better one: the two open
+child-environment leaks the source tracks as `BUG-260819-3qn52o`, a
+service-tier export that lets an inherited value pass through when the launch
+configured none, and an unrecognized tier that is dropped rather than refused.
+Each pin names why changing it inside a parity port would be wrong.
+
+### The claude plugin: `pkg/agentic/systems/claude`
+
+The Claude Code CLI, ported from the same spawn adapter and proven against both
+claude launch-surface goldens through the real `Registry` and `BuildPlan`. Its
+plugin id is `claude-code` — the Layer-1 name — while the goldens record the
+frozen RUNTIME id `claude`; `parity_test.go` maps between them in one place.
+
+- **Two launch surfaces from one grammar.** Prompt mode streams the assignment
+  on stdin. Goal mode appends the assignment as SYSTEM context
+  (`--append-system-prompt-file`), spends the child's one user turn on a
+  `/goal <predicate>` directive, and therefore attaches NO stdin at all — which
+  is what `claude/goal-mode`'s `stdin_kind: none` records.
+- **Goal-mode launch PREPARATION is explicitly out of the plan surface.** The
+  source runs a provider preflight before construction: a version gate at Claude
+  Code 2.1.139, a `/goal` capability probe classified into
+  unavailable/untrusted/hooks-disabled, and a session-state decision. Steps two
+  and three START PROCESSES, and `BuildPlan` calls every plugin method to build a
+  DRY RUN — so preparation behind any of them would make a dry run execute the
+  harness twice. `goal.go` states the whole of what the source does and where it
+  has to land instead (the launch/session plane, when that is ported); this task
+  invents no home for it. What IS carried across is the one refusal that belongs
+  to the argv: a goal carrying no provider condition is rejected rather than
+  shipped as a bare `/goal` binding the child to nothing.
+- **The environment contract is ONE exact key.** Claude strips `CLAUDECODE` and
+  nothing else. It does NOT strip the codex family — that is a codex child's
+  filter, and the qwen filter is the one that composes both — so a claude child
+  inherits `CODEX_*`, the app-server and session-manager URLs, and the
+  credentials their pointers name. That is the source's `BUG-260819-3qn52o` seen
+  from the other side; it is pinned by a test rather than left implicit. PATH is
+  not sanitized either, which no golden can see, so it has its own test.
+- **Binary resolution is plain `PATH`.** No managed package, no shim to unwrap,
+  and none of codex's resolution machinery imported.
+- **The budget ceiling is claude's alone.** `--max-budget-usd` is the one adapter
+  capability no other agent in the source's table declares, and neither capture
+  configured a budget — so it has no golden and is proven against the source's
+  construction instead, including the `%.2f` rendering and the `> 0` guard that
+  silently drops a zero ceiling.
+- **One argv construction site**, guarded the same way codex's is and by the same
+  scanner.
+
+### The qwen plugin: `pkg/agentic/systems/qwen`
+
+The Qwen Code CLI, proven against both qwen launch-surface goldens. Its plugin
+id is `qwen-code` while the goldens record the frozen RUNTIME id `qwen`;
+`parity_test.go` maps between them in one place.
+
+- **The environment filter is what this plugin exists to get right.** It is the
+  codex family PLUS `CLAUDECODE`, and that last key is a fix the source paid for
+  (its `TASK-260817-2eo4ok`): before it, a qwen child launched from inside a
+  Claude Code session inherited the nesting marker and refused to start. The
+  strip is narrowed one key at a time against the golden, `CLAUDECODE` included,
+  so the twelve entries are told apart from entries that were never there.
+- **The codex half is single-sourced**, in `internal/runtimeenv`, shared with the
+  codex plugin — because the source shares it too, and says so on
+  `filterQwenRuntimeEnv`. A copy of the eleven keys per plugin is the drift that
+  comment closed, and it would be invisible: a child that inherits one key too
+  many still launches.
+- **Effort travels on STDIN**, as a field of a two-frame stream-json control
+  protocol, not in argv. An argv comparison alone cannot see it going missing,
+  so the goldens compare the frames byte for byte and a mutant that empties the
+  field is required to fail in `StdinData`. The encoding choices — maps rather
+  than structs, so key order matches; `SetEscapeHTML(false)`, which no fixture's
+  prompt exercises — are pinned by their own tests.
+- **Three source leaks stay OPEN and named**: the two board credentials
+  `BUG-260819-3qn52o` records, plus `QWEN_CODE_SESSION_ID`, which nothing here
+  strips — so a qwen child spawned from inside a qwen session inherits its
+  parent's session id. All three are pinned by a test asserting the CURRENT
+  behaviour, so closing one has to be a deliberate edit to the comment too.
+
+### The gemini plugin: `pkg/agentic/systems/gemini`
+
+The Gemini CLI, proven against both gemini goldens. Plugin id `gemini-cli`,
+runtime id `gemini`. It is the simplest of the six and the simplicity is the
+contract: plain `PATH` resolution, no effort transport, no composition grammar,
+no goal, budget or service tier.
+
+- **The prompt reaches the child ONCE.** gemini appends what it reads on stdin
+  to the `-p` value, so a real launch passes an EMPTY `-p` and streams the
+  assignment; a dry run has no file and substitutes the source's `<prompt>`
+  placeholder. That single argument is the only difference between the two
+  modes, and the mutant that puts the text in argv as well is the first one in
+  the file.
+- **The environment filter is EMPTY**, and `env.go` says so rather than
+  expressing it by omitting the file. A gemini child inherits `CLAUDECODE`, the
+  whole `CODEX_*` family and every credential in the parent — the extreme case
+  of `BUG-260819-3qn52o`, whose shape is that each filter names only the
+  runtimes it knew about. The bound that makes the emptiness load-bearing is a
+  negative: a plugin carrying the codex-family filter must FAIL the golden.
+
+### The muse plugin: `pkg/agentic/systems/muse`
+
+The Muse CLI, proven against both muse goldens. It is the one system whose
+plugin id and runtime id are the same spelling.
+
+- **The assignment is a PATH in argv** (`--prompt-file`), so muse attaches no
+  stdin at all — `muse/exec` records `stdin_kind: none`, and the mutant that
+  streams the assignment as well must fail in `StdinKind`. Because the path is
+  in argv, the dry run has something to substitute: the source's
+  `<prompt-file>`.
+- **An unreadable assignment is NOT this plugin's refusal.** Every other system
+  reads the file; muse only names it. A plugin that stat'ed it would be
+  performing work in a method `BuildPlan` calls for a dry run.
+- **Nothing about muse's VENDOR reaches this plugin.** The extraction source
+  records muse's broker as unknown; that is Layer-2's business, settled there,
+  and a test holds the declaration to carrying no opinion about it.
+- The environment filter is EMPTY, with the same bound gemini's has.
+
+### The agy plugin: `pkg/agentic/systems/agy`
+
+The Antigravity CLI, proven against both agy goldens. Plugin id `antigravity`,
+runtime id `agy`.
+
+- **The binary comes from a PREFLIGHT, and agy has no `PATH` fallback at all.**
+  The source's probe runs `agy --version` and `agy --help` and validates a
+  minimum version and seven required headless flags — it START PROCESSES, so it
+  cannot live behind any method here, exactly as claude's goal preparation
+  cannot. `runtime.go` carries the whole boundary. The result reaches the plugin
+  at CONSTRUCTION (`agy.NewWithRuntime`), which makes this the one ported plugin
+  that holds state; the alternative was an agy-shaped field on the core request
+  that five plugins would ignore.
+- **The source's two resolution functions become one resolution plus one
+  mode-aware refusal.** `ResolveBinary` takes no mode — that is the core's
+  anti-drift guarantee — so it answers the preflighted executable when there is
+  one and the `agy` display placeholder when there is not, and `Argv` REFUSES an
+  exec launch in the placeholder state. `agy/dry-run`'s golden is that
+  placeholder branch and `agy/exec`'s is the other, so both are fixture-backed.
+  The dry run's no-side-effect promise is measured, not asserted: a plan builds
+  over an assignment file that does not exist and an environment with no `PATH`.
+- **Effort is encoded in the MODEL ID** (`gemini-3.6-flash-high`) and the effort
+  flag is REJECTED. The plugin never parses the suffix — that vocabulary is the
+  vendor layer's — and declares `EffortTransportNone`, which makes the refusal
+  of a required-effort model decidable from the contract alone. Neither golden
+  configures an effort, so both refusals have their own tests.
+- **The only ARG_MAX budget in the module**, because agy is the only system that
+  puts the whole assignment in argv. The gate is proven by NARROWING as well as
+  by an oversize prompt: a prompt is sized into the window where the arguments
+  alone fit and the arguments plus a long executable path do not, so a port
+  measuring only the arguments is caught.
+- The environment filter is EMPTY, with the same bound gemini's has.
+
+### Shared plugin internals
+
+Three packages exist because a second plugin needed the same rule, which is the
+only reason any of them should:
+
+- `internal/runtimeenv` — the codex-family parent-runtime strip, its exact-key
+  filter, its credential-pointer resolution and its `PATH` sanitizer, shared by
+  the codex and qwen plugins. The source shares it too.
+- `internal/mcpjson` — the `--mcp-config <json>` composition grammar, shared by
+  claude, qwen and agy. The source validates all three with one function, and
+  the claude port said this validator would have to be shared before there was
+  anything to share it with. Its refusal messages name the GRAMMAR rather than a
+  system, which is the one deliberate divergence from the source's text: the
+  source says "Claude" even when refusing an agy composition.
+- `internal/paritycase` — the machine state a golden was captured under,
+  reproduced on the machine running the test, used by the four plugins ported
+  last. The codex and claude plugins keep their own copies of these helpers,
+  deliberately: rewriting the harness under an accepted parity proof would put
+  the proof and the change in one commit. That residual is stated in the package
+  comment rather than hidden.
+
+### One argv guard, shared
+
+`internal/argvguard` is the scanner all six plugins' guards drive; `internal/gosources`
+is the single answer to "which files does this module's build compile", used by
+those guards and by the single-source binding guard. Each plugin supplies only
+what is genuinely its own — the signature literals and the allowlist — so the
+threshold (ONE co-occurring literal), the resolution depth and the declared-open
+residuals are one fact rather than one per plugin.
+
+Allowlist keys are FILE-SCOPED. Every plugin names its construction site `Args`,
+so a bare-name allowlist would have exempted every `Args` in the module from
+every guard — a weakening that arrives silently the moment a second plugin lands.
+
+Each signature deliberately EXCLUDES the literals a sibling plugin also spells,
+because a guard that fires on legitimate neighbouring code is a guard somebody
+deletes: `claude` and `agy` both drop `--dangerously-skip-permissions` and
+`--output-format`, `muse` drops `--model` and `--json`, `gemini` drops its
+single-letter flags. `agy` also drops `--add-dir` — and that one was NOT
+predicted. It was in the signature until the cross-plugin bound reported the
+codex plugin's own `Args`, which is that test doing exactly what it exists for.
+Every plugin carries a cross-plugin false-positive check against all five of its
+siblings' real sources, and the residual each exclusion leaves is named on the
+signature and demonstrated staying open.
 
 ### Layer 2: `pkg/vendorplugin`
 
@@ -225,6 +454,41 @@ None of these commands keeps a list of its own. A private one would be a
 second binding for the same fact, which is exactly what the single-source
 guard exists to prevent.
 
+### Launch-surface parity goldens
+
+`pkg/agentic/parity` holds the contract every agentic-system plugin port proves
+itself against: one golden per `(system, case)` recording the binary, argv,
+environment keys added and removed, and stdin bytes that the launch produced.
+
+The goldens are captured by the EXTRACTION SOURCE's own harness
+(`skill-project-management`, `tools/board-cli/internal/spawn/parity_capture_test.go`,
+`TestCaptureLaunchSurface`) and only compared here. A golden captured by code
+living next to the port proves only that the port agrees with itself.
+
+```
+.scripts/capture-parity-goldens.sh [--source /path/to/skill-project-management]
+```
+
+The script runs the source harness under a pinned synthetic parent environment,
+then hands the result to this repository's masking and writes
+`pkg/agentic/parity/testdata/goldens/`. It refuses a dirty source checkout. The
+source checkout is otherwise read-only: the only thing the script does inside it
+is run one `go test`.
+
+That pinned environment seeds two kinds of key, and a recapture must keep both.
+The keys the source's filters act on make each strip observable — the filter's
+lower bound. Four **bystander** keys that no filter touches make the upper bound
+observable too: without them a system that strips everything and a system that
+strips exactly the right keys produce the same diff, and a port that discards
+the whole parent environment passes. `PARITY_BYSTANDER` covers the wipe; the
+three `*_LIKE_BUT_NOT` near-misses cover a port that filters by prefix where the
+source filters by exact key.
+
+`pkg/agentic/parity/testdata/goldens/README.md` is the boundary document — what
+is captured, what the source could NOT capture and why, and what the goldens do
+not prove even for the combinations they cover. A port task reads it before
+concluding that a missing golden is permission.
+
 ## Tools
 
 | Tool | Purpose | Entry point | Artifacts |
@@ -232,3 +496,7 @@ guard exists to prevent.
 | `task-board` | board tracking for this repo's work | `task-board q/m/spawn ...` | `.task-board/` |
 | `make` | build, test, vet and install the CLI | `make build` / `test` / `vet` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
+| parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
+| codex mutation harness | narrow every codex gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-hp5fb4/mutants.py` | `.temp/TASK-260822-hp5fb4/mutants-*.log` |
+| claude mutation harness | narrow every claude gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-3u97y3/mutants.py` | `.temp/TASK-260822-3u97y3/mutants-*.log` |
+| qwen/gemini/muse/agy mutation harness | narrow every gate the four remaining ports wrote, plus the two shared internals, and confirm the suite goes red | `python3 .temp/TASK-260822-xz8rj5/mutants.py` | `.temp/TASK-260822-xz8rj5/mutants-*.log` |

@@ -1,18 +1,17 @@
 package agentic
 
 import (
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/relux-works/skill-agents-management/internal/gosources"
 )
 
 // This file is the mechanical enforcement of invariant 5 in
@@ -1089,16 +1088,11 @@ func moduleRoot(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("Getwd: %v", err)
 	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatalf("no go.mod above the test working directory; the guard has nothing to scan")
-		}
-		dir = parent
+	root, err := gosources.Root(dir)
+	if err != nil {
+		t.Fatalf("%v", err)
 	}
+	return root
 }
 
 // moduleSources reads every non-test Go source in the module, discovered by
@@ -1114,52 +1108,18 @@ func moduleSources(t *testing.T) map[string]string {
 	return sources
 }
 
-// moduleSkipDirs are the directory names excluded on top of the toolchain's own
-// dot/underscore rule. Each is a tree of code that is not this module's:
-// vendor and node_modules hold dependencies, and testdata is what go build
-// itself ignores. See the scan-scope section of this file's threat model.
-var moduleSkipDirs = map[string]bool{
-	"vendor":       true,
-	"node_modules": true,
-	"testdata":     true,
-}
-
 // skipModuleDir answers whether the walk refuses to descend into dir, which is
 // the one question that decides what "the whole module" means.
 //
-// It mirrors go/build's own exclusion rules rather than naming directories: a
-// denylist of specific dot-directories is what let .agents through, because a
-// list can only exclude the machine-local trees somebody thought of. A leading
-// "." or "_" is the toolchain's rule, and a directory carrying its own go.mod
-// is a different module — the Go build of THIS module compiles none of it, so
-// the guard has no standing to report it.
-//
-// root itself is never skipped. The module root is routinely a dot-nested path
-// (a worktree under .temp/, a checkout under .cache/), and testing its own name
-// would silently scan zero files while reporting clean.
-//
-// A stat that fails for a reason other than "not there" is propagated, not read
-// as absence: a directory the walk cannot inspect is an unknown, and answering
-// "no go.mod" for it would turn an unreadable tree into a silently unscanned
-// one. The guard fails loudly instead.
+// It delegates to internal/gosources, which is where the rule now lives for the
+// whole repository. It was here first, and it moved when the second system
+// plugin's argv guard needed the same answer: two walks with two skip lists are
+// two definitions of "the whole module", and both report clean when they
+// disagree. The rules themselves, and the red trunk that produced them, are
+// documented on gosources.SkipDir; the scan-scope section of this file's threat
+// model states what they buy this guard.
 func skipModuleDir(root, path, name string) (bool, error) {
-	if path == root {
-		return false, nil
-	}
-	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
-		return true, nil
-	}
-	if moduleSkipDirs[name] {
-		return true, nil
-	}
-	switch _, err := os.Stat(filepath.Join(path, "go.mod")); {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, fs.ErrNotExist):
-		return false, nil
-	default:
-		return false, fmt.Errorf("deciding whether %s is a nested module: %w", path, err)
-	}
+	return gosources.SkipDir(root, path, name)
 }
 
 // walkModuleSources collects every non-test Go source under root that the Go
@@ -1171,40 +1131,7 @@ func skipModuleDir(root, path, name string) (bool, error) {
 // over the real checkout, where a dot-directory may or may not exist depending
 // on whose machine is running the suite.
 func walkModuleSources(root string) (map[string]string, error) {
-	sources := map[string]string{}
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			skip, err := skipModuleDir(root, path, entry.Name())
-			if err != nil {
-				return err
-			}
-			if skip {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		sources[filepath.ToSlash(relative)] = string(data)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return sources, nil
+	return gosources.Walk(root)
 }
 
 // The allowlist that used to live here — one file, permitted to hold a system
@@ -1229,6 +1156,23 @@ func TestSingleSourceGuardScansTheWholeModule(t *testing.T) {
 		"pkg/agentic/registry.go",
 		"pkg/agentic/plan.go",
 		"pkg/agentic/system.go",
+		// The system plugins, ONE BINDING FILE EACH. They are the files most
+		// likely to grow a second binding — a plugin is where somebody reaches
+		// for "switch on the id" — so a scan that did not reach them would
+		// leave the guard's whole subject unguarded while every other assertion
+		// here stayed green.
+		//
+		// Every plugin in this module is listed, and the list is what makes the
+		// claim checkable: a seventh plugin added without a line here would be
+		// a package the guard walks but nothing insists it walks, and the day
+		// the scan scope narrows for some other reason, that plugin would go
+		// unguarded silently.
+		"pkg/agentic/systems/codex/codex.go",
+		"pkg/agentic/systems/claude/claude.go",
+		"pkg/agentic/systems/qwen/qwen.go",
+		"pkg/agentic/systems/gemini/gemini.go",
+		"pkg/agentic/systems/muse/muse.go",
+		"pkg/agentic/systems/agy/agy.go",
 		"pkg/vendorplugin/registry.go",
 		"pkg/vendorplugin/runtime.go",
 		"pkg/vendorplugin/spawn.go",
