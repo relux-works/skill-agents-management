@@ -46,6 +46,43 @@ declare which systems they support. See [docs/architecture.md](docs/architecture
 for the contract, the layering rules, and the planned local-model plugin
 (load/unload awareness, inference-busy state, memory-pressure sequencing).
 
+### Layer 1: `pkg/agentic`
+
+The agentic-system plugin contract and its registry.
+
+- `System` is the plugin interface: identity, a static `Capabilities`
+  declaration (launch modes, effort transport, goal/budget/service-tier
+  support, composition grammar, home, auth hint), and five dispatch surfaces —
+  `ResolveBinary`, `Argv`, `ChildEnv`, `Stdin`, `ValidateComposition`.
+- `Registry` is the only place a system binding may live. `Register` is the
+  only way one comes to exist, and it refuses a duplicate id, an id that does
+  not normalize, an id that normalizes to a spelling other than itself, an id
+  that is not the same across two consecutive reads, and a declaration that
+  could never launch. The middle two are what keep `sys.ID()` and the registry
+  key the same string at registration: a plugin answering a second spelling of
+  its own id — whether by normalizing to it or by changing its answer — is a
+  shadow binding one layer up from the map. Stability AFTER registration stays
+  the plugin's contract obligation; `System.ID` says which half is enforced and
+  a test demonstrates the half that is not.
+- `BuildPlan` is the single dispatch site. It drives every surface through one
+  registry lookup and returns a `Plan` — binary, argv, environment, stdin bytes
+  — which is the parity surface a refactor has to reproduce. There is no
+  switch over system ids anywhere, and
+  `pkg/agentic/singlesource_guard_test.go` fails the build if one appears: a
+  go/ast scan of the whole module for a second binding table or an id switch,
+  with its threat model and its declared-open residuals documented in the file.
+  Its rules are held to 49 mutants in `singlesource_guard_mutants_test.go`,
+  split into the set its author wrote and the set two reviews wrote against it.
+  Four of the first review's walked through, and the rules they forced are
+  marked in the file; the second review found the guard catching `switch id`
+  over an id nobody has declared yet while admitting `if id == "opencode"`, and
+  four mutants now hold both rules to the same question. Seven further cases
+  demonstrate the residual classes staying OPEN, so the threat model's list and
+  the test can be read against each other.
+
+No concrete system plugin ships yet — that is the next story. The contract is
+proven by one test double registered through the public API.
+
 ## Status
 
 Extraction in progress. The current scope is moving the vendors and agentic
@@ -100,9 +137,15 @@ agents-management version          # build version, commit and build date
 agents-management plugins [--json] # the plugins compiled into this binary
 ```
 
-`plugins` prints an empty list and exits 0 today. That is the answer, not a
-stub: no plugin has been compiled in yet, which is a different fact from a
+`plugins` reads the `pkg/agentic` default registry — the same registry a
+plugin package registers into from its `init` — and prints the registered
+system ids. It prints an empty list and exits 0 today. That is the answer, not
+a stub: no plugin has been compiled in yet, which is a different fact from a
 failure to look. `--json` renders the empty case as `[]`, never `null`.
+
+The command keeps no list of its own on purpose. A private one would be a
+second binding for the same fact, which is exactly what the single-source
+guard exists to prevent.
 
 ## Tools
 

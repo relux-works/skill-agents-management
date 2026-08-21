@@ -3,16 +3,20 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 
+	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/spf13/cobra"
 )
 
-// registeredPlugins names the plugins compiled into this binary. It is empty
-// today and that is a valid answer, not a failure: the plugin contracts land
-// in follow-up work, and a consumer asking an unpopulated binary what it
-// carries deserves an empty list and exit 0, never an error.
-var registeredPlugins []string
+// systemRegistry is where this binary reads its plugins from. It points at the
+// package-level default registry that plugin packages register into from their
+// init functions, so the command has no list of its own.
+//
+// A private list here would be a second binding for the same fact — the exact
+// shadow table docs/architecture.md's invariant 5 forbids and
+// pkg/agentic/singlesource_guard_test.go fails the build over. The variable
+// exists only so a test can swap in an isolated registry.
+var systemRegistry = agentic.Default
 
 var pluginsJSON bool
 
@@ -41,14 +45,16 @@ var pluginsCmd = &cobra.Command{
 	},
 }
 
-// pluginNames returns the registered plugin names in a stable order. The
-// result is always non-nil so the JSON encoding of "nothing registered" is
-// [] and never null — a consumer ranging over the answer must not have to
+// pluginNames returns the registered agentic system ids in a stable order. The
+// result is always non-nil so the JSON encoding of "nothing registered" is []
+// and never null — a consumer ranging over the answer must not have to
 // special-case the empty case.
 func pluginNames() []string {
-	names := make([]string, 0, len(registeredPlugins))
-	names = append(names, registeredPlugins...)
-	sort.Strings(names)
+	ids := systemRegistry.IDs()
+	names := make([]string, 0, len(ids))
+	for _, id := range ids {
+		names = append(names, id.String())
+	}
 	return names
 }
 

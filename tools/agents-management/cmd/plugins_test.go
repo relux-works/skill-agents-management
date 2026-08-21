@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
 // An unpopulated binary must answer "nothing registered" and exit 0. Treating
@@ -87,16 +90,62 @@ func TestPluginsCommandJSONListsRegisteredNamesSorted(t *testing.T) {
 	}
 }
 
-// pluginNames hands out a copy: a caller that sorts or appends to the answer
-// must not be able to reorder or grow the compiled-in set.
+// pluginNames hands out a copy: a caller that sorts, appends to or overwrites
+// the answer must not be able to reorder or grow the compiled-in set.
 func TestPluginNamesDoesNotAliasRegistry(t *testing.T) {
-	withRegisteredPlugins(t, "vendor-openai", "claude-code")
+	registry := withRegisteredPlugins(t, "vendor-openai", "claude-code")
 
 	names := pluginNames()
 	names[0] = "mutated"
 
-	if registeredPlugins[0] != "vendor-openai" {
-		t.Errorf("registeredPlugins[0] = %q, want %q: pluginNames aliased the registry",
-			registeredPlugins[0], "vendor-openai")
+	if got := registry.IDs(); len(got) != 2 || got[0] != "claude-code" || got[1] != "vendor-openai" {
+		t.Errorf("registry ids = %v after mutating pluginNames' result; the answer aliased the registry", got)
+	}
+	if again := pluginNames(); again[0] != "claude-code" {
+		t.Errorf("pluginNames() = %v on the second call; the first caller's write survived", again)
+	}
+}
+
+// The command reports what the registry holds, so a system registered through
+// the public API — the only way a binding exists — comes back out under its
+// id, and there is no second path that could print something else.
+func TestPluginsCommandReportsWhatTheRegistryHolds(t *testing.T) {
+	withRegisteredPlugins(t, "claude-code", "codex")
+
+	stdout, _, err := runRoot(t, "plugins")
+	if err != nil {
+		t.Fatalf("plugins command failed: %v", err)
+	}
+	if stdout != "claude-code\ncodex\n" {
+		t.Errorf("stdout = %q, want the registered ids in sorted order", stdout)
+	}
+}
+
+// The CLI can never print a non-canonical spelling, because a plugin that
+// answers one cannot be registered at all — agentic.ErrUnnormalizedSystemID,
+// enforced at the registration boundary this command reads through.
+//
+// This is the same property an earlier version of the test above asserted by
+// registering "Claude-Code" and watching "claude-code" come out. Under the
+// stricter contract that registration is refused outright, so the property is
+// asserted where it now lives: at the boundary, driven from outside the
+// agentic package by the same stub a real out-of-repo plugin would be.
+func TestCLICannotSurfaceAnUnnormalizedPluginID(t *testing.T) {
+	registry := agentic.NewRegistry()
+	err := registry.Register(stubSystem{id: "Claude-Code"})
+	if !errors.Is(err, agentic.ErrUnnormalizedSystemID) {
+		t.Fatalf("Register(\"Claude-Code\") err = %v, want ErrUnnormalizedSystemID", err)
+	}
+
+	previous := systemRegistry
+	systemRegistry = registry
+	t.Cleanup(func() { systemRegistry = previous })
+
+	stdout, _, err := runRoot(t, "plugins")
+	if err != nil {
+		t.Fatalf("plugins command failed: %v", err)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want nothing: the refused plugin must not reach the CLI under either spelling", stdout)
 	}
 }
