@@ -1,0 +1,424 @@
+{
+  "agy/dry-run": {
+    "binary": "agy",
+    "args": [
+      "--print",
+      "\u003cprompt\u003e",
+      "--model",
+      "gemini-3.6-flash-high",
+      "--output-format",
+      "json",
+      "--print-timeout",
+      "30m",
+      "--mode",
+      "accept-edits",
+      "--dangerously-skip-permissions",
+      "--disable-slash-commands",
+      "--add-dir",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfaceagydry-run1550265027/001"
+    ],
+    "stdin_kind": "n/a-dry-run"
+  },
+  "agy/exec": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfaceagyexec2247260294/001/agy",
+    "args": [
+      "--print",
+      "agy exec-mode prompt",
+      "--model",
+      "gemini-3.6-flash-high",
+      "--output-format",
+      "json",
+      "--print-timeout",
+      "30m",
+      "--mode",
+      "accept-edits",
+      "--dangerously-skip-permissions",
+      "--disable-slash-commands",
+      "--add-dir",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfaceagyexec2247260294/002"
+    ],
+    "env_added": [
+      "TASK_BOARD_RUN_ID=RUN-parity-agy",
+      "TASK_BOARD_TASK_ID=TASK-parity-agy"
+    ],
+    "env_removed": [
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "none"
+  },
+  "claude/goal-mode": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfaceclaudegoal-mode97630689/001/claude",
+    "args": [
+      "-p",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-opus-5",
+      "--effort",
+      "high",
+      "--dangerously-skip-permissions",
+      "--append-system-prompt-file",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfaceclaudegoal-mode97630689/002/prompt.md",
+      "/goal Own the latest active revision of board goal **GOAL-260717-CLD001** for run **RUN-parity-claude-goal** through its board-defined success predicate. Before nested spawn, at every directive checkpoint, and before claiming success, run `task-board spawn goal RUN-parity-claude-goal`; treat the returned objective, resolved scope, and revision as authoritative and surface them with the required board acceptance evidence. A stale revision, cancelled/superseded goal, or missing scoped acceptance evidence is not success."
+    ],
+    "env_added": [
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-260717-CLD001",
+      "TASK_BOARD_RUN_ID=RUN-parity-claude-goal",
+      "TASK_BOARD_TASK_ID=TASK-parity-claude-goal"
+    ],
+    "env_removed": [
+      "CLAUDECODE=1",
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "none"
+  },
+  "claude/prompt-mode": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfaceclaudeprompt-mode3251796100/001/claude",
+    "args": [
+      "-p",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-opus-5",
+      "--effort",
+      "high",
+      "--dangerously-skip-permissions"
+    ],
+    "env_added": [
+      "TASK_BOARD_RUN_ID=RUN-parity-claude",
+      "TASK_BOARD_TASK_ID=TASK-parity-claude"
+    ],
+    "env_removed": [
+      "CLAUDECODE=1",
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "bytes",
+    "stdin_data": "claude prompt-mode body"
+  },
+  "codex/dry-run": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/parity-bin/codex",
+    "args": [
+      "--search",
+      "-a",
+      "never",
+      "-p",
+      "parity-profile",
+      "exec",
+      "-m",
+      "gpt-5.6-terra",
+      "-c",
+      "model_reasoning_effort=\"high\"",
+      "-c",
+      "service_tier=\"priority\"",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--skip-git-repo-check",
+      "-C",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexdry-run1110160919/001",
+      "--add-dir",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexdry-run1110160919/001/.task-board",
+      "-"
+    ],
+    "stdin_kind": "n/a-dry-run"
+  },
+  "codex/exec-default-path": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-default-path573334286/001/codex",
+    "args": [
+      "--search",
+      "-a",
+      "never",
+      "-p",
+      "parity-profile",
+      "exec",
+      "-m",
+      "gpt-5.6-terra",
+      "-c",
+      "model_reasoning_effort=\"high\"",
+      "-c",
+      "service_tier=\"priority\"",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--skip-git-repo-check",
+      "-C",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-default-path573334286/002",
+      "--add-dir",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-default-path573334286/002/.task-board",
+      "-"
+    ],
+    "env_added": [
+      "TASK_BOARD_BOARD_DIR=/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-default-path573334286/002/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "TASK_BOARD_DIR=/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-default-path573334286/002/.task-board",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex"
+    ],
+    "env_removed": [
+      "CODEX_CI=parity-ci",
+      "CODEX_MANAGED_BY_BUN=1",
+      "CODEX_MANAGED_BY_NPM=1",
+      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
+      "CODEX_SESSION=parity-session",
+      "CODEX_THREAD_ID=parity-thread",
+      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
+      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
+      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
+      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
+      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "bytes",
+    "stdin_data": "codex exec-mode prompt"
+  },
+  "codex/exec-managed-npm-path": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-managed-npm-path2782936265/003/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+    "args": [
+      "--search",
+      "-a",
+      "never",
+      "-p",
+      "parity-profile",
+      "exec",
+      "-m",
+      "gpt-5.6-terra",
+      "-c",
+      "model_reasoning_effort=\"high\"",
+      "-c",
+      "service_tier=\"priority\"",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--skip-git-repo-check",
+      "-C",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-managed-npm-path2782936265/002",
+      "--add-dir",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-managed-npm-path2782936265/002/.task-board",
+      "-"
+    ],
+    "env_added": [
+      "TASK_BOARD_BOARD_DIR=/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-managed-npm-path2782936265/002/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "TASK_BOARD_DIR=/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-managed-npm-path2782936265/002/.task-board",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex"
+    ],
+    "env_removed": [
+      "CODEX_CI=parity-ci",
+      "CODEX_MANAGED_BY_BUN=1",
+      "CODEX_MANAGED_BY_NPM=1",
+      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
+      "CODEX_SESSION=parity-session",
+      "CODEX_THREAD_ID=parity-thread",
+      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
+      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
+      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
+      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
+      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "bytes",
+    "stdin_data": "codex managed-npm prompt"
+  },
+  "codex/exec-native-shim": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-native-shim172812349/001/codex-shim-package/vendor/aarch64-apple-darwin/bin/codex",
+    "args": [
+      "--search",
+      "-a",
+      "never",
+      "-p",
+      "parity-profile",
+      "exec",
+      "-m",
+      "gpt-5.6-terra",
+      "-c",
+      "model_reasoning_effort=\"high\"",
+      "-c",
+      "service_tier=\"priority\"",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--skip-git-repo-check",
+      "-C",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-native-shim172812349/002",
+      "--add-dir",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-native-shim172812349/002/.task-board",
+      "-"
+    ],
+    "env_added": [
+      "TASK_BOARD_BOARD_DIR=/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-native-shim172812349/002/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "TASK_BOARD_DIR=/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacecodexexec-native-shim172812349/002/.task-board",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex"
+    ],
+    "env_removed": [
+      "CODEX_CI=parity-ci",
+      "CODEX_MANAGED_BY_BUN=1",
+      "CODEX_MANAGED_BY_NPM=1",
+      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
+      "CODEX_SESSION=parity-session",
+      "CODEX_THREAD_ID=parity-thread",
+      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
+      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
+      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
+      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
+      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "bytes",
+    "stdin_data": "codex native-shim prompt"
+  },
+  "gemini/dry-run": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/parity-bin/gemini",
+    "args": [
+      "-p",
+      "\u003cprompt\u003e",
+      "-m",
+      "gemini-3.5-flash",
+      "-y",
+      "--skip-trust",
+      "-o",
+      "json",
+      "--include-directories",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacegeminidry-run2877037662/001"
+    ],
+    "stdin_kind": "n/a-dry-run"
+  },
+  "gemini/exec": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacegeminiexec3432396159/001/gemini",
+    "args": [
+      "-p",
+      "",
+      "-m",
+      "gemini-3.5-flash",
+      "-y",
+      "--skip-trust",
+      "-o",
+      "json",
+      "--include-directories",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacegeminiexec3432396159/002"
+    ],
+    "env_added": [
+      "TASK_BOARD_RUN_ID=RUN-parity-gemini",
+      "TASK_BOARD_TASK_ID=TASK-parity-gemini"
+    ],
+    "env_removed": [
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "bytes",
+    "stdin_data": "gemini exec-mode prompt"
+  },
+  "muse/dry-run": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/parity-bin/muse",
+    "args": [
+      "exec",
+      "--json",
+      "--yolo",
+      "--model",
+      "muse-spark",
+      "--workspace",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacemusedry-run4173343302/001",
+      "--prompt-file",
+      "\u003cprompt-file\u003e"
+    ],
+    "stdin_kind": "n/a-dry-run"
+  },
+  "muse/exec": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacemuseexec2960741925/001/muse",
+    "args": [
+      "exec",
+      "--json",
+      "--yolo",
+      "--model",
+      "muse-spark",
+      "--workspace",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacemuseexec2960741925/002",
+      "--prompt-file",
+      "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfacemuseexec2960741925/002/prompt.md"
+    ],
+    "env_added": [
+      "TASK_BOARD_RUN_ID=RUN-parity-muse",
+      "TASK_BOARD_TASK_ID=TASK-parity-muse"
+    ],
+    "env_removed": [
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "none"
+  },
+  "qwen/dry-run": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/parity-bin/qwen",
+    "args": [
+      "--model",
+      "qwen3.7-max",
+      "--approval-mode",
+      "yolo",
+      "--input-format",
+      "stream-json",
+      "--output-format",
+      "stream-json"
+    ],
+    "stdin_kind": "n/a-dry-run"
+  },
+  "qwen/exec": {
+    "binary": "/Users/alexis/src/relux-works/skill-agents-management/.temp/STORY-260821-1xppz3/worktree/.temp/TASK-260822-slgewd/capture-tmp/TestCaptureLaunchSurfaceqwenexec1192710890/001/qwen",
+    "args": [
+      "--model",
+      "qwen3.7-max",
+      "--approval-mode",
+      "yolo",
+      "--input-format",
+      "stream-json",
+      "--output-format",
+      "stream-json"
+    ],
+    "env_added": [
+      "TASK_BOARD_RUN_ID=RUN-parity-qwen",
+      "TASK_BOARD_TASK_ID=TASK-parity-qwen"
+    ],
+    "env_removed": [
+      "CLAUDECODE=1",
+      "CODEX_CI=parity-ci",
+      "CODEX_MANAGED_BY_BUN=1",
+      "CODEX_MANAGED_BY_NPM=1",
+      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
+      "CODEX_SESSION=parity-session",
+      "CODEX_THREAD_ID=parity-thread",
+      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
+      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
+      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
+      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
+      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "bytes",
+    "stdin_data": "{\"request\":{\"effort\":\"high\",\"subtype\":\"initialize\"},\"request_id\":\"RUN-parity-qwen-initialize\",\"type\":\"control_request\"}\n{\"message\":{\"content\":[{\"text\":\"qwen exec-mode prompt\",\"type\":\"text\"}],\"role\":\"user\"},\"parent_tool_use_id\":null,\"session_id\":\"RUN-parity-qwen\",\"type\":\"user\"}\n"
+  }
+}

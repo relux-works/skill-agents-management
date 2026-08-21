@@ -1,0 +1,3853 @@
+diff --git a/.scripts/capture-parity-goldens.sh b/.scripts/capture-parity-goldens.sh
+new file mode 100755
+index 0000000..9db94cb
+--- /dev/null
++++ b/.scripts/capture-parity-goldens.sh
+@@ -0,0 +1,156 @@
++#!/usr/bin/env bash
++#
++# Regenerate pkg/agentic/parity/testdata/goldens from the EXTRACTION SOURCE's
++# own capture harness.
++#
++# This script runs skill-project-management's TestCaptureLaunchSurface and hands
++# its output to this repository's generator. It does not capture anything
++# itself, and it must not grow code that does: a golden captured beside the port
++# proves only that the port agrees with itself.
++#
++# The source checkout is READ-ONLY here. The only thing this script does inside
++# it is run one `go test`.
++#
++# Usage:
++#   .scripts/capture-parity-goldens.sh [--source /path/to/skill-project-management]
++#
++set -euo pipefail
++
++REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++
++# The default sibling lookup resolves through the MAIN checkout, not this one.
++# Story work happens in a worktree under .temp/, where "../skill-project-management"
++# points at a scratch directory rather than at the extraction source.
++MAIN_CHECKOUT="$(cd "$(git -C "$REPO_ROOT" rev-parse --git-common-dir)/.." 2>/dev/null && pwd || echo "$REPO_ROOT")"
++if [ -z "${SOURCE_REPO:-}" ]; then
++  for candidate in "$REPO_ROOT/../skill-project-management" "$MAIN_CHECKOUT/../skill-project-management"; do
++    if [ -d "$candidate" ]; then SOURCE_REPO="$(cd "$candidate" && pwd)"; break; fi
++  done
++fi
++
++while [ $# -gt 0 ]; do
++  case "$1" in
++    --source) SOURCE_REPO="$2"; shift 2 ;;
++    *) echo "unknown argument: $1" >&2; exit 2 ;;
++  esac
++done
++
++if [ -z "${SOURCE_REPO:-}" ] || [ ! -d "$SOURCE_REPO" ]; then
++  echo "source checkout not found; pass --source /path/to/skill-project-management" >&2
++  exit 2
++fi
++
++HARNESS_REL="tools/board-cli/internal/spawn/parity_capture_test.go"
++if [ ! -f "$SOURCE_REPO/$HARNESS_REL" ]; then
++  echo "no capture harness at $SOURCE_REPO/$HARNESS_REL" >&2
++  exit 2
++fi
++
++SOURCE_COMMIT="$(git -C "$SOURCE_REPO" rev-parse HEAD)"
++SOURCE_DIRTY="$(git -C "$SOURCE_REPO" status --porcelain)"
++if [ -n "$SOURCE_DIRTY" ]; then
++  # A golden captured from a dirty tree records a commit that does not describe
++  # the code that produced it, which is worse than recording nothing.
++  echo "source checkout $SOURCE_REPO is dirty; a golden's commit would not describe what captured it" >&2
++  echo "$SOURCE_DIRTY" >&2
++  exit 1
++fi
++
++SCRATCH="$REPO_ROOT/.temp/parity-capture"
++rm -rf "$SCRATCH"
++mkdir -p "$SCRATCH/tmp" "$SCRATCH/bin" "$SCRATCH/out"
++
++# Stub executables on a PINNED PATH, the source harness's own
++# setHermeticAgentPath technique applied from outside it. Without this, the
++# dry-run cases resolve whichever providers the operator happens to have
++# installed — or fail to resolve at all — and the fixture records the machine
++# rather than the contract.
++for name in claude codex qwen muse gemini agy; do
++  printf '#!/bin/sh\ncat >/dev/null\nexit 0\n' > "$SCRATCH/bin/$name"
++  chmod +x "$SCRATCH/bin/$name"
++done
++
++GO_BIN_DIR="$(dirname "$(command -v go)")"
++RAW="$SCRATCH/out/raw-capture.json"
++META="$SCRATCH/out/capture-meta.json"
++
++# The PINNED PARENT ENVIRONMENT. The source harness diffs the child environment
++# against os.Environ(), so an unpinned capture records whichever session
++# variables the operator's shell carried: a key the plugin strips would be
++# provably stripped only on the machine that happened to set it, and the
++# fixture would carry that machine's paths and run ids.
++#
++# Every value below is synthetic. The keys are the ones the source's filters
++# act on (filterCodexRuntimeEnv, filterQwenRuntimeEnv, withSpawnEnv), seeded so
++# each strip and each replacement is OBSERVABLE in the capture rather than
++# invisible for want of a parent value.
++PINNED_ENV=(
++  CLAUDECODE=1
++  CODEX_THREAD_ID=parity-thread
++  CODEX_SESSION=parity-session
++  CODEX_CI=parity-ci
++  CODEX_MANAGED_BY_NPM=1
++  CODEX_MANAGED_BY_BUN=1
++  CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root
++  TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server
++  TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN
++  PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token
++  TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager
++  TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN
++  PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token
++  TASK_BOARD_SESSION_ID=SESSION-parity-parent
++  TASK_BOARD_RUN_ID=RUN-parity-parent
++  TASK_BOARD_TASK_ID=TASK-parity-parent
++  TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board
++  TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent
++)
++
++# TASK_BOARD_DIR is deliberately ABSENT: the source sets it on the child from
++# the run's board directory, and a parent value would mask that injection.
++echo "capturing from $SOURCE_REPO @ $SOURCE_COMMIT"
++env -i \
++  HOME="$HOME" \
++  PATH="$SCRATCH/bin:$GO_BIN_DIR:/usr/bin:/bin:/usr/sbin:/sbin" \
++  TMPDIR="$SCRATCH/tmp" \
++  SPAWN_PARITY_CAPTURE_OUT="$RAW" \
++  "${PINNED_ENV[@]}" \
++  sh -c "cd '$SOURCE_REPO/tools/board-cli' && go test -mod=mod ./internal/spawn -run TestCaptureLaunchSurface -count=1"
++
++# The meta the generator records into every fixture. parent_env is the pinned
++# set above verbatim; parent_env_omitted names what the capture process also
++# needed and why it is not recorded.
++{
++  printf '{\n'
++  printf '  "source_repo": "skill-project-management",\n'
++  printf '  "source_commit": "%s",\n' "$SOURCE_COMMIT"
++  printf '  "source_harness": "%s::TestCaptureLaunchSurface",\n' "$HARNESS_REL"
++  printf '  "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",\n'
++  printf '  "captured_by": "%s",\n' "${PARITY_CAPTURED_BY:-TASK-260822-slgewd}"
++  printf '  "parent_env": ['
++  sep=""
++  for entry in "${PINNED_ENV[@]}"; do
++    printf '%s\n    "%s"' "$sep" "$entry"
++    sep=","
++  done
++  printf '\n  ],\n'
++  printf '  "parent_env_omitted": [\n'
++  printf '    "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",\n'
++  printf '    "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",\n'
++  printf '    "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",\n'
++  printf '    "SPAWN_PARITY_CAPTURE_OUT — the source harness'"'"'s own output path; inherited unchanged by every child, so it diffs to nothing"\n'
++  printf '  ],\n'
++  printf '  "temp_root": "%s",\n' "$SCRATCH/tmp"
++  printf '  "stub_bin_dir": "%s",\n' "$SCRATCH/bin"
++  printf '  "forbidden_literals": ["%s", "%s", "%s"]\n' "$HOME" "$SOURCE_REPO" "$REPO_ROOT"
++  printf '}\n'
++} > "$META"
++
++echo "generating goldens"
++cd "$REPO_ROOT"
++env -u TASK_BOARD_DIR \
++  PARITY_GOLDEN_CAPTURE_IN="$RAW" \
++  PARITY_GOLDEN_META_IN="$META" \
++  PARITY_GOLDEN_OUT="$REPO_ROOT/pkg/agentic/parity/testdata/goldens" \
++  go test -mod=mod ./pkg/agentic/parity -run TestWriteGoldensFromCapture -count=1 -v
++
++echo "done: pkg/agentic/parity/testdata/goldens"
+diff --git a/LOGBOOK.md b/LOGBOOK.md
+index 87e0f98..62b26b3 100644
+--- a/LOGBOOK.md
++++ b/LOGBOOK.md
+@@ -3,6 +3,18 @@
+ > Institutional memory. Concise, factual, high-signal.
+ > Newest entries first. One block per insight.
+ 
++## 2026-08-22
++
++### 1853 — A pinned parent environment is what makes a captured env diff portable
++- DECISION: The launch-surface goldens (`pkg/agentic/parity/testdata/goldens/`) were captured by running the EXTRACTION SOURCE's own `TestCaptureLaunchSurface` under `env -i` with a synthetic parent environment, not under an ordinary shell. The source harness diffs the child env against `os.Environ()`; its own `parity-after.json` therefore carries `TASK_BOARD_BOARD_DIR=/Users/alexis/src/relux-works/skill-project-management/.task-board` and this session's run ids. `.scripts/capture-parity-goldens.sh`.
++- FINDING: The real defect an unpinned capture hides is not the leaked paths, it is the SILENCE. `env_removed` can only report a key the parent actually had. A plugin's strip of `CODEX_SESSION` or `TASK_BOARD_SESSION_ID` is provable only on a machine that happened to set it — everywhere else the golden records nothing and the port passes for want of evidence. The pinned set seeds exactly the keys `filterCodexRuntimeEnv`, `filterQwenRuntimeEnv` and `withSpawnEnv` act on, so each strip and each replacement is observable. `TASK_BOARD_DIR` is deliberately absent so the child's injection of it shows up as an addition.
++- DECISION: Each golden records its own `capture.parent_env`, and `ComparePlan` feeds THAT to the plan rather than letting the caller supply one. Env added/removed is a diff; a port supplying its own baseline compares a different measurement wearing the same schema. `TestAPlanBuiltWithoutTheGoldensParentEnvIsNotSilentlyAccepted`.
++- DECISION: PATH pinned to a stub-executable directory, so the dry-run cases resolve deterministically. Deviates from the source's artifact, which recorded its operator's installed codex and `executable file not found` for qwen/muse. An `error` fixture pins a refusal instead of the dry-run argv grammar — which is the thing the ports must reproduce — so the deviation buys the contract back. Written up in the fixtures README rather than left for a reader to hit.
++- FINDING: Masking must be ONE implementation used by both sides. Generation discovers the machine-local literals (`DiscoverSubstitutions`, regex over the capture layout) and then calls the SAME `Mask` the comparison calls. A regex masker at generation and a literal masker at comparison would agree until the day they did not, and the disagreement would read as a port bug.
++- NOTE: Three pins on masking, because masking is where a real difference goes invisible while the suite stays green: rule set frozen as a literal; the set of snapshot FIELDS masking may rewrite frozen and checked by planting a maskable literal in every field at once; each rule narrowed one at a time until a real golden stops matching. `pkg/agentic/parity/mask_test.go`.
++- SCOPE: `pkg/agentic/parity/` (new package, 14 goldens, 45 tests), `.scripts/capture-parity-goldens.sh`, `README.md`. Source checkout read-only throughout — one `go test`, clean before and after.
++- STATUS: TASK-260822-slgewd handed to review, uncommitted for the CR snapshot. Source commit pinned in every fixture: `ed4878123061b39fdae67160f6b5632117b48a2f`.
++
+ ## 2026-08-21
+ 
+ ### 2015 — A guard's scan scope is part of its rule, not plumbing
+diff --git a/README.md b/README.md
+index 6b26f62..fd0dc9d 100644
+--- a/README.md
++++ b/README.md
+@@ -225,6 +225,32 @@ None of these commands keeps a list of its own. A private one would be a
+ second binding for the same fact, which is exactly what the single-source
+ guard exists to prevent.
+ 
++### Launch-surface parity goldens
++
++`pkg/agentic/parity` holds the contract every agentic-system plugin port proves
++itself against: one golden per `(system, case)` recording the binary, argv,
++environment keys added and removed, and stdin bytes that the launch produced.
++
++The goldens are captured by the EXTRACTION SOURCE's own harness
++(`skill-project-management`, `tools/board-cli/internal/spawn/parity_capture_test.go`,
++`TestCaptureLaunchSurface`) and only compared here. A golden captured by code
++living next to the port proves only that the port agrees with itself.
++
++```
++.scripts/capture-parity-goldens.sh [--source /path/to/skill-project-management]
++```
++
++The script runs the source harness under a pinned synthetic parent environment,
++then hands the result to this repository's masking and writes
++`pkg/agentic/parity/testdata/goldens/`. It refuses a dirty source checkout. The
++source checkout is otherwise read-only: the only thing the script does inside it
++is run one `go test`.
++
++`pkg/agentic/parity/testdata/goldens/README.md` is the boundary document — what
++is captured, what the source could NOT capture and why, and what the goldens do
++not prove even for the combinations they cover. A port task reads it before
++concluding that a missing golden is permission.
++
+ ## Tools
+ 
+ | Tool | Purpose | Entry point | Artifacts |
+@@ -232,3 +258,4 @@ guard exists to prevent.
+ | `task-board` | board tracking for this repo's work | `task-board q/m/spawn ...` | `.task-board/` |
+ | `make` | build, test, vet and install the CLI | `make build` / `test` / `vet` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
+ | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
++| parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
+diff --git a/pkg/agentic/parity/capture.go b/pkg/agentic/parity/capture.go
+new file mode 100644
+index 0000000..a2e9ca3
+--- /dev/null
++++ b/pkg/agentic/parity/capture.go
+@@ -0,0 +1,283 @@
++package parity
++
++import (
++	"fmt"
++	"regexp"
++	"sort"
++	"strconv"
++	"strings"
++
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
++)
++
++// This file turns one run of the SOURCE repository's capture harness into the
++// fixtures under testdata/goldens. It reads that harness's output; it does not
++// reproduce it. Nothing here builds a command, resolves a binary or filters an
++// environment, and nothing here may ever start to: a golden produced by code
++// that lives beside the port proves only that the port agrees with itself.
++//
++// The production call site is TestWriteGoldensFromCapture in
++// goldens_generate_test.go, driven by .scripts/capture-parity-goldens.sh.
++
++// CaptureLayout is where one capture run put its machine-local directories.
++// It is the bridge between the raw harness output and Substitutions: the
++// harness records absolute paths, and this says which of them are noise.
++type CaptureLayout struct {
++	// TempRoot is TMPDIR for the capture process — the directory
++	// testing.T.TempDir allocated beneath.
++	TempRoot string
++	// StubBinDir is the directory of stub executables the capture put on PATH.
++	StubBinDir string
++	// ForbiddenLiterals are machine-local strings that must not survive into a
++	// fixture even though no rule masks them — the operator's home directory,
++	// the source checkout path. A hit is an error, not a silent write: a
++	// golden carrying one is a fixture that only reproduces on one machine.
++	ForbiddenLiterals []string
++}
++
++// tempSlotPattern matches one testing.T.TempDir slot beneath the capture's
++// TMPDIR. The source harness allocates them as
++// <TMPDIR>/TestCaptureLaunchSurface<subtest><random>/<NNN>, so the random
++// component is what varies run to run and NNN is the allocation order that
++// does not.
++var tempSlotPattern = regexp.MustCompile(`^(.*/TestCaptureLaunchSurface[^/]*)/(\d{3})$`)
++
++// DiscoverSubstitutions finds the machine-local directories one captured
++// snapshot actually references.
++//
++// It is discovery, not masking: it produces the Substitutions that the SHARED
++// Mask then applies, so the goldens and every later comparison go through one
++// masking implementation rather than two that agree until they do not.
++//
++// A slot number appearing under two different parent directories within one
++// case means the layout assumption above is wrong for that case, and it is
++// reported rather than guessed past.
++func DiscoverSubstitutions(snap Snapshot, layout CaptureLayout) (Substitutions, error) {
++	parents := map[int]string{}
++	highest := 0
++	for _, candidate := range snapshotPathCandidates(snap, layout.TempRoot) {
++		match := tempSlotPattern.FindStringSubmatch(candidate)
++		if match == nil {
++			continue
++		}
++		slot, err := strconv.Atoi(match[2])
++		if err != nil || slot < 1 {
++			return Substitutions{}, fmt.Errorf("parity: temp slot %q in %q is not a positive index", match[2], candidate)
++		}
++		if existing, seen := parents[slot]; seen && existing != match[1] {
++			return Substitutions{}, fmt.Errorf("parity: temp slot %03d appears under two directories, %q and %q; the capture layout this discovery assumes does not hold", slot, existing, match[1])
++		}
++		parents[slot] = match[1]
++		if slot > highest {
++			highest = slot
++		}
++	}
++	subs := Substitutions{TempSlots: make([]string, highest)}
++	for slot, parent := range parents {
++		subs.TempSlots[slot-1] = parent + "/" + fmt.Sprintf("%03d", slot)
++	}
++	if layout.StubBinDir != "" && snapshotMentions(snap, layout.StubBinDir) {
++		subs.StubBinDir = layout.StubBinDir
++	}
++	return subs, nil
++}
++
++// snapshotPathCandidates returns every longest prefix of every string in snap
++// that could be a temp slot directory. Paths appear both bare (a work
++// directory) and with a suffix (a binary inside a slot, a .task-board beneath
++// one), so each candidate is walked up from its full length to the temp root.
++func snapshotPathCandidates(snap Snapshot, tempRoot string) []string {
++	if tempRoot == "" {
++		return nil
++	}
++	var out []string
++	for _, field := range snapshotStrings(snap) {
++		index := 0
++		for {
++			found := strings.Index(field[index:], tempRoot)
++			if found < 0 {
++				break
++			}
++			start := index + found
++			// The path runs to the first character that cannot be in one. The
++			// harness writes shell-safe paths, so whitespace and quotes end it.
++			end := start
++			for end < len(field) && !strings.ContainsRune(" \t\n\r\"'", rune(field[end])) {
++				end++
++			}
++			candidate := field[start:end]
++			for candidate != tempRoot && candidate != "" {
++				out = append(out, candidate)
++				cut := strings.LastIndex(candidate, "/")
++				if cut < 0 {
++					break
++				}
++				candidate = candidate[:cut]
++			}
++			index = end
++		}
++	}
++	return out
++}
++
++func snapshotStrings(snap Snapshot) []string {
++	out := []string{snap.Binary, snap.StdinData, snap.Error}
++	out = append(out, snap.Args...)
++	out = append(out, snap.EnvAdded...)
++	out = append(out, snap.EnvRemoved...)
++	return out
++}
++
++func snapshotMentions(snap Snapshot, literal string) bool {
++	for _, field := range snapshotStrings(snap) {
++		if strings.Contains(field, literal) {
++			return true
++		}
++	}
++	return false
++}
++
++// GenerationMeta is the provenance of one capture run, recorded into every
++// golden it produces.
++type GenerationMeta struct {
++	SourceRepo       string
++	SourceCommit     string
++	SourceHarness    string
++	CaptureEnvVar    string
++	CapturedBy       string
++	ParentEnv        []string
++	ParentEnvOmitted []string
++	Layout           CaptureLayout
++}
++
++// GoldensFromCapture converts the raw harness output into fixtures.
++//
++// Every id must split into a system and a case, the case must agree with the
++// stdin marker about which launch mode it is, and nothing machine-local may
++// survive masking. Each of those is an error rather than a best effort, because
++// the only thing worse than a missing golden is a wrong one that a port then
++// proves itself against.
++func GoldensFromCapture(raw map[string]Snapshot, meta GenerationMeta) ([]Golden, error) {
++	if len(raw) == 0 {
++		return nil, fmt.Errorf("parity: the capture produced no combinations at all")
++	}
++	if strings.TrimSpace(meta.SourceCommit) == "" {
++		return nil, fmt.Errorf("parity: refusing to write goldens with no source commit; a fixture whose provenance is unknown cannot settle a dispute")
++	}
++	ids := make([]string, 0, len(raw))
++	for id := range raw {
++		ids = append(ids, id)
++	}
++	sort.Strings(ids)
++
++	out := make([]Golden, 0, len(ids))
++	for _, id := range ids {
++		system, kase, ok := strings.Cut(id, "/")
++		if !ok || system == "" || kase == "" {
++			return nil, fmt.Errorf("parity: capture key %q is not <system>/<case>", id)
++		}
++		snap := raw[id]
++		mode, err := launchModeForCase(id, kase, snap)
++		if err != nil {
++			return nil, err
++		}
++		subs, err := DiscoverSubstitutions(snap, meta.Layout)
++		if err != nil {
++			return nil, fmt.Errorf("parity: %s: %w", id, err)
++		}
++		masked := Mask(snap, subs)
++		if err := assertNothingMachineLocal(id, masked, meta.Layout); err != nil {
++			return nil, err
++		}
++		out = append(out, Golden{
++			SchemaVersion: GoldenSchemaVersion,
++			ID:            id,
++			System:        system,
++			Case:          kase,
++			LaunchMode:    mode.String(),
++			Capture: Capture{
++				SourceRepo:       meta.SourceRepo,
++				SourceCommit:     meta.SourceCommit,
++				SourceHarness:    meta.SourceHarness,
++				CaptureEnvVar:    meta.CaptureEnvVar,
++				CapturedBy:       meta.CapturedBy,
++				ParentEnv:        append([]string(nil), meta.ParentEnv...),
++				ParentEnvOmitted: append([]string(nil), meta.ParentEnvOmitted...),
++				MaskRules:        maskRuleNames(),
++				Placeholders:     placeholdersIn(masked),
++			},
++			Surface: masked,
++		})
++	}
++	return out, nil
++}
++
++// launchModeForCase maps a source case onto an agentic launch mode, and
++// cross-checks the mapping against the stdin marker the harness recorded.
++//
++// The cross-check is the point. The name-based rule alone would be a guess; the
++// source's two capture paths record different stdin markers (its dry-run path
++// calls BuildArgs and observes no command at all), so the marker is independent
++// evidence of which path ran. Disagreement means the source grew a case shape
++// this mapping does not know, and that has to stop a generation rather than
++// produce a mislabelled fixture.
++func launchModeForCase(id, kase string, snap Snapshot) (agentic.LaunchMode, error) {
++	mode := agentic.LaunchModeExec
++	if kase == "dry-run" {
++		mode = agentic.LaunchModeDryRun
++	}
++	dryRunMarker := snap.StdinKind == StdinDryRun
++	if (mode == agentic.LaunchModeDryRun) != dryRunMarker {
++		return 0, fmt.Errorf("parity: %s: case name maps to %s but the capture recorded stdin_kind %q; the source grew a case shape this mapping does not know",
++			id, mode, snap.StdinKind)
++	}
++	return mode, nil
++}
++
++func assertNothingMachineLocal(id string, masked Snapshot, layout CaptureLayout) error {
++	forbidden := append([]string(nil), layout.ForbiddenLiterals...)
++	if layout.TempRoot != "" {
++		forbidden = append(forbidden, layout.TempRoot)
++	}
++	if layout.StubBinDir != "" {
++		forbidden = append(forbidden, layout.StubBinDir)
++	}
++	for _, literal := range forbidden {
++		if literal == "" {
++			continue
++		}
++		if snapshotMentions(masked, literal) {
++			return fmt.Errorf("parity: %s: %q survived masking; a fixture carrying it reproduces on one machine only", id, literal)
++		}
++	}
++	return nil
++}
++
++func maskRuleNames() []string {
++	names := make([]string, 0, len(maskRules))
++	for _, rule := range maskRules {
++		names = append(names, rule.Name)
++	}
++	return names
++}
++
++func placeholdersIn(snap Snapshot) []string {
++	seen := map[string]bool{}
++	for _, field := range snapshotStrings(snap) {
++		if strings.Contains(field, PlaceholderStubBinDir) {
++			seen[PlaceholderStubBinDir] = true
++		}
++		for slot := 1; slot <= 16; slot++ {
++			placeholder := TempSlotPlaceholder(slot)
++			if strings.Contains(field, placeholder) {
++				seen[placeholder] = true
++			}
++		}
++	}
++	out := make([]string, 0, len(seen))
++	for placeholder := range seen {
++		out = append(out, placeholder)
++	}
++	sort.Strings(out)
++	return out
++}
+diff --git a/pkg/agentic/parity/compare.go b/pkg/agentic/parity/compare.go
+new file mode 100644
+index 0000000..1ce2501
+--- /dev/null
++++ b/pkg/agentic/parity/compare.go
+@@ -0,0 +1,91 @@
++package parity
++
++import (
++	"fmt"
++	"strings"
++
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
++)
++
++// Difference is one field on which a plan and its golden disagree.
++type Difference struct {
++	// Field is the Snapshot field name, so a failure names the surface that
++	// drifted rather than only printing two blobs.
++	Field string
++	Want  string
++	Got   string
++}
++
++func (d Difference) String() string {
++	return fmt.Sprintf("%s:\n    golden: %s\n    plan:   %s", d.Field, d.Want, d.Got)
++}
++
++// Compare reports every field on which got differs from want.
++//
++// There is no tolerance, no normalization and no field it declines to look at.
++// A parity harness that forgives one field forgives it forever, and the field
++// it forgives is where the next divergence lands — the source repository's own
++// history is a display binary drifting from the launch target for exactly as
++// long as nothing compared it.
++//
++// TestCompareReportsEveryField holds this to the Snapshot type by reflection:
++// a field added later and not handled here fails the suite until it is.
++func Compare(want, got Snapshot) []Difference {
++	var diffs []Difference
++	str := func(field, w, g string) {
++		if w != g {
++			diffs = append(diffs, Difference{Field: field, Want: quote(w), Got: quote(g)})
++		}
++	}
++	slice := func(field string, w, g []string) {
++		if !equalStrings(w, g) {
++			diffs = append(diffs, Difference{Field: field, Want: quoteAll(w), Got: quoteAll(g)})
++		}
++	}
++	str("Binary", want.Binary, got.Binary)
++	slice("Args", want.Args, got.Args)
++	slice("EnvAdded", want.EnvAdded, got.EnvAdded)
++	slice("EnvRemoved", want.EnvRemoved, got.EnvRemoved)
++	str("StdinKind", want.StdinKind, got.StdinKind)
++	str("StdinData", want.StdinData, got.StdinData)
++	str("Error", want.Error, got.Error)
++	return diffs
++}
++
++// ComparePlan is the whole harness in one call, and the entry point a port test
++// drives: snapshot the plan against the golden's own recorded parent
++// environment, mask it with the caller's machine-local directories, and compare
++// it to the golden's surface.
++//
++// Taking the parent environment from the golden rather than from the caller is
++// deliberate. EnvAdded and EnvRemoved are a diff, and a port test that supplied
++// its own baseline would be comparing two different measurements that happen to
++// share a schema.
++func ComparePlan(g Golden, plan agentic.Plan, subs Substitutions) []Difference {
++	return Compare(g.Surface, Mask(FromPlan(plan, g.Capture.ParentEnv), subs))
++}
++
++func equalStrings(a, b []string) bool {
++	if len(a) != len(b) {
++		return false
++	}
++	for i := range a {
++		if a[i] != b[i] {
++			return false
++		}
++	}
++	return true
++}
++
++func quote(s string) string { return fmt.Sprintf("%q", s) }
++
++func quoteAll(in []string) string {
++	if len(in) == 0 {
++		return "[]"
++	}
++	parts := make([]string, len(in))
++	for i, s := range in {
++		parts[i] = fmt.Sprintf("%q", s)
++	}
++	return "[" + strings.Join(parts, " ") + "]"
++}
+diff --git a/pkg/agentic/parity/compare_test.go b/pkg/agentic/parity/compare_test.go
+new file mode 100644
+index 0000000..80b7a41
+--- /dev/null
++++ b/pkg/agentic/parity/compare_test.go
+@@ -0,0 +1,90 @@
++package parity
++
++import (
++	"reflect"
++	"testing"
++)
++
++// TestCompareReportsEveryField is the reason Compare can be trusted to "fail on
++// any field difference" rather than on the fields its author remembered.
++//
++// It walks the Snapshot type by reflection, mutates ONE field at a time, and
++// requires Compare to report that field by name. A field added to Snapshot
++// later and not handled in Compare fails here on the day it is added, which is
++// the only moment anyone is looking.
++func TestCompareReportsEveryField(t *testing.T) {
++	base := Snapshot{
++		Binary:     "/opt/probe/bin/probe",
++		Args:       []string{"exec", "--model", "probe-1"},
++		EnvAdded:   []string{"ADD=1"},
++		EnvRemoved: []string{"GONE=1"},
++		StdinKind:  StdinBytes,
++		StdinData:  "prompt",
++		Error:      "",
++	}
++	if diffs := Compare(base, base); len(diffs) != 0 {
++		t.Fatalf("Compare reported differences between a snapshot and itself: %v", diffs)
++	}
++
++	typ := reflect.TypeOf(base)
++	for i := 0; i < typ.NumField(); i++ {
++		field := typ.Field(i)
++		t.Run(field.Name, func(t *testing.T) {
++			mutant := base
++			value := reflect.ValueOf(&mutant).Elem().Field(i)
++			switch field.Type.Kind() {
++			case reflect.String:
++				value.SetString(value.String() + "-mutated")
++			case reflect.Slice:
++				value.Set(reflect.ValueOf(append(append([]string(nil), value.Interface().([]string)...), "mutated")))
++			default:
++				t.Fatalf("Snapshot.%s is a %s, which this test does not know how to mutate; a field Compare might be ignoring is a field no port failure would name", field.Name, field.Type.Kind())
++			}
++
++			diffs := Compare(base, mutant)
++			if len(diffs) == 0 {
++				t.Fatalf("Compare found no difference after mutating %s. A parity harness that forgives one field forgives it forever, and the field it forgives is where the next divergence lands", field.Name)
++			}
++			named := false
++			for _, d := range diffs {
++				if d.Field == field.Name {
++					named = true
++				}
++			}
++			if !named {
++				t.Errorf("Compare reported %v after mutating %s, but named no difference in that field; a failure that does not name the surface that drifted sends the reader to the wrong place", diffs, field.Name)
++			}
++			if len(diffs) != 1 {
++				t.Errorf("mutating one field produced %d differences: %v", len(diffs), diffs)
++			}
++		})
++	}
++}
++
++// TestCompareTreatsNilAndEmptySlicesAsEqual pins the one place Compare is
++// deliberately not byte-literal. A plugin that returns no argv may return nil
++// or an empty slice, and the JSON round trip through a golden turns one into
++// the other. Reporting that as a difference would make every fixture depend on
++// which one the encoder happened to write.
++func TestCompareTreatsNilAndEmptySlicesAsEqual(t *testing.T) {
++	if diffs := Compare(Snapshot{Args: nil}, Snapshot{Args: []string{}}); len(diffs) != 0 {
++		t.Errorf("Compare distinguished a nil slice from an empty one: %v", diffs)
++	}
++	// But not an empty one from a populated one, which is the difference that
++	// matters and the thing the leniency above must not be extended into.
++	if diffs := Compare(Snapshot{Args: []string{}}, Snapshot{Args: []string{"--flag"}}); len(diffs) == 0 {
++		t.Error("Compare treated an empty argv and a one-flag argv as equal")
++	}
++}
++
++// TestCompareIsOrderSensitiveOnArgv holds argv to a sequence rather than a set.
++// `-C dir --add-dir other` and `--add-dir other -C dir` are different command
++// lines to a harness that reads positionally, and a comparison that sorted
++// before comparing would call them the same.
++func TestCompareIsOrderSensitiveOnArgv(t *testing.T) {
++	a := Snapshot{Args: []string{"-C", "/work", "--add-dir", "/board"}}
++	b := Snapshot{Args: []string{"--add-dir", "/board", "-C", "/work"}}
++	if diffs := Compare(a, b); len(diffs) == 0 {
++		t.Error("Compare treated two different argv orderings as equal; argv is a sequence, not a set")
++	}
++}
+diff --git a/pkg/agentic/parity/doc.go b/pkg/agentic/parity/doc.go
+new file mode 100644
+index 0000000..9031047
+--- /dev/null
++++ b/pkg/agentic/parity/doc.go
+@@ -0,0 +1,52 @@
++// Package parity holds the launch-surface goldens the agentic-system plugin
++// ports are proved against, and the harness that compares an agentic.Plan to
++// one.
++//
++// # What a golden is, and what it is not
++//
++// A golden is the OBSERVABLE launch surface of one (system, mode) combination
++// as the extraction source produced it: the binary that was resolved, the full
++// argv, the environment keys added and removed relative to the parent process,
++// and the stdin bytes. Invariant 1 of docs/architecture.md makes that surface
++// the parity bar, and the reason it is these four fields rather than an argv
++// string is that argv-string equality passes while the environment or the
++// stdin protocol silently diverges.
++//
++// Every golden in testdata/goldens was captured by the SOURCE repository's own
++// harness — skill-project-management,
++// tools/board-cli/internal/spawn/parity_capture_test.go, TestCaptureLaunchSurface,
++// which is skipped unless SPAWN_PARITY_CAPTURE_OUT is set. Nothing in this
++// package captures anything. That division is the whole point: a golden
++// captured by code living next to the port proves only that the new code
++// agrees with itself, which is precisely the assurance a port must not be
++// given. This package captures nothing and compares everything.
++//
++// The source commit each golden was captured at is recorded inside the golden
++// file. A golden whose provenance is unknown cannot settle a dispute about
++// what the source actually did.
++//
++// # What the harness does
++//
++// FromPlan maps an agentic.Plan onto the source's snapshot schema. Compare
++// reports EVERY field that differs — it has no notion of a difference small
++// enough to ignore, and TestCompareReportsEveryField holds it to that by
++// reflection over the Snapshot type, so a field added later fails the suite
++// until Compare learns it.
++//
++// # Masking
++//
++// Two things in a captured surface are machine-local rather than contractual:
++// the temporary directories testing.T.TempDir allocates, and the PATH the
++// capture seeded to make the harness hermetic. The source excluded PATH from
++// its own env diff for exactly this reason and masked temp-dir noise before
++// diffing its two snapshots. Both rules are ported here, in mask.go, as a
++// CLOSED set — MaskRules is frozen by TestMaskRuleSetIsFrozen, and the set of
++// snapshot fields masking is allowed to rewrite is frozen by
++// TestMaskingCoversExactlyTheDeclaredFields.
++//
++// The pin matters more than the rules. Masking that grows is how parity
++// evidence rots: each widening makes a real difference invisible, and the
++// suite stays green while the port drifts. A widening must therefore cost a
++// deliberate edit to a frozen list plus the sentence explaining why, which is
++// the smallest price at which the erosion stops being silent.
++package parity
+diff --git a/pkg/agentic/parity/golden.go b/pkg/agentic/parity/golden.go
+new file mode 100644
+index 0000000..eabe7c8
+--- /dev/null
++++ b/pkg/agentic/parity/golden.go
+@@ -0,0 +1,175 @@
++package parity
++
++import (
++	"embed"
++	"encoding/json"
++	"fmt"
++	"io/fs"
++	"path"
++	"sort"
++	"strings"
++)
++
++// goldenFS embeds the fixtures so any package in this module can prove itself
++// against them without knowing where the checkout root is.
++//
++// They live under testdata/ on purpose, and the consequence is worth stating
++// rather than discovering: the single-source guard's scan scope excludes
++// testdata (singlesource_scanscope_test.go), so nothing under it is scanned for
++// a reintroduced system binding. For these fixtures that is correct — they are
++// JSON captured by another repository, they declare no binding, and the guard
++// reports on what this module's Go build compiles. The rule it costs is the
++// general one: a .go file placed under this directory would be invisible to the
++// guard, so no Go source belongs here.
++//
++//go:embed testdata/goldens/*.json
++var goldenFS embed.FS
++
++const goldensDir = "testdata/goldens"
++
++// GoldenSchemaVersion is the version every fixture in this package carries. It
++// exists so a fixture written against an older shape fails loudly instead of
++// unmarshalling into zero values that compare equal to nothing.
++const GoldenSchemaVersion = 1
++
++// Capture is the provenance of one golden: where it came from, at which commit,
++// and under exactly what parent environment.
++//
++// SourceCommit is the field that makes a golden able to settle an argument. A
++// port that disagrees with a golden is either a wrong port or a stale golden,
++// and without the commit there is no way to tell which — the fixture becomes a
++// number somebody once believed.
++type Capture struct {
++	// SourceRepo and SourceCommit identify the checkout the capture ran in.
++	SourceRepo   string `json:"source_repo"`
++	SourceCommit string `json:"source_commit"`
++	// SourceHarness is the test that produced it, and CaptureEnvVar the
++	// variable that un-skips it, so the capture is repeatable from the golden
++	// alone.
++	SourceHarness string `json:"source_harness"`
++	CaptureEnvVar string `json:"capture_env_var"`
++	// CapturedBy is the task this repository ran the capture under.
++	CapturedBy string `json:"captured_by"`
++	// ParentEnv is the environment the capture process ran with, minus
++	// ParentEnvOmitted. EnvAdded and EnvRemoved are a diff against exactly
++	// this, so a port test that wants a comparable diff feeds this value to
++	// LaunchRequest.Env rather than inventing a baseline.
++	//
++	// It is pinned and synthetic rather than a developer's real environment:
++	// the source harness diffs against os.Environ(), so an unpinned capture
++	// would record whichever session variables the operator's shell happened
++	// to carry, and a key the plugin strips would be provably stripped only on
++	// the machine that happened to set it.
++	ParentEnv []string `json:"parent_env"`
++	// ParentEnvOmitted names the variables the capture process needed but that
++	// are not in ParentEnv, each with the reason. They are all pass-through:
++	// no filter under capture touches them, so they appear in neither EnvAdded
++	// nor EnvRemoved and omitting them changes no diff — while keeping them
++	// would write this machine's home directory into a fixture.
++	ParentEnvOmitted []string `json:"parent_env_omitted"`
++	// MaskRules are the rules applied, by name, matching MaskRules().
++	MaskRules []string `json:"mask_rules"`
++	// Placeholders are the mask placeholders this golden actually contains, so
++	// a port test can see how many temp slots it has to reproduce without
++	// grepping the fixture.
++	Placeholders []string `json:"placeholders"`
++}
++
++// Golden is one captured (system, mode) launch surface plus its provenance.
++type Golden struct {
++	SchemaVersion int `json:"schema_version"`
++	// ID is the source harness's own subtest key, verbatim — "claude/prompt-mode",
++	// "codex/exec-native-shim". Keeping the source's spelling is what lets a
++	// reader match a fixture to a line in parity_capture_test.go without a
++	// translation table.
++	ID string `json:"id"`
++	// System is the source's agent identifier and Case its variant within a
++	// mode. LaunchMode is the agentic.LaunchMode the case belongs to; several
++	// cases map onto one mode, which is why Case exists at all.
++	System     string  `json:"system"`
++	Case       string  `json:"case"`
++	LaunchMode string  `json:"launch_mode"`
++	Capture    Capture `json:"capture"`
++	// Surface is the masked launch surface. It is what Compare compares.
++	Surface Snapshot `json:"surface"`
++}
++
++// FileName is the fixture file this golden is stored as.
++func (g Golden) FileName() string {
++	return strings.ReplaceAll(g.ID, "/", "_") + ".json"
++}
++
++// Load returns one golden by its source subtest key.
++func Load(id string) (Golden, error) {
++	all, err := LoadAll()
++	if err != nil {
++		return Golden{}, err
++	}
++	g, ok := all[id]
++	if !ok {
++		return Golden{}, fmt.Errorf("parity: no golden for %q; captured ids are %v", id, sortedIDs(all))
++	}
++	return g, nil
++}
++
++// LoadAll returns every embedded golden, keyed by ID.
++//
++// A fixture that does not parse, or whose declared ID disagrees with its file
++// name, is an error rather than a skipped entry. A parity suite that silently
++// covers one combination fewer than it believes is the failure mode this whole
++// package exists to prevent, and a malformed read is not an absence.
++func LoadAll() (map[string]Golden, error) {
++	return loadDir(goldenFS, goldensDir)
++}
++
++// loadDir is LoadAll over any filesystem, so the loader's REFUSALS can be
++// driven from a test directory. Proving them against the embedded fixtures is
++// impossible by construction: those fixtures are valid, and a refusal path that
++// nothing malformed ever reaches is a refusal nobody has seen work.
++func loadDir(fsys fs.FS, dir string) (map[string]Golden, error) {
++	entries, err := fs.ReadDir(fsys, dir)
++	if err != nil {
++		return nil, fmt.Errorf("parity: reading goldens in %s: %w", dir, err)
++	}
++	out := make(map[string]Golden, len(entries))
++	for _, entry := range entries {
++		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
++			continue
++		}
++		data, err := fs.ReadFile(fsys, path.Join(dir, entry.Name()))
++		if err != nil {
++			return nil, fmt.Errorf("parity: reading golden %s: %w", entry.Name(), err)
++		}
++		var g Golden
++		decoder := json.NewDecoder(strings.NewReader(string(data)))
++		decoder.DisallowUnknownFields()
++		if err := decoder.Decode(&g); err != nil {
++			return nil, fmt.Errorf("parity: decoding golden %s: %w", entry.Name(), err)
++		}
++		if g.SchemaVersion != GoldenSchemaVersion {
++			return nil, fmt.Errorf("parity: golden %s declares schema version %d, this package reads %d",
++				entry.Name(), g.SchemaVersion, GoldenSchemaVersion)
++		}
++		if g.FileName() != entry.Name() {
++			return nil, fmt.Errorf("parity: golden %s declares id %q, which belongs in %s",
++				entry.Name(), g.ID, g.FileName())
++		}
++		if _, duplicate := out[g.ID]; duplicate {
++			return nil, fmt.Errorf("parity: two goldens claim id %q", g.ID)
++		}
++		out[g.ID] = g
++	}
++	if len(out) == 0 {
++		return nil, fmt.Errorf("parity: no goldens found in %s", dir)
++	}
++	return out, nil
++}
++
++func sortedIDs(all map[string]Golden) []string {
++	ids := make([]string, 0, len(all))
++	for id := range all {
++		ids = append(ids, id)
++	}
++	sort.Strings(ids)
++	return ids
++}
+diff --git a/pkg/agentic/parity/golden_test.go b/pkg/agentic/parity/golden_test.go
+new file mode 100644
+index 0000000..e3d4a6a
+--- /dev/null
++++ b/pkg/agentic/parity/golden_test.go
+@@ -0,0 +1,330 @@
++package parity
++
++import (
++	"encoding/json"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++// sourceHarnessCases is the combination list the SOURCE harness captures,
++// transcribed from the capture calls in
++// skill-project-management/tools/board-cli/internal/spawn/parity_capture_test.go.
++//
++// It is written out here rather than derived from the fixtures on purpose. A
++// coverage check that reads the fixture directory and reports what it finds
++// answers "did I load what is there", which is true of an empty directory too.
++// This list is what makes a MISSING golden a failure: a capture run that
++// silently dropped a combination — a t.Skipf inside one of the source's own
++// cases, a generator that swallowed an id — otherwise leaves the suite green
++// and that combination unproven.
++var sourceHarnessCases = []string{
++	"claude/prompt-mode",
++	"claude/goal-mode",
++	"codex/exec-default-path",
++	"codex/exec-managed-npm-path",
++	"codex/exec-native-shim",
++	"codex/dry-run",
++	"qwen/exec",
++	"qwen/dry-run",
++	"muse/exec",
++	"muse/dry-run",
++	"gemini/exec",
++	"gemini/dry-run",
++	"agy/exec",
++	"agy/dry-run",
++}
++
++func loadGoldens(t *testing.T) map[string]Golden {
++	t.Helper()
++	all, err := LoadAll()
++	if err != nil {
++		t.Fatalf("LoadAll: %v", err)
++	}
++	return all
++}
++
++func goldenByID(t *testing.T, id string) Golden {
++	t.Helper()
++	g, err := Load(id)
++	if err != nil {
++		t.Fatalf("Load(%q): %v", id, err)
++	}
++	return g
++}
++
++func TestEverySourceCombinationHasAGolden(t *testing.T) {
++	all := loadGoldens(t)
++	for _, id := range sourceHarnessCases {
++		if _, ok := all[id]; !ok {
++			t.Errorf("no golden for %q, which the source harness captures; a port of it would have nothing to prove itself against. present=%v", id, sortedIDs(all))
++		}
++	}
++	// Set equality, not only membership: a fixture nobody transcribed above is
++	// either a case the source grew — which the ports need to know about — or a
++	// fixture generated inside this repository, which is the one thing a golden
++	// may never be.
++	expected := map[string]bool{}
++	for _, id := range sourceHarnessCases {
++		expected[id] = true
++	}
++	for id := range all {
++		if !expected[id] {
++			t.Errorf("golden %q corresponds to no capture call in the source harness; either the source grew a case and this list is stale, or something in this repository generated a fixture", id)
++		}
++	}
++}
++
++func TestEveryGoldenRecordsItsProvenance(t *testing.T) {
++	for id, g := range loadGoldens(t) {
++		if strings.TrimSpace(g.Capture.SourceCommit) == "" {
++			t.Errorf("%s: no source commit; a golden whose provenance is unknown cannot settle a dispute about what the source did", id)
++		}
++		if len(g.Capture.SourceCommit) != 40 {
++			t.Errorf("%s: source commit %q is not a full 40-character sha; an abbreviation can turn ambiguous as the source's history grows", id, g.Capture.SourceCommit)
++		}
++		if !strings.Contains(g.Capture.SourceHarness, "parity_capture_test.go") {
++			t.Errorf("%s: source harness %q does not name the source's capture test; the fixture cannot be re-derived from itself", id, g.Capture.SourceHarness)
++		}
++		if g.Capture.CaptureEnvVar == "" {
++			t.Errorf("%s: no capture env var recorded; the harness that produced this is skipped without one, so the fixture is not reproducible from the file alone", id)
++		}
++		if len(g.Capture.ParentEnv) == 0 {
++			t.Errorf("%s: no parent environment recorded; env_added and env_removed are a diff, and a diff with no recorded baseline is a number", id)
++		}
++		if len(g.Capture.ParentEnvOmitted) == 0 {
++			t.Errorf("%s: no parent-environment omissions recorded; the capture process needed variables that are not in parent_env, and an unstated omission is indistinguishable from an absence", id)
++		}
++		if !equalStrings(g.Capture.MaskRules, maskRuleNames()) {
++			t.Errorf("%s: recorded mask rules %v are not this package's rules %v; the fixture was masked by something other than the code that will compare it", id, g.Capture.MaskRules, maskRuleNames())
++		}
++	}
++}
++
++// TestEveryGoldenEnvEntryIsAccountedFor holds the parent environment a golden
++// records to the diff it is supposed to explain.
++//
++// Every env_removed entry must appear in parent_env: removal means "the parent
++// had it, the child does not", so an entry that was never in the recorded
++// parent means the diff was taken against a baseline the fixture does not
++// carry — the case where a port reproduces the plan correctly and fails anyway,
++// with nothing in the failure saying why.
++func TestEveryGoldenEnvEntryIsAccountedFor(t *testing.T) {
++	for id, g := range loadGoldens(t) {
++		parent := map[string]bool{}
++		for _, entry := range g.Capture.ParentEnv {
++			parent[entry] = true
++		}
++		for _, entry := range g.Surface.EnvRemoved {
++			if !parent[entry] {
++				t.Errorf("%s: env_removed carries %q, which is not in the recorded parent_env; this fixture's diff was taken against a baseline it does not record", id, entry)
++			}
++		}
++		for _, entry := range g.Surface.EnvAdded {
++			if parent[entry] {
++				t.Errorf("%s: env_added carries %q, which the recorded parent already had; an entry present on both sides is not an addition", id, entry)
++			}
++		}
++	}
++}
++
++// TestGoldenSurfacesCarryNoMachineLocalPaths is the leak check on masking.
++//
++// It scans the SURFACE only. The provenance block legitimately names the source
++// harness file and its test function, and a check that swept the whole file
++// would either fail on that or be weakened until it passed — which is how a
++// leak check stops checking.
++func TestGoldenSurfacesCarryNoMachineLocalPaths(t *testing.T) {
++	home, err := os.UserHomeDir()
++	if err != nil {
++		t.Fatalf("UserHomeDir: %v", err)
++	}
++	forbidden := []string{home, "/var/folders/", "TestCaptureLaunchSurface", ".temp/parity-capture"}
++	for id, g := range loadGoldens(t) {
++		for _, field := range snapshotStrings(g.Surface) {
++			for _, literal := range forbidden {
++				if literal != "" && strings.Contains(field, literal) {
++					t.Errorf("%s: surface carries machine-local literal %q inside %q; this fixture reproduces on one machine only", id, literal, field)
++				}
++			}
++		}
++	}
++}
++
++// TestGoldensAreAlreadyFullyMasked proves the fixtures sit in the masked
++// vocabulary rather than merely near it: masking an already-masked surface with
++// no substitutions must change nothing, and a golden must compare equal to
++// itself.
++//
++// The second half is not a tautology worth skipping. Compare reporting
++// differences between two identical values would make every port failure
++// unreadable; Compare reporting NOTHING between two different values is what
++// TestCompareReportsEveryField covers.
++func TestGoldensAreAlreadyFullyMasked(t *testing.T) {
++	for id, g := range loadGoldens(t) {
++		if diffs := Compare(g.Surface, Mask(g.Surface, Substitutions{})); len(diffs) != 0 {
++			t.Errorf("%s: re-masking changed the surface: %v", id, diffs)
++		}
++		if diffs := Compare(g.Surface, g.Surface); len(diffs) != 0 {
++			t.Errorf("%s: a golden does not compare equal to itself: %v", id, diffs)
++		}
++	}
++}
++
++// TestGoldenLaunchModeAgreesWithTheStdinMarker re-checks on load what
++// launchModeForCase checked at generation. The two happen at different times —
++// generation runs once on an operator's machine, this runs on every suite — and
++// a fixture hand-edited into disagreement would otherwise be a mislabelled
++// contract that nothing notices.
++func TestGoldenLaunchModeAgreesWithTheStdinMarker(t *testing.T) {
++	for id, g := range loadGoldens(t) {
++		dryRun := g.LaunchMode == "dry-run"
++		marker := g.Surface.StdinKind == StdinDryRun
++		if dryRun != marker {
++			t.Errorf("%s: launch_mode %q and stdin_kind %q disagree about which source capture path produced this", id, g.LaunchMode, g.Surface.StdinKind)
++		}
++		if dryRun && (len(g.Surface.EnvAdded) > 0 || len(g.Surface.EnvRemoved) > 0) {
++			t.Errorf("%s: a dry-run golden carries an environment diff, but the source's dry-run capture path builds no command and observes no environment; this fixture claims a measurement that was never taken", id)
++		}
++	}
++}
++
++// TestLoadRefusesAnUnknownID is the refusal half of Load. Returning a zero
++// Golden for a typo'd id would give a port a surface of empty strings to
++// compare against, and empty compares equal to an empty plan.
++func TestLoadRefusesAnUnknownID(t *testing.T) {
++	if _, err := Load("claude/prompt_mode"); err == nil {
++		t.Fatal("Load accepted an id no golden carries; a zero Golden would let a port prove itself against an empty surface")
++	}
++}
++
++// TestLoadDirRefusesAMalformedFixture is the negative side of the loader.
++//
++// Its contract is that a fixture which does not parse, declares the wrong
++// schema version, carries a field the reader does not know, or sits under the
++// wrong name is an ERROR rather than a skipped entry — a parity suite silently
++// covering one combination fewer than it believes is the exact failure this
++// package exists to prevent, and a failed read is not a legitimate absence.
++// Loading the real fixtures proves the reading path; only these prove the
++// refusals.
++func TestLoadDirRefusesAMalformedFixture(t *testing.T) {
++	valid := goldenByID(t, "muse/exec")
++
++	structured := []struct {
++		name    string
++		mutate  func(g *Golden) string
++		wantErr string
++	}{
++		{
++			name:    "wrong schema version",
++			mutate:  func(g *Golden) string { g.SchemaVersion = GoldenSchemaVersion + 1; return g.FileName() },
++			wantErr: "schema version",
++		},
++		{
++			name:    "id disagrees with file name",
++			mutate:  func(g *Golden) string { return "muse_something-else.json" },
++			wantErr: "belongs in",
++		},
++	}
++	for _, tc := range structured {
++		t.Run(tc.name, func(t *testing.T) {
++			g := valid
++			name := tc.mutate(&g)
++			dir := t.TempDir()
++			data, err := json.MarshalIndent(g, "", "  ")
++			if err != nil {
++				t.Fatalf("marshal: %v", err)
++			}
++			if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
++				t.Fatalf("WriteFile: %v", err)
++			}
++			if _, err := loadDir(os.DirFS(dir), "."); err == nil {
++				t.Fatalf("the loader accepted a fixture with %s", tc.name)
++			} else if !strings.Contains(err.Error(), tc.wantErr) {
++				t.Errorf("the refusal does not say what was wrong: got %v, want it to mention %q", err, tc.wantErr)
++			}
++		})
++	}
++
++	raw := []struct {
++		name string
++		body string
++		why  string
++	}{
++		{
++			name: "unparseable json",
++			body: "{not json",
++			why:  "a file that cannot be read is not a combination that is absent",
++		},
++		{
++			name: `{"schema_version":1,"id":"muse/exec","system":"muse","case":"exec","launch_mode":"exec","capture":{},"surface":{"binary":"x","args":[],"stdin_kind":"none"},"tolerance":"0.5"}`,
++			body: `{"schema_version":1,"id":"muse/exec","system":"muse","case":"exec","launch_mode":"exec","capture":{},"surface":{"binary":"x","args":[],"stdin_kind":"none"},"tolerance":"0.5"}`,
++			why:  "a field the reader does not know is a contract term silently dropped",
++		},
++	}
++	for _, tc := range raw {
++		t.Run(tc.why, func(t *testing.T) {
++			dir := t.TempDir()
++			if err := os.WriteFile(filepath.Join(dir, "muse_exec.json"), []byte(tc.body), 0o644); err != nil {
++				t.Fatalf("WriteFile: %v", err)
++			}
++			if _, err := loadDir(os.DirFS(dir), "."); err == nil {
++				t.Fatalf("the loader accepted the fixture; %s", tc.why)
++			}
++		})
++	}
++
++	t.Run("no fixtures at all", func(t *testing.T) {
++		if _, err := loadDir(os.DirFS(t.TempDir()), "."); err == nil {
++			t.Fatal("the loader reported success over a directory holding no fixtures; a suite proving nothing must not look like a suite that passed")
++		}
++	})
++}
++
++// TestFixturesReadmeNamesWhatTheGoldensDoNotProve holds the boundary document
++// to the fixtures it describes.
++//
++// The port tasks read that README to learn where the goldens stop. A README
++// that drifts from the fixtures — a stale source commit, an uncaptured surface
++// nobody wrote down — is prose a reader trusts with nothing holding it to the
++// code, which is the same defect as an unpinned mask one level up.
++func TestFixturesReadmeNamesWhatTheGoldensDoNotProve(t *testing.T) {
++	body, err := os.ReadFile(filepath.Join("testdata", "goldens", "README.md"))
++	if err != nil {
++		t.Fatalf("reading the fixtures README: %v", err)
++	}
++	text := string(body)
++
++	// The commit the README quotes must be the commit the fixtures carry.
++	for id, g := range loadGoldens(t) {
++		if !strings.Contains(text, g.Capture.SourceCommit) {
++			t.Fatalf("the README does not name the commit %s was captured at (%s); a boundary document quoting a different capture than the fixtures is worse than none", id, g.Capture.SourceCommit)
++		}
++	}
++
++	// The two surfaces the source could not capture, with the reason each is
++	// missing rather than only the fact.
++	mustName := []string{
++		"managed-session-args",
++		"TestManagedCodexSpawnArgsMatchesTheHistoricalConstruction",
++		"interactive-manager-client argv passthrough",
++		"LaunchModeManagedSession",
++		"sanitizeCodexPath",
++		"testdata",
++	}
++	for _, needle := range mustName {
++		if !strings.Contains(text, needle) {
++			t.Errorf("the fixtures README does not mention %q; a port would read the absence of a golden for it as permission rather than as an uncovered surface", needle)
++		}
++	}
++
++	// And every combination that IS captured must appear, so the coverage table
++	// cannot quietly fall behind the directory.
++	for _, id := range sourceHarnessCases {
++		system, kase, _ := strings.Cut(id, "/")
++		if !strings.Contains(text, "`"+kase+"`") || !strings.Contains(text, system) {
++			t.Errorf("the README's coverage table does not list %q", id)
++		}
++	}
++}
+diff --git a/pkg/agentic/parity/goldens_generate_test.go b/pkg/agentic/parity/goldens_generate_test.go
+new file mode 100644
+index 0000000..c91cb7b
+--- /dev/null
++++ b/pkg/agentic/parity/goldens_generate_test.go
+@@ -0,0 +1,116 @@
++package parity
++
++import (
++	"encoding/json"
++	"os"
++	"path/filepath"
++	"sort"
++	"testing"
++)
++
++// TestWriteGoldensFromCapture regenerates testdata/goldens from one run of the
++// SOURCE repository's capture harness.
++//
++// It is gated the same way the source gates its own capture — skipped unless
++// PARITY_GOLDEN_CAPTURE_IN is set — so the ordinary suite never rewrites the
++// fixtures it is supposed to be checked against. .scripts/capture-parity-goldens.sh
++// is what sets the three variables; running this test by hand is possible and
++// deliberately inconvenient.
++//
++// It is also the production call site for GoldensFromCapture and
++// DiscoverSubstitutions, which exist for no other caller.
++func TestWriteGoldensFromCapture(t *testing.T) {
++	capturePath := os.Getenv("PARITY_GOLDEN_CAPTURE_IN")
++	if capturePath == "" {
++		t.Skip("set PARITY_GOLDEN_CAPTURE_IN (and PARITY_GOLDEN_META_IN, PARITY_GOLDEN_OUT) to regenerate the goldens; .scripts/capture-parity-goldens.sh does it properly")
++	}
++	metaPath := os.Getenv("PARITY_GOLDEN_META_IN")
++	outDir := os.Getenv("PARITY_GOLDEN_OUT")
++	if metaPath == "" || outDir == "" {
++		t.Fatal("PARITY_GOLDEN_CAPTURE_IN is set but PARITY_GOLDEN_META_IN or PARITY_GOLDEN_OUT is not; regenerating from a capture whose provenance was not supplied is exactly the fixture this package refuses to write")
++	}
++
++	var raw map[string]Snapshot
++	readJSON(t, capturePath, &raw)
++
++	// The on-disk shape of GenerationMeta, kept as its own type so the script
++	// that writes it and the package that reads it share one spelling.
++	var meta struct {
++		SourceRepo        string   `json:"source_repo"`
++		SourceCommit      string   `json:"source_commit"`
++		SourceHarness     string   `json:"source_harness"`
++		CaptureEnvVar     string   `json:"capture_env_var"`
++		CapturedBy        string   `json:"captured_by"`
++		ParentEnv         []string `json:"parent_env"`
++		ParentEnvOmitted  []string `json:"parent_env_omitted"`
++		TempRoot          string   `json:"temp_root"`
++		StubBinDir        string   `json:"stub_bin_dir"`
++		ForbiddenLiterals []string `json:"forbidden_literals"`
++	}
++	readJSON(t, metaPath, &meta)
++
++	parentEnv := append([]string(nil), meta.ParentEnv...)
++	sort.Strings(parentEnv)
++
++	goldens, err := GoldensFromCapture(raw, GenerationMeta{
++		SourceRepo:       meta.SourceRepo,
++		SourceCommit:     meta.SourceCommit,
++		SourceHarness:    meta.SourceHarness,
++		CaptureEnvVar:    meta.CaptureEnvVar,
++		CapturedBy:       meta.CapturedBy,
++		ParentEnv:        parentEnv,
++		ParentEnvOmitted: meta.ParentEnvOmitted,
++		Layout: CaptureLayout{
++			TempRoot:          meta.TempRoot,
++			StubBinDir:        meta.StubBinDir,
++			ForbiddenLiterals: meta.ForbiddenLiterals,
++		},
++	})
++	if err != nil {
++		t.Fatalf("GoldensFromCapture: %v", err)
++	}
++
++	if err := os.MkdirAll(outDir, 0o755); err != nil {
++		t.Fatalf("MkdirAll(%s): %v", outDir, err)
++	}
++	// Every fixture the capture did not produce is removed rather than left
++	// behind. A stale golden for a combination the source no longer captures is
++	// a contract nobody is maintaining, and the port that proves itself against
++	// it learns nothing.
++	stale, err := filepath.Glob(filepath.Join(outDir, "*.json"))
++	if err != nil {
++		t.Fatalf("Glob(%s): %v", outDir, err)
++	}
++	written := map[string]bool{}
++	for _, g := range goldens {
++		path := filepath.Join(outDir, g.FileName())
++		data, err := json.MarshalIndent(g, "", "  ")
++		if err != nil {
++			t.Fatalf("marshal %s: %v", g.ID, err)
++		}
++		if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
++			t.Fatalf("WriteFile(%s): %v", path, err)
++		}
++		written[path] = true
++		t.Logf("wrote %s (%s, %s)", g.FileName(), g.ID, g.LaunchMode)
++	}
++	for _, path := range stale {
++		if !written[path] {
++			if err := os.Remove(path); err != nil {
++				t.Fatalf("Remove stale %s: %v", path, err)
++			}
++			t.Logf("removed stale %s", filepath.Base(path))
++		}
++	}
++}
++
++func readJSON(t *testing.T, path string, into any) {
++	t.Helper()
++	data, err := os.ReadFile(path)
++	if err != nil {
++		t.Fatalf("ReadFile(%s): %v", path, err)
++	}
++	if err := json.Unmarshal(data, into); err != nil {
++		t.Fatalf("Unmarshal(%s): %v", path, err)
++	}
++}
+diff --git a/pkg/agentic/parity/mask.go b/pkg/agentic/parity/mask.go
+new file mode 100644
+index 0000000..66f9f86
+--- /dev/null
++++ b/pkg/agentic/parity/mask.go
+@@ -0,0 +1,161 @@
++package parity
++
++import (
++	"fmt"
++	"sort"
++	"strings"
++)
++
++// MaskRule is one machine-local thing a captured surface contains that the
++// contract does not.
++//
++// The set is CLOSED and frozen by TestMaskRuleSetIsFrozen. Adding a rule is
++// the edit that makes parity evidence rot — every widening makes one more real
++// difference invisible while the suite stays green — so it costs a deliberate
++// change to a pinned literal plus the Why sentence that has to survive review.
++type MaskRule struct {
++	// Name is the rule's stable identifier, recorded in every golden it was
++	// applied to.
++	Name string
++	// Why states what makes the thing it masks noise rather than contract. A
++	// rule that cannot answer this is a difference being hidden.
++	Why string
++}
++
++// maskRules is the frozen set. Order is the order Mask applies them in, which
++// matters only in that longer, more specific literals must be substituted
++// before shorter prefixes of themselves; Mask enforces that by length rather
++// than by trusting this order.
++var maskRules = []MaskRule{
++	{
++		Name: "capture-temp-slot",
++		Why: "the source harness allocates its bin, work and package-root directories with testing.T.TempDir, " +
++			"whose path carries the subtest name and a per-run random number. Two runs of identical code produce " +
++			"different paths, so the literal is noise; WHICH slot a path came from is contract, and the " +
++			"<TMPDIR:N> placeholders keep it.",
++	},
++	{
++		Name: "capture-stub-bin-dir",
++		Why: "the capture seeds PATH with a directory of stub executables so binary resolution is hermetic — the " +
++			"source's own setHermeticAgentPath technique. Where that directory sits is the capture operator's " +
++			"choice; that resolution landed in it rather than on a real installed binary is the fact worth keeping.",
++	},
++	{
++		Name: "path-env-excluded",
++		Why: "PATH is excluded from the environment diff entirely, ported verbatim from the source harness's " +
++			"diffEnv. It is the seeded value from the rule above, so it differs run to run for reasons unrelated " +
++			"to any port. The residual this leaves open — a port that changes what it strips FROM PATH — is " +
++			"named in testdata/goldens/README.md rather than left for a reader to discover.",
++	},
++}
++
++// MaskRules returns the frozen rule set.
++func MaskRules() []MaskRule { return append([]MaskRule(nil), maskRules...) }
++
++// Substitutions are the concrete machine-local directories ONE capture run or
++// ONE plan-building test used. They are the input to the first two mask rules;
++// the third needs none, because excluding PATH needs no knowledge of its value.
++//
++// Both sides of a parity comparison fill this in with their own directories and
++// get the same placeholders out, which is the only arrangement under which a
++// golden captured on one machine can be compared to a plan built on another.
++type Substitutions struct {
++	// TempSlots are the temp directories in allocation order: index 0 becomes
++	// <TMPDIR:1>. The source harness allocates them in a fixed order per
++	// capture case — bin directory, then work directory, then any case-specific
++	// root — so the index is stable and a port test reproduces it by allocating
++	// the same number of directories in the same order.
++	TempSlots []string
++	// StubBinDir is the PATH-seeded stub directory, or empty when the case
++	// resolved no binary through PATH.
++	StubBinDir string
++}
++
++// The placeholder vocabulary. It is closed: TestMaskRuleSetIsFrozen pins the
++// rules and TestGoldensCarryNoMachineLocalPaths pins that nothing else leaked
++// through into a golden.
++const (
++	// PlaceholderStubBinDir stands for Substitutions.StubBinDir.
++	PlaceholderStubBinDir = "<PARITY-BIN>"
++	// tempSlotPlaceholderFormat stands for Substitutions.TempSlots[N-1].
++	tempSlotPlaceholderFormat = "<TMPDIR:%d>"
++)
++
++// TempSlotPlaceholder is the placeholder for the nth temp slot, 1-based, so a
++// caller reading a golden can name the slot it has to reproduce.
++func TempSlotPlaceholder(n int) string { return fmt.Sprintf(tempSlotPlaceholderFormat, n) }
++
++// replacement is one literal-to-placeholder substitution.
++type replacement struct {
++	literal     string
++	placeholder string
++}
++
++func (s Substitutions) replacements() []replacement {
++	out := make([]replacement, 0, len(s.TempSlots)+1)
++	for i, dir := range s.TempSlots {
++		if strings.TrimSpace(dir) == "" {
++			continue
++		}
++		out = append(out, replacement{literal: dir, placeholder: TempSlotPlaceholder(i + 1)})
++	}
++	if strings.TrimSpace(s.StubBinDir) != "" {
++		out = append(out, replacement{literal: s.StubBinDir, placeholder: PlaceholderStubBinDir})
++	}
++	// Longest literal first. A temp root and a slot beneath it share a prefix,
++	// and substituting the shorter one first would leave the longer one
++	// half-rewritten — a masked path that matches nothing, which reads as a
++	// real difference and sends the next reader hunting a port bug that is not
++	// there.
++	sort.SliceStable(out, func(i, j int) bool { return len(out[i].literal) > len(out[j].literal) })
++	return out
++}
++
++// maskedFields names every Snapshot field Mask is allowed to rewrite.
++//
++// It is frozen by TestMaskingCoversExactlyTheDeclaredFields, which plants a
++// maskable literal in EVERY field and asserts exactly this set changed. That
++// is the pin the task asks for: masking that silently widens to a new field —
++// StdinKind, say — would start hiding differences in a field nobody agreed to
++// stop comparing, and this list is where that widening has to be written down.
++var maskedFields = []string{"Binary", "Args", "EnvAdded", "EnvRemoved", "StdinData", "Error"}
++
++// MaskedFields returns the frozen list of Snapshot fields masking rewrites.
++func MaskedFields() []string { return append([]string(nil), maskedFields...) }
++
++// Mask rewrites the machine-local literals in snap into placeholders.
++//
++// It does NOT apply the PATH exclusion: that rule lives in DiffEnv, because it
++// has to act while the diff is being computed rather than on its result. Both
++// are named in MaskRules so the reader gets one list rather than two.
++func Mask(snap Snapshot, subs Substitutions) Snapshot {
++	reps := subs.replacements()
++	apply := func(s string) string {
++		for _, r := range reps {
++			s = strings.ReplaceAll(s, r.literal, r.placeholder)
++		}
++		return s
++	}
++	applyAll := func(in []string) []string {
++		if in == nil {
++			return nil
++		}
++		out := make([]string, len(in))
++		for i, s := range in {
++			out[i] = apply(s)
++		}
++		return out
++	}
++	// Field by field, and deliberately not by reflection over every string
++	// field: a field added to Snapshot must be a decision about whether it is
++	// maskable, and reflection would answer that decision "yes" by default.
++	return Snapshot{
++		Binary:     apply(snap.Binary),
++		Args:       applyAll(snap.Args),
++		EnvAdded:   applyAll(snap.EnvAdded),
++		EnvRemoved: applyAll(snap.EnvRemoved),
++		StdinKind:  snap.StdinKind,
++		StdinData:  apply(snap.StdinData),
++		Error:      apply(snap.Error),
++	}
++}
+diff --git a/pkg/agentic/parity/mask_test.go b/pkg/agentic/parity/mask_test.go
+new file mode 100644
+index 0000000..684f8d5
+--- /dev/null
++++ b/pkg/agentic/parity/mask_test.go
+@@ -0,0 +1,184 @@
++package parity
++
++import (
++	"reflect"
++	"strings"
++	"testing"
++)
++
++// TestMaskRuleSetIsFrozen is the pin the parity mechanism rests on.
++//
++// Masking is the one place where a real difference can be made invisible while
++// every test stays green. One widening at a time — "this path varies too", "so
++// does this id" — and the goldens end up proving that two things agree about
++// the fields nobody masked yet. The rule set is therefore a frozen literal:
++// adding a rule costs an edit here plus the Why sentence that has to survive
++// review, which is the smallest price at which the erosion stops being silent.
++//
++// If this test fails, do not update the literal to match. Read the new rule's
++// Why first, and decide whether the thing it hides is genuinely machine-local
++// noise or a difference between the source and the port.
++func TestMaskRuleSetIsFrozen(t *testing.T) {
++	frozen := []string{"capture-temp-slot", "capture-stub-bin-dir", "path-env-excluded"}
++	got := MaskRules()
++	if len(got) != len(frozen) {
++		t.Fatalf("the mask rule set has %d rules, frozen at %d: %v", len(got), len(frozen), maskRuleNames())
++	}
++	for i, want := range frozen {
++		if got[i].Name != want {
++			t.Errorf("mask rule %d is %q, frozen as %q", i, got[i].Name, want)
++		}
++		if strings.TrimSpace(got[i].Why) == "" {
++			t.Errorf("mask rule %q states no reason; a rule that cannot say what makes the thing it hides noise is a difference being suppressed", got[i].Name)
++		}
++	}
++}
++
++// TestMaskingCoversExactlyTheDeclaredFields is the other half of the pin: not
++// which rules exist, but which FIELDS they are allowed to touch.
++//
++// A maskable literal is planted in every string-bearing field of a Snapshot at
++// once, and exactly the declared fields must come back changed. A masker that
++// silently widened to StdinKind — or that quietly stopped masking Error —
++// fails here, because this drives the real Mask and compares the whole struct
++// field by field rather than checking the fields it already expects.
++func TestMaskingCoversExactlyTheDeclaredFields(t *testing.T) {
++	const literal = "/machine/local/slot"
++	planted := Snapshot{
++		Binary:     literal + "/bin",
++		Args:       []string{"--dir", literal},
++		EnvAdded:   []string{"ADDED=" + literal},
++		EnvRemoved: []string{"REMOVED=" + literal},
++		StdinKind:  literal,
++		StdinData:  "prompt at " + literal,
++		Error:      "cannot read " + literal,
++	}
++	masked := Mask(planted, Substitutions{TempSlots: []string{literal}})
++
++	declared := map[string]bool{}
++	for _, name := range MaskedFields() {
++		declared[name] = true
++	}
++	before := reflect.ValueOf(planted)
++	after := reflect.ValueOf(masked)
++	typ := before.Type()
++	for i := 0; i < typ.NumField(); i++ {
++		name := typ.Field(i).Name
++		changed := !reflect.DeepEqual(before.Field(i).Interface(), after.Field(i).Interface())
++		switch {
++		case declared[name] && !changed:
++			t.Errorf("MaskedFields declares %s maskable, but masking left it alone; a golden generated with this masker would carry a machine-local literal in %s", name, name)
++		case !declared[name] && changed:
++			t.Errorf("masking rewrote %s, which MaskedFields does not declare. Masking that widens to a new field starts hiding differences in a field nobody agreed to stop comparing — add it to maskedFields deliberately, with a reason, or stop masking it", name)
++		}
++	}
++
++	// And the declared list must name real fields, so a typo cannot quietly
++	// exempt a field from the check above.
++	for name := range declared {
++		if _, ok := typ.FieldByName(name); !ok {
++			t.Errorf("MaskedFields names %q, which is not a Snapshot field", name)
++		}
++	}
++}
++
++// TestEveryMaskRuleIsNecessary proves the bound by NARROWING the mask rather
++// than by deleting it.
++//
++// Dropping all substitutions would show only that masking does something. This
++// drops ONE rule's substitution at a time and requires that at least one real
++// golden stops matching — which pins WHICH rule carries which golden, so a
++// later edit that collapses two rules into one loose one is visible here rather
++// than in a port failure six weeks later.
++func TestEveryMaskRuleIsNecessary(t *testing.T) {
++	const (
++		fakeSlot1 = "/capture/slot-one"
++		fakeSlot2 = "/capture/slot-two"
++		fakeSlot3 = "/capture/slot-three"
++		fakeBin   = "/capture/stub-bin"
++	)
++	full := Substitutions{TempSlots: []string{fakeSlot1, fakeSlot2, fakeSlot3}, StubBinDir: fakeBin}
++
++	// unmask turns a golden surface back into what a capture on this fictional
++	// machine would have produced, so that re-masking it must reproduce the
++	// golden exactly and masking it with a NARROWED rule set must not.
++	unmask := func(snap Snapshot) Snapshot {
++		expand := func(s string) string {
++			s = strings.ReplaceAll(s, PlaceholderStubBinDir, fakeBin)
++			s = strings.ReplaceAll(s, TempSlotPlaceholder(1), fakeSlot1)
++			s = strings.ReplaceAll(s, TempSlotPlaceholder(2), fakeSlot2)
++			s = strings.ReplaceAll(s, TempSlotPlaceholder(3), fakeSlot3)
++			return s
++		}
++		expandAll := func(in []string) []string {
++			if in == nil {
++				return nil
++			}
++			out := make([]string, len(in))
++			for i, s := range in {
++				out[i] = expand(s)
++			}
++			return out
++		}
++		return Snapshot{
++			Binary: expand(snap.Binary), Args: expandAll(snap.Args),
++			EnvAdded: expandAll(snap.EnvAdded), EnvRemoved: expandAll(snap.EnvRemoved),
++			StdinKind: snap.StdinKind, StdinData: expand(snap.StdinData), Error: expand(snap.Error),
++		}
++	}
++
++	narrowings := []struct {
++		rule string
++		subs Substitutions
++	}{
++		{rule: "capture-temp-slot", subs: Substitutions{StubBinDir: fakeBin}},
++		{rule: "capture-stub-bin-dir", subs: Substitutions{TempSlots: full.TempSlots}},
++	}
++
++	all := loadGoldens(t)
++	for _, narrowed := range narrowings {
++		t.Run(narrowed.rule, func(t *testing.T) {
++			matchedAnyway := []string{}
++			bitAtLeastOnce := false
++			for id, g := range all {
++				raw := unmask(g.Surface)
++				if diffs := Compare(g.Surface, Mask(raw, full)); len(diffs) != 0 {
++					t.Fatalf("%s: the full rule set does not reproduce its own golden, so this narrowing proves nothing: %v", id, diffs)
++				}
++				if len(Compare(g.Surface, Mask(raw, narrowed.subs))) == 0 {
++					matchedAnyway = append(matchedAnyway, id)
++					continue
++				}
++				bitAtLeastOnce = true
++			}
++			if !bitAtLeastOnce {
++				t.Errorf("removing the %s substitution changed no golden's verdict; either the rule masks nothing any fixture contains, or two rules are covering for each other. still matched: %v", narrowed.rule, matchedAnyway)
++			}
++		})
++	}
++}
++
++// TestMaskSubstitutesLongerLiteralsFirst pins the one ordering decision inside
++// Mask. A temp root and a slot beneath it share a prefix; substituting the
++// shorter first leaves the longer one half-rewritten, and a half-masked path
++// matches nothing — it reads as a real difference and sends the next reader
++// hunting a port bug that is not there.
++func TestMaskSubstitutesLongerLiteralsFirst(t *testing.T) {
++	subs := Substitutions{TempSlots: []string{"/capture", "/capture/001"}}
++	masked := Mask(Snapshot{Binary: "/capture/001/codex"}, subs)
++	want := TempSlotPlaceholder(2) + "/codex"
++	if masked.Binary != want {
++		t.Errorf("Mask produced %q, want %q; the shorter literal was substituted first and left the longer one half-rewritten", masked.Binary, want)
++	}
++}
++
++// TestMaskIgnoresEmptySubstitutions holds the difference between "this case
++// used no stub bin directory" and "substitute the empty string everywhere".
++// The latter would splice a placeholder between every character of every field.
++func TestMaskIgnoresEmptySubstitutions(t *testing.T) {
++	snap := Snapshot{Binary: "codex", Args: []string{"exec"}}
++	masked := Mask(snap, Substitutions{TempSlots: []string{"", ""}, StubBinDir: "   "})
++	if diffs := Compare(snap, masked); len(diffs) != 0 {
++		t.Errorf("empty substitutions changed the snapshot: %v", diffs)
++	}
++}
+diff --git a/pkg/agentic/parity/plan_test.go b/pkg/agentic/parity/plan_test.go
+new file mode 100644
+index 0000000..16dcf21
+--- /dev/null
++++ b/pkg/agentic/parity/plan_test.go
+@@ -0,0 +1,359 @@
++package parity
++
++import (
++	"errors"
++	"strings"
++	"testing"
++
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
++)
++
++// This file drives the REAL entry point — agentic.BuildPlan, through a real
++// agentic.Registry — and compares the plan it returns to a golden captured by
++// the source repository. It is the shape every port task will use, demonstrated
++// once here so that the harness's ability to bite is established before the
++// first port depends on it.
++//
++// The systems below are PROBES, not ports. They exist to produce a plan this
++// package can compare; they are not the claude-code, codex or muse plugins, and
++// nothing outside this file registers them. A port lands its own System in its
++// own package and proves itself against the same golden through the same
++// ComparePlan call.
++
++const probeID agentic.SystemID = "parity-probe"
++
++// probeSystem is a System whose every answer is precomputed by a recipe. The
++// launch surface is therefore hand-written from the source's argv grammar,
++// which is what makes the comparison meaningful: a probe that read its argv
++// back out of the golden would prove only that JSON round-trips.
++type probeSystem struct {
++	caps agentic.Capabilities
++
++	binary    string
++	argv      []string
++	stripKeys []string
++	inject    []string
++	stdin     agentic.StdinPayload
++}
++
++func (p *probeSystem) ID() agentic.SystemID                                { return probeID }
++func (p *probeSystem) Capabilities() agentic.Capabilities                  { return p.caps }
++func (p *probeSystem) ResolveBinary(agentic.LaunchRequest) (string, error) { return p.binary, nil }
++
++func (p *probeSystem) Argv(agentic.LaunchRequest, agentic.LaunchMode) ([]string, error) {
++	return append([]string(nil), p.argv...), nil
++}
++
++func (p *probeSystem) ChildEnv(parent []string, _ agentic.LaunchRequest) ([]string, error) {
++	child := make([]string, 0, len(parent)+len(p.inject))
++	for _, entry := range parent {
++		key, _, _ := strings.Cut(entry, "=")
++		stripped := false
++		for _, drop := range p.stripKeys {
++			if key == drop {
++				stripped = true
++				break
++			}
++		}
++		if !stripped {
++			child = append(child, entry)
++		}
++	}
++	return append(child, p.inject...), nil
++}
++
++func (p *probeSystem) Stdin(agentic.LaunchRequest) (agentic.StdinPayload, error) {
++	return p.stdin, nil
++}
++
++func (p *probeSystem) ValidateComposition(c agentic.Composition) error {
++	if !c.IsZero() {
++		return errors.New("parity probe declares no composition grammar")
++	}
++	return nil
++}
++
++// probeRecipe builds one system plus the launch request and machine-local
++// directories that reproduce one golden.
++type probeRecipe struct {
++	goldenID string
++	// tempSlots is how many directories the source harness allocated for this
++	// case, in the same order. The golden's capture.placeholders block is where
++	// a port reads this number off rather than guessing it.
++	tempSlots int
++	usesStub  bool
++	mode      agentic.LaunchMode
++	build     func(dirs probeDirs) (*probeSystem, agentic.LaunchRequest)
++}
++
++// probeDirs are this test process's stand-ins for the capture's machine-local
++// directories. They are real t.TempDir values, so the masking under test is
++// doing real work rather than rewriting a literal that was already a
++// placeholder.
++type probeDirs struct {
++	temp []string
++	stub string
++}
++
++func (d probeDirs) substitutions() Substitutions {
++	return Substitutions{TempSlots: d.temp, StubBinDir: d.stub}
++}
++
++// parityProbeRecipes covers one golden of each shape the harness has to handle:
++// stdin bytes with an environment diff, no stdin with temp paths in argv, and a
++// dry run whose binary resolves through the PATH-seeded stub directory.
++var parityProbeRecipes = []probeRecipe{
++	{
++		goldenID:  "claude/prompt-mode",
++		tempSlots: 1,
++		mode:      agentic.LaunchModeExec,
++		build: func(dirs probeDirs) (*probeSystem, agentic.LaunchRequest) {
++			req := agentic.LaunchRequest{
++				System:  probeID,
++				Model:   agentic.Model{ID: "claude-opus-5", Effort: agentic.EffortSupportRequired},
++				Effort:  "high",
++				Prompt:  []byte("claude prompt-mode body"),
++				WorkDir: dirs.temp[0],
++			}
++			sys := &probeSystem{
++				caps: agentic.Capabilities{
++					LaunchModes:     []agentic.LaunchMode{agentic.LaunchModeExec},
++					EffortTransport: agentic.EffortTransportArgv,
++					DefaultHome:     "~/.claude",
++				},
++				binary: dirs.temp[0] + "/claude",
++				argv: []string{
++					"-p", "--output-format", "json",
++					"--model", req.Model.ID,
++					"--effort", req.Effort,
++					"--dangerously-skip-permissions",
++				},
++				stripKeys: []string{"CLAUDECODE", "TASK_BOARD_BOARD_DIR", "TASK_BOARD_DELIVERY_GOAL_ID", "TASK_BOARD_RUN_ID", "TASK_BOARD_TASK_ID"},
++				inject:    []string{"TASK_BOARD_RUN_ID=RUN-parity-claude", "TASK_BOARD_TASK_ID=TASK-parity-claude"},
++				stdin:     agentic.StdinPayload{Attached: true, Bytes: []byte("claude prompt-mode body")},
++			}
++			return sys, req
++		},
++	},
++	{
++		goldenID:  "muse/exec",
++		tempSlots: 2,
++		mode:      agentic.LaunchModeExec,
++		build: func(dirs probeDirs) (*probeSystem, agentic.LaunchRequest) {
++			req := agentic.LaunchRequest{
++				System:     probeID,
++				Model:      agentic.Model{ID: "muse-spark"},
++				PromptPath: dirs.temp[1] + "/prompt.md",
++				WorkDir:    dirs.temp[1],
++			}
++			sys := &probeSystem{
++				caps: agentic.Capabilities{
++					LaunchModes: []agentic.LaunchMode{agentic.LaunchModeExec},
++				},
++				binary: dirs.temp[0] + "/muse",
++				argv: []string{
++					"exec", "--json", "--yolo",
++					"--model", req.Model.ID,
++					"--workspace", req.WorkDir,
++					"--prompt-file", req.PromptPath,
++				},
++				stripKeys: []string{"TASK_BOARD_BOARD_DIR", "TASK_BOARD_DELIVERY_GOAL_ID", "TASK_BOARD_RUN_ID", "TASK_BOARD_TASK_ID"},
++				inject:    []string{"TASK_BOARD_RUN_ID=RUN-parity-muse", "TASK_BOARD_TASK_ID=TASK-parity-muse"},
++			}
++			return sys, req
++		},
++	},
++	{
++		goldenID:  "muse/dry-run",
++		tempSlots: 1,
++		usesStub:  true,
++		mode:      agentic.LaunchModeDryRun,
++		build: func(dirs probeDirs) (*probeSystem, agentic.LaunchRequest) {
++			req := agentic.LaunchRequest{
++				System:  probeID,
++				Model:   agentic.Model{ID: "muse-spark"},
++				WorkDir: dirs.temp[0],
++			}
++			sys := &probeSystem{
++				caps: agentic.Capabilities{
++					LaunchModes: []agentic.LaunchMode{agentic.LaunchModeDryRun},
++				},
++				binary: dirs.stub + "/muse",
++				argv: []string{
++					"exec", "--json", "--yolo",
++					"--model", req.Model.ID,
++					"--workspace", req.WorkDir,
++					"--prompt-file", "<prompt-file>",
++				},
++			}
++			return sys, req
++		},
++	},
++}
++
++func makeProbeDirs(t *testing.T, recipe probeRecipe) probeDirs {
++	t.Helper()
++	dirs := probeDirs{}
++	for i := 0; i < recipe.tempSlots; i++ {
++		dirs.temp = append(dirs.temp, t.TempDir())
++	}
++	if recipe.usesStub {
++		dirs.stub = t.TempDir()
++	}
++	return dirs
++}
++
++// buildProbePlan drives the production entry point: register into a real
++// registry, then agentic.BuildPlan. Nothing here constructs a Plan by hand — a
++// helper that is unit-tested but called from nowhere promises nothing, and the
++// thing the ports need proved is that a plan produced the way production
++// produces one lands on the golden.
++func buildProbePlan(t *testing.T, sys *probeSystem, req agentic.LaunchRequest, mode agentic.LaunchMode, parentEnv []string) agentic.Plan {
++	t.Helper()
++	registry := agentic.NewRegistry()
++	if err := registry.Register(sys); err != nil {
++		t.Fatalf("Register(parity probe): %v", err)
++	}
++	req.Env = parentEnv
++	plan, err := agentic.BuildPlan(registry, req, mode)
++	if err != nil {
++		t.Fatalf("BuildPlan: %v", err)
++	}
++	return plan
++}
++
++// TestProbePlansMatchTheirGoldens is the positive half: a plan built through
++// agentic.BuildPlan, snapshotted, masked and compared, matches the surface the
++// source harness captured. It proves the harness is REACHABLE and that a
++// correct plan passes. It does not prove the harness bites; that is the next
++// test's job, and one without the other is worthless.
++func TestProbePlansMatchTheirGoldens(t *testing.T) {
++	for _, recipe := range parityProbeRecipes {
++		t.Run(recipe.goldenID, func(t *testing.T) {
++			g := goldenByID(t, recipe.goldenID)
++			dirs := makeProbeDirs(t, recipe)
++			sys, req := recipe.build(dirs)
++			plan := buildProbePlan(t, sys, req, recipe.mode, g.Capture.ParentEnv)
++			if diffs := ComparePlan(g, plan, dirs.substitutions()); len(diffs) != 0 {
++				for _, d := range diffs {
++					t.Errorf("%s does not match its golden:\n  %s", recipe.goldenID, d)
++				}
++			}
++		})
++	}
++}
++
++// TestAWrongPlanFailsAgainstItsGolden is the evidence that makes the positive
++// test above mean anything.
++//
++// Three deliberate defects, one per field family the source harness records —
++// an argv flag changed, an environment key dropped, one stdin byte changed —
++// each applied to a plan that is otherwise correct, and each must be reported
++// IN THE FIELD IT WAS PLANTED IN. A mutant that fails for the wrong reason
++// proves nothing about the field it was written for.
++func TestAWrongPlanFailsAgainstItsGolden(t *testing.T) {
++	// claude/prompt-mode is the mutation subject because it is the one golden
++	// carrying all three at once: an argv grammar, an environment diff with
++	// both a strip and an injection, and attached stdin bytes.
++	const subject = "claude/prompt-mode"
++	recipe := parityProbeRecipes[0]
++	if recipe.goldenID != subject {
++		t.Fatalf("the mutation subject moved: expected %s, got %s", subject, recipe.goldenID)
++	}
++
++	mutants := []struct {
++		name      string
++		defect    string
++		wantField string
++		apply     func(sys *probeSystem)
++	}{
++		{
++			name:      "one argv flag changed",
++			defect:    "--dangerously-skip-permissions spelled in the singular, the kind of typo a port introduces while retyping a grammar",
++			wantField: "Args",
++			apply: func(sys *probeSystem) {
++				for i, arg := range sys.argv {
++					if arg == "--dangerously-skip-permissions" {
++						sys.argv[i] = "--dangerously-skip-permission"
++					}
++				}
++			},
++		},
++		{
++			name:      "one env key dropped",
++			defect:    "TASK_BOARD_TASK_ID never injected, so the child cannot report against its own task",
++			wantField: "EnvAdded",
++			apply: func(sys *probeSystem) {
++				kept := sys.inject[:0]
++				for _, entry := range sys.inject {
++					if !strings.HasPrefix(entry, "TASK_BOARD_TASK_ID=") {
++						kept = append(kept, entry)
++					}
++				}
++				sys.inject = kept
++			},
++		},
++		{
++			name:      "one stdin byte changed",
++			defect:    "a single byte of the prompt differs; the argv is identical, which is exactly the divergence argv-string equality cannot see",
++			wantField: "StdinData",
++			apply: func(sys *probeSystem) {
++				body := []byte(string(sys.stdin.Bytes))
++				body[len(body)-1] = 'Y'
++				sys.stdin = agentic.StdinPayload{Attached: true, Bytes: body}
++			},
++		},
++	}
++
++	for _, mutant := range mutants {
++		t.Run(mutant.name, func(t *testing.T) {
++			g := goldenByID(t, subject)
++			dirs := makeProbeDirs(t, recipe)
++
++			// The unmutated plan must match first. Without this, a mutant that
++			// "failed" could be failing for a reason that has nothing to do
++			// with the defect it was written to plant.
++			clean, cleanReq := recipe.build(dirs)
++			cleanPlan := buildProbePlan(t, clean, cleanReq, recipe.mode, g.Capture.ParentEnv)
++			if diffs := ComparePlan(g, cleanPlan, dirs.substitutions()); len(diffs) != 0 {
++				t.Fatalf("the unmutated plan already differs, so this mutant proves nothing: %v", diffs)
++			}
++
++			sys, req := recipe.build(dirs)
++			mutant.apply(sys)
++			plan := buildProbePlan(t, sys, req, recipe.mode, g.Capture.ParentEnv)
++			diffs := ComparePlan(g, plan, dirs.substitutions())
++			if len(diffs) == 0 {
++				t.Fatalf("the harness admitted a plan with a real defect (%s). A golden that a wrong plan satisfies is a golden that proves nothing, and every port after this one would ship on it", mutant.defect)
++			}
++			named := false
++			for _, d := range diffs {
++				if d.Field == mutant.wantField {
++					named = true
++				}
++			}
++			if !named {
++				t.Errorf("the defect was planted in %s but the harness reported %v; a failure that names the wrong surface sends the next reader to the wrong file", mutant.wantField, diffs)
++			}
++		})
++	}
++}
++
++// TestAPlanBuiltWithoutTheGoldensParentEnvIsNotSilentlyAccepted holds the one
++// way a port could get a green result from a measurement it never took.
++//
++// EnvAdded and EnvRemoved are a diff. A port that builds its plan from some
++// other baseline is comparing a different measurement wearing the same schema,
++// and the failure has to be loud: ComparePlan takes the parent environment from
++// the GOLDEN for exactly this reason, so the only way to reach this state is to
++// feed the request a different environment than the golden records.
++func TestAPlanBuiltWithoutTheGoldensParentEnvIsNotSilentlyAccepted(t *testing.T) {
++	recipe := parityProbeRecipes[0]
++	g := goldenByID(t, recipe.goldenID)
++	dirs := makeProbeDirs(t, recipe)
++	sys, req := recipe.build(dirs)
++	plan := buildProbePlan(t, sys, req, recipe.mode, []string{"UNRELATED=1"})
++	if diffs := ComparePlan(g, plan, dirs.substitutions()); len(diffs) == 0 {
++		t.Fatal("a plan built from an unrelated parent environment matched the golden; the environment half of the parity bar is not being measured")
++	}
++}
+diff --git a/pkg/agentic/parity/snapshot.go b/pkg/agentic/parity/snapshot.go
+new file mode 100644
+index 0000000..35ef7f4
+--- /dev/null
++++ b/pkg/agentic/parity/snapshot.go
+@@ -0,0 +1,152 @@
++package parity
++
++import (
++	"sort"
++	"strings"
++
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
++)
++
++// Snapshot is the source harness's launch-surface schema, field for field.
++//
++// The JSON tags are the source's own (launchSurfaceSnapshot in
++// parity_capture_test.go), including its omitempty choices, because the
++// goldens in testdata/goldens are that harness's output and a renamed field
++// would silently read as an absent one.
++type Snapshot struct {
++	// Binary is the executable the launch actually resolved — the managed-npm
++	// path, the unwrapped native shim, the preflighted runtime — not a display
++	// placeholder. The source's own BuildArgs bug was a display placeholder
++	// drifting from the launch target, so this field is the one that caught it.
++	Binary string `json:"binary"`
++	// Args is argv excluding the binary itself.
++	Args []string `json:"args"`
++	// EnvAdded and EnvRemoved are whole KEY=VALUE entries present in exactly
++	// one of the parent and child environments, sorted. A value replacement
++	// therefore appears in BOTH lists, which is what makes
++	// TASK_BOARD_RUN_ID=<parent> removed and TASK_BOARD_RUN_ID=<child> added
++	// legible as one fact rather than lost as a no-op.
++	EnvAdded   []string `json:"env_added,omitempty"`
++	EnvRemoved []string `json:"env_removed,omitempty"`
++	// StdinKind is a closed vocabulary: StdinNone, StdinBytes, StdinDryRun.
++	// It is separate from StdinData because an absent stdin and an attached
++	// empty stream are different facts — the child sees a closed descriptor in
++	// one and EOF in the other — and one empty string cannot say which.
++	StdinKind string `json:"stdin_kind"`
++	StdinData string `json:"stdin_data,omitempty"`
++	// Error is the failure the capture recorded instead of a surface. An
++	// errored capture has no binary, argv, env or stdin at all, so a golden
++	// carrying one pins a refusal rather than a launch.
++	Error string `json:"error,omitempty"`
++}
++
++// The StdinKind vocabulary, spelled as the source spelled it.
++const (
++	// StdinNone means the child gets no stdin at all.
++	StdinNone = "none"
++	// StdinBytes means the child reads StdinData.
++	StdinBytes = "bytes"
++	// StdinDryRun is what the source's dry-run capture path records. It is not
++	// "the dry run attaches no stdin": that path calls BuildArgs, which builds
++	// no command and therefore observes no stdin and no environment either. A
++	// dry-run golden proves the binary and the argv, and says nothing about
++	// the other two. See testdata/goldens/README.md.
++	StdinDryRun = "n/a-dry-run"
++)
++
++// envDiffExcludedKeys are the environment keys DiffEnv refuses to compare.
++//
++// PATH and only PATH, ported from the source harness's diffEnv, where the
++// justification was that the capture seeds PATH with a testing.T.TempDir so
++// the harness resolves stub binaries instead of whatever the developer's
++// machine happens to have installed. That seeding makes the value differ
++// between two runs of the same code, which is noise, not a signal.
++//
++// The cost is real and is not hidden: the source recorded that qwen's child
++// PATH VALUE changed in the refactor this capture proved — sanitizeCodexPath
++// strips .codex/tmp/arg0 shim entries — and its own harness could not see it.
++// A port that changes what it strips from PATH is therefore outside what these
++// goldens prove. testdata/goldens/README.md carries that boundary.
++//
++// The list is a var rather than an inline check so TestDiffEnvExcludesPathAndOnlyPath
++// can narrow it and show which class each entry covers.
++var envDiffExcludedKeys = []string{"PATH"}
++
++func envDiffExcluded(entry string) bool {
++	key, _, _ := strings.Cut(entry, "=")
++	for _, excluded := range envDiffExcludedKeys {
++		if key == excluded {
++			return true
++		}
++	}
++	return false
++}
++
++// DiffEnv reports the whole KEY=VALUE entries present in exactly one of parent
++// and child, sorted, with envDiffExcludedKeys dropped from both sides.
++//
++// It is the source's diffEnv, ported. The set semantics are the source's too:
++// two identical entries in one list collapse, because the child environment is
++// a set as far as the harness that reads it is concerned.
++func DiffEnv(parent, child []string) (added, removed []string) {
++	parentSet := entrySet(parent)
++	childSet := entrySet(child)
++	for entry := range childSet {
++		if !parentSet[entry] {
++			added = append(added, entry)
++		}
++	}
++	for entry := range parentSet {
++		if !childSet[entry] {
++			removed = append(removed, entry)
++		}
++	}
++	sort.Strings(added)
++	sort.Strings(removed)
++	return added, removed
++}
++
++func entrySet(env []string) map[string]bool {
++	set := make(map[string]bool, len(env))
++	for _, entry := range env {
++		if envDiffExcluded(entry) {
++			continue
++		}
++		set[entry] = true
++	}
++	return set
++}
++
++// FromPlan maps a plan onto the snapshot schema, against the parent
++// environment the plan was built from.
++//
++// parent must be the same environment that was handed to the launch request as
++// LaunchRequest.Env: EnvAdded and EnvRemoved are a diff, and a diff against a
++// different baseline is a different measurement wearing the same name. The
++// golden records the exact parent environment its capture ran under
++// (Golden.Capture.ParentEnv) so a port test has no reason to invent one.
++//
++// The dry-run split mirrors the source, which had two capture functions rather
++// than one: its dry-run path called BuildArgs, which returns a binary and argv
++// and never constructs a command, so there is no environment and no stdin to
++// observe. Reporting an empty env diff for a dry-run plan would be reporting an
++// absence that was never measured, so this returns the source's StdinDryRun
++// marker and leaves both env lists nil instead.
++func FromPlan(plan agentic.Plan, parent []string) Snapshot {
++	snap := Snapshot{
++		Binary: plan.Binary,
++		Args:   append([]string(nil), plan.Argv...),
++	}
++	if plan.Mode == agentic.LaunchModeDryRun {
++		snap.StdinKind = StdinDryRun
++		return snap
++	}
++	snap.EnvAdded, snap.EnvRemoved = DiffEnv(parent, plan.Env)
++	if plan.Stdin.Attached {
++		snap.StdinKind = StdinBytes
++		snap.StdinData = string(plan.Stdin.Bytes)
++	} else {
++		snap.StdinKind = StdinNone
++	}
++	return snap
++}
+diff --git a/pkg/agentic/parity/snapshot_test.go b/pkg/agentic/parity/snapshot_test.go
+new file mode 100644
+index 0000000..c871d41
+--- /dev/null
++++ b/pkg/agentic/parity/snapshot_test.go
+@@ -0,0 +1,156 @@
++package parity
++
++import (
++	"testing"
++
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
++)
++
++// TestDiffEnvExcludesPathAndOnlyPath proves the exclusion's BOUND, not merely
++// its existence.
++//
++// Deleting the exclusion would show that something drops PATH. This narrows the
++// question one key at a time: every neighbouring spelling — a key with PATH as
++// a prefix, a key with PATH as a suffix, the lowercase spelling, a key whose
++// VALUE contains a path — must still be reported. An exclusion that widened by
++// one key is one environment key a port could change with nothing noticing,
++// which is the same class of failure the guard's scan-scope test exists for.
++func TestDiffEnvExcludesPathAndOnlyPath(t *testing.T) {
++	parent := []string{
++		"PATH=/parent/bin",
++		"PATHEXT=.COM;.EXE",
++		"MANPATH=/parent/man",
++		"path=/parent/lower",
++		"GOPATH=/parent/go",
++		"HOME=/parent/home",
++		"TASK_BOARD_RUN_ID=RUN-parent",
++	}
++	child := []string{
++		"PATH=/child/bin",
++		"PATHEXT=.COM",
++		"MANPATH=/child/man",
++		"path=/child/lower",
++		"GOPATH=/child/go",
++		"HOME=/parent/home",
++		"TASK_BOARD_RUN_ID=RUN-child",
++	}
++	added, removed := DiffEnv(parent, child)
++
++	for _, entry := range append(append([]string(nil), added...), removed...) {
++		if entry == "PATH=/parent/bin" || entry == "PATH=/child/bin" {
++			t.Errorf("DiffEnv reported %q; PATH is seeded by the capture harness and differs run to run for reasons unrelated to any port", entry)
++		}
++	}
++	// Every neighbour must be reported on both sides. This is the narrowing:
++	// each one is a key an over-eager exclusion would swallow.
++	mustReport := map[string][]string{
++		"added": {"PATHEXT=.COM", "MANPATH=/child/man", "path=/child/lower", "GOPATH=/child/go", "TASK_BOARD_RUN_ID=RUN-child"},
++		"removed": {"PATHEXT=.COM;.EXE", "MANPATH=/parent/man", "path=/parent/lower", "GOPATH=/parent/go",
++			"TASK_BOARD_RUN_ID=RUN-parent"},
++	}
++	for _, want := range mustReport["added"] {
++		if !contains(added, want) {
++			t.Errorf("DiffEnv did not report %q as added; the PATH exclusion has widened past the one key it is allowed to cover. added=%v", want, added)
++		}
++	}
++	for _, want := range mustReport["removed"] {
++		if !contains(removed, want) {
++			t.Errorf("DiffEnv did not report %q as removed; the PATH exclusion has widened past the one key it is allowed to cover. removed=%v", want, removed)
++		}
++	}
++	// HOME is unchanged between the two, so it belongs in neither list. An
++	// entry reported as both added and removed when nothing about it moved
++	// would drown every real difference in noise.
++	if contains(added, "HOME=/parent/home") || contains(removed, "HOME=/parent/home") {
++		t.Errorf("DiffEnv reported an unchanged entry. added=%v removed=%v", added, removed)
++	}
++	if len(envDiffExcludedKeys) != 1 || envDiffExcludedKeys[0] != "PATH" {
++		t.Errorf("the env-diff exclusion list is %v; it is PATH and only PATH, ported from the source harness's diffEnv, and every widening is one more key a port can change unobserved", envDiffExcludedKeys)
++	}
++}
++
++// TestDiffEnvReportsAValueReplacementOnBothSides pins the shape that makes a
++// replacement legible. TASK_BOARD_RUN_ID is not added and is not removed — its
++// VALUE changes — and the only way whole-entry set semantics can say that is by
++// reporting the old entry removed and the new one added.
++func TestDiffEnvReportsAValueReplacementOnBothSides(t *testing.T) {
++	added, removed := DiffEnv([]string{"K=old"}, []string{"K=new"})
++	if !contains(added, "K=new") || !contains(removed, "K=old") {
++		t.Errorf("a value replacement did not appear on both sides: added=%v removed=%v", added, removed)
++	}
++}
++
++func TestFromPlanMapsTheWholeSurface(t *testing.T) {
++	parent := []string{"KEEP=1", "DROP=1", "PATH=/parent/bin"}
++	plan := agentic.Plan{
++		Mode:   agentic.LaunchModeExec,
++		Binary: "/opt/probe/bin/probe",
++		Argv:   []string{"exec", "--model", "probe-1"},
++		Env:    []string{"KEEP=1", "ADD=2", "PATH=/child/bin"},
++		Stdin:  agentic.StdinPayload{Attached: true, Bytes: []byte("prompt")},
++	}
++	got := FromPlan(plan, parent)
++	want := Snapshot{
++		Binary:     "/opt/probe/bin/probe",
++		Args:       []string{"exec", "--model", "probe-1"},
++		EnvAdded:   []string{"ADD=2"},
++		EnvRemoved: []string{"DROP=1"},
++		StdinKind:  StdinBytes,
++		StdinData:  "prompt",
++	}
++	if diffs := Compare(want, got); len(diffs) != 0 {
++		t.Errorf("FromPlan mapped the surface wrong: %v", diffs)
++	}
++}
++
++// TestFromPlanKeepsAttachedEmptyStdinDistinctFromNone holds the distinction
++// StdinPayload.Attached exists for. A harness reading its prompt from an
++// attached empty stream sees EOF; one launched with no stdin at all sees a
++// closed descriptor, and the two produce different child behaviour. Collapsing
++// them into one empty string would make a port that got this wrong pass.
++func TestFromPlanKeepsAttachedEmptyStdinDistinctFromNone(t *testing.T) {
++	attachedEmpty := FromPlan(agentic.Plan{Mode: agentic.LaunchModeExec, Stdin: agentic.StdinPayload{Attached: true}}, nil)
++	detached := FromPlan(agentic.Plan{Mode: agentic.LaunchModeExec}, nil)
++	if attachedEmpty.StdinKind == detached.StdinKind {
++		t.Fatalf("an attached empty stdin and no stdin both mapped to %q", attachedEmpty.StdinKind)
++	}
++	if attachedEmpty.StdinKind != StdinBytes || detached.StdinKind != StdinNone {
++		t.Errorf("stdin kinds are %q (attached empty) and %q (none), want %q and %q",
++			attachedEmpty.StdinKind, detached.StdinKind, StdinBytes, StdinNone)
++	}
++}
++
++// TestFromPlanReportsNoEnvOrStdinForADryRun holds the boundary the source's own
++// harness has: its dry-run capture path calls BuildArgs, which builds no
++// command, so there is no environment and no stdin to observe. Reporting an
++// empty env diff here would be reporting an absence that was never measured,
++// and a dry-run golden would then appear to prove an environment contract it
++// cannot.
++func TestFromPlanReportsNoEnvOrStdinForADryRun(t *testing.T) {
++	plan := agentic.Plan{
++		Mode:   agentic.LaunchModeDryRun,
++		Binary: "/opt/probe/bin/probe",
++		Argv:   []string{"exec", "<assignment-prompt-file>"},
++		Env:    []string{"THIS=would-be-a-lie"},
++		Stdin:  agentic.StdinPayload{Attached: true, Bytes: []byte("so would this")},
++	}
++	got := FromPlan(plan, []string{"BASE=1"})
++	if got.StdinKind != StdinDryRun {
++		t.Errorf("dry-run stdin kind is %q, want %q", got.StdinKind, StdinDryRun)
++	}
++	if got.StdinData != "" || len(got.EnvAdded) != 0 || len(got.EnvRemoved) != 0 {
++		t.Errorf("a dry-run snapshot reported an environment or stdin the source's dry-run path never observes: %+v", got)
++	}
++	if got.Binary == "" || len(got.Args) == 0 {
++		t.Errorf("a dry-run snapshot dropped the two things it does prove, the binary and the argv: %+v", got)
++	}
++}
++
++func contains(haystack []string, needle string) bool {
++	for _, entry := range haystack {
++		if entry == needle {
++			return true
++		}
++	}
++	return false
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/README.md b/pkg/agentic/parity/testdata/goldens/README.md
+new file mode 100644
+index 0000000..7128340
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/README.md
+@@ -0,0 +1,211 @@
++# Launch-surface goldens
++
++These fixtures are the parity contract every agentic-system plugin port in this
++repository proves itself against. They were captured by the **extraction
++source's own harness**, not by anything in this repository.
++
++- Source repo: `skill-project-management`
++- Source commit: `ed4878123061b39fdae67160f6b5632117b48a2f`
++- Source harness: `tools/board-cli/internal/spawn/parity_capture_test.go`,
++  `TestCaptureLaunchSurface`, skipped unless `SPAWN_PARITY_CAPTURE_OUT` is set
++- Captured under: `TASK-260822-slgewd`
++
++Each file records that provenance inside itself. A golden whose provenance is
++unknown cannot settle a dispute about what the source actually did — it becomes
++a number somebody once believed.
++
++## Why the source captures them and this repository only compares
++
++A golden captured by code that lives next to the port proves only that the new
++code agrees with itself. The source's harness produced the parity evidence for
++the source's own adapter refactor (`TASK-260817-1v9v95`), and that provenance is
++the whole reason these files are worth anything. Nothing in `pkg/agentic/parity`
++builds a command, resolves a binary or filters an environment, and nothing in it
++may start to.
++
++## Regenerating
++
++```sh
++.scripts/capture-parity-goldens.sh [--source /path/to/skill-project-management]
++```
++
++The script runs the source harness under a **pinned, synthetic parent
++environment** and hands the result to `TestWriteGoldensFromCapture`, which
++applies this repository's masking and writes these files. It refuses to run
++against a dirty source checkout: a golden recording a commit that does not
++describe the code that produced it is worse than one recording nothing.
++
++The source checkout is read-only in that flow. The only thing the script does
++inside it is run one `go test`.
++
++## What is captured
++
++Fourteen combinations, one file per `(system, case)`:
++
++| System | Case | Launch mode | Stdin | Notes |
++|---|---|---|---|---|
++| claude | `prompt-mode` | exec | bytes | the assignment prompt on stdin |
++| claude | `goal-mode` | exec | none | goal text is an argv argument, not stdin |
++| codex | `exec-default-path` | exec | bytes | binary resolved from `PATH` |
++| codex | `exec-managed-npm-path` | exec | bytes | binary resolved from the managed npm package |
++| codex | `exec-native-shim` | exec | bytes | npm shim unwrapped to the native binary |
++| codex | `dry-run` | dry-run | — | |
++| qwen | `exec` | exec | bytes | stdin is a two-line stream-json control protocol |
++| qwen | `dry-run` | dry-run | — | |
++| muse | `exec` | exec | none | prompt passed as `--prompt-file` |
++| muse | `dry-run` | dry-run | — | |
++| gemini | `exec` | exec | bytes | |
++| gemini | `dry-run` | dry-run | — | |
++| agy | `exec` | exec | none | |
++| agy | `dry-run` | dry-run | — | binary is the literal `agy` placeholder, see below |
++
++## What the source could NOT capture
++
++These are the source's own stated reasons, from its `TASK-260817-1v9v95` results
++artifact. A port touching one of these surfaces has **no golden** and must find
++other evidence; it must not read the absence as permission.
++
++### 1. The managed-session-args surface (the source's "Site 3")
++
++> the managed-session-args (Site 3) surface lives in package `cmd`, and
++> pre-refactor it had no `spawn.CodexArgs` to call from `package spawn`'s test.
++
++`TestCaptureLaunchSurface` lives in `package spawn` and can only reach what that
++package exports. The source gave that surface its own proof instead:
++`TestManagedCodexSpawnArgsMatchesTheHistoricalConstruction` in
++`tools/board-cli/cmd/codex_managed_session_args_parity_test.go`, which compares
++the new call against the frozen original `managedCodexSpawnArgs` body across a
++range of configs.
++
++**Consequence here**: `agentic.LaunchModeManagedSession` has **no golden at
++all**. The contract declares the mode; the goldens say nothing about it. A port
++declaring `LaunchModeManagedSession` needs its own frozen-reference proof, in
++the source's style, and should say so where its capability is declared.
++
++### 2. The interactive-manager-client argv passthrough
++
++> The interactive-manager-client argv passthrough path (`cmd/codex_manager.go`,
++> `cmd/claude_manager.go`) is a fourth, structurally different surface (filters
++> user-typed argv rather than constructing it) not in scope for this task's
++> three named sites.
++
++It filters argv a human typed rather than constructing argv from a config, so
++the capture harness — which builds a command from a `*spawn.Config` — has no way
++to express it. Nothing in these goldens covers it.
++
++## What the goldens do not prove about the combinations they DO cover
++
++### PATH content is not compared
++
++`path-env-excluded` is ported verbatim from the source harness's `diffEnv`. PATH
++is seeded with a `t.TempDir` so binary resolution is hermetic, so its value
++differs run to run for reasons unrelated to any port.
++
++The source recorded the cost of this exclusion explicitly rather than leaving it
++implied: qwen's child PATH **value** changed in the refactor these captures
++proved — `filterQwenRuntimeEnv` routes through `filterCodexRuntimeEnv` →
++`sanitizeCodexPath`, which strips `.codex/tmp/arg0`-style shim entries — and its
++own harness could not see it.
++
++**A port that changes what it strips from PATH is outside what these goldens
++prove.** That needs its own test.
++
++### Dry-run goldens prove the binary and the argv, and nothing else
++
++The source's dry-run capture path calls `BuildArgs`, which returns a binary and
++an argv and never constructs a command. There is no environment and no stdin to
++observe, so a dry-run golden carries neither. `FromPlan` mirrors that: for
++`LaunchModeDryRun` it records the `n/a-dry-run` marker and leaves both
++environment lists empty rather than reporting an absence that was never
++measured.
++
++### `agy/dry-run` records the placeholder binary on purpose
++
++Its binary is the literal string `agy`, not a resolved path. The source's
++`BuildArgs` resolves Antigravity through `cfg.AgyRuntime.Executable` when a
++preflight has already populated it and falls back to the placeholder when it has
++not — because `BuildArgs` promises no side effects and must never itself trigger
++the preflight. The dry-run capture supplies no `AgyRuntime`, so the placeholder
++is the correct captured value.
++
++### The parent environment is pinned and synthetic
++
++Every golden records the exact parent environment its capture ran under, in
++`capture.parent_env`. The source harness diffs the child environment against
++`os.Environ()`, so an unpinned capture would record whichever session variables
++the operator's shell happened to carry — and a key the plugin strips would be
++provably stripped only on the machine that happened to set it.
++
++The pinned set seeds the keys the source's filters act on
++(`filterCodexRuntimeEnv`, `filterQwenRuntimeEnv`, `withSpawnEnv`) so each strip
++and each replacement is observable. **A key that is not in `parent_env` cannot
++appear in `env_removed`**: the goldens prove the strips they seed and are silent
++about any other.
++
++`capture.parent_env_omitted` names the four variables the capture process needed
++that are not recorded, each with its reason. All four are pass-through — no
++filter under capture touches them — so omitting them changes no diff, while
++keeping them would write an operator's home directory into a fixture.
++
++### Dry-run binary resolution is pinned, and differs from the source's artifact
++
++The source's `parity-after.json` recorded, for the dry-run cases, whatever its
++operator's machine happened to have installed: `codex/dry-run` resolved a real
++managed-npm path, and `qwen/dry-run` and `muse/dry-run` recorded
++`exec: "qwen": executable file not found in $PATH`.
++
++This capture pins `PATH` to a directory of stub executables instead, so the
++dry-run goldens record a *successful* resolution that lands on the stub. The
++deviation is deliberate: a fixture whose binary field is "whatever this
++developer installed" cannot be compared on another machine, and an `error`
++fixture pins a refusal rather than an argv — the dry-run argv grammar, which is
++the thing the ports have to reproduce, would not be captured at all.
++
++One consequence to read precisely: `codex/dry-run` pins the **PATH-resolution
++branch** of the source's `resolveCodexBinary`, because `CODEX_MANAGED_PACKAGE_ROOT`
++is pinned to a directory that does not exist. The managed-npm branch and the
++native-shim branch are pinned by `codex/exec-managed-npm-path` and
++`codex/exec-native-shim`, which build their layouts under `t.TempDir` and do not
++depend on the operator's machine.
++
++### The capture is `darwin/arm64`
++
++`codex/exec-managed-npm-path` and `codex/exec-native-shim` embed the platform
++package and target triple the source's `codexPlatformPackage()` resolved
++(`@openai/codex-darwin-arm64`, `aarch64-apple-darwin`). On another platform the
++source's own harness skips those cases. A port proving itself against them on a
++different platform will differ in the binary field for a reason that is not a
++defect.
++
++## Masking
++
++Three rules, frozen in `mask.go` and pinned by `TestMaskRuleSetIsFrozen` and
++`TestMaskingCoversExactlyTheDeclaredFields`:
++
++| Rule | What it hides |
++|---|---|
++| `capture-temp-slot` | `t.TempDir` paths → `<TMPDIR:N>`, N being allocation order |
++| `capture-stub-bin-dir` | the PATH-seeded stub directory → `<PARITY-BIN>` |
++| `path-env-excluded` | the `PATH` entry, dropped from the environment diff entirely |
++
++`capture.placeholders` in each file lists the placeholders that file actually
++uses, so a port test knows how many temp directories to allocate without
++grepping the fixture.
++
++Masking is where a real difference can be made invisible while the suite stays
++green. Adding a rule costs a deliberate edit to a frozen literal plus a `Why`
++sentence, and `TestEveryMaskRuleIsNecessary` narrows one rule at a time to show
++which fixture each one carries.
++
++## Why these live under `testdata/`
++
++The single-source guard's scan scope excludes `testdata/`
++(`pkg/agentic/singlesource_scanscope_test.go`), so nothing here is scanned for a
++reintroduced system binding.
++
++That is **correct for these fixtures** and it is stated rather than assumed: they
++are JSON captured by another repository, they declare no binding, and the guard
++reports on what this module's Go build compiles. The rule it costs is the general
++one — **a `.go` file placed under this directory would be invisible to the
++guard**, so no Go source belongs here. The harness that reads these files lives
++one directory up, in `pkg/agentic/parity`, where the guard does scan it.
+diff --git a/pkg/agentic/parity/testdata/goldens/agy_dry-run.json b/pkg/agentic/parity/testdata/goldens/agy_dry-run.json
+new file mode 100644
+index 0000000..e3463a2
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/agy_dry-run.json
+@@ -0,0 +1,68 @@
++{
++  "schema_version": 1,
++  "id": "agy/dry-run",
++  "system": "agy",
++  "case": "dry-run",
++  "launch_mode": "dry-run",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:1\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "agy",
++    "args": [
++      "--print",
++      "\u003cprompt\u003e",
++      "--model",
++      "gemini-3.6-flash-high",
++      "--output-format",
++      "json",
++      "--print-timeout",
++      "30m",
++      "--mode",
++      "accept-edits",
++      "--dangerously-skip-permissions",
++      "--disable-slash-commands",
++      "--add-dir",
++      "\u003cTMPDIR:1\u003e"
++    ],
++    "stdin_kind": "n/a-dry-run"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/agy_exec.json b/pkg/agentic/parity/testdata/goldens/agy_exec.json
+new file mode 100644
+index 0000000..f9f375b
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/agy_exec.json
+@@ -0,0 +1,79 @@
++{
++  "schema_version": 1,
++  "id": "agy/exec",
++  "system": "agy",
++  "case": "exec",
++  "launch_mode": "exec",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:1\u003e",
++      "\u003cTMPDIR:2\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cTMPDIR:1\u003e/agy",
++    "args": [
++      "--print",
++      "agy exec-mode prompt",
++      "--model",
++      "gemini-3.6-flash-high",
++      "--output-format",
++      "json",
++      "--print-timeout",
++      "30m",
++      "--mode",
++      "accept-edits",
++      "--dangerously-skip-permissions",
++      "--disable-slash-commands",
++      "--add-dir",
++      "\u003cTMPDIR:2\u003e"
++    ],
++    "env_added": [
++      "TASK_BOARD_RUN_ID=RUN-parity-agy",
++      "TASK_BOARD_TASK_ID=TASK-parity-agy"
++    ],
++    "env_removed": [
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "stdin_kind": "none"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/claude_goal-mode.json b/pkg/agentic/parity/testdata/goldens/claude_goal-mode.json
+new file mode 100644
+index 0000000..5354488
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/claude_goal-mode.json
+@@ -0,0 +1,78 @@
++{
++  "schema_version": 1,
++  "id": "claude/goal-mode",
++  "system": "claude",
++  "case": "goal-mode",
++  "launch_mode": "exec",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:1\u003e",
++      "\u003cTMPDIR:2\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cTMPDIR:1\u003e/claude",
++    "args": [
++      "-p",
++      "--output-format",
++      "json",
++      "--model",
++      "claude-opus-5",
++      "--effort",
++      "high",
++      "--dangerously-skip-permissions",
++      "--append-system-prompt-file",
++      "\u003cTMPDIR:2\u003e/prompt.md",
++      "/goal Own the latest active revision of board goal **GOAL-260717-CLD001** for run **RUN-parity-claude-goal** through its board-defined success predicate. Before nested spawn, at every directive checkpoint, and before claiming success, run `task-board spawn goal RUN-parity-claude-goal`; treat the returned objective, resolved scope, and revision as authoritative and surface them with the required board acceptance evidence. A stale revision, cancelled/superseded goal, or missing scoped acceptance evidence is not success."
++    ],
++    "env_added": [
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-260717-CLD001",
++      "TASK_BOARD_RUN_ID=RUN-parity-claude-goal",
++      "TASK_BOARD_TASK_ID=TASK-parity-claude-goal"
++    ],
++    "env_removed": [
++      "CLAUDECODE=1",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "stdin_kind": "none"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/claude_prompt-mode.json b/pkg/agentic/parity/testdata/goldens/claude_prompt-mode.json
+new file mode 100644
+index 0000000..8748991
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/claude_prompt-mode.json
+@@ -0,0 +1,74 @@
++{
++  "schema_version": 1,
++  "id": "claude/prompt-mode",
++  "system": "claude",
++  "case": "prompt-mode",
++  "launch_mode": "exec",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:1\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cTMPDIR:1\u003e/claude",
++    "args": [
++      "-p",
++      "--output-format",
++      "json",
++      "--model",
++      "claude-opus-5",
++      "--effort",
++      "high",
++      "--dangerously-skip-permissions"
++    ],
++    "env_added": [
++      "TASK_BOARD_RUN_ID=RUN-parity-claude",
++      "TASK_BOARD_TASK_ID=TASK-parity-claude"
++    ],
++    "env_removed": [
++      "CLAUDECODE=1",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "stdin_kind": "bytes",
++    "stdin_data": "claude prompt-mode body"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/codex_dry-run.json b/pkg/agentic/parity/testdata/goldens/codex_dry-run.json
+new file mode 100644
+index 0000000..49d95e1
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/codex_dry-run.json
+@@ -0,0 +1,74 @@
++{
++  "schema_version": 1,
++  "id": "codex/dry-run",
++  "system": "codex",
++  "case": "dry-run",
++  "launch_mode": "dry-run",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cPARITY-BIN\u003e",
++      "\u003cTMPDIR:1\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cPARITY-BIN\u003e/codex",
++    "args": [
++      "--search",
++      "-a",
++      "never",
++      "-p",
++      "parity-profile",
++      "exec",
++      "-m",
++      "gpt-5.6-terra",
++      "-c",
++      "model_reasoning_effort=\"high\"",
++      "-c",
++      "service_tier=\"priority\"",
++      "--dangerously-bypass-approvals-and-sandbox",
++      "--skip-git-repo-check",
++      "-C",
++      "\u003cTMPDIR:1\u003e",
++      "--add-dir",
++      "\u003cTMPDIR:1\u003e/.task-board",
++      "-"
++    ],
++    "stdin_kind": "n/a-dry-run"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/codex_exec-default-path.json b/pkg/agentic/parity/testdata/goldens/codex_exec-default-path.json
+new file mode 100644
+index 0000000..22f648e
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/codex_exec-default-path.json
+@@ -0,0 +1,101 @@
++{
++  "schema_version": 1,
++  "id": "codex/exec-default-path",
++  "system": "codex",
++  "case": "exec-default-path",
++  "launch_mode": "exec",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:1\u003e",
++      "\u003cTMPDIR:2\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cTMPDIR:1\u003e/codex",
++    "args": [
++      "--search",
++      "-a",
++      "never",
++      "-p",
++      "parity-profile",
++      "exec",
++      "-m",
++      "gpt-5.6-terra",
++      "-c",
++      "model_reasoning_effort=\"high\"",
++      "-c",
++      "service_tier=\"priority\"",
++      "--dangerously-bypass-approvals-and-sandbox",
++      "--skip-git-repo-check",
++      "-C",
++      "\u003cTMPDIR:2\u003e",
++      "--add-dir",
++      "\u003cTMPDIR:2\u003e/.task-board",
++      "-"
++    ],
++    "env_added": [
++      "TASK_BOARD_BOARD_DIR=\u003cTMPDIR:2\u003e/.task-board",
++      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
++      "TASK_BOARD_DIR=\u003cTMPDIR:2\u003e/.task-board",
++      "TASK_BOARD_RUN_ID=RUN-parity-codex",
++      "TASK_BOARD_TASK_ID=TASK-parity-codex"
++    ],
++    "env_removed": [
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "stdin_kind": "bytes",
++    "stdin_data": "codex exec-mode prompt"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/codex_exec-managed-npm-path.json b/pkg/agentic/parity/testdata/goldens/codex_exec-managed-npm-path.json
+new file mode 100644
+index 0000000..4228c5a
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/codex_exec-managed-npm-path.json
+@@ -0,0 +1,101 @@
++{
++  "schema_version": 1,
++  "id": "codex/exec-managed-npm-path",
++  "system": "codex",
++  "case": "exec-managed-npm-path",
++  "launch_mode": "exec",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:2\u003e",
++      "\u003cTMPDIR:3\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cTMPDIR:3\u003e/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
++    "args": [
++      "--search",
++      "-a",
++      "never",
++      "-p",
++      "parity-profile",
++      "exec",
++      "-m",
++      "gpt-5.6-terra",
++      "-c",
++      "model_reasoning_effort=\"high\"",
++      "-c",
++      "service_tier=\"priority\"",
++      "--dangerously-bypass-approvals-and-sandbox",
++      "--skip-git-repo-check",
++      "-C",
++      "\u003cTMPDIR:2\u003e",
++      "--add-dir",
++      "\u003cTMPDIR:2\u003e/.task-board",
++      "-"
++    ],
++    "env_added": [
++      "TASK_BOARD_BOARD_DIR=\u003cTMPDIR:2\u003e/.task-board",
++      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
++      "TASK_BOARD_DIR=\u003cTMPDIR:2\u003e/.task-board",
++      "TASK_BOARD_RUN_ID=RUN-parity-codex",
++      "TASK_BOARD_TASK_ID=TASK-parity-codex"
++    ],
++    "env_removed": [
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "stdin_kind": "bytes",
++    "stdin_data": "codex managed-npm prompt"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/codex_exec-native-shim.json b/pkg/agentic/parity/testdata/goldens/codex_exec-native-shim.json
+new file mode 100644
+index 0000000..6a46714
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/codex_exec-native-shim.json
+@@ -0,0 +1,101 @@
++{
++  "schema_version": 1,
++  "id": "codex/exec-native-shim",
++  "system": "codex",
++  "case": "exec-native-shim",
++  "launch_mode": "exec",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:1\u003e",
++      "\u003cTMPDIR:2\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cTMPDIR:1\u003e/codex-shim-package/vendor/aarch64-apple-darwin/bin/codex",
++    "args": [
++      "--search",
++      "-a",
++      "never",
++      "-p",
++      "parity-profile",
++      "exec",
++      "-m",
++      "gpt-5.6-terra",
++      "-c",
++      "model_reasoning_effort=\"high\"",
++      "-c",
++      "service_tier=\"priority\"",
++      "--dangerously-bypass-approvals-and-sandbox",
++      "--skip-git-repo-check",
++      "-C",
++      "\u003cTMPDIR:2\u003e",
++      "--add-dir",
++      "\u003cTMPDIR:2\u003e/.task-board",
++      "-"
++    ],
++    "env_added": [
++      "TASK_BOARD_BOARD_DIR=\u003cTMPDIR:2\u003e/.task-board",
++      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
++      "TASK_BOARD_DIR=\u003cTMPDIR:2\u003e/.task-board",
++      "TASK_BOARD_RUN_ID=RUN-parity-codex",
++      "TASK_BOARD_TASK_ID=TASK-parity-codex"
++    ],
++    "env_removed": [
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "stdin_kind": "bytes",
++    "stdin_data": "codex native-shim prompt"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/gemini_dry-run.json b/pkg/agentic/parity/testdata/goldens/gemini_dry-run.json
+new file mode 100644
+index 0000000..a61cf07
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/gemini_dry-run.json
+@@ -0,0 +1,65 @@
++{
++  "schema_version": 1,
++  "id": "gemini/dry-run",
++  "system": "gemini",
++  "case": "dry-run",
++  "launch_mode": "dry-run",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cPARITY-BIN\u003e",
++      "\u003cTMPDIR:1\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cPARITY-BIN\u003e/gemini",
++    "args": [
++      "-p",
++      "\u003cprompt\u003e",
++      "-m",
++      "gemini-3.5-flash",
++      "-y",
++      "--skip-trust",
++      "-o",
++      "json",
++      "--include-directories",
++      "\u003cTMPDIR:1\u003e"
++    ],
++    "stdin_kind": "n/a-dry-run"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/gemini_exec.json b/pkg/agentic/parity/testdata/goldens/gemini_exec.json
+new file mode 100644
+index 0000000..cbb2874
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/gemini_exec.json
+@@ -0,0 +1,76 @@
++{
++  "schema_version": 1,
++  "id": "gemini/exec",
++  "system": "gemini",
++  "case": "exec",
++  "launch_mode": "exec",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:1\u003e",
++      "\u003cTMPDIR:2\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cTMPDIR:1\u003e/gemini",
++    "args": [
++      "-p",
++      "",
++      "-m",
++      "gemini-3.5-flash",
++      "-y",
++      "--skip-trust",
++      "-o",
++      "json",
++      "--include-directories",
++      "\u003cTMPDIR:2\u003e"
++    ],
++    "env_added": [
++      "TASK_BOARD_RUN_ID=RUN-parity-gemini",
++      "TASK_BOARD_TASK_ID=TASK-parity-gemini"
++    ],
++    "env_removed": [
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "stdin_kind": "bytes",
++    "stdin_data": "gemini exec-mode prompt"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/muse_dry-run.json b/pkg/agentic/parity/testdata/goldens/muse_dry-run.json
+new file mode 100644
+index 0000000..a6bda90
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/muse_dry-run.json
+@@ -0,0 +1,64 @@
++{
++  "schema_version": 1,
++  "id": "muse/dry-run",
++  "system": "muse",
++  "case": "dry-run",
++  "launch_mode": "dry-run",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cPARITY-BIN\u003e",
++      "\u003cTMPDIR:1\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cPARITY-BIN\u003e/muse",
++    "args": [
++      "exec",
++      "--json",
++      "--yolo",
++      "--model",
++      "muse-spark",
++      "--workspace",
++      "\u003cTMPDIR:1\u003e",
++      "--prompt-file",
++      "\u003cprompt-file\u003e"
++    ],
++    "stdin_kind": "n/a-dry-run"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/muse_exec.json b/pkg/agentic/parity/testdata/goldens/muse_exec.json
+new file mode 100644
+index 0000000..59d5880
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/muse_exec.json
+@@ -0,0 +1,74 @@
++{
++  "schema_version": 1,
++  "id": "muse/exec",
++  "system": "muse",
++  "case": "exec",
++  "launch_mode": "exec",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:1\u003e",
++      "\u003cTMPDIR:2\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cTMPDIR:1\u003e/muse",
++    "args": [
++      "exec",
++      "--json",
++      "--yolo",
++      "--model",
++      "muse-spark",
++      "--workspace",
++      "\u003cTMPDIR:2\u003e",
++      "--prompt-file",
++      "\u003cTMPDIR:2\u003e/prompt.md"
++    ],
++    "env_added": [
++      "TASK_BOARD_RUN_ID=RUN-parity-muse",
++      "TASK_BOARD_TASK_ID=TASK-parity-muse"
++    ],
++    "env_removed": [
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "stdin_kind": "none"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/qwen_dry-run.json b/pkg/agentic/parity/testdata/goldens/qwen_dry-run.json
+new file mode 100644
+index 0000000..b41436a
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/qwen_dry-run.json
+@@ -0,0 +1,62 @@
++{
++  "schema_version": 1,
++  "id": "qwen/dry-run",
++  "system": "qwen",
++  "case": "dry-run",
++  "launch_mode": "dry-run",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cPARITY-BIN\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cPARITY-BIN\u003e/qwen",
++    "args": [
++      "--model",
++      "qwen3.7-max",
++      "--approval-mode",
++      "yolo",
++      "--input-format",
++      "stream-json",
++      "--output-format",
++      "stream-json"
++    ],
++    "stdin_kind": "n/a-dry-run"
++  }
++}
+diff --git a/pkg/agentic/parity/testdata/goldens/qwen_exec.json b/pkg/agentic/parity/testdata/goldens/qwen_exec.json
+new file mode 100644
+index 0000000..c49e187
+--- /dev/null
++++ b/pkg/agentic/parity/testdata/goldens/qwen_exec.json
+@@ -0,0 +1,87 @@
++{
++  "schema_version": 1,
++  "id": "qwen/exec",
++  "system": "qwen",
++  "case": "exec",
++  "launch_mode": "exec",
++  "capture": {
++    "source_repo": "skill-project-management",
++    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
++    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
++    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
++    "captured_by": "TASK-260822-slgewd",
++    "parent_env": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "parent_env_omitted": [
++      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
++      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
++      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
++      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
++    ],
++    "mask_rules": [
++      "capture-temp-slot",
++      "capture-stub-bin-dir",
++      "path-env-excluded"
++    ],
++    "placeholders": [
++      "\u003cTMPDIR:1\u003e"
++    ]
++  },
++  "surface": {
++    "binary": "\u003cTMPDIR:1\u003e/qwen",
++    "args": [
++      "--model",
++      "qwen3.7-max",
++      "--approval-mode",
++      "yolo",
++      "--input-format",
++      "stream-json",
++      "--output-format",
++      "stream-json"
++    ],
++    "env_added": [
++      "TASK_BOARD_RUN_ID=RUN-parity-qwen",
++      "TASK_BOARD_TASK_ID=TASK-parity-qwen"
++    ],
++    "env_removed": [
++      "CLAUDECODE=1",
++      "CODEX_CI=parity-ci",
++      "CODEX_MANAGED_BY_BUN=1",
++      "CODEX_MANAGED_BY_NPM=1",
++      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
++      "CODEX_SESSION=parity-session",
++      "CODEX_THREAD_ID=parity-thread",
++      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
++      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
++      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
++      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
++      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
++      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
++      "TASK_BOARD_RUN_ID=RUN-parity-parent",
++      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
++      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
++      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
++      "TASK_BOARD_TASK_ID=TASK-parity-parent"
++    ],
++    "stdin_kind": "bytes",
++    "stdin_data": "{\"request\":{\"effort\":\"high\",\"subtype\":\"initialize\"},\"request_id\":\"RUN-parity-qwen-initialize\",\"type\":\"control_request\"}\n{\"message\":{\"content\":[{\"text\":\"qwen exec-mode prompt\",\"type\":\"text\"}],\"role\":\"user\"},\"parent_tool_use_id\":null,\"session_id\":\"RUN-parity-qwen\",\"type\":\"user\"}\n"
++  }
++}

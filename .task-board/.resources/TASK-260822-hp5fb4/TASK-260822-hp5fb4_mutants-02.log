@@ -1,0 +1,68 @@
+baseline: GREEN (exit 0)
+
+RED            env: strip by PREFIX instead of by exact key
+         caught by: TestAPrefixStripFailsAgainstTheCodexGolden, TestAWholeEnvironmentWipeFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden/one_argv_flag_misspelled, TestAWrongPlanFailsAgainstTheCodexGolden/one_stdin_byte_changed, TestAWrongPlanFailsAgainstTheCodexGolden/the_service_tier_never_reaches_the_child, TestFilterEnvKeysMatchesWholeKeys, TestPlansMa
+RED            env: stop resolving the credential POINTERS
+         caught by: TestAPrefixStripAlsoLeaksThePointedAtCredentials, TestAPrefixStripFailsAgainstTheCodexGolden, TestAWholeEnvironmentWipeFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden/one_argv_flag_misspelled, TestAWrongPlanFailsAgainstTheCodexGolden/one_stdin_byte_changed, TestAWrongPlanFailsAgainstTheCodexGolden/the_service_tier_never_reaches_the_chi
+RED            env: stop sanitizing PATH
+         caught by: TestSanitizePathReachesTheChildThroughBuildPlan
+RED            env: sanitize PATH by dropping every entry
+         caught by: TestSanitizePathDropsOnlyTheCodexRuntimeEntries, TestSanitizePathReachesTheChildThroughBuildPlan
+RED            env: discard the parent environment entirely
+         caught by: TestAPrefixStripAlsoLeaksThePointedAtCredentials, TestAPrefixStripFailsAgainstTheCodexGolden, TestAWholeEnvironmentWipeFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden/one_argv_flag_misspelled, TestAWrongPlanFailsAgainstTheCodexGolden/one_stdin_byte_changed, TestAWrongPlanFailsAgainstTheCodexGolden/the_service_tier_never_reaches_the_chi
+RED            env: let a blocked key collide with an injected one
+         caught by: TestAPrefixStripFailsAgainstTheCodexGolden, TestAWholeEnvironmentWipeFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden/one_argv_flag_misspelled, TestAWrongPlanFailsAgainstTheCodexGolden/one_stdin_byte_changed, TestAWrongPlanFailsAgainstTheCodexGolden/the_service_tier_never_reaches_the_child, TestNoStrippedKeyCollidesWithAnInjectedOne, Te
+RED            binary: skip the managed-npm path
+         caught by: TestPlansMatchTheCodexGoldens, TestPlansMatchTheCodexGoldens/codex/exec-managed-npm-path, TestResolveBinaryIsTheSameAnswerForEveryLaunchMode, TestResolveBinaryPrefersTheManagedPackageOverPath
+RED            binary: skip the native-shim unwrap
+         caught by: TestPlansMatchTheCodexGoldens, TestPlansMatchTheCodexGoldens/codex/exec-native-shim, TestResolveBinaryUnwrapsTheNPMShim
+RED            binary: trust the managed layout without a stat
+         caught by: TestAManagedRootPointingAtADirectoryIsNotAResolution, TestAManagedRootWithoutTheBinaryFallsThroughToPath, TestAPrefixStripFailsAgainstTheCodexGolden, TestAWholeEnvironmentWipeFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden/one_argv_flag_misspelled, TestAWrongPlanFailsAgainstTheCodexGolden/one_stdin_byte_changed, TestAWrongPlanFailsAgai
+RED            binary: accept a directory as an executable
+         caught by: TestAManagedRootPointingAtADirectoryIsNotAResolution
+RED            binary: drop the codex.js shape check
+         caught by: TestNativeBinaryFromShimRequiresBothShapeChecks, TestNativeBinaryFromShimRequiresBothShapeChecks/a_plain_executable_on_PATH_is_not_a_shim
+RED            binary: drop the bin/ shape check
+         caught by: TestNativeBinaryFromShimRequiresBothShapeChecks, TestNativeBinaryFromShimRequiresBothShapeChecks/a_codex.js_outside_a_bin_directory_is_not_a_shim
+RED            binary: fall back to the ambient PATH when the launch env has none
+         caught by: TestAnAbsentPathIsNotAMissingBinary
+RED            binary: accept a non-executable PATH candidate
+         caught by: TestALookPathCandidateMustBeExecutable
+RED            args: spell the profile flag the managed-session way in exec mode
+         caught by: TestAPrefixStripFailsAgainstTheCodexGolden, TestAWholeEnvironmentWipeFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden/one_argv_flag_misspelled, TestAWrongPlanFailsAgainstTheCodexGolden/one_stdin_byte_changed, TestAWrongPlanFailsAgainstTheCodexGolden/the_service_tier_never_reaches_the_child, TestPlansMatchTheCodexGoldens, TestPlansMatchT
+RED            args: spell the model flag the exec way in managed-session mode
+         caught by: TestManagedSessionArgsMatchTheFrozenConstruction
+RED            args: emit the effort override unconditionally
+         caught by: TestManagedSessionArgsMatchTheFrozenConstruction, TestTheOptionalExecFlagsAreOmittedWhenUnset, TestTheOptionalExecFlagsAreOmittedWhenUnset/no_effort
+RED            args: emit --add-dir with no directory
+         caught by: TestTheOptionalExecFlagsAreOmittedWhenUnset, TestTheOptionalExecFlagsAreOmittedWhenUnset/no_board_directory
+RED            args: pass an unrecognized service tier through verbatim
+         caught by: TestAnUnknownServiceTierIsDropped, TestNormalizeServiceTierVocabulary
+RED            args: alias the caller's composition prefix
+         caught by: TestArgsDoesNotAliasTheCallersCompositionPrefix
+RED            composition: accept any MCP field
+         caught by: TestCompositionRefusals, TestCompositionRefusals/a_field_outside_the_closed_set,_added_to_an_otherwise_valid_composition
+RED            composition: accept a top-level flag between the pairs
+         caught by: TestCompositionErrorsAreNotWrappedSentinels, TestCompositionRefusals, TestCompositionRefusals/a_top-level_flag_smuggled_between_the_pairs, TestTheGrammarIsDeclaredAndEnforcedThroughBuildPlan
+RED            composition: stop checking the bearer reference against the metadata
+         caught by: TestCompositionRefusals, TestCompositionRefusals/a_bearer_reference_the_server_did_not_declare
+RED            composition: accept args that are not a TOML string array
+         caught by: TestCompositionRefusals, TestCompositionRefusals/args_holding_a_number_rather_than_a_string, TestCompositionRefusals/args_that_are_not_a_TOML_string_array
+RED            plugin: declare no composition grammar
+         caught by: TestTheDeclaredCapabilitiesMatchTheSourceAdapter, TestTheGrammarIsDeclaredAndEnforcedThroughBuildPlan
+RED            plugin: declare budget support codex does not have
+         caught by: TestABudgetIsRefusedRatherThanDropped, TestTheDeclaredCapabilitiesMatchTheSourceAdapter
+RED            plugin: read a failed prompt read as an empty stream
+         caught by: TestAnUnreadablePromptIsAnErrorAndNotAnEmptyStream
+RED            plugin: alias the caller's prompt bytes
+         caught by: TestStdinDoesNotAliasTheCallersPromptBytes
+RED            core: replace run-context values by PREFIX
+         caught by: TestSetEnvValueMatchesWholeKeys
+RED            core: export a blank instead of removing the key
+         caught by: TestAGoallessLaunchRemovesAnInheritedGoal, TestAPrefixStripFailsAgainstTheCodexGolden, TestAWholeEnvironmentWipeFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden, TestAWrongPlanFailsAgainstTheCodexGolden/one_argv_flag_misspelled, TestAWrongPlanFailsAgainstTheCodexGolden/one_stdin_byte_changed, TestAWrongPlanFailsAgainstTheCodexGolden/the_service_tier_never_reaches_the_child, Tes
+RED            core: export the board selector as given
+         caught by: TestTheBoardSelectorIsAbsolute
+
+restored checkout: GREEN (exit 0)
+
+31/31 mutants caught
