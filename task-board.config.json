@@ -30,7 +30,11 @@
     },
     "worktree_isolation": {
       "validation": {
-        "commands": []
+        "commands": [
+          "make vet",
+          "make build",
+          "env -u TASK_BOARD_DIR go test -mod=mod ./... -count=1"
+        ]
       }
     }
   },

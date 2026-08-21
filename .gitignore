@@ -1,6 +1,8 @@
-# Build outputs
-agents-management
-tools/*/agents-management
+# Build outputs. Anchored on purpose: an unanchored `agents-management`
+# pattern matches directories too, and would silently ignore the entire
+# tools/agents-management source tree.
+/agents-management
+/tools/agents-management/agents-management
 dist/
 
 # Temporary utilities, logs, worktrees, smoke artifacts
