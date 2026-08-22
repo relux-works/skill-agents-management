@@ -364,15 +364,59 @@ The vendor plugin contract, its registry, and the runtime declarations.
   tier or the composition), and hands it to `agentic.BuildPlan`. Spawn
   EXECUTION is not here — that is a port story.
 
-The single-source guard now covers both layers from ONE list of dispatch key
-types (`SystemID`, `VendorID`, `RuntimeID`), each mapped to the single file
-permitted to bind it. That is stricter than a flat allowlist: a
-`map[VendorID]T` inside the agentic registry is a violation even though that
-file legitimately holds a binding map, and a mutant plants exactly that.
+The single-source guard covers both layers from ONE list, keyed by the FACT
+being bound. Three entries are dispatch key types (`SystemID`, `VendorID`,
+`RuntimeID`), each mapped to the single file permitted to bind it — stricter
+than a flat allowlist, since a `map[VendorID]T` inside the agentic registry is a
+violation even though that file legitimately holds a binding map, and a mutant
+plants exactly that. Four more are the vendors' binding files, one per vendor:
+a model row declares which harnesses drive it, which is a binding, and spelling
+a plugin id in a composite literal anywhere else fails the guard. Displacing
+every home and requiring the real tables to be reported is what keeps a green
+run from meaning "the rule never matched anything".
 
-No concrete vendor plugin ships yet — that is the next story. The contract is
-proven by one test double, registered through the public API, that exists
-nowhere else in the module.
+### The vendor plugins: `pkg/vendorplugin/vendors/{anthropic,openai,alibaba,google}`
+
+All 43 rows of the extraction source's model registry, carried across. 41 land
+in the four vendors; the two `muse` rows belong to no vendor, because the source
+records that runtime's broker as checked-and-never-established, and the port
+accounts for them explicitly rather than dropping them.
+
+- **Ported verbatim**: model ids, the agentic systems each row declares, the
+  per-model effort vocabularies and the recommended efforts. A full-set pin
+  compares both directions against a fixture captured from the source's own
+  sources, and six drift mutants prove the pin fires.
+- **Derived**: the capability rank position. The source scores per broker with
+  ties allowed; this layer numbers 1..n with ties refused, ordering by score and
+  breaking ties on the source's declaration order. Each position's basis carries
+  the source score it came from.
+- **Authored here**: the usage descriptions. The source has no
+  what-is-this-model-best-for field and the contract refuses a blank one, so
+  these were written for this repository — marked as such in every binding file,
+  with a test that fails if the note is removed.
+- `alibaba` is the architecture's own argument: five rows under the `qwen-code`
+  harness and one under `codex`. A cross-runtime pair is one vendor declaring
+  one more system, and a test builds a real launch through it.
+- `google` is one vendor over two harnesses (`gemini-cli` and `antigravity`),
+  which is why a rank is comparable within a broker rather than within a
+  harness.
+
+### Admitted-pair digests
+
+`ExpandV2Ceiling` turns a decided spawn-policy-v2 ceiling into its exact
+`(model, effort)` pair set and hashes a canonical serialization of it. Model
+MEMBERSHIP comes from the extraction source's frozen v2 compatibility snapshot
+(`pkg/vendorplugin/v2snapshot.go`); the per-model effort vocabularies come from
+the vendor rows. Keeping those two apart is the source's own hard-won split — a
+capability rank is evidence, and the day it decides admission, a truthful
+re-rank silently moves who may spawn.
+
+The digests are pinned against values captured from the SOURCE BINARY run over
+the source repository's own `task-board.config.json`, not recomputed here: a
+digest computed by the port and pinned by the port proves only that the port
+agrees with itself. Three vocabulary-drift mutants prove the digest moves when
+the rows do, and one lineup-reversal mutant proves it does not move when the
+ranks do.
 
 Identifier normalization for all three id kinds lives once, in
 `internal/ident`. Two folds that agree today and drift tomorrow is the
@@ -497,6 +541,8 @@ concluding that a missing golden is permission.
 | `make` | build, test, vet and install the CLI | `make build` / `test` / `vet` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
+| model registry capture | regenerate the vendor fixtures: the source's model rows and frozen v2 tiers (read from its Go sources) and the admitted-pair digests (read from its own binary) | `.scripts/capture-model-registry.sh` | `pkg/vendorplugin/testdata/source-model-registry.json`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`, scratch in `.temp/capture-model-registry/` |
 | codex mutation harness | narrow every codex gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-hp5fb4/mutants.py` | `.temp/TASK-260822-hp5fb4/mutants-*.log` |
 | claude mutation harness | narrow every claude gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-3u97y3/mutants.py` | `.temp/TASK-260822-3u97y3/mutants-*.log` |
 | qwen/gemini/muse/agy mutation harness | narrow every gate the four remaining ports wrote, plus the two shared internals, and confirm the suite goes red | `python3 .temp/TASK-260822-xz8rj5/mutants.py` | `.temp/TASK-260822-xz8rj5/mutants-*.log` |
+| vendor-layer mutation harness | narrow every gate the vendor port wrote — the admission expansion, the digest serialization, the ported rows and the per-vendor guard homes — and confirm the suite goes red | `python3 .temp/TASK-260822-3cknas/mutants.py` | `.temp/TASK-260822-3cknas/mutants-*.log` |

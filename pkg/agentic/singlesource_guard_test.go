@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/relux-works/skill-agents-management/internal/gosources"
 )
@@ -184,8 +185,8 @@ const (
 	bindingClassIDSwitch = "id-switch"
 )
 
-// bindingHomes is THE list of dispatch key types this module registers by,
-// each mapped to the ONE file permitted to bind it.
+// bindingHomes is THE list of the FACTS this module binds by, each mapped to
+// the ONE file permitted to write that fact down.
 //
 // It is one list rather than one guard per layer. The vendor layer
 // (pkg/vendorplugin) has the same invariant for the same reason — its registry
@@ -194,15 +195,63 @@ const (
 // extended. That is the failure this whole file exists to prevent, and
 // reproducing it in the guard would be a poor joke.
 //
-// The mapping is per KEY TYPE, not per file, and that is stricter than a flat
-// allowlist: the file that binds systems is not thereby allowed to bind
-// vendors. A map[VendorID]T inside pkg/agentic/registry.go is a shadow table
-// even though that file legitimately holds a binding map, and
+// # Two kinds of entry, and what each one buys
+//
+// The first three entries are DISPATCH KEY TYPES. They are resolved as Go type
+// names, so a `map[VendorID]T` — or a named type whose underlying type is one,
+// or a make() of it, or a field of it — is a violation anywhere except that key
+// type's home. The mapping is per KEY TYPE, not per file, and that is stricter
+// than a flat allowlist: the file that binds systems is not thereby allowed to
+// bind vendors. A map[VendorID]T inside pkg/agentic/registry.go is a shadow
+// table even though that file legitimately holds a binding map, and
 // TestSingleSourceGuardCatchesCrossLayerBindings plants exactly that.
+//
+// The rest are ID-SPELLING homes: tables that must name plugin ids as literals
+// to say what they say. Each vendor's model rows are one such fact, and the
+// guard's composite-literal rule reports a plugin id spelled in a composite
+// literal in any file that is not one of these homes. Their keys are
+// deliberately not legal Go identifiers, so naming one here can never
+// accidentally teach the scanner a new key type;
+// TestSingleSourceGuardHomesSplitByKind holds that line.
+//
+// pkg/vendorplugin/v2snapshot.go spells runtime ids too and is deliberately NOT
+// listed. Its ids are STRUCT FIELD VALUES rather than bare composite-literal
+// elements, which the literal rule does not reach — the same shape the frozen
+// runtime table in pkg/vendorplugin/registry.go has — so an entry for it would
+// grant a permission the file never uses and that no mutant could show
+// mattering. What does hold that file is the structural rule: written as the
+// map[RuntimeID][][]string it obviously wants to be, it fails the guard, which
+// is exactly why it is a slice.
+//
+// Why the vendor rows need one at all: a vendor plugin's model list DECLARES
+// which agentic systems drive each model, which is a binding in the plain sense
+// — it is the thing Registry.Register checks the dependency direction against.
+// Giving each vendor exactly one such file is AC5 of TASK-260822-3cknas, and
+// this list is where "exactly one" is enforced rather than hoped for.
 var bindingHomes = map[string]string{
 	"SystemID":  "pkg/agentic/registry.go",
 	"VendorID":  "pkg/vendorplugin/registry.go",
 	"RuntimeID": "pkg/vendorplugin/registry.go",
+
+	"anthropic models": "pkg/vendorplugin/vendors/anthropic/models.go",
+	"openai models":    "pkg/vendorplugin/vendors/openai/models.go",
+	"alibaba models":   "pkg/vendorplugin/vendors/alibaba/models.go",
+	"google models":    "pkg/vendorplugin/vendors/google/models.go",
+}
+
+// dispatchKeyTypes are the entries of bindingHomes that name a Go type the
+// scanner resolves as a binding key. Everything else in that map is an
+// id-spelling home; see the comment above.
+var dispatchKeyTypes = []string{"SystemID", "VendorID", "RuntimeID"}
+
+// vendorBindingHomes is the per-vendor half, one entry per registered vendor
+// plugin. It is written out separately so "one binding file per vendor" is a
+// checkable claim rather than a pattern a reader has to notice.
+var vendorBindingHomes = map[string]string{
+	"anthropic": "pkg/vendorplugin/vendors/anthropic/models.go",
+	"openai":    "pkg/vendorplugin/vendors/openai/models.go",
+	"alibaba":   "pkg/vendorplugin/vendors/alibaba/models.go",
+	"google":    "pkg/vendorplugin/vendors/google/models.go",
 }
 
 // knownPluginIDs is the identifier vocabulary a reintroduced binding would
@@ -1177,6 +1226,17 @@ func TestSingleSourceGuardScansTheWholeModule(t *testing.T) {
 		"pkg/vendorplugin/runtime.go",
 		"pkg/vendorplugin/spawn.go",
 		"pkg/vendorplugin/vendor.go",
+		"pkg/vendorplugin/admission.go",
+		"pkg/vendorplugin/v2snapshot.go",
+		// The vendor plugins, ONE BINDING FILE EACH, for the same reason the
+		// system plugins are listed above: a model table is where somebody
+		// reaches for a second copy of "which harness drives this", and a scan
+		// that did not reach these files would leave four tables unguarded
+		// while every other assertion here stayed green.
+		"pkg/vendorplugin/vendors/anthropic/models.go",
+		"pkg/vendorplugin/vendors/openai/models.go",
+		"pkg/vendorplugin/vendors/alibaba/models.go",
+		"pkg/vendorplugin/vendors/google/models.go",
 		"tools/agents-management/cmd/plugins.go",
 		"tools/agents-management/cmd/root.go",
 		"tools/agents-management/main.go",
@@ -1230,15 +1290,26 @@ func TestSingleSourceGuardRulesFireOnRealCode(t *testing.T) {
 	// held to the same standard as the original: a rule that fires only on
 	// pkg/agentic would leave the vendor bindings unguarded while this test
 	// stayed green.
-	for _, required := range []string{"pkg/agentic/registry.go", "pkg/vendorplugin/registry.go"} {
+	// Every layer's real registry AND every id-spelling home. The vendor
+	// tables are here for the same reason the registries are: displaced, each
+	// one's `[]agentic.SystemID{"claude-code"}` is a plugin id spelled outside
+	// a home, so a file that stays silent under displacement is a file the
+	// composite-literal rule cannot see — and its silence in the real run
+	// would then mean nothing at all.
+	required := []string{"pkg/agentic/registry.go", "pkg/vendorplugin/registry.go"}
+	for _, home := range vendorBindingHomes {
+		required = append(required, home)
+	}
+	sort.Strings(required)
+	for _, file := range required {
 		found := false
 		for _, v := range violations {
-			if v.File == required && v.Class == bindingClassTable {
+			if v.File == file && v.Class == bindingClassTable {
 				found = true
 			}
 		}
 		if !found {
-			t.Errorf("with the homes displaced, %s's own binding map was not reported; the binding-table rule does not fire on that file's real code, so its silence elsewhere proves nothing. violations=%v", required, violations)
+			t.Errorf("with the homes displaced, %s's own binding table was not reported; the binding-table rule does not fire on that file's real code, so its silence elsewhere proves nothing. violations=%v", file, violations)
 		}
 	}
 }
@@ -1257,9 +1328,80 @@ func TestSingleSourceGuardHomesAreDistinctFacts(t *testing.T) {
 			t.Errorf("bindingHomes[%q] = %q, which the module scan never reached", key, home)
 		}
 	}
-	for _, key := range []string{"SystemID", "VendorID", "RuntimeID"} {
+	for _, key := range dispatchKeyTypes {
 		if _, ok := bindingHomes[key]; !ok {
 			t.Errorf("%s is a dispatch key type of this module and has no home in bindingHomes; it is bindable anywhere", key)
 		}
 	}
+}
+
+// TestSingleSourceGuardHomesSplitByKind holds the line between the two kinds of
+// entry bindingHomes carries.
+//
+// A dispatch key type is resolved as a Go TYPE NAME, so adding an entry whose
+// key happens to spell one would silently teach the scanner a fourth key type
+// and, worse, declare its home in one move. The id-spelling homes are therefore
+// keyed by strings that cannot be Go identifiers, and this test is what keeps
+// that from being a convention somebody breaks by writing the obvious thing.
+func TestSingleSourceGuardHomesSplitByKind(t *testing.T) {
+	declared := map[string]bool{}
+	for _, key := range dispatchKeyTypes {
+		declared[key] = true
+	}
+	for key := range bindingHomes {
+		if declared[key] {
+			continue
+		}
+		if isGoIdentifier(key) {
+			t.Errorf("bindingHomes[%q] is not a declared dispatch key type but spells a legal Go identifier; the scanner resolves such a key as a TYPE NAME, so this entry silently declares a fourth binding key type and its home at the same time", key)
+		}
+	}
+	for _, key := range dispatchKeyTypes {
+		if !isGoIdentifier(key) {
+			t.Errorf("dispatchKeyTypes names %q, which is not a legal Go identifier and therefore cannot be the type the scanner resolves", key)
+		}
+	}
+}
+
+// TestEveryVendorHasExactlyOneBindingFile is AC5 of TASK-260822-3cknas held to
+// the code.
+//
+// It checks three things a reader would otherwise have to check by eye: every
+// vendor named here has a home, every home is a file the module scan reaches,
+// and no two vendors share one. The last is the one that matters — two vendors
+// pointing at one file would give each of them permission to spell the other's
+// bindings, which is the flat allowlist this guard deliberately is not.
+func TestEveryVendorHasExactlyOneBindingFile(t *testing.T) {
+	sources := moduleSources(t)
+	seen := map[string]string{}
+	for vendor, home := range vendorBindingHomes {
+		if _, ok := sources[home]; !ok {
+			t.Errorf("vendor %q declares its binding file as %q, which the module scan never reached", vendor, home)
+		}
+		if other, taken := seen[home]; taken {
+			t.Errorf("vendors %q and %q share the binding file %q; one file per vendor is the rule, and a shared one lets each spell the other's bindings", other, vendor, home)
+		}
+		seen[home] = vendor
+		if bindingHomes[vendor+" models"] != home {
+			t.Errorf("vendor %q's binding file %q is not the home bindingHomes records for it (%q); the guard would not permit that file to spell plugin ids", vendor, home, bindingHomes[vendor+" models"])
+		}
+	}
+}
+
+// isGoIdentifier reports whether s could be a Go identifier, which is exactly
+// the question "could the scanner resolve this key as a type name".
+func isGoIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if r == '_' || unicode.IsLetter(r) {
+			continue
+		}
+		if i > 0 && unicode.IsDigit(r) {
+			continue
+		}
+		return false
+	}
+	return true
 }

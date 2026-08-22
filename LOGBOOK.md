@@ -5,6 +5,27 @@
 
 ## 2026-08-22
 
+### 2356 — Admission had to keep reading the FROZEN v2 snapshot, not the ranks this port derives
+- DECISION: Ported `v2AdmissionSnapshotRolloutTiers` verbatim into `pkg/vendorplugin/v2snapshot.go` and made it the only membership authority for a v2 ordered ceiling. Deriving membership from `CapabilityRank` would have reproduced the pinned digests for the current configs and reintroduced the exact defect the source spent a task removing: a truthful re-rank silently moving who may spawn.
+- FINDING: The source's `PolicyRank` HAS TIES and the vendor contract refuses them. Three tie sites: the anthropic haiku alias pair (both 10), the alibaba `qwen3.7-plus` / `qwen3.7-plus-via-codex` pair (both 30), and FIVE google collisions (50/45/40/35/30) where a gemini-cli row and an antigravity row score equally because the source ranked the two harnesses independently within one broker. Positions are score-descending with declaration order breaking ties.
+- FINDING: The tie break is only safe because ranks are not the admission authority. A ceiling bound at `claude-haiku-4-5-20251001` admits BOTH haiku rows through the frozen tier and would admit ONE through the derived positions. `TestAliasTierAdmitsBothDirections` is where that would surface; `TestCapabilityRanksAreNotTheAdmissionAuthority` reverses a whole vendor's lineup and requires the digest to hold.
+- SCOPE: `pkg/vendorplugin/v2snapshot.go`, `pkg/vendorplugin/admission.go`, `pkg/vendorplugin/vendors/*/models.go`.
+- STATUS: TASK-260822-3cknas handed to review, uncommitted.
+
+### 2354 — A runtime is (system x vendor), and that pair is the ONLY honest way to scope a model index
+- FINDING: Two vendors own rows reachable through two harnesses each — alibaba (5 `qwen-code` + 1 `codex`) and google (7 `gemini-cli` + 8 `antigravity`). Indexing a vendor's whole list per runtime gives the qwen runtime a row only the codex harness can drive: an admitted pair no launch could ever make, in a set that still looks well-formed. `RuntimeModels` filters on `DrivenBy(runtime.SystemID)` and `TestRuntimeModelsScopeToTheHarnessThatDrivesThem` pins the six counts.
+- FINDING: The (system, vendor) pair is UNIQUE across all seven runtimes the source registers, so the full-set pin derives each row's runtime from that pair through the declarations instead of carrying an eighth copy of the bindings.
+- NOTE: `qwen-codex` is deliberately NOT seeded into the frozen table — the source keeps it non-builtin as its own worked example of an operator-declared runtime, declared in that repo's `task-board.config.json`. It reaches this module through the public `DeclareRuntime`, and a real launch is built through it.
+- SCOPE: `pkg/vendorplugin/v2snapshot.go:RuntimeModels`, `pkg/vendorplugin/sourceport_test.go`.
+- STATUS: TASK-260822-3cknas handed to review, uncommitted.
+
+### 2353 — Digests must be captured from the SOURCE BINARY, and TASK_BOARD_DIR silently redirects which config it reads
+- ANOMALY: `task-board q 'project_config()'` run inside the source checkout reported `config_path` pointing at THIS repository's `task-board.config.json`, because `TASK_BOARD_DIR` was exported in the spawn environment. The digests happened to match (both configs carry the same codex/claude ceilings), so the mistake would have gone unnoticed and pinned a digest over the wrong file.
+- FIX: `.scripts/capture-model-registry.sh` runs the source binary under `env -u TASK_BOARD_DIR` and then VERIFIES the projected `config_path` is the source repository's own file, refusing otherwise. It also records the config's sha256 in the fixture.
+- DECISION: The capture builds the source CLI into a scratch path outside that checkout and reads its Go sources with a Python extractor, so the source stays read-only. A digest recomputed beside the port and pinned by the port proves only that the port agrees with itself.
+- SCOPE: `.scripts/capture-model-registry.sh`, `.scripts/extract-model-registry.py`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`.
+- STATUS: TASK-260822-3cknas handed to review, uncommitted.
+
 ### 2352 — The agy preflight has no home in the plan surface, so the evidence travels on the plugin
 - DECISION: `agy.New()` carries no preflight evidence and `agy.NewWithRuntime(Runtime{Executable})` carries it. That makes agy the ONE ported plugin holding state, and the divergence is stated on the type rather than discovered.
 - ROOT CAUSE: The source reads `cfg.AgyRuntime` — evidence hanging off its Config. This layer's `LaunchRequest` has no field for it and must not grow one: an agy-shaped field on the type every system reads would put one harness's preflight into the core contract for five plugins to ignore. `ProbeAgyRuntime` itself runs `agy --version` and `agy --help`, so it cannot live behind any `System` method: `BuildPlan` calls all of them to build a DRY RUN. Same boundary as claude's goal preparation, different mechanism.
