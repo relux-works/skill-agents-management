@@ -1,0 +1,85 @@
+baseline: go test ./... exit 0
+
+[ 1/41] KILLED   identity: hash the broker instead of the runtime
+          crossbinary_test.go:83: IdentityKey("codex", "/Users/alexis/.codex") = "538c8c6a6901bf5c", want the pinned "8ec4c1a052a55ed6" — the on-disk identity M
+[ 2/41] KILLED   identity: drop the 0x00 separator
+          broker_migration_test.go:33: IdentityKey(claude, /var/tmp/providerlimits-pin/claude-home) = "3c69f198d5334552", want the pinned "f62f97776336a5d1" — t
+[ 3/41] KILLED   identity: widen the key from 16 to 20 hex digits
+          broker_migration_test.go:33: IdentityKey(claude, /var/tmp/providerlimits-pin/claude-home) = "f62f97776336a5d13685", want the pinned "f62f97776336a5d1"
+[ 4/41] KILLED   identity: fold the home to lower case
+          identity_test.go:189: normalisation folded case; that would be wrong on a case-sensitive volume
+[ 5/41] KILLED   layout: rename the state file suffix
+          crossbinary_test.go:113: no real state fixtures found; this test would pass vacuously
+[ 6/41] KILLED   schema: rename the next_probe_at JSON tag
+          broker_migration_test.go:318: claims after next_probe_at: 0 leased / 0 unleased, want 1/0 — the pre-existing record did not become probe-eligible
+[ 7/41] KILLED   schema: make suppressed_since a value instead of a pointer
+          crossbinary_test.go:122: the re-encoded bytes differ from the ones on disk; the on-disk schema moved.
+[ 8/41] KILLED   schema: reorder two group-record fields
+          crossbinary_test.go:122: the re-encoded bytes differ from the ones on disk; the on-disk schema moved.
+[ 9/41] KILLED   schema: bump the on-disk version this binary writes
+          failopen_test.go:422: state file does not carry "version": 3:
+[10/41] KILLED   encoder: drop the trailing newline
+          crossbinary_test.go:122: the re-encoded bytes differ from the ones on disk; the on-disk schema moved.
+[11/41] KILLED   read: report a corrupt file as a proven absence
+          lost_state_test.go:50: read on a corrupt file = "absent", want "corrupt"
+[12/41] KILLED   read: narrow Indeterminate so a degraded read counts as determinate
+          lost_state_test.go:99: read after the quarantine = "degraded", want an indeterminate read
+[13/41] KILLED   verdict: admit an indeterminate read as healthy
+          verdict_test.go:211: a corrupt state file read as HEALTHY; a failed read was laundered into a proven absence
+[14/41] KILLED   verdict: treat only a corrupt read as a failure, not an unreadable one
+          verdict_test.go:211: a schema ahead state file read as HEALTHY; a failed read was laundered into a proven absence
+[15/41] KILLED   verdict: report a probe-eligible group as healthy
+          verdict_test.go:421: a probe-eligible group read as healthy (serviceable=true); it is admitted to exactly one caller, and only by winning a claim
+[16/41] KILLED   verdict: report a probing group as healthy
+          verdict_test.go:445: a group another run holds the probe on read as healthy (serviceable=true)
+[17/41] KILLED   verdict: use the parsed reset hint as the clear time
+          crossbinary_test.go:266: verdict.Until = 2026-08-23 10:30:00 +0000 UTC, want the source's own next_probe_at 2026-08-22 12:02:00 +0000 UTC
+[18/41] KILLED   verdict: invent a window for a suppression that has none
+          verdict_test.go:363: a suppression with no window produced a limited verdict clearing at 2026-08-23 01:43:42.135489 +0300 MSK m=+304.555510001, which 
+[19/41] KILLED   verdict: widen the unclassifiable carve-out to every runtime
+          crossbinary_test.go:266: verdict.Until = 0001-01-01 00:00:00 +0000 UTC, want the source's own next_probe_at 2026-08-22 12:02:00 +0000 UTC
+[20/41] KILLED   verdict: drop the evidence from a limited verdict
+          crossbinary_test.go:271: the verdict does not carry the recorded evidence "RUN-260822-2jouz3"; a limited verdict has to say what established it.
+[21/41] KILLED   verdict: name no source on a healthy absence
+          verdict_test.go:133: the verdict contradicts its own evidence and CheckAvailability would refuse it: vendorplugin: availability verdict contradicts it
+[22/41] KILLED   verdict: take the LATEST clear time runtime-wide instead of the earliest
+          verdict_test.go:572: Until = 2026-08-22 12:30:00 +0000 UTC, want the EARLIEST clear time 2026-08-22 12:03:00 +0000 UTC; a caller sleeping to the later
+[23/41] KILLED   verdict: write while reading — quarantine on the read path
+          failopen_test.go:44: a read must not quarantine, because reads must not mutate state
+[24/41] KILLED   ladder: change one step of the shipped ladder
+          crossbinary_test.go:390: the full shipped ladder differs from the source's.
+[25/41] KILLED   ladder: raise the six-hour ceiling
+          ladder_test.go:80: MaxLadderStep = 12h0m0s, the source's is 6h0m0s
+[26/41] KILLED   ladder: widen the legacy alias set to gemini
+          ladder_test.go:179: ResolveLadderKey("gemini").Known = true, the source's decode says false
+[27/41] KILLED   ladder: admit any string as a broker key
+          ladder_test.go:179: ResolveLadderKey("gemini").Known = true, the source's decode says false
+[28/41] KILLED   ladder: look the broker row up before the runtime row
+          ladder_test.go:231: with both rows present the runtime spelling must win: key="anthropic" legacy=false
+[29/41] KILLED   ladder: admit two spellings of one broker
+          ladder_test.go:299: a table spelling one broker twice was admitted; the second row is silently unused
+[30/41] KILLED   ladder: refuse an unknown row instead of dropping it
+          ladder_test.go:273: an unresolvable row must be dropped, not refused: providerlimits: unknown backoff row "another-unknown"
+[31/41] KILLED   classification: give alibaba a classifier
+          groups_test.go:106: HasClassifierForRuntime(qwen) is true, so a qwen failure could suppress a group; no qwen classifier exists
+[32/41] KILLED   classification: key HasClassifier on the runtime as well as the broker
+          broker_migration_test.go:95: HasClassifier("claude") is true; "claude" is a runtime ID, not a broker, and HasClassifier must key on broker names only
+[33/41] KILLED   classification: treat an unestablished vendor binding as a broker
+          broker_migration_test.go:139: brokerForRuntime("muse") = "muse", want "" (from vendorplugin.FrozenRuntimes)
+[34/41] KILLED   grouping: hand UnmappedGroup the broker instead of the runtime
+          broker_migration_test.go:53: Lookup(claude, claude-not-a-real-model).Group = "anthropic-unmapped:claude-not-a-real-model", want "claude-unmapped:claud
+[35/41] KILLED   grouping: drop one model from the claude plan group
+          groups_test.go:67: group "claude-plan" members = [claude-opus-5 claude-sonnet-5 claude-opus-4-8 claude-opus-4-6 claude-sonnet-4-6 claude-haiku-4-5-202
+[36/41] KILLED   home: fall back to a guessed dot-directory when the harness declares none
+          identity_test.go:342: a provider with no defined home must be an error, not a guess
+[37/41] KILLED   home: read the environment variable of a different harness
+          identity_test.go:339: DefaultProviderHome = "/tmp/other-codex", want ~/.claude
+[38/41] KILLED   guard: widen the single-source allowlist to a whole file
+          singlesource_guard_test.go:1502: the allowlist entry for "pkg/providerlimits/groups.go::func HasClassifier" swallowed a real shadow table declared bes
+[39/41] KILLED   guard: leave a stale allowlist entry behind
+          singlesource_guard_test.go:1407: the allowlist exempts "pkg/providerlimits/nowhere.go::func Gone", and the scan reports no such site; a leftover exemp
+[40/41] KILLED   boundary: reach into an unallowed package of this module
+          boundary_test.go:134: verdict.go imports "github.com/relux-works/skill-agents-management/internal/launchenv"; the limit plane may import only pkg/vend
+[41/41] KILLED   boundary: import the extraction source back in
+
+41/41 mutants killed

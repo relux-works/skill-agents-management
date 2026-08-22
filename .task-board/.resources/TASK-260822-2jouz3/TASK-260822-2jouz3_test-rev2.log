@@ -1,0 +1,23 @@
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	1.281s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.761s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	2.297s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	3.354s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.808s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.855s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.482s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.897s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	5.470s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.938s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.200s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.240s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.221s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.286s
+ok  	github.com/relux-works/skill-agents-management/pkg/providerlimits	9.699s
+ok  	github.com/relux-works/skill-agents-management/pkg/vendorplugin	5.119s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+ok  	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.675s

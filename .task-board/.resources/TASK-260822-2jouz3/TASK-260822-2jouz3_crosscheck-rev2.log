@@ -1,0 +1,55 @@
+baseline: exit 0
+  PASS     TestSingleSourceAllowlistHasNoUnusedEntries
+  PASS     TestSingleSourceAllowlistEntriesCarryAReason
+  PASS     TestSingleSourceAllowlistDoesNotExemptTheRestOfItsFile
+  PASS     TestSingleSourceAllowlistedSitesAreReportedWhenNotExempt
+  PASS     TestSingleSourceGuardHomesSplitByKind
+  PASS     TestEveryVendorHasExactlyOneBindingFile
+  PASS     TestSingleSourceGuardHomesAreDistinctFacts
+
+### limit: point an exemption at a file that has no such site (stale entry)   (suite exit 1)
+  FAIL     TestSingleSourceAllowlistHasNoUnusedEntries
+  PASS     TestSingleSourceAllowlistEntriesCarryAReason
+  PASS     TestSingleSourceAllowlistDoesNotExemptTheRestOfItsFile
+  FAIL     TestSingleSourceAllowlistedSitesAreReportedWhenNotExempt
+  PASS     TestSingleSourceGuardHomesSplitByKind
+  PASS     TestEveryVendorHasExactlyOneBindingFile
+  PASS     TestSingleSourceGuardHomesAreDistinctFacts
+
+### limit: widen an exemption's reason to a label   (suite exit 1)
+  PASS     TestSingleSourceAllowlistHasNoUnusedEntries
+  FAIL     TestSingleSourceAllowlistEntriesCarryAReason
+  PASS     TestSingleSourceAllowlistDoesNotExemptTheRestOfItsFile
+  PASS     TestSingleSourceAllowlistedSitesAreReportedWhenNotExempt
+  PASS     TestSingleSourceGuardHomesSplitByKind
+  PASS     TestEveryVendorHasExactlyOneBindingFile
+  PASS     TestSingleSourceGuardHomesAreDistinctFacts
+
+### vendor: a vendor loses its binding-file home   (suite exit 1)
+  PASS     TestSingleSourceAllowlistHasNoUnusedEntries
+  PASS     TestSingleSourceAllowlistEntriesCarryAReason
+  PASS     TestSingleSourceAllowlistDoesNotExemptTheRestOfItsFile
+  PASS     TestSingleSourceAllowlistedSitesAreReportedWhenNotExempt
+  PASS     TestSingleSourceGuardHomesSplitByKind
+  FAIL     TestEveryVendorHasExactlyOneBindingFile
+  FAIL     TestSingleSourceGuardHomesAreDistinctFacts
+
+### vendor: two vendors share one binding file   (suite exit 1)
+  PASS     TestSingleSourceAllowlistHasNoUnusedEntries
+  PASS     TestSingleSourceAllowlistEntriesCarryAReason
+  PASS     TestSingleSourceAllowlistDoesNotExemptTheRestOfItsFile
+  PASS     TestSingleSourceAllowlistedSitesAreReportedWhenNotExempt
+  PASS     TestSingleSourceGuardHomesSplitByKind
+  FAIL     TestEveryVendorHasExactlyOneBindingFile
+  PASS     TestSingleSourceGuardHomesAreDistinctFacts
+
+### vendor: an id-spelling home keyed as a legal Go identifier   (suite exit 1)
+  PASS     TestSingleSourceAllowlistHasNoUnusedEntries
+  PASS     TestSingleSourceAllowlistEntriesCarryAReason
+  PASS     TestSingleSourceAllowlistDoesNotExemptTheRestOfItsFile
+  PASS     TestSingleSourceAllowlistedSitesAreReportedWhenNotExempt
+  FAIL     TestSingleSourceGuardHomesSplitByKind
+  FAIL     TestEveryVendorHasExactlyOneBindingFile
+  PASS     TestSingleSourceGuardHomesAreDistinctFacts
+
+every mutant redded exactly its own story's rule; no cross-masking
