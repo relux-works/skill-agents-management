@@ -91,7 +91,8 @@ The agentic-system plugin contract and its registry.
   neither miss the machine-local case nor quietly widen into ignoring real
   code.
 
-One concrete system plugin ships: `pkg/agentic/systems/codex`. See below.
+Two concrete system plugins ship: `pkg/agentic/systems/codex` and
+`pkg/agentic/systems/claude`. See below.
 
 The contract is also proven by one test double registered through the public
 API, so the interface stays exercisable without any plugin compiled in.
@@ -135,6 +136,64 @@ child-environment leaks the source tracks as `BUG-260819-3qn52o`, a
 service-tier export that lets an inherited value pass through when the launch
 configured none, and an unrecognized tier that is dropped rather than refused.
 Each pin names why changing it inside a parity port would be wrong.
+
+### The claude plugin: `pkg/agentic/systems/claude`
+
+The Claude Code CLI, ported from the same spawn adapter and proven against both
+claude launch-surface goldens through the real `Registry` and `BuildPlan`. Its
+plugin id is `claude-code` — the Layer-1 name — while the goldens record the
+frozen RUNTIME id `claude`; `parity_test.go` maps between them in one place.
+
+- **Two launch surfaces from one grammar.** Prompt mode streams the assignment
+  on stdin. Goal mode appends the assignment as SYSTEM context
+  (`--append-system-prompt-file`), spends the child's one user turn on a
+  `/goal <predicate>` directive, and therefore attaches NO stdin at all — which
+  is what `claude/goal-mode`'s `stdin_kind: none` records.
+- **Goal-mode launch PREPARATION is explicitly out of the plan surface.** The
+  source runs a provider preflight before construction: a version gate at Claude
+  Code 2.1.139, a `/goal` capability probe classified into
+  unavailable/untrusted/hooks-disabled, and a session-state decision. Steps two
+  and three START PROCESSES, and `BuildPlan` calls every plugin method to build a
+  DRY RUN — so preparation behind any of them would make a dry run execute the
+  harness twice. `goal.go` states the whole of what the source does and where it
+  has to land instead (the launch/session plane, when that is ported); this task
+  invents no home for it. What IS carried across is the one refusal that belongs
+  to the argv: a goal carrying no provider condition is rejected rather than
+  shipped as a bare `/goal` binding the child to nothing.
+- **The environment contract is ONE exact key.** Claude strips `CLAUDECODE` and
+  nothing else. It does NOT strip the codex family — that is a codex child's
+  filter, and the qwen filter is the one that composes both — so a claude child
+  inherits `CODEX_*`, the app-server and session-manager URLs, and the
+  credentials their pointers name. That is the source's `BUG-260819-3qn52o` seen
+  from the other side; it is pinned by a test rather than left implicit. PATH is
+  not sanitized either, which no golden can see, so it has its own test.
+- **Binary resolution is plain `PATH`.** No managed package, no shim to unwrap,
+  and none of codex's resolution machinery imported.
+- **The budget ceiling is claude's alone.** `--max-budget-usd` is the one adapter
+  capability no other agent in the source's table declares, and neither capture
+  configured a budget — so it has no golden and is proven against the source's
+  construction instead, including the `%.2f` rendering and the `> 0` guard that
+  silently drops a zero ceiling.
+- **One argv construction site**, guarded the same way codex's is and by the same
+  scanner.
+
+### One argv guard, shared
+
+`internal/argvguard` is the scanner both plugins' guards drive; `internal/gosources`
+is the single answer to "which files does this module's build compile", used by
+those guards and by the single-source binding guard. Each plugin supplies only
+what is genuinely its own — the signature literals and the allowlist — so the
+threshold (ONE co-occurring literal), the resolution depth and the declared-open
+residuals are one fact rather than one per plugin.
+
+Allowlist keys are FILE-SCOPED. Both plugins name their construction site `Args`,
+so a bare-name allowlist would have exempted every `Args` in the module from
+every guard — a weakening that arrives silently the moment a second plugin lands.
+`claude`'s signature also deliberately EXCLUDES `--dangerously-skip-permissions`
+and `--output-format`, because the source's agy and qwen builders spell them too
+and a guard that fires on a legitimate sibling plugin is a guard somebody
+deletes. The residual that leaves is named on the signature and demonstrated
+staying open.
 
 ### Layer 2: `pkg/vendorplugin`
 
@@ -311,3 +370,4 @@ concluding that a missing golden is permission.
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
 | codex mutation harness | narrow every codex gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-hp5fb4/mutants.py` | `.temp/TASK-260822-hp5fb4/mutants-*.log` |
+| claude mutation harness | narrow every claude gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-3u97y3/mutants.py` | `.temp/TASK-260822-3u97y3/mutants-*.log` |

@@ -1,11 +1,11 @@
 package codex
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/relux-works/skill-agents-management/internal/launchenv"
 )
 
 // Codex has THREE binary-resolution paths and they are tried in this order:
@@ -50,7 +50,13 @@ const shimFileName = executableName + ".js"
 // caller that curated an environment without PATH did not ask this plugin to
 // substitute its own, and resolving through a PATH the child will never see is
 // how a launcher reports a binary the child cannot run.
-var ErrNoPathInLaunchEnvironment = fmt.Errorf("codex: the launch environment carries no PATH")
+//
+// The sentinel is internal/launchenv's, re-exported under this plugin's own
+// name so a caller holding only this package can match on it. It is an alias
+// rather than a wrapper on purpose: two sentinels for one condition is two
+// things a caller has to know about, and errors.Is would answer differently
+// depending on which one a future edit returned.
+var ErrNoPathInLaunchEnvironment = launchenv.ErrNoPath
 
 // resolveBinary returns the exact executable a launch will run.
 //
@@ -194,36 +200,15 @@ func nativeBinaryFromShim(shimPath string) string {
 
 // lookPath resolves name against the PATH carried by env.
 //
-// It is exec.LookPath's rule — split PATH, treat an empty element as the
-// current directory, take the first entry that is an executable file — over a
-// SUPPLIED environment instead of the process's own. A name that already
-// contains a separator is used as given, exactly as exec.LookPath does.
-//
-// The distinction this keeps is the one the whole file exists for: "PATH is
-// absent" and "PATH contains no codex" are different facts and produce
-// different errors, so a caller that curated an environment without PATH is
-// not told its codex install is missing.
+// The rule — exec.LookPath's, over a SUPPLIED environment instead of the
+// process's own — lives in internal/launchenv, because every system plugin
+// needs the identical reshape and two copies that disagree about an empty PATH
+// element both launch. The distinction this file cares about survives the move:
+// "PATH is absent" and "PATH contains no codex" are different facts and produce
+// different errors, so a caller that curated an environment without PATH is not
+// told its codex install is missing.
 func lookPath(env []string, name string) (string, error) {
-	if strings.ContainsRune(name, filepath.Separator) {
-		if isExecutableFile(name) {
-			return name, nil
-		}
-		return "", fmt.Errorf("codex: %s is not an executable file", name)
-	}
-	pathValue, ok := lookupEnv(env, "PATH")
-	if !ok {
-		return "", ErrNoPathInLaunchEnvironment
-	}
-	for _, dir := range filepath.SplitList(pathValue) {
-		if dir == "" {
-			dir = "."
-		}
-		candidate := filepath.Join(dir, name)
-		if isExecutableFile(candidate) {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("codex: %q not found in the launch environment's PATH", name)
+	return launchenv.LookPath(env, name)
 }
 
 // isRegularFile reports whether path names an existing file rather than a
@@ -231,24 +216,7 @@ func lookPath(env []string, name string) (string, error) {
 // source's `if _, err := os.Stat(...); err == nil` verbatim; the caller's next
 // move — try the following resolution path — is the same for a missing file
 // and an unreadable one.
-func isRegularFile(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.Mode().IsRegular()
-}
-
-// isExecutableFile reports whether path is a regular file with an execute bit
-// set, which is what PATH lookup requires of a candidate.
-func isExecutableFile(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	mode := info.Mode()
-	return mode.IsRegular() && mode.Perm()&0o111 != 0
-}
+func isRegularFile(path string) bool { return launchenv.IsRegularFile(path) }
 
 // lookupEnv returns the value of key in a KEY=VALUE environment and whether it
 // was present at all.
@@ -257,28 +225,14 @@ func isExecutableFile(path string) bool {
 // different facts. An empty PATH is a caller saying "resolve nothing", and it
 // produces a not-found refusal; an absent one produces
 // ErrNoPathInLaunchEnvironment.
-func lookupEnv(env []string, key string) (string, bool) {
-	prefix := key + "="
-	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			return strings.TrimPrefix(entry, prefix), true
-		}
-	}
-	return "", false
-}
+func lookupEnv(env []string, key string) (string, bool) { return launchenv.Lookup(env, key) }
 
 // envValue returns the trimmed value of key, or "" when it is unset.
 //
 // It is the source's envValue, and it trims because the values it reads —
 // package roots, the NAMES of other variables — are path- and identifier-
 // shaped, where surrounding whitespace is always a typo rather than data.
-func envValue(env []string, key string) string {
-	value, ok := lookupEnv(env, key)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(value)
-}
+func envValue(env []string, key string) string { return launchenv.Value(env, key) }
 
 // hostOS and hostArch report the platform the resolution table was consulted
 // for. They exist so a test that SKIPS on an unlisted platform can name which

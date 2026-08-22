@@ -287,6 +287,27 @@ type Goal struct {
 	ID        string
 	Objective string
 	Revision  int
+
+	// ProviderCondition is the success predicate a goal-aware harness is
+	// handed VERBATIM, in whatever form that harness's own goal mechanism
+	// takes. Empty means the caller supplied none.
+	//
+	// Reshape from the source adapter (named by TASK-260822-3u97y3): the
+	// source's claude adapter reads goal.ProviderCondition off the board's
+	// GoalContract and splices it into argv as `/goal <condition>`
+	// (ClaudeGoalDirective, spawn/claude_goal.go). The text is RENDERED by the
+	// board layer (pkgboard.RenderGoalProviderCondition) and the board
+	// validates a stored contract against a re-render, so the renderer is a
+	// single source elsewhere. Without this field a plugin could only invent a
+	// second renderer here — two spellings of one predicate, with the board
+	// rejecting whichever one it did not produce — or drop the binding
+	// entirely and launch a goal-bound child bound to nothing.
+	//
+	// It is deliberately NOT the Objective. The objective is the operator's
+	// intent text; the provider condition is the machine-checkable predicate,
+	// and the claude goldens record the second reaching argv while the first
+	// reaches nothing.
+	ProviderCondition string
 }
 
 // Budget is the spend ceiling a launch is bound to, in the unit the harness
