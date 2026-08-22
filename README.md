@@ -225,6 +225,41 @@ None of these commands keeps a list of its own. A private one would be a
 second binding for the same fact, which is exactly what the single-source
 guard exists to prevent.
 
+### Launch-surface parity goldens
+
+`pkg/agentic/parity` holds the contract every agentic-system plugin port proves
+itself against: one golden per `(system, case)` recording the binary, argv,
+environment keys added and removed, and stdin bytes that the launch produced.
+
+The goldens are captured by the EXTRACTION SOURCE's own harness
+(`skill-project-management`, `tools/board-cli/internal/spawn/parity_capture_test.go`,
+`TestCaptureLaunchSurface`) and only compared here. A golden captured by code
+living next to the port proves only that the port agrees with itself.
+
+```
+.scripts/capture-parity-goldens.sh [--source /path/to/skill-project-management]
+```
+
+The script runs the source harness under a pinned synthetic parent environment,
+then hands the result to this repository's masking and writes
+`pkg/agentic/parity/testdata/goldens/`. It refuses a dirty source checkout. The
+source checkout is otherwise read-only: the only thing the script does inside it
+is run one `go test`.
+
+That pinned environment seeds two kinds of key, and a recapture must keep both.
+The keys the source's filters act on make each strip observable — the filter's
+lower bound. Four **bystander** keys that no filter touches make the upper bound
+observable too: without them a system that strips everything and a system that
+strips exactly the right keys produce the same diff, and a port that discards
+the whole parent environment passes. `PARITY_BYSTANDER` covers the wipe; the
+three `*_LIKE_BUT_NOT` near-misses cover a port that filters by prefix where the
+source filters by exact key.
+
+`pkg/agentic/parity/testdata/goldens/README.md` is the boundary document — what
+is captured, what the source could NOT capture and why, and what the goldens do
+not prove even for the combinations they cover. A port task reads it before
+concluding that a missing golden is permission.
+
 ## Tools
 
 | Tool | Purpose | Entry point | Artifacts |
@@ -232,3 +267,4 @@ guard exists to prevent.
 | `task-board` | board tracking for this repo's work | `task-board q/m/spawn ...` | `.task-board/` |
 | `make` | build, test, vet and install the CLI | `make build` / `test` / `vet` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
+| parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |

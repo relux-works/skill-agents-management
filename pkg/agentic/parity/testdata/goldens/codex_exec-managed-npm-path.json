@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "id": "codex/exec-managed-npm-path",
+  "system": "codex",
+  "case": "exec-managed-npm-path",
+  "launch_mode": "exec",
+  "capture": {
+    "source_repo": "skill-project-management",
+    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
+    "source_harness": "tools/board-cli/internal/spawn/parity_capture_test.go::TestCaptureLaunchSurface",
+    "capture_env_var": "SPAWN_PARITY_CAPTURE_OUT",
+    "captured_by": "TASK-260822-slgewd",
+    "parent_env": [
+      "CLAUDECODE=1",
+      "CLAUDECODE_LIKE_BUT_NOT=keep-me",
+      "CODEX_CI=parity-ci",
+      "CODEX_LIKE_BUT_NOT=keep-me",
+      "CODEX_MANAGED_BY_BUN=1",
+      "CODEX_MANAGED_BY_NPM=1",
+      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
+      "CODEX_SESSION=parity-session",
+      "CODEX_THREAD_ID=parity-thread",
+      "PARITY_BYSTANDER=keep-me",
+      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
+      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
+      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_LIKE_BUT_NOT=keep-me",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
+      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
+      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "parent_env_omitted": [
+      "HOME — the operator machine home the Go toolchain needs for its build cache; no filter under capture touches it, so it is in neither env_added nor env_removed",
+      "PATH — seeded with the stub bin directory and excluded from the env diff by the path-env-excluded mask rule",
+      "TMPDIR — the capture temp root, machine-local, masked out of the surface by capture-temp-slot",
+      "SPAWN_PARITY_CAPTURE_OUT — the source harness's own output path; inherited unchanged by every child, so it diffs to nothing"
+    ],
+    "mask_rules": [
+      "capture-temp-slot",
+      "capture-stub-bin-dir",
+      "path-env-excluded"
+    ],
+    "placeholders": [
+      "\u003cTMPDIR:2\u003e",
+      "\u003cTMPDIR:3\u003e"
+    ]
+  },
+  "surface": {
+    "binary": "\u003cTMPDIR:3\u003e/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+    "args": [
+      "--search",
+      "-a",
+      "never",
+      "-p",
+      "parity-profile",
+      "exec",
+      "-m",
+      "gpt-5.6-terra",
+      "-c",
+      "model_reasoning_effort=\"high\"",
+      "-c",
+      "service_tier=\"priority\"",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--skip-git-repo-check",
+      "-C",
+      "\u003cTMPDIR:2\u003e",
+      "--add-dir",
+      "\u003cTMPDIR:2\u003e/.task-board",
+      "-"
+    ],
+    "env_added": [
+      "TASK_BOARD_BOARD_DIR=\u003cTMPDIR:2\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "TASK_BOARD_DIR=\u003cTMPDIR:2\u003e/.task-board",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex"
+    ],
+    "env_removed": [
+      "CODEX_CI=parity-ci",
+      "CODEX_MANAGED_BY_BUN=1",
+      "CODEX_MANAGED_BY_NPM=1",
+      "CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
+      "CODEX_SESSION=parity-session",
+      "CODEX_THREAD_ID=parity-thread",
+      "PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
+      "PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
+      "TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+      "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
+      "TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
+      "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+      "TASK_BOARD_RUN_ID=RUN-parity-parent",
+      "TASK_BOARD_SESSION_ID=SESSION-parity-parent",
+      "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
+      "TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
+      "TASK_BOARD_TASK_ID=TASK-parity-parent"
+    ],
+    "stdin_kind": "bytes",
+    "stdin_data": "codex managed-npm prompt"
+  }
+}
