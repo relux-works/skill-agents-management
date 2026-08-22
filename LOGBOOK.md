@@ -5,6 +5,51 @@
 
 ## 2026-08-22
 
+### 2140 — Binary resolution that reads the process environment cannot be dry-run-proven
+- DECISION: The codex plugin resolves its binary from `LaunchRequest.Env`, not from `os.Getenv`/`exec.LookPath`. `pkg/agentic/systems/codex/binary.go`.
+- NOTE: The source read the ambient process env for both `CODEX_MANAGED_PACKAGE_ROOT` and `PATH`. Under the plugin contract that is unprovable: `System` promises a plugin reaches for no ambient state and that a dry run reports the same target a real launch would, and neither claim survives a process-global. Reading the handed environment also makes all three resolution paths testable in parallel against stub layouts with no `t.Setenv` anywhere.
+- FINDING: The reshape is invisible in the goldens for a reason worth knowing. The capture's managed-npm case set the package root with `t.Setenv` AFTER recording its baseline, so `capture.parent_env` carries the pinned placeholder while the code under capture saw a temp layout. A port test that repoints the launch environment reproduces exactly that state — and the strip removes the key from the child either way, so the recorded diff is identical.
+- NOTE: An absent PATH and an empty PATH are separate answers (`ErrNoPathInLaunchEnvironment` vs not-found). A caller that curated an environment without PATH must not be told its codex install is missing.
+- SCOPE: `pkg/agentic/systems/codex/binary.go`, `binary_test.go`.
+- STATUS: Resolved (TASK-260822-hp5fb4).
+
+### 2138 — A prefix env strip does not only over-strip; it breaks pointer resolution and leaks the credentials
+- FINDING: `filterCodexRuntimeEnv` carries no fixed list of credential variables. It reads `TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV` and `TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV`, each holding the NAME of the variable that holds a token, and blocks what they name. A port that strips the `TASK_BOARD_` family by prefix removes those pointers BEFORE the filter can read them, so the tokens they point at are never blocked and reach the child.
+- NOTE: So the prefix reading has two independent consequences — it over-strips the near-miss bystanders AND under-strips exactly the credentials the filter exists to contain. Found while porting, not predicted: the first prefix-strip attack failed its own narrowing subtest because the credential leak was still catching it after the bystanders were removed.
+- NOTE: Consequence for the attack's shape. The narrowing that isolates the exact-key property uses the `CODEX_` prefix ALONE, which disturbs no pointer; the credential leak gets its own test with the full family set. One attack proving two things proves neither cleanly.
+- SCOPE: `pkg/agentic/systems/codex/parity_negatives_test.go`, `env_test.go`.
+- STATUS: Resolved (TASK-260822-hp5fb4).
+
+### 2135 — The codex goldens have a fifth survivor the capture script does not maintain
+- FINDING: `CLAUDECODE` survives a codex child incidentally — `filterCodexRuntimeEnv` has no entry for it; stripping it is `filterQwenRuntimeEnv`'s addition. So codex/exec preserves 5 of 22 pinned keys, not the 4 seeded bystanders, and the wipe attack's narrowing fails if it removes only the four.
+- NOTE: The distinction is load-bearing rather than pedantic. A seeded bystander is maintained and a test fails if a recapture drops it; an incidental survivor would vanish the day someone adds `CLAUDECODE` to the codex filter for a good reason, and a preservation bound resting on it would break silently. The wipe test therefore carries two narrowings: remove ALL survivors and the bypass returns, remove only the incidental one and the four seeded keys still catch it.
+- SCOPE: `pkg/agentic/systems/codex/parity_negatives_test.go`.
+- STATUS: Resolved (TASK-260822-hp5fb4).
+
+### 2132 — Two gates were decoration until a mutation run said so
+- ANOMALY: 31 mutants over the codex plugin's production gates; 29 red, 2 survived a fully green suite.
+- FINDING 1: the composition validator's closed-field check. The negative test substituted an unknown field FOR the url, so the per-transport shape rule ("an http server needs a url") refused it and the field check itself was never exercised. Fixed by ADDING the unknown field to an otherwise valid composition, which only the closed-set check can refuse.
+- FINDING 2: `childEnv`'s filter-then-inject ORDER. The comment claimed the order was load-bearing; swapping it left the whole suite green, because no key in the codex blocked set is also a run-context key. The comment was wrong, not the tests. Corrected to state what is true today, plus `TestNoStrippedKeyCollidesWithAnInjectedOne` pinning the non-overlap — so the day a collision arrives it is a failing test naming the comment rather than a child that lost its run id to its own filter.
+- NOTE: Both survivors were tests that PASSED for the wrong reason. Neither would have been found by adding more assertions; only breaking the production code found them.
+- SCOPE: `.temp/TASK-260822-hp5fb4/mutants.py`, `mutants-01.log` (29/31), `mutants-02.log` (31/31).
+- STATUS: Resolved (TASK-260822-hp5fb4).
+
+### 2128 — The plugin contract could not express what withSpawnEnv read off the config
+- DECISION: `LaunchRequest` gained `Run RunContext` (run id, task id, board dir, context id) and `Profile`; `CompositionServer` gained `BearerTokenEnvVar`; `pkg/agentic/runcontext.go` carries the source's `withSpawnEnv`/`appendOrReplaceEnv` as `WithRunContext`/`SetEnvValue`.
+- NOTE: Not optional. The codex goldens record `TASK_BOARD_RUN_ID`, `TASK_BOARD_TASK_ID`, `TASK_BOARD_BOARD_DIR` and `TASK_BOARD_DIR` in `env_added`, and `-p <profile>` / `--add-dir <board>` in the argv. A plugin that reaches for nothing ambient cannot produce any of them unless they arrive on the request.
+- DECISION: the run-context injection lives in the CORE, not in each plugin. The source had exactly one `withSpawnEnv` shared by all six adapters; six copies here would be six sources for one fact, and the drift would be invisible because a system that injects one variable differently still launches.
+- NOTE: `CompositionServer.BearerTokenEnvVar` is the smaller but sharper one — without it the codex validator can only DROP its two bearer checks, which is a validating gate quietly getting weaker across a move.
+- SCOPE: `pkg/agentic/system.go`, `pkg/agentic/runcontext.go`, `runcontext_test.go`.
+- STATUS: Resolved (TASK-260822-hp5fb4).
+
+### 2125 — Three source behaviours pinned as-is rather than improved mid-port
+- DECISION: The codex plugin keeps, and tests assert, three behaviours that read as defects: `BUG-260819-3qn52o`'s two open child-env leaks (`TASK_BOARD_TOKEN`/`TASK_BOARD_BUILDER_GATEWAY_TOKEN` reaching every provider child, and another runtime's session state not stripped); a service-tier export guarded by `if tier != ""`, so a launch configuring no tier lets the parent's value pass through to the child; and an unrecognized tier normalizing to nothing and being dropped with no refusal.
+- NOTE: The bug is in backlog at the commit the goldens were captured from. Its own AC3 says why it cannot be closed one plugin at a time — the construction has to make a seventh runtime safe without editing N filters — so fixing it in one of six ports would leave two implementations of one contract disagreeing.
+- NOTE: The tier drop sits awkwardly beside this repo's own rule that a parameter a system cannot honour is REFUSED rather than dropped (`ErrServiceTierUnsupported`). Pinned where a reader will find it rather than changed in a parity port.
+- NOTE: Pinning current behaviour is the mechanism, not the point: if someone closes a leak, the test goes red and names the bug, which is the conversation that should happen. A comment alone would have let the state change silently.
+- SCOPE: `pkg/agentic/systems/codex/env.go`, `env_test.go`.
+- STATUS: Open by design (BUG-260819-3qn52o remains the source's to close).
+
 ### 1915 — A seeded env diff proves a filter's lower bound only; bystander keys buy the upper bound
 - FINDING: Seeding the pinned capture environment with exactly the keys a filter strips proves the filter removes AT LEAST those keys and says nothing about whether it removes more. `qwen/exec` was the fixture where that gap became a bypass: `filterQwenRuntimeEnv` is `filterCodexRuntimeEnv` plus `CLAUDECODE`, which between them stripped all 18 seeded keys, so `env_removed` covered 100% of `parent_env` and a port whose `ChildEnv` discards the whole parent environment and returns only its injections byte-matched the golden through the real `agentic.BuildPlan` — zero differences.
 - ANOMALY: The golden's SHAPE invited the defect. A port author reading "everything removed" writes "return only the injections" and passes. Review found it by building that port; the goldens had no way to report it.

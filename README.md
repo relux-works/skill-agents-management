@@ -91,8 +91,50 @@ The agentic-system plugin contract and its registry.
   neither miss the machine-local case nor quietly widen into ignoring real
   code.
 
-No concrete system plugin ships yet. The contract is proven by one test double
-registered through the public API.
+One concrete system plugin ships: `pkg/agentic/systems/codex`. See below.
+
+The contract is also proven by one test double registered through the public
+API, so the interface stays exercisable without any plugin compiled in.
+
+### The codex plugin: `pkg/agentic/systems/codex`
+
+The Codex CLI, ported from `skill-project-management`'s spawn adapter and
+proven against all four codex launch-surface goldens through the real
+`Registry` and `BuildPlan`.
+
+- **Three binary-resolution paths**, in order: the managed npm package named by
+  `CODEX_MANAGED_PACKAGE_ROOT`, the npm shim on `PATH` unwrapped to the native
+  binary beside it, and the `PATH` entry itself. Each step that could resolve
+  is confirmed with a stat before it is returned, so a layout that is named but
+  not installed falls through instead of producing a path to nothing. All three
+  are covered by a golden and again by hermetic stub layouts that attack the
+  ORDER between them.
+- **One argv construction site.** `args.go`'s `Args` is the only place codex CLI
+  flags are spelled, for both the `codex exec` grammar (shared verbatim by the
+  dry-run mirror) and the managed-session provider-args fragment.
+  `argvguard_test.go` scans every non-test Go file in the module and fails if a
+  second site appears; it narrows itself onto the real `Args` to prove it can
+  fire, holds nine mutant spellings, and demonstrates its three declared-open
+  residuals staying open.
+- **Effort transport is argv** — a `-c model_reasoning_effort="..."` override —
+  and the vocabulary stays with the vendor layer. The service-tier override
+  travels the same way.
+- **Environment filtering by EXACT KEY**, never by prefix, including two
+  pointers whose VALUES name the credential variables to block. The parity
+  package's two permanent negatives — a whole-environment wipe and a
+  family-prefix strip — are re-run against this plugin rather than against a
+  probe, each with the narrowing that shows which seeded key catches it.
+- **Managed-session mode has no golden** (the source's capture harness could not
+  reach that surface), so it is proven the source's way instead: against a
+  frozen copy of the pre-refactor construction across every combination of
+  profile, effort and tier.
+
+Three behaviours are carried over from the source deliberately and pinned by
+tests that assert the CURRENT behaviour rather than a better one: the two open
+child-environment leaks the source tracks as `BUG-260819-3qn52o`, a
+service-tier export that lets an inherited value pass through when the launch
+configured none, and an unrecognized tier that is dropped rather than refused.
+Each pin names why changing it inside a parity port would be wrong.
 
 ### Layer 2: `pkg/vendorplugin`
 
@@ -268,3 +310,4 @@ concluding that a missing golden is permission.
 | `make` | build, test, vet and install the CLI | `make build` / `test` / `vet` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
+| codex mutation harness | narrow every codex gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-hp5fb4/mutants.py` | `.temp/TASK-260822-hp5fb4/mutants-*.log` |
