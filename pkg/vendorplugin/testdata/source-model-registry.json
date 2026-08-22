@@ -1,0 +1,949 @@
+{
+  "model_count": 43,
+  "models": [
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Latest frontier agentic coding model",
+      "id": "gpt-5.6-sol",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 120,
+      "reasoning": "ReasoningRequired",
+      "recommended": true,
+      "recommended_effort": "max",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Balanced agentic coding model for everyday work",
+      "id": "gpt-5.6-terra",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 110,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "max",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Fast and affordable agentic coding model",
+      "id": "gpt-5.6-luna",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 100,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "max",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Frontier model for complex coding and research",
+      "id": "gpt-5.5",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 90,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Strong model for everyday coding",
+      "id": "gpt-5.4",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 80,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Small, fast, cost-efficient model for simpler work",
+      "id": "gpt-5.4-mini",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 70,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Ultra-fast coding model",
+      "id": "gpt-5.3-codex-spark",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 60,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Legacy coding-specialized frontier model",
+      "id": "gpt-5.3-codex",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 50,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Legacy agentic coding model",
+      "id": "gpt-5.2-codex",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 40,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Legacy Codex flagship model",
+      "id": "gpt-5.1-codex-max",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 30,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Legacy general-purpose reasoning model",
+      "id": "gpt-5.2",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 20,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "openai",
+      "description": "Legacy small Codex model",
+      "id": "gpt-5.1-codex-mini",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 10,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "high",
+      "runtime": "codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "claude-code"
+      ],
+      "broker": "anthropic",
+      "description": "Most capable, for the hardest and longest-running tasks",
+      "id": "claude-fable-5",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 80,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "high",
+      "runtime": "claude",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "claude-code"
+      ],
+      "broker": "anthropic",
+      "description": "Best for everyday, complex tasks",
+      "id": "claude-opus-5",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 75,
+      "reasoning": "ReasoningRequired",
+      "recommended": true,
+      "recommended_effort": "high",
+      "runtime": "claude",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "claude-code"
+      ],
+      "broker": "anthropic",
+      "description": "Efficient for routine tasks",
+      "id": "claude-sonnet-5",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 60,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "high",
+      "runtime": "claude",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "claude-code"
+      ],
+      "broker": "anthropic",
+      "description": "Fastest for quick answers",
+      "id": "claude-haiku-4-5",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 10,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "claude",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "claude-code"
+      ],
+      "broker": "anthropic",
+      "description": "Previous-generation model for everyday, complex tasks",
+      "id": "claude-opus-4-8",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 70,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "claude",
+      "superseded_by": "claude-opus-5",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "claude-code"
+      ],
+      "broker": "anthropic",
+      "description": "Legacy top-tier Claude model",
+      "id": "claude-opus-4-6",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 30,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "high",
+      "runtime": "claude",
+      "superseded_by": "claude-opus-5",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "claude-code"
+      ],
+      "broker": "anthropic",
+      "description": "Legacy balanced Claude model",
+      "id": "claude-sonnet-4-6",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 20,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "medium",
+      "runtime": "claude",
+      "superseded_by": "claude-sonnet-5",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "claude-code"
+      ],
+      "broker": "anthropic",
+      "description": "Dated snapshot of claude-haiku-4-5",
+      "id": "claude-haiku-4-5-20251001",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 10,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "claude",
+      "superseded_by": "claude-haiku-4-5",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "qwen-code"
+      ],
+      "broker": "alibaba",
+      "description": "Recommended balanced reasoning and vision model",
+      "id": "qwen3.7-plus",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 30,
+      "reasoning": "ReasoningRequired",
+      "recommended": true,
+      "recommended_effort": "xhigh",
+      "runtime": "qwen",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "qwen-code"
+      ],
+      "broker": "alibaba",
+      "description": "Preview flagship reasoning and vision model",
+      "id": "qwen3.8-max-preview",
+      "lifecycle": "ModelLifecyclePreview",
+      "policy_rank": 50,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "qwen",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "qwen-code"
+      ],
+      "broker": "alibaba",
+      "description": "Production flagship reasoning model",
+      "id": "qwen3.7-max",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 40,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "qwen",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "qwen-code"
+      ],
+      "broker": "alibaba",
+      "description": "Previous-generation balanced reasoning and vision model",
+      "id": "qwen3.6-plus",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 20,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "qwen",
+      "superseded_by": "qwen3.7-plus",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "qwen-code"
+      ],
+      "broker": "alibaba",
+      "description": "Fast cost-efficient reasoning model",
+      "id": "qwen3.6-flash",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 10,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "qwen",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "codex"
+      ],
+      "broker": "alibaba",
+      "description": "Evidentiary cross-runtime registration proving qwen-codex admission/effort/identity wiring; mirrors qwen3.7-plus's profile, not a vendor-captured Alibaba-via-codex model ID",
+      "id": "qwen3.7-plus-via-codex",
+      "lifecycle": "ModelLifecyclePreview",
+      "policy_rank": 30,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "xhigh",
+      "runtime": "qwen-codex",
+      "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "muse"
+      ],
+      "broker": "",
+      "description": "Muse Spark contributor model",
+      "id": "muse-spark-1.2-contributor",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 10,
+      "reasoning": "ReasoningNone",
+      "recommended": true,
+      "recommended_effort": "",
+      "runtime": "muse",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "muse"
+      ],
+      "broker": "",
+      "description": "Muse Spark contributor model (alias)",
+      "id": "muse-spark",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 10,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "muse",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "gemini-cli"
+      ],
+      "broker": "google",
+      "description": "Preview model for complex reasoning and agentic workflows",
+      "id": "gemini-3.1-pro-preview",
+      "lifecycle": "ModelLifecyclePreview",
+      "policy_rank": 50,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "gemini",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "gemini-cli"
+      ],
+      "broker": "google",
+      "description": "Stable frontier Flash model for agentic and coding tasks",
+      "id": "gemini-3.5-flash",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 45,
+      "reasoning": "ReasoningNone",
+      "recommended": true,
+      "recommended_effort": "",
+      "runtime": "gemini",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "gemini-cli"
+      ],
+      "broker": "google",
+      "description": "Preview multimodal model for agentic and coding tasks",
+      "id": "gemini-3-flash-preview",
+      "lifecycle": "ModelLifecyclePreview",
+      "policy_rank": 40,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "gemini",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "gemini-cli"
+      ],
+      "broker": "google",
+      "description": "Stable low-latency model for high-volume lightweight tasks",
+      "id": "gemini-3.1-flash-lite",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 35,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "gemini",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "gemini-cli"
+      ],
+      "broker": "google",
+      "description": "Stable thinking model for complex code, math, and STEM",
+      "id": "gemini-2.5-pro",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 30,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "gemini",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "gemini-cli"
+      ],
+      "broker": "google",
+      "description": "Hosted dense Gemma 4 instruction model",
+      "id": "gemma-4-31b-it",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 20,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "gemini",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "gemini-cli"
+      ],
+      "broker": "google",
+      "description": "Hosted mixture-of-experts Gemma 4 instruction model",
+      "id": "gemma-4-26b-a4b-it",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 10,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "gemini",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "antigravity"
+      ],
+      "broker": "google",
+      "description": "Gemini 3.6 Flash with high effort",
+      "id": "gemini-3.6-flash-high",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 50,
+      "reasoning": "ReasoningNone",
+      "recommended": true,
+      "recommended_effort": "",
+      "runtime": "agy",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "antigravity"
+      ],
+      "broker": "google",
+      "description": "Gemini 3.1 Pro with high effort",
+      "id": "gemini-3.1-pro-high",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 60,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "agy",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "antigravity"
+      ],
+      "broker": "google",
+      "description": "Gemini 3.1 Pro with low effort",
+      "id": "gemini-3.1-pro-low",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 55,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "agy",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "antigravity"
+      ],
+      "broker": "google",
+      "description": "Gemini 3.6 Flash with medium effort",
+      "id": "gemini-3.6-flash-medium",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 45,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "agy",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "antigravity"
+      ],
+      "broker": "google",
+      "description": "Gemini 3.6 Flash with low effort",
+      "id": "gemini-3.6-flash-low",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 40,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "agy",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "antigravity"
+      ],
+      "broker": "google",
+      "description": "Gemini 3.5 Flash with high effort",
+      "id": "gemini-3.5-flash-high",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 35,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "agy",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "antigravity"
+      ],
+      "broker": "google",
+      "description": "Gemini 3.5 Flash with medium effort",
+      "id": "gemini-3.5-flash-medium",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 30,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "agy",
+      "superseded_by": "",
+      "supported_efforts": []
+    },
+    {
+      "agentic_systems": [
+        "antigravity"
+      ],
+      "broker": "google",
+      "description": "Gemini 3.5 Flash with low effort",
+      "id": "gemini-3.5-flash-low",
+      "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 25,
+      "reasoning": "ReasoningNone",
+      "recommended": false,
+      "recommended_effort": "",
+      "runtime": "agy",
+      "superseded_by": "",
+      "supported_efforts": []
+    }
+  ],
+  "provenance": {
+    "generated_by": ".scripts/capture-model-registry.sh",
+    "source_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
+    "source_files": {
+      "models": {
+        "path": "tools/board-cli/internal/spawn/models.go",
+        "sha256": "sha256:2327d6ad5ffda3fef00fe4eb95c5f9af5f48a4bc1b394dade42c3f3896242594"
+      },
+      "reasoning_effort": {
+        "path": "pkg/remoteconfig/reasoningeffort/reasoningeffort.go",
+        "sha256": "sha256:c1b7ecfe023e1eebb99a572a04966346f4a9db78282cdd96e675fcec8486938b"
+      },
+      "runtimeid": {
+        "path": "pkg/remoteconfig/runtimeid/runtimeid.go",
+        "sha256": "sha256:bb5d42e85a0e3a374eab4b796f8c5a3fafec298037977b5bc9f799955d00242b"
+      },
+      "runtimeid_builtins": {
+        "path": "pkg/remoteconfig/runtimeid/builtins.go",
+        "sha256": "sha256:18fd9be47540d60169a5817bf7e12a04b9b66421a3bd649458eb9ec7fe42c82c"
+      },
+      "spawn": {
+        "path": "tools/board-cli/internal/spawn/spawn.go",
+        "sha256": "sha256:6692094ac47b5907291bd4d033911fb331c8100563747e6e7b16d72c31f734f2"
+      },
+      "v2_snapshot": {
+        "path": "tools/board-cli/internal/spawn/v2_admission_snapshot.go",
+        "sha256": "sha256:307a40a0ed35fac663f0d22284a6f2890d1f8c5122ba97c54b410068a9f81a38"
+      }
+    },
+    "source_repo": "/Users/alexis/src/relux-works/skill-project-management"
+  },
+  "v2_admission_snapshot": {
+    "rollout_version": "spawn-policy-v2-rollout-2026-07-28",
+    "tiers": {
+      "claude": [
+        [
+          "claude-haiku-4-5",
+          "claude-haiku-4-5-20251001"
+        ],
+        [
+          "claude-sonnet-4-6"
+        ],
+        [
+          "claude-opus-4-6"
+        ],
+        [
+          "claude-opus-4-8"
+        ],
+        [
+          "claude-sonnet-5"
+        ],
+        [
+          "claude-opus-5"
+        ],
+        [
+          "claude-fable-5"
+        ]
+      ],
+      "codex": [
+        [
+          "gpt-5.1-codex-mini"
+        ],
+        [
+          "gpt-5.2"
+        ],
+        [
+          "gpt-5.1-codex-max"
+        ],
+        [
+          "gpt-5.2-codex"
+        ],
+        [
+          "gpt-5.3-codex"
+        ],
+        [
+          "gpt-5.3-codex-spark"
+        ],
+        [
+          "gpt-5.4-mini"
+        ],
+        [
+          "gpt-5.4"
+        ],
+        [
+          "gpt-5.5"
+        ],
+        [
+          "gpt-5.6-luna"
+        ],
+        [
+          "gpt-5.6-terra"
+        ],
+        [
+          "gpt-5.6-sol"
+        ]
+      ],
+      "qwen": [
+        [
+          "qwen3.6-flash"
+        ],
+        [
+          "qwen3.6-plus"
+        ],
+        [
+          "qwen3.7-plus"
+        ],
+        [
+          "qwen3.7-max"
+        ],
+        [
+          "qwen3.8-max-preview"
+        ]
+      ]
+    }
+  }
+}

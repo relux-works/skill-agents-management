@@ -1,0 +1,962 @@
+mutation harness for TASK-260822-3cknas
+each mutant NARROWS one gate; a green suite is a harness failure
+
+### an unplaceable effort bound widens instead of admitting nothing
+pkg/vendorplugin/admission.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	1.883s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.350s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	2.384s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.859s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	3.336s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.823s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.351s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.820s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	5.388s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.779s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.298s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.312s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.339s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.376s
+--- FAIL: TestExpandRefusesRatherThanNarrowing (0.00s)
+    --- FAIL: TestExpandRefusesRatherThanNarrowing/an_effort_bound_the_admission_scale_cannot_place (0.00s)
+        admissionpin_test.go:253: the expansion answered with codex: gpt-5.1-codex-max:high gpt-5.1-codex-max:low gpt-5.1-codex-max:medium gpt-5.1-codex-max:minimal gpt-5.1-codex-max:xhigh gpt-5.1-codex-mini:high gpt-5.1-codex-mini:low gpt-5.1-codex-mini:medium gpt-5.1-codex-mini:minimal gpt-5.1-codex-mini:xhigh gpt-5.2-codex:high gpt-5.2-codex:low gpt-5.2-codex:medium gpt-5.2-codex:minimal gpt-5.2-codex:xhigh gpt-5.2:high gpt-5.2:low gpt-5.2:medium gpt-5.2:minimal gpt-5.2:xhigh gpt-5.3-codex-spark:high gpt-5.3-codex-spark:low gpt-5.3-codex-spark:medium gpt-5.3-codex-spark:xhigh gpt-5.3-codex:high gpt-5.3-codex:low gpt-5.3-codex:medium gpt-5.3-codex:minimal gpt-5.3-codex:xhigh gpt-5.4-mini:high gpt-5.4-mini:low gpt-5.4-mini:medium gpt-5.4-mini:xhigh gpt-5.4:high gpt-5.4:low gpt-5.4:medium gpt-5.4:xhigh gpt-5.5:high gpt-5.5:low gpt-5.5:medium gpt-5.5:xhigh gpt-5.6-luna:high gpt-5.6-luna:low gpt-5.6-luna:max gpt-5.6-luna:medium gpt-5.6-luna:xhigh gpt-5.6-sol:high gpt-5.6-sol:low gpt-5.6-sol:max gpt-5.6-sol:medium gpt-5.6-sol:ultra gpt-5.6-sol:xhigh gpt-5.6-terra:high gpt-5.6-terra:low gpt-5.6-terra:max gpt-5.6-terra:medium gpt-5.6-terra:ultra gpt-5.6-terra:xhigh instead of refusing; an unanswerable ceiling that returns a set is indistinguishable from a narrower one
+--- FAIL: TestEffortsUnderBoundRefusesToWidenOnAnUnplaceableBound (0.00s)
+    --- FAIL: TestEffortsUnderBoundRefusesToWidenOnAnUnplaceableBound/an_unplaceable_bound_admits_nothing_rather_than_everything (0.00s)
+        admissionpin_test.go:360: got [low high max], want []
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.942s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.738s
+FAIL
+[exit 1]
+
+### a model with no effort axis drops out of the set instead of admitting the empty effort
+pkg/vendorplugin/admission.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	1.191s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	0.599s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.654s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.133s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.605s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.102s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	3.585s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.081s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.666s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	4.997s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.074s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.029s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.168s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.201s
+--- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary (0.00s)
+    --- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary/claude (0.00s)
+        admissionpin_test.go:81: admitted pairs for claude differ from the source binary's:
+             got [claude-opus-4-6:high claude-opus-4-6:low claude-opus-4-6:medium claude-opus-4-8:high claude-opus-4-8:low claude-opus-4-8:medium claude-opus-5:high claude-opus-5:low claude-opus-5:medium claude-sonnet-4-6:high claude-sonnet-4-6:low claude-sonnet-4-6:medium claude-sonnet-5:high claude-sonnet-5:low claude-sonnet-5:medium]
+            want [claude-haiku-4-5 claude-haiku-4-5-20251001 claude-opus-4-6:high claude-opus-4-6:low claude-opus-4-6:medium claude-opus-4-8:high claude-opus-4-8:low claude-opus-4-8:medium claude-opus-5:high claude-opus-5:low claude-opus-5:medium claude-sonnet-4-6:high claude-sonnet-4-6:low claude-sonnet-4-6:medium claude-sonnet-5:high claude-sonnet-5:low claude-sonnet-5:medium]
+        admissionpin_test.go:88: digest for claude is sha256:2aa0a9022d55c64ec0afab262901a8e26d06e8b2623c756913b81f5b36a9f324 and the source binary computed sha256:604689aa7954d2b138ba0e034212301a6878800dddcd22e82be96effe6929757 over /Users/alexis/src/relux-works/skill-project-management/task-board.config.json (sha256:3607d48fcc1bc856a4b11737543363ab11c4f79aa08346823152cb5a5a135de8)
+            canonical serialization was:
+            "claude\nclaude-opus-4-6\tlow,medium,high\nclaude-opus-4-8\tlow,medium,high\nclaude-opus-5\tlow,medium,high\nclaude-sonnet-4-6\tlow,medium,high\nclaude-sonnet-5\tlow,medium,high\n"
+--- FAIL: TestCapabilityRanksAreNotTheAdmissionAuthority (0.00s)
+    admissionpin_test.go:198: reversing vendor anthropic's lineup moved runtime claude's admitted set: digest sha256:2aa0a9022d55c64ec0afab262901a8e26d06e8b2623c756913b81f5b36a9f324, pinned sha256:604689aa7954d2b138ba0e034212301a6878800dddcd22e82be96effe6929757. A capability rank is evidence, and the day it decides admission a truthful re-rank changes who may spawn
+--- FAIL: TestAliasTierAdmitsBothDirections (0.00s)
+    admissionpin_test.go:318: expanding a claude ceiling bound at claude-haiku-4-5: vendorplugin: spawn-policy-v2 ceiling cannot be expanded through the frozen admission snapshot: runtime claude bound "claude-haiku-4-5"/"less_or_equal" with effort "" admits no (model, effort) pair
+--- FAIL: TestEffortsUnderBoundRefusesToWidenOnAnUnplaceableBound (0.00s)
+    --- FAIL: TestEffortsUnderBoundRefusesToWidenOnAnUnplaceableBound/a_model_with_no_effort_axis_admits_exactly_the_empty_effort (0.00s)
+        admissionpin_test.go:360: got [], want []
+    --- FAIL: TestEffortsUnderBoundRefusesToWidenOnAnUnplaceableBound/a_model_with_no_effort_axis_is_unaffected_by_an_unplaceable_bound (0.00s)
+        admissionpin_test.go:360: got [], want []
+--- FAIL: TestIsolatedRegistryMirrorsTheDefault (0.00s)
+    admissionpin_test.go:517: the unmutated isolated registry hashes claude to sha256:2aa0a9022d55c64ec0afab262901a8e26d06e8b2623c756913b81f5b36a9f324 and the source binary computed sha256:604689aa7954d2b138ba0e034212301a6878800dddcd22e82be96effe6929757; the mutant harness differs from production, so nothing it reports is about the port
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.788s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.596s
+FAIL
+[exit 1]
+
+### the provider label stops reaching the hashed serialization
+pkg/vendorplugin/admission.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.574s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.068s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	2.037s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	1.543s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.597s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.095s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	3.548s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.039s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.602s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	4.997s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.069s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.130s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.175s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.198s
+--- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary (0.00s)
+    --- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary/claude (0.00s)
+        admissionpin_test.go:88: digest for claude is sha256:70457104686e0d29a07db47fcb333ae24c2b2c17b2b89f4af7cb02f771127d51 and the source binary computed sha256:604689aa7954d2b138ba0e034212301a6878800dddcd22e82be96effe6929757 over /Users/alexis/src/relux-works/skill-project-management/task-board.config.json (sha256:3607d48fcc1bc856a4b11737543363ab11c4f79aa08346823152cb5a5a135de8)
+            canonical serialization was:
+            "\nclaude-haiku-4-5\t\nclaude-haiku-4-5-20251001\t\nclaude-opus-4-6\tlow,medium,high\nclaude-opus-4-8\tlow,medium,high\nclaude-opus-5\tlow,medium,high\nclaude-sonnet-4-6\tlow,medium,high\nclaude-sonnet-5\tlow,medium,high\n"
+    --- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary/codex (0.00s)
+        admissionpin_test.go:88: digest for codex is sha256:a0911d0dce3bb49e78e28664c90a2b89e81bd9b0447a9c4e1f8b0d5311f28164 and the source binary computed sha256:0e8a5455bd715c185712c69337037e9200d724826f64edf65f409a564eccda7c over /Users/alexis/src/relux-works/skill-project-management/task-board.config.json (sha256:3607d48fcc1bc856a4b11737543363ab11c4f79aa08346823152cb5a5a135de8)
+            canonical serialization was:
+            "\ngpt-5.1-codex-max\tminimal,low,medium\ngpt-5.1-codex-mini\tminimal,low,medium\ngpt-5.2\tminimal,low,medium\ngpt-5.2-codex\tminimal,low,medium\ngpt-5.3-codex\tminimal,low,medium\ngpt-5.3-codex-spark\tlow,medium\ngpt-5.4\tlow,medium\ngpt-5.4-mini\tlow,medium\ngpt-5.5\tlow,medium\ngpt-5.6-luna\tlow,medium\ngpt-5.6-sol\tlow,medium\ngpt-5.6-terra\tlow,medium\n"
+--- FAIL: TestCapabilityRanksAreNotTheAdmissionAuthority (0.00s)
+    admissionpin_test.go:198: reversing vendor anthropic's lineup moved runtime claude's admitted set: digest sha256:70457104686e0d29a07db47fcb333ae24c2b2c17b2b89f4af7cb02f771127d51, pinned sha256:604689aa7954d2b138ba0e034212301a6878800dddcd22e82be96effe6929757. A capability rank is evidence, and the day it decides admission a truthful re-rank changes who may spawn
+    admissionpin_test.go:198: reversing vendor openai's lineup moved runtime codex's admitted set: digest sha256:a0911d0dce3bb49e78e28664c90a2b89e81bd9b0447a9c4e1f8b0d5311f28164, pinned sha256:0e8a5455bd715c185712c69337037e9200d724826f64edf65f409a564eccda7c. A capability rank is evidence, and the day it decides admission a truthful re-rank changes who may spawn
+--- FAIL: TestIsolatedRegistryMirrorsTheDefault (0.00s)
+    admissionpin_test.go:517: the unmutated isolated registry hashes claude to sha256:70457104686e0d29a07db47fcb333ae24c2b2c17b2b89f4af7cb02f771127d51 and the source binary computed sha256:604689aa7954d2b138ba0e034212301a6878800dddcd22e82be96effe6929757; the mutant harness differs from production, so nothing it reports is about the port
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.736s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.518s
+FAIL
+[exit 1]
+
+### an effort word the scale cannot place is dropped instead of kept
+pkg/vendorplugin/admission.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.569s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.065s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.568s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.103s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.614s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.109s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.135s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.556s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.666s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.069s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.144s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.131s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.157s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.152s
+--- FAIL: TestSortEffortsKeepsAWordTheScaleCannotPlace (0.00s)
+    admissionpin_test.go:373: got [alpha zeta low high], want [low high alpha zeta]; an unplaced word dropped here is an admitted pair silently removed from a digest
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.754s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.501s
+FAIL
+[exit 1]
+
+### a floor bound is read as a ceiling
+pkg/vendorplugin/admission.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.615s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.138s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.630s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.158s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.604s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.122s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	3.616s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.110s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.670s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.066s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.126s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.132s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.163s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.190s
+--- FAIL: TestEffortsUnderBoundRefusesToWidenOnAnUnplaceableBound (0.00s)
+    --- FAIL: TestEffortsUnderBoundRefusesToWidenOnAnUnplaceableBound/a_floor_admits_at_and_above (0.00s)
+        admissionpin_test.go:360: got [low high], want [high max]
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.768s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.584s
+FAIL
+[exit 1]
+
+### a bound the frozen snapshot cannot answer falls back to the whole universe
+pkg/vendorplugin/v2snapshot.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.528s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	2.024s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.026s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	1.518s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.551s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.040s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.045s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.470s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.576s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	4.979s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.042s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.088s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.150s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.167s
+--- FAIL: TestExpandRefusesRatherThanNarrowing (0.00s)
+    --- FAIL: TestExpandRefusesRatherThanNarrowing/a_bound_naming_a_model_registered_after_the_freeze (0.00s)
+        admissionpin_test.go:253: the expansion answered with codex: gpt-5.1-codex-max:high gpt-5.1-codex-max:low gpt-5.1-codex-max:medium gpt-5.1-codex-max:minimal gpt-5.1-codex-max:xhigh gpt-5.1-codex-mini:high gpt-5.1-codex-mini:low gpt-5.1-codex-mini:medium gpt-5.1-codex-mini:minimal gpt-5.1-codex-mini:xhigh gpt-5.2-codex:high gpt-5.2-codex:low gpt-5.2-codex:medium gpt-5.2-codex:minimal gpt-5.2-codex:xhigh gpt-5.2:high gpt-5.2:low gpt-5.2:medium gpt-5.2:minimal gpt-5.2:xhigh gpt-5.3-codex-spark:high gpt-5.3-codex-spark:low gpt-5.3-codex-spark:medium gpt-5.3-codex-spark:xhigh gpt-5.3-codex:high gpt-5.3-codex:low gpt-5.3-codex:medium gpt-5.3-codex:minimal gpt-5.3-codex:xhigh gpt-5.4-mini:high gpt-5.4-mini:low gpt-5.4-mini:medium gpt-5.4-mini:xhigh gpt-5.4:high gpt-5.4:low gpt-5.4:medium gpt-5.4:xhigh gpt-5.5:high gpt-5.5:low gpt-5.5:medium gpt-5.5:xhigh gpt-5.6-luna:high gpt-5.6-luna:low gpt-5.6-luna:max gpt-5.6-luna:medium gpt-5.6-luna:xhigh gpt-5.6-sol:high gpt-5.6-sol:low gpt-5.6-sol:max gpt-5.6-sol:medium gpt-5.6-sol:ultra gpt-5.6-sol:xhigh gpt-5.6-terra:high gpt-5.6-terra:low gpt-5.6-terra:max gpt-5.6-terra:medium gpt-5.6-terra:ultra gpt-5.6-terra:xhigh instead of refusing; an unanswerable ceiling that returns a set is indistinguishable from a narrower one
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.708s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.400s
+FAIL
+[exit 1]
+
+### an uncaptured runtime is answered instead of refused
+pkg/vendorplugin/v2snapshot.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.520s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.510s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	0.981s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.045s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.508s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.036s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	3.549s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.029s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.552s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	4.990s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.144s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.201s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.180s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.193s
+ok  	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.803s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.546s
+FAIL
+[exit 1]
+
+### an expansion that admits nothing is returned instead of refused
+pkg/vendorplugin/v2snapshot.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	1.135s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	0.589s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.629s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.186s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.665s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.168s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	3.654s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.142s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.708s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.091s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.172s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.155s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.187s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.109s
+--- FAIL: TestExpandRefusesRatherThanNarrowing (0.00s)
+    --- FAIL: TestExpandRefusesRatherThanNarrowing/an_effort_bound_the_admission_scale_cannot_place (0.00s)
+        admissionpin_test.go:253: the expansion answered with codex:  instead of refusing; an unanswerable ceiling that returns a set is indistinguishable from a narrower one
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.721s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.565s
+FAIL
+[exit 1]
+
+### a snapshot-admitted model the vendor does not register is skipped instead of refused
+pkg/vendorplugin/v2snapshot.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.592s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.103s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.573s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.075s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.596s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.088s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.152s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.607s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.650s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.062s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.114s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.153s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.129s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.188s
+ok  	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.752s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.558s
+FAIL
+[exit 1]
+
+### a runtime's model index stops scoping to the harness that drives it
+pkg/vendorplugin/v2snapshot.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.805s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.311s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.825s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.318s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.851s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.347s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	3.805s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.286s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.855s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.348s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.163s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.207s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.192s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.186s
+--- FAIL: TestRuntimeModelsScopeToTheHarnessThatDrivesThem (0.00s)
+    --- FAIL: TestRuntimeModelsScopeToTheHarnessThatDrivesThem/qwen (0.00s)
+        admissionpin_test.go:654: runtime qwen indexes 6 models and its harness drives 5: [qwen3.6-flash qwen3.6-plus qwen3.7-max qwen3.7-plus qwen3.7-plus-via-codex qwen3.8-max-preview]
+    --- FAIL: TestRuntimeModelsScopeToTheHarnessThatDrivesThem/qwen-codex (0.00s)
+        admissionpin_test.go:654: runtime qwen-codex indexes 6 models and its harness drives 1: [qwen3.6-flash qwen3.6-plus qwen3.7-max qwen3.7-plus qwen3.7-plus-via-codex qwen3.8-max-preview]
+    --- FAIL: TestRuntimeModelsScopeToTheHarnessThatDrivesThem/gemini (0.00s)
+        admissionpin_test.go:654: runtime gemini indexes 15 models and its harness drives 7: [gemini-2.5-pro gemini-3-flash-preview gemini-3.1-flash-lite gemini-3.1-pro-high gemini-3.1-pro-low gemini-3.1-pro-preview gemini-3.5-flash gemini-3.5-flash-high gemini-3.5-flash-low gemini-3.5-flash-medium gemini-3.6-flash-high gemini-3.6-flash-low gemini-3.6-flash-medium gemma-4-26b-a4b-it gemma-4-31b-it]
+    --- FAIL: TestRuntimeModelsScopeToTheHarnessThatDrivesThem/agy (0.00s)
+        admissionpin_test.go:654: runtime agy indexes 15 models and its harness drives 8: [gemini-2.5-pro gemini-3-flash-preview gemini-3.1-flash-lite gemini-3.1-pro-high gemini-3.1-pro-low gemini-3.1-pro-preview gemini-3.5-flash gemini-3.5-flash-high gemini-3.5-flash-low gemini-3.5-flash-medium gemini-3.6-flash-high gemini-3.6-flash-low gemini-3.6-flash-medium gemma-4-26b-a4b-it gemma-4-31b-it]
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.690s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.475s
+FAIL
+[exit 1]
+
+### the effort bound direction stops following the model criterion
+pkg/vendorplugin/v2snapshot.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	1.155s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	0.661s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.627s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.142s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.622s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.119s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.254s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.605s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.752s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.144s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.110s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.135s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.153s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.175s
+--- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary (0.00s)
+    --- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary/claude (0.00s)
+        admissionpin_test.go:81: admitted pairs for claude differ from the source binary's:
+             got [claude-haiku-4-5 claude-haiku-4-5-20251001 claude-opus-4-6:high claude-opus-4-6:max claude-opus-4-8:high claude-opus-4-8:max claude-opus-4-8:xhigh claude-opus-5:high claude-opus-5:max claude-opus-5:xhigh claude-sonnet-4-6:high claude-sonnet-4-6:max claude-sonnet-5:high claude-sonnet-5:max claude-sonnet-5:xhigh]
+            want [claude-haiku-4-5 claude-haiku-4-5-20251001 claude-opus-4-6:high claude-opus-4-6:low claude-opus-4-6:medium claude-opus-4-8:high claude-opus-4-8:low claude-opus-4-8:medium claude-opus-5:high claude-opus-5:low claude-opus-5:medium claude-sonnet-4-6:high claude-sonnet-4-6:low claude-sonnet-4-6:medium claude-sonnet-5:high claude-sonnet-5:low claude-sonnet-5:medium]
+        admissionpin_test.go:88: digest for claude is sha256:b27c71b1a9915022ee45b97ac6f3100fd2df15d764d48a8970c1be71c36a3ca8 and the source binary computed sha256:604689aa7954d2b138ba0e034212301a6878800dddcd22e82be96effe6929757 over /Users/alexis/src/relux-works/skill-project-management/task-board.config.json (sha256:3607d48fcc1bc856a4b11737543363ab11c4f79aa08346823152cb5a5a135de8)
+            canonical serialization was:
+            "claude\nclaude-haiku-4-5\t\nclaude-haiku-4-5-20251001\t\nclaude-opus-4-6\thigh,max\nclaude-opus-4-8\thigh,xhigh,max\nclaude-opus-5\thigh,xhigh,max\nclaude-sonnet-4-6\thigh,max\nclaude-sonnet-5\thigh,xhigh,max\n"
+    --- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary/codex (0.00s)
+        admissionpin_test.go:81: admitted pairs for codex differ from the source binary's:
+             got [gpt-5.1-codex-max:high gpt-5.1-codex-max:medium gpt-5.1-codex-max:xhigh gpt-5.1-codex-mini:high gpt-5.1-codex-mini:medium gpt-5.1-codex-mini:xhigh gpt-5.2-codex:high gpt-5.2-codex:medium gpt-5.2-codex:xhigh gpt-5.2:high gpt-5.2:medium gpt-5.2:xhigh gpt-5.3-codex-spark:high gpt-5.3-codex-spark:medium gpt-5.3-codex-spark:xhigh gpt-5.3-codex:high gpt-5.3-codex:medium gpt-5.3-codex:xhigh gpt-5.4-mini:high gpt-5.4-mini:medium gpt-5.4-mini:xhigh gpt-5.4:high gpt-5.4:medium gpt-5.4:xhigh gpt-5.5:high gpt-5.5:medium gpt-5.5:xhigh gpt-5.6-luna:high gpt-5.6-luna:max gpt-5.6-luna:medium gpt-5.6-luna:xhigh gpt-5.6-sol:high gpt-5.6-sol:max gpt-5.6-sol:medium gpt-5.6-sol:ultra gpt-5.6-sol:xhigh gpt-5.6-terra:high gpt-5.6-terra:max gpt-5.6-terra:medium gpt-5.6-terra:ultra gpt-5.6-terra:xhigh]
+            want [gpt-5.1-codex-max:low gpt-5.1-codex-max:medium gpt-5.1-codex-max:minimal gpt-5.1-codex-mini:low gpt-5.1-codex-mini:medium gpt-5.1-codex-mini:minimal gpt-5.2-codex:low gpt-5.2-codex:medium gpt-5.2-codex:minimal gpt-5.2:low gpt-5.2:medium gpt-5.2:minimal gpt-5.3-codex-spark:low gpt-5.3-codex-spark:medium gpt-5.3-codex:low gpt-5.3-codex:medium gpt-5.3-codex:minimal gpt-5.4-mini:low gpt-5.4-mini:medium gpt-5.4:low gpt-5.4:medium gpt-5.5:low gpt-5.5:medium gpt-5.6-luna:low gpt-5.6-luna:medium gpt-5.6-sol:low gpt-5.6-sol:medium gpt-5.6-terra:low gpt-5.6-terra:medium]
+        admissionpin_test.go:88: digest for codex is sha256:61fed208bd2a5b2bae6219d14be2c81313feb9e7508718be4586d8865cd703b8 and the source binary computed sha256:0e8a5455bd715c185712c69337037e9200d724826f64edf65f409a564eccda7c over /Users/alexis/src/relux-works/skill-project-management/task-board.config.json (sha256:3607d48fcc1bc856a4b11737543363ab11c4f79aa08346823152cb5a5a135de8)
+            canonical serialization was:
+            "codex\ngpt-5.1-codex-max\tmedium,high,xhigh\ngpt-5.1-codex-mini\tmedium,high,xhigh\ngpt-5.2\tmedium,high,xhigh\ngpt-5.2-codex\tmedium,high,xhigh\ngpt-5.3-codex\tmedium,high,xhigh\ngpt-5.3-codex-spark\tmedium,high,xhigh\ngpt-5.4\tmedium,high,xhigh\ngpt-5.4-mini\tmedium,high,xhigh\ngpt-5.5\tmedium,high,xhigh\ngpt-5.6-luna\tmedium,high,xhigh,max\ngpt-5.6-sol\tmedium,high,xhigh,max,ultra\ngpt-5.6-terra\tmedium,high,xhigh,max,ultra\n"
+--- FAIL: TestCapabilityRanksAreNotTheAdmissionAuthority (0.00s)
+    admissionpin_test.go:198: reversing vendor anthropic's lineup moved runtime claude's admitted set: digest sha256:b27c71b1a9915022ee45b97ac6f3100fd2df15d764d48a8970c1be71c36a3ca8, pinned sha256:604689aa7954d2b138ba0e034212301a6878800dddcd22e82be96effe6929757. A capability rank is evidence, and the day it decides admission a truthful re-rank changes who may spawn
+    admissionpin_test.go:198: reversing vendor openai's lineup moved runtime codex's admitted set: digest sha256:61fed208bd2a5b2bae6219d14be2c81313feb9e7508718be4586d8865cd703b8, pinned sha256:0e8a5455bd715c185712c69337037e9200d724826f64edf65f409a564eccda7c. A capability rank is evidence, and the day it decides admission a truthful re-rank changes who may spawn
+--- FAIL: TestIsolatedRegistryMirrorsTheDefault (0.00s)
+    admissionpin_test.go:517: the unmutated isolated registry hashes claude to sha256:b27c71b1a9915022ee45b97ac6f3100fd2df15d764d48a8970c1be71c36a3ca8 and the source binary computed sha256:604689aa7954d2b138ba0e034212301a6878800dddcd22e82be96effe6929757; the mutant harness differs from production, so nothing it reports is about the port
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.741s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.516s
+FAIL
+[exit 1]
+
+### Models() hands out the plugin's own slices instead of copies
+pkg/vendorplugin/plugin.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.596s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.715s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	2.202s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	1.107s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	3.209s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	2.661s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.163s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.605s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.692s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.072s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.141s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.147s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.063s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.117s
+--- FAIL: TestEverySourceModelRowIsPorted (0.00s)
+    sourceport_test.go:381: model "gpt-5.6-sol" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.6-sol"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.6-sol" accepts [scribbled scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max ultra]
+    sourceport_test.go:381: model "gpt-5.6-terra" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.6-terra"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.6-terra" accepts [scribbled scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max ultra]
+    sourceport_test.go:381: model "gpt-5.6-luna" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.6-luna"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.6-luna" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "gpt-5.5" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.5"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.5" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh]
+    sourceport_test.go:381: model "gpt-5.4" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.4"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.4" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh]
+    sourceport_test.go:381: model "gpt-5.4-mini" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.4-mini"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.4-mini" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh]
+    sourceport_test.go:381: model "gpt-5.3-codex-spark" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.3-codex-spark"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.3-codex-spark" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh]
+    sourceport_test.go:381: model "gpt-5.3-codex" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.3-codex"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.3-codex" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh]
+    sourceport_test.go:381: model "gpt-5.2-codex" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.2-codex"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.2-codex" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh]
+    sourceport_test.go:381: model "gpt-5.1-codex-max" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.1-codex-max"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.1-codex-max" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh]
+    sourceport_test.go:381: model "gpt-5.2" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.2"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.2" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh]
+    sourceport_test.go:381: model "gpt-5.1-codex-mini" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "gpt-5.1-codex-mini"'s pair (muse x openai) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gpt-5.1-codex-mini" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh]
+    sourceport_test.go:381: model "claude-fable-5" declares systems [muse] and the source binds it to [claude-code]
+    sourceport_test.go:381: model "claude-fable-5"'s pair (muse x anthropic) does not name exactly one declared runtime
+    sourceport_test.go:381: model "claude-fable-5" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "claude-opus-5" declares systems [muse] and the source binds it to [claude-code]
+    sourceport_test.go:381: model "claude-opus-5"'s pair (muse x anthropic) does not name exactly one declared runtime
+    sourceport_test.go:381: model "claude-opus-5" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "claude-sonnet-5" declares systems [muse] and the source binds it to [claude-code]
+    sourceport_test.go:381: model "claude-sonnet-5"'s pair (muse x anthropic) does not name exactly one declared runtime
+    sourceport_test.go:381: model "claude-sonnet-5" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "claude-haiku-4-5" declares systems [muse] and the source binds it to [claude-code]
+    sourceport_test.go:381: model "claude-haiku-4-5"'s pair (muse x anthropic) does not name exactly one declared runtime
+    sourceport_test.go:381: model "claude-opus-4-8" declares systems [muse] and the source binds it to [claude-code]
+    sourceport_test.go:381: model "claude-opus-4-8"'s pair (muse x anthropic) does not name exactly one declared runtime
+    sourceport_test.go:381: model "claude-opus-4-8" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "claude-opus-4-6" declares systems [muse] and the source binds it to [claude-code]
+    sourceport_test.go:381: model "claude-opus-4-6"'s pair (muse x anthropic) does not name exactly one declared runtime
+    sourceport_test.go:381: model "claude-opus-4-6" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high max]
+    sourceport_test.go:381: model "claude-sonnet-4-6" declares systems [muse] and the source binds it to [claude-code]
+    sourceport_test.go:381: model "claude-sonnet-4-6"'s pair (muse x anthropic) does not name exactly one declared runtime
+    sourceport_test.go:381: model "claude-sonnet-4-6" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high max]
+    sourceport_test.go:381: model "claude-haiku-4-5-20251001" declares systems [muse] and the source binds it to [claude-code]
+    sourceport_test.go:381: model "claude-haiku-4-5-20251001"'s pair (muse x anthropic) does not name exactly one declared runtime
+    sourceport_test.go:381: model "qwen3.7-plus" declares systems [muse] and the source binds it to [qwen-code]
+    sourceport_test.go:381: model "qwen3.7-plus"'s pair (muse x alibaba) does not name exactly one declared runtime
+    sourceport_test.go:381: model "qwen3.7-plus" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "qwen3.8-max-preview" declares systems [muse] and the source binds it to [qwen-code]
+    sourceport_test.go:381: model "qwen3.8-max-preview"'s pair (muse x alibaba) does not name exactly one declared runtime
+    sourceport_test.go:381: model "qwen3.8-max-preview" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "qwen3.7-max" declares systems [muse] and the source binds it to [qwen-code]
+    sourceport_test.go:381: model "qwen3.7-max"'s pair (muse x alibaba) does not name exactly one declared runtime
+    sourceport_test.go:381: model "qwen3.7-max" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "qwen3.6-plus" declares systems [muse] and the source binds it to [qwen-code]
+    sourceport_test.go:381: model "qwen3.6-plus"'s pair (muse x alibaba) does not name exactly one declared runtime
+    sourceport_test.go:381: model "qwen3.6-plus" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "qwen3.6-flash" declares systems [muse] and the source binds it to [qwen-code]
+    sourceport_test.go:381: model "qwen3.6-flash"'s pair (muse x alibaba) does not name exactly one declared runtime
+    sourceport_test.go:381: model "qwen3.6-flash" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max]
+    sourceport_test.go:381: model "qwen3.7-plus-via-codex" declares systems [muse] and the source binds it to [codex]
+    sourceport_test.go:381: model "qwen3.7-plus-via-codex"'s pair (muse x alibaba) does not name exactly one declared runtime
+    sourceport_test.go:381: model "qwen3.7-plus-via-codex" accepts [scribbled scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max ultra]
+    sourceport_test.go:381: model "gemini-3.1-pro-preview" declares systems [muse] and the source binds it to [gemini-cli]
+    sourceport_test.go:381: model "gemini-3.1-pro-preview"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.5-flash" declares systems [muse] and the source binds it to [gemini-cli]
+    sourceport_test.go:381: model "gemini-3.5-flash"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3-flash-preview" declares systems [muse] and the source binds it to [gemini-cli]
+    sourceport_test.go:381: model "gemini-3-flash-preview"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.1-flash-lite" declares systems [muse] and the source binds it to [gemini-cli]
+    sourceport_test.go:381: model "gemini-3.1-flash-lite"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-2.5-pro" declares systems [muse] and the source binds it to [gemini-cli]
+    sourceport_test.go:381: model "gemini-2.5-pro"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemma-4-31b-it" declares systems [muse] and the source binds it to [gemini-cli]
+    sourceport_test.go:381: model "gemma-4-31b-it"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemma-4-26b-a4b-it" declares systems [muse] and the source binds it to [gemini-cli]
+    sourceport_test.go:381: model "gemma-4-26b-a4b-it"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.6-flash-high" declares systems [muse] and the source binds it to [antigravity]
+    sourceport_test.go:381: model "gemini-3.6-flash-high"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.1-pro-high" declares systems [muse] and the source binds it to [antigravity]
+    sourceport_test.go:381: model "gemini-3.1-pro-high"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.1-pro-low" declares systems [muse] and the source binds it to [antigravity]
+    sourceport_test.go:381: model "gemini-3.1-pro-low"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.6-flash-medium" declares systems [muse] and the source binds it to [antigravity]
+    sourceport_test.go:381: model "gemini-3.6-flash-medium"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.6-flash-low" declares systems [muse] and the source binds it to [antigravity]
+    sourceport_test.go:381: model "gemini-3.6-flash-low"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.5-flash-high" declares systems [muse] and the source binds it to [antigravity]
+    sourceport_test.go:381: model "gemini-3.5-flash-high"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.5-flash-medium" declares systems [muse] and the source binds it to [antigravity]
+    sourceport_test.go:381: model "gemini-3.5-flash-medium"'s pair (muse x google) does not name exactly one declared runtime
+    sourceport_test.go:381: model "gemini-3.5-flash-low" declares systems [muse] and the source binds it to [antigravity]
+    sourceport_test.go:381: model "gemini-3.5-flash-low"'s pair (muse x google) does not name exactly one declared runtime
+--- FAIL: TestTheFullSetPinFiresOnDrift (0.00s)
+    --- FAIL: TestTheFullSetPinFiresOnDrift/a_model_rebound_to_the_other_harness_of_the_same_vendor (0.00s)
+        sourceport_test.go:478: the pin fired but never named the drift: wanted a report containing "model \"gemini-2.5-pro\" declares systems [gemini-cli] and the source binds it to [antigravity]", got [model "gpt-5.6-sol" declares systems [muse] and the source binds it to [codex] model "gpt-5.6-sol"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.6-sol" accepts [scribbled scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max ultra] model "gpt-5.6-terra" declares systems [muse] and the source binds it to [codex] model "gpt-5.6-terra"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.6-terra" accepts [scribbled scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max ultra] model "gpt-5.6-luna" declares systems [muse] and the source binds it to [codex] model "gpt-5.6-luna"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.6-luna" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "gpt-5.5" declares systems [muse] and the source binds it to [codex] model "gpt-5.5"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.5" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh] model "gpt-5.4" declares systems [muse] and the source binds it to [codex] model "gpt-5.4"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.4" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh] model "gpt-5.4-mini" declares systems [muse] and the source binds it to [codex] model "gpt-5.4-mini"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.4-mini" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh] model "gpt-5.3-codex-spark" declares systems [muse] and the source binds it to [codex] model "gpt-5.3-codex-spark"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.3-codex-spark" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh] model "gpt-5.3-codex" declares systems [muse] and the source binds it to [codex] model "gpt-5.3-codex"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.3-codex" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh] model "gpt-5.2-codex" declares systems [muse] and the source binds it to [codex] model "gpt-5.2-codex"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.2-codex" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh] model "gpt-5.1-codex-max" declares systems [muse] and the source binds it to [codex] model "gpt-5.1-codex-max"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.1-codex-max" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh] model "gpt-5.2" declares systems [muse] and the source binds it to [codex] model "gpt-5.2"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.2" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh] model "gpt-5.1-codex-mini" declares systems [muse] and the source binds it to [codex] model "gpt-5.1-codex-mini"'s pair (muse x openai) does not name exactly one declared runtime model "gpt-5.1-codex-mini" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [minimal low medium high xhigh] model "claude-fable-5" declares systems [muse] and the source binds it to [claude-code] model "claude-fable-5"'s pair (muse x anthropic) does not name exactly one declared runtime model "claude-fable-5" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "claude-opus-5" declares systems [muse] and the source binds it to [claude-code] model "claude-opus-5"'s pair (muse x anthropic) does not name exactly one declared runtime model "claude-opus-5" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "claude-sonnet-5" declares systems [muse] and the source binds it to [claude-code] model "claude-sonnet-5"'s pair (muse x anthropic) does not name exactly one declared runtime model "claude-sonnet-5" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "claude-haiku-4-5" declares systems [muse] and the source binds it to [claude-code] model "claude-haiku-4-5"'s pair (muse x anthropic) does not name exactly one declared runtime model "claude-opus-4-8" declares systems [muse] and the source binds it to [claude-code] model "claude-opus-4-8"'s pair (muse x anthropic) does not name exactly one declared runtime model "claude-opus-4-8" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "claude-opus-4-6" declares systems [muse] and the source binds it to [claude-code] model "claude-opus-4-6"'s pair (muse x anthropic) does not name exactly one declared runtime model "claude-opus-4-6" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high max] model "claude-sonnet-4-6" declares systems [muse] and the source binds it to [claude-code] model "claude-sonnet-4-6"'s pair (muse x anthropic) does not name exactly one declared runtime model "claude-sonnet-4-6" accepts [scribbled scribbled scribbled scribbled] and the source accepts [low medium high max] model "claude-haiku-4-5-20251001" declares systems [muse] and the source binds it to [claude-code] model "claude-haiku-4-5-20251001"'s pair (muse x anthropic) does not name exactly one declared runtime model "qwen3.7-plus" declares systems [muse] and the source binds it to [qwen-code] model "qwen3.7-plus"'s pair (muse x alibaba) does not name exactly one declared runtime model "qwen3.7-plus" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "qwen3.8-max-preview" declares systems [muse] and the source binds it to [qwen-code] model "qwen3.8-max-preview"'s pair (muse x alibaba) does not name exactly one declared runtime model "qwen3.8-max-preview" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "qwen3.7-max" declares systems [muse] and the source binds it to [qwen-code] model "qwen3.7-max"'s pair (muse x alibaba) does not name exactly one declared runtime model "qwen3.7-max" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "qwen3.6-plus" declares systems [muse] and the source binds it to [qwen-code] model "qwen3.6-plus"'s pair (muse x alibaba) does not name exactly one declared runtime model "qwen3.6-plus" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "qwen3.6-flash" declares systems [muse] and the source binds it to [qwen-code] model "qwen3.6-flash"'s pair (muse x alibaba) does not name exactly one declared runtime model "qwen3.6-flash" accepts [scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max] model "qwen3.7-plus-via-codex" declares systems [muse] and the source binds it to [codex] model "qwen3.7-plus-via-codex"'s pair (muse x alibaba) does not name exactly one declared runtime model "qwen3.7-plus-via-codex" accepts [scribbled scribbled scribbled scribbled scribbled scribbled] and the source accepts [low medium high xhigh max ultra] model "gemini-3.1-pro-preview" declares systems [muse] and the source binds it to [gemini-cli] model "gemini-3.1-pro-preview"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.5-flash" declares systems [muse] and the source binds it to [gemini-cli] model "gemini-3.5-flash"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3-flash-preview" declares systems [muse] and the source binds it to [gemini-cli] model "gemini-3-flash-preview"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.1-flash-lite" declares systems [muse] and the source binds it to [gemini-cli] model "gemini-3.1-flash-lite"'s pair (muse x google) does not name exactly one declared runtime model "gemini-2.5-pro" declares systems [muse] and the source binds it to [antigravity] model "gemini-2.5-pro"'s pair (muse x google) does not name exactly one declared runtime model "gemma-4-31b-it" declares systems [muse] and the source binds it to [gemini-cli] model "gemma-4-31b-it"'s pair (muse x google) does not name exactly one declared runtime model "gemma-4-26b-a4b-it" declares systems [muse] and the source binds it to [gemini-cli] model "gemma-4-26b-a4b-it"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.6-flash-high" declares systems [muse] and the source binds it to [antigravity] model "gemini-3.6-flash-high"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.1-pro-high" declares systems [muse] and the source binds it to [antigravity] model "gemini-3.1-pro-high"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.1-pro-low" declares systems [muse] and the source binds it to [antigravity] model "gemini-3.1-pro-low"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.6-flash-medium" declares systems [muse] and the source binds it to [antigravity] model "gemini-3.6-flash-medium"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.6-flash-low" declares systems [muse] and the source binds it to [antigravity] model "gemini-3.6-flash-low"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.5-flash-high" declares systems [muse] and the source binds it to [antigravity] model "gemini-3.5-flash-high"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.5-flash-medium" declares systems [muse] and the source binds it to [antigravity] model "gemini-3.5-flash-medium"'s pair (muse x google) does not name exactly one declared runtime model "gemini-3.5-flash-low" declares systems [muse] and the source binds it to [antigravity] model "gemini-3.5-flash-low"'s pair (muse x google) does not name exactly one declared runtime]
+--- FAIL: TestEveryRankCarriesTheSourceEvidence (0.00s)
+    sourceport_test.go:583: vendor anthropic model "claude-fable-5" ranks at position 1 and no basis entry records the source's own "PolicyRank 80"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor anthropic model "claude-opus-5" ranks at position 2 and no basis entry records the source's own "PolicyRank 75"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor anthropic model "claude-opus-4-8" ranks at position 3 and no basis entry records the source's own "PolicyRank 70"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor anthropic model "claude-sonnet-5" ranks at position 4 and no basis entry records the source's own "PolicyRank 60"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor anthropic model "claude-opus-4-6" ranks at position 5 and no basis entry records the source's own "PolicyRank 30"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor anthropic model "claude-sonnet-4-6" ranks at position 6 and no basis entry records the source's own "PolicyRank 20"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor anthropic model "claude-haiku-4-5" ranks at position 7 and no basis entry records the source's own "PolicyRank 10"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor anthropic model "claude-haiku-4-5-20251001" ranks at position 8 and no basis entry records the source's own "PolicyRank 10"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.6-sol" ranks at position 1 and no basis entry records the source's own "PolicyRank 120"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.6-terra" ranks at position 2 and no basis entry records the source's own "PolicyRank 110"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.6-luna" ranks at position 3 and no basis entry records the source's own "PolicyRank 100"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.5" ranks at position 4 and no basis entry records the source's own "PolicyRank 90"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.4" ranks at position 5 and no basis entry records the source's own "PolicyRank 80"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.4-mini" ranks at position 6 and no basis entry records the source's own "PolicyRank 70"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.3-codex-spark" ranks at position 7 and no basis entry records the source's own "PolicyRank 60"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.3-codex" ranks at position 8 and no basis entry records the source's own "PolicyRank 50"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.2-codex" ranks at position 9 and no basis entry records the source's own "PolicyRank 40"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.1-codex-max" ranks at position 10 and no basis entry records the source's own "PolicyRank 30"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.2" ranks at position 11 and no basis entry records the source's own "PolicyRank 20"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor openai model "gpt-5.1-codex-mini" ranks at position 12 and no basis entry records the source's own "PolicyRank 10"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor alibaba model "qwen3.8-max-preview" ranks at position 1 and no basis entry records the source's own "PolicyRank 50"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor alibaba model "qwen3.7-max" ranks at position 2 and no basis entry records the source's own "PolicyRank 40"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor alibaba model "qwen3.7-plus" ranks at position 3 and no basis entry records the source's own "PolicyRank 30"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor alibaba model "qwen3.7-plus-via-codex" ranks at position 4 and no basis entry records the source's own "PolicyRank 30"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor alibaba model "qwen3.6-plus" ranks at position 5 and no basis entry records the source's own "PolicyRank 20"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor alibaba model "qwen3.6-flash" ranks at position 6 and no basis entry records the source's own "PolicyRank 10"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.1-pro-high" ranks at position 1 and no basis entry records the source's own "PolicyRank 60"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.1-pro-low" ranks at position 2 and no basis entry records the source's own "PolicyRank 55"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.1-pro-preview" ranks at position 3 and no basis entry records the source's own "PolicyRank 50"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.6-flash-high" ranks at position 4 and no basis entry records the source's own "PolicyRank 50"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.5-flash" ranks at position 5 and no basis entry records the source's own "PolicyRank 45"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.6-flash-medium" ranks at position 6 and no basis entry records the source's own "PolicyRank 45"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3-flash-preview" ranks at position 7 and no basis entry records the source's own "PolicyRank 40"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.6-flash-low" ranks at position 8 and no basis entry records the source's own "PolicyRank 40"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.1-flash-lite" ranks at position 9 and no basis entry records the source's own "PolicyRank 35"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.5-flash-high" ranks at position 10 and no basis entry records the source's own "PolicyRank 35"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-2.5-pro" ranks at position 11 and no basis entry records the source's own "PolicyRank 30"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.5-flash-medium" ranks at position 12 and no basis entry records the source's own "PolicyRank 30"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemini-3.5-flash-low" ranks at position 13 and no basis entry records the source's own "PolicyRank 25"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemma-4-31b-it" ranks at position 14 and no basis entry records the source's own "PolicyRank 20"; the position would then rest on this repository's say-so
+    sourceport_test.go:583: vendor google model "gemma-4-26b-a4b-it" ranks at position 15 and no basis entry records the source's own "PolicyRank 10"; the position would then rest on this repository's say-so
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.702s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.476s
+FAIL
+[exit 1]
+
+### a vendor's launch drops the caller's composition
+pkg/vendorplugin/plugin.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.597s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.117s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.635s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.170s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.646s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.137s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.150s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.582s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.753s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.129s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.166s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.139s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.169s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.182s
+ok  	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.720s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.502s
+FAIL
+[exit 1]
+
+### one anthropic model loses one effort word
+pkg/vendorplugin/vendors/anthropic/models.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.545s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.043s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.501s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.016s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.509s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.002s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	3.514s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.002s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.568s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	4.960s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.103s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.120s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.154s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.171s
+--- FAIL: TestEverySourceModelRowIsPorted (0.00s)
+    sourceport_test.go:381: model "claude-opus-5" accepts [low medium high xhigh] and the source accepts [low medium high xhigh max]
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.741s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.507s
+FAIL
+[exit 1]
+
+### one openai model is rebound to another harness
+pkg/vendorplugin/vendors/openai/models.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.597s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.112s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.636s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.149s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.741s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.218s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.169s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.617s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.697s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.110s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.108s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.150s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.164s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.157s
+--- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary (0.00s)
+    --- FAIL: TestAdmittedPairDigestsReproduceTheSourceBinary/codex (0.00s)
+        admissionpin_test.go:67: expanding the source repository's own codex ceiling: vendorplugin: spawn-policy-v2 ceiling cannot be expanded through the frozen admission snapshot: the snapshot admits "gpt-5.5" for runtime codex and vendor openai does not register it under that runtime's agentic system
+--- FAIL: TestTheDigestFiresOnADriftedVocabulary (0.00s)
+    --- FAIL: TestTheDigestFiresOnADriftedVocabulary/one_effort_word_dropped_from_one_model (0.00s)
+        admissionpin_test.go:158: expanding the drifted registry: vendorplugin: spawn-policy-v2 ceiling cannot be expanded through the frozen admission snapshot: the snapshot admits "gpt-5.5" for runtime codex and vendor openai does not register it under that runtime's agentic system
+    --- FAIL: TestTheDigestFiresOnADriftedVocabulary/one_effort_word_gained_by_one_model (0.00s)
+        admissionpin_test.go:158: expanding the drifted registry: vendorplugin: spawn-policy-v2 ceiling cannot be expanded through the frozen admission snapshot: the snapshot admits "gpt-5.5" for runtime codex and vendor openai does not register it under that runtime's agentic system
+    --- FAIL: TestTheDigestFiresOnADriftedVocabulary/one_model_losing_its_effort_axis_entirely (0.00s)
+        admissionpin_test.go:158: expanding the drifted registry: vendorplugin: spawn-policy-v2 ceiling cannot be expanded through the frozen admission snapshot: the snapshot admits "gpt-5.5" for runtime codex and vendor openai does not register it under that runtime's agentic system
+--- FAIL: TestCapabilityRanksAreNotTheAdmissionAuthority (0.00s)
+    admissionpin_test.go:195: expanding codex with vendor openai re-ranked: vendorplugin: spawn-policy-v2 ceiling cannot be expanded through the frozen admission snapshot: the snapshot admits "gpt-5.5" for runtime codex and vendor openai does not register it under that runtime's agentic system
+--- FAIL: TestIsolatedRegistryMirrorsTheDefault (0.00s)
+    admissionpin_test.go:514: expanding codex through the unmutated isolated registry: vendorplugin: spawn-policy-v2 ceiling cannot be expanded through the frozen admission snapshot: the snapshot admits "gpt-5.5" for runtime codex and vendor openai does not register it under that runtime's agentic system
+--- FAIL: TestEverySourceModelRowIsPorted (0.00s)
+    sourceport_test.go:381: vendor openai does not declare source row "gpt-5.5"
+    sourceport_test.go:381: vendor openai declares model "gpt-5.5x", which is not a row of the source table
+--- FAIL: TestCapabilityRankOrderingMatchesTheSourceScores (0.00s)
+    sourceport_test.go:538: vendor openai ranks "gpt-5.5x" at position 4; the source's scores in descending declaration order put "gpt-5.5" there
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.669s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.462s
+FAIL
+[exit 1]
+
+### one google model loses its usage description
+pkg/vendorplugin/vendors/google/models.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	2.117s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	0.547s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.092s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	1.588s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.597s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.099s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	4.075s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.509s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.609s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.009s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.124s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.109s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.142s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.179s
+panic: google: registering the vendor plugin: vendorplugin: vendor google: model "gemini-2.5-pro": vendorplugin: model has no usage description: the field says what the model is best used for, and an operator choosing between models reads it
+
+goroutine 1 [running]:
+github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google.init.0()
+	/private/var/folders/31/0y3t5xv92xvbkc2r6hhfk_jw0000gn/T/tmpo_nolkvp/worktree/pkg/vendorplugin/vendors/google/google.go:64 +0x84
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.717s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.712s
+FAIL
+[exit 1]
+
+### two alibaba models are given the same capability position
+pkg/vendorplugin/vendors/alibaba/models.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.518s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.002s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.487s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	1.973s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.416s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	2.930s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	3.447s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.914s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.441s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	4.867s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.009s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.049s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.096s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.155s
+panic: alibaba: registering the vendor plugin: vendorplugin: vendor declares two models at the same capability rank: alibaba ranks both "qwen3.7-plus" and "qwen3.7-plus-via-codex" at position 3; a lineup that cannot order itself is not a ranking
+
+goroutine 1 [running]:
+github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba.init.0()
+	/private/var/folders/31/0y3t5xv92xvbkc2r6hhfk_jw0000gn/T/tmpp96zq2_b/worktree/pkg/vendorplugin/vendors/alibaba/alibaba.go:60 +0x84
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.736s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.545s
+FAIL
+[exit 1]
+
+### one alibaba model's description stops warning it is not a real vendor id
+pkg/vendorplugin/vendors/alibaba/models.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.598s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.615s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.099s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.133s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	3.116s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	2.601s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic	3.566s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.586s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.101s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.033s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.115s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.141s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.149s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.195s
+--- FAIL: TestUsageDescriptionsAreMarkedAuthoredHere (0.00s)
+    sourceport_test.go:631: vendors/alibaba/models.go does not state "AUTHORED HERE, not ported: every Description"; every Description in it is authorship rather than a ported fact, and a reader has no way to tell without the note
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.738s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.520s
+FAIL
+[exit 1]
+
+### a vendor loses its binding-file home in the module guard
+pkg/agentic/singlesource_guard_test.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.580s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.099s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.626s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.139s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.628s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.135s
+--- FAIL: TestSingleSourceGuardFindsNoSecondBinding (0.01s)
+    singlesource_guard_test.go:1266: a second agentic system binding exists outside the registry:
+          pkg/vendorplugin/vendors/google/models.go:112 [binding-table] var models: a composite literal with the plugin id "antigravity" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:119 [binding-table] var models: a composite literal with the plugin id "antigravity" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:126 [binding-table] var models: a composite literal with the plugin id "gemini-cli" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:133 [binding-table] var models: a composite literal with the plugin id "antigravity" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:140 [binding-table] var models: a composite literal with the plugin id "gemini-cli" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:147 [binding-table] var models: a composite literal with the plugin id "antigravity" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:154 [binding-table] var models: a composite literal with the plugin id "gemini-cli" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:161 [binding-table] var models: a composite literal with the plugin id "antigravity" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:168 [binding-table] var models: a composite literal with the plugin id "gemini-cli" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:175 [binding-table] var models: a composite literal with the plugin id "antigravity" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:182 [binding-table] var models: a composite literal with the plugin id "gemini-cli" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:189 [binding-table] var models: a composite literal with the plugin id "antigravity" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:196 [binding-table] var models: a composite literal with the plugin id "antigravity" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:203 [binding-table] var models: a composite literal with the plugin id "gemini-cli" as a element; a registry is the only place the set of plugins may be spelled
+          pkg/vendorplugin/vendors/google/models.go:210 [binding-table] var models: a composite literal with the plugin id "gemini-cli" as a element; a registry is the only place the set of plugins may be spelled
+--- FAIL: TestSingleSourceGuardHomesAreDistinctFacts (0.00s)
+    singlesource_guard_test.go:1328: bindingHomes["google models"] = "pkg/vendorplugin/vendors/google/nowhere.go", which the module scan never reached
+--- FAIL: TestEveryVendorHasExactlyOneBindingFile (0.00s)
+    singlesource_guard_test.go:1386: vendor "google"'s binding file "pkg/vendorplugin/vendors/google/models.go" is not the home bindingHomes records for it ("pkg/vendorplugin/vendors/google/nowhere.go"); the guard would not permit that file to spell plugin ids
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	3.598s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	4.091s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.666s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.059s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.127s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.160s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.151s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.195s
+ok  	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.797s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.508s
+FAIL
+[exit 1]
+
+### two vendors are pointed at one binding file
+pkg/agentic/singlesource_guard_test.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	1.057s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.571s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	0.530s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.087s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.607s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	3.113s
+--- FAIL: TestEveryVendorHasExactlyOneBindingFile (0.00s)
+    singlesource_guard_test.go:1382: vendors "anthropic" and "openai" share the binding file "pkg/vendorplugin/vendors/anthropic/models.go"; one file per vendor is the rule, and a shared one lets each spell the other's bindings
+    singlesource_guard_test.go:1386: vendor "openai"'s binding file "pkg/vendorplugin/vendors/anthropic/models.go" is not the home bindingHomes records for it ("pkg/vendorplugin/vendors/openai/models.go"); the guard would not permit that file to spell plugin ids
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic	4.645s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.544s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	4.110s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	5.027s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	5.105s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.116s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.136s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.165s
+ok  	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.720s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.506s
+FAIL
+[exit 1]
+
+### an id-spelling home is keyed by something the scanner would read as a type name
+pkg/agentic/singlesource_guard_test.go
+$ go test -mod=mod ./... -count=1
+ok  	github.com/relux-works/skill-agents-management/internal/argvguard	0.505s
+ok  	github.com/relux-works/skill-agents-management/internal/gosources	1.002s
+ok  	github.com/relux-works/skill-agents-management/internal/ident	1.500s
+ok  	github.com/relux-works/skill-agents-management/internal/launchenv	2.000s
+ok  	github.com/relux-works/skill-agents-management/internal/mcpjson	2.454s
+?   	github.com/relux-works/skill-agents-management/internal/paritycase	[no test files]
+ok  	github.com/relux-works/skill-agents-management/internal/runtimeenv	2.942s
+FAIL	github.com/relux-works/skill-agents-management/pkg/agentic [build failed]
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/parity	3.397s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy	3.970s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude	4.381s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex	4.890s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini	5.032s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse	5.063s
+ok  	github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen	5.100s
+ok  	github.com/relux-works/skill-agents-management/pkg/vendorplugin	4.697s
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google	[no test files]
+?   	github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai	[no test files]
+?   	github.com/relux-works/skill-agents-management/tools/agents-management	[no test files]
+--- FAIL: TestBuildOutputIsIgnoredAndSourcesAreNot (0.01s)
+    build_integration_test.go:278: git check-ignore Makefile: exit status 128
+FAIL
+FAIL	github.com/relux-works/skill-agents-management/tools/agents-management/cmd	6.519s
+FAIL
+# github.com/relux-works/skill-agents-management/pkg/agentic [github.com/relux-works/skill-agents-management/pkg/agentic.test]
+pkg/agentic/singlesource_guard_test.go:240:2: duplicate key "SystemID" in map literal
+[exit 1]
+
+
+=== summary ===
+21/21 mutants killed
