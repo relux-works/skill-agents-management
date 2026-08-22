@@ -1,0 +1,1 @@
+{"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","api_error_status":"not-an-integer","duration_ms":4211,"num_turns":1,"result":"API Error: Request rejected. You've reached your usage limit.","session_id":"0d1f2c33-6b2a-4f0e-9d7b-8f4c1a2b3c4d"}

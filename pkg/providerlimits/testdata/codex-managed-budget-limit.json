@@ -1,0 +1,9 @@
+{
+  "comment": "Codex app-server thread-goal status on the managed path. budgetLimited reports exhaustion of the tokenBudget this runtime itself sent on a board goal, so it proves nothing about the shared subscription.",
+  "threadGoal": {
+    "id": "goal_01JQ8Z2W7Q",
+    "status": "budgetLimited",
+    "tokenBudget": 120000,
+    "tokensUsed": 120000
+  }
+}

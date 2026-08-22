@@ -1,0 +1,31 @@
+{
+  "version": 3,
+  "identity": "a60c75e2da6f9bf4",
+  "provider": "codex",
+  "home_display": "/tmp/providerlimits-xrt/codex-home",
+  "groups": {
+    "codex-plan": {
+      "provider": "codex",
+      "state": "suppressed",
+      "backoff_step": 0,
+      "suppressed_since": "2026-08-22T12:00:00Z",
+      "next_probe_at": "2026-08-22T12:02:00Z",
+      "consecutive_limit_observations": 1,
+      "last_observation_at": "2026-08-22T12:00:00Z",
+      "evidence": {
+        "run_id": "RUN-260822-2jouz4",
+        "task_id": "TASK-260822-2jouz3",
+        "model": "gpt-5.5",
+        "marker": "you've hit your usage limit",
+        "excerpt": "ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 5th, 2026 10:30 AM."
+      },
+      "provider_reset_hint": {
+        "raw": "or try again at Aug 5th, 2026 10:30 AM",
+        "parsed": "2026-08-05T10:30:00Z",
+        "used": false,
+        "note": "diagnostic only; may shorten a backoff step, never extend or suppress"
+      },
+      "probe_lease": null
+    }
+  }
+}

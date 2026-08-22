@@ -1,0 +1,24 @@
+{
+  "version": 3,
+  "identity": "09e9e699566c6827",
+  "provider": "codex",
+  "home_display": "~/Library/Application Support/task-board/session-manager/19e03767f1bb988edc779466934ee2e43e7d9b1362c162d94b1dfcb2b3f10d46/sessions/SES-qdBSb8p52fBH37waBUYgQxV1/codex-home",
+  "groups": {
+    "codex-unmapped:": {
+      "provider": "codex",
+      "state": "suppressed",
+      "backoff_step": 2,
+      "suppressed_since": "2026-08-04T18:34:54.057547+03:00",
+      "next_probe_at": "2026-08-04T19:05:08.489705+03:00",
+      "consecutive_limit_observations": 4,
+      "last_observation_at": "2026-08-04T18:50:08.489705+03:00",
+      "evidence": {
+        "task_id": "TASK-260801-limit",
+        "marker": "you've hit your usage limit",
+        "log": "/var/folders/31/0y3t5xv92xvbkc2r6hhfk_jw0000gn/T/TestLaunchProcessClassifiesGoallessCodexUsageLimitThroughProduct390251123/001/agent.log",
+        "excerpt": "ERROR: You've hit your usage limit. Try again at Aug 5th, 2026 10:30 AM."
+      },
+      "probe_lease": null
+    }
+  }
+}

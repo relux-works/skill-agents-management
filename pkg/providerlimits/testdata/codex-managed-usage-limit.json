@@ -1,0 +1,7 @@
+{
+  "comment": "Codex app-server thread-goal status on the managed path. usageLimited is the provider reporting its own shared subscription exhausted.",
+  "threadGoal": {
+    "id": "goal_01JQ8Z2W7R",
+    "status": "usageLimited"
+  }
+}

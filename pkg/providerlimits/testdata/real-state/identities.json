@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "identities": {
+    "09e9e699566c6827": {
+      "provider": "codex",
+      "home_display": "~/Library/Application Support/task-board/session-manager/19e03767f1bb988edc779466934ee2e43e7d9b1362c162d94b1dfcb2b3f10d46/sessions/SES-qdBSb8p52fBH37waBUYgQxV1/codex-home",
+      "first_seen": "2026-08-04T18:34:54.07158+03:00",
+      "last_seen": "2026-08-04T18:50:08.493543+03:00"
+    },
+    "8ec4c1a052a55ed6": {
+      "provider": "codex",
+      "home_display": "~/.codex",
+      "first_seen": "2026-08-04T12:03:50.872081903+03:00",
+      "last_seen": "2026-08-21T14:51:32.662286+03:00"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "version": 3,
+  "identity": "b078b81958cdd46d",
+  "provider": "claude",
+  "home_display": "/tmp/providerlimits-xrt/claude-home",
+  "groups": {
+    "claude-plan": {
+      "provider": "claude",
+      "state": "suppressed",
+      "backoff_step": 0,
+      "suppressed_since": "2026-08-22T12:00:00Z",
+      "next_probe_at": "2026-08-22T12:02:00Z",
+      "consecutive_limit_observations": 1,
+      "last_observation_at": "2026-08-22T12:00:00Z",
+      "evidence": {
+        "run_id": "RUN-260822-2jouz3",
+        "task_id": "TASK-260822-2jouz3",
+        "model": "claude-opus-5",
+        "marker": "api_error_status 429",
+        "excerpt": "API Error: Request rejected (429) · You've reached your usage limit. Your limit resets at 10:30am."
+      },
+      "provider_reset_hint": {
+        "raw": "Your limit resets at 10:30am",
+        "parsed": "2026-08-23T10:30:00Z",
+        "used": false,
+        "note": "diagnostic only; may shorten a backoff step, never extend or suppress"
+      },
+      "probe_lease": null
+    }
+  }
+}
