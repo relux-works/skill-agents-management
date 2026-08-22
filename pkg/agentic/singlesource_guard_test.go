@@ -254,6 +254,56 @@ var vendorBindingHomes = map[string]string{
 	"google":    "pkg/vendorplugin/vendors/google/models.go",
 }
 
+// singleSourceAllowlist names the sites permitted to spell a plugin id outside
+// a binding home, each with the reason it is not a second binding.
+//
+// # Why an allowlist exists at all
+//
+// The rule this guard enforces is "one place per FACT". Every entry below
+// spells plugin ids while binding nothing: none of them maps a runtime to a
+// system or a vendor, and none of them is a set that grows when a plugin is
+// added. Two of them are the opposite — frozen historical sets that must never
+// be edited again — which is why deriving them from the registry would be
+// wrong rather than tidy.
+//
+// Keys are FILE-SCOPED, exactly as the codex argv guard's allowlist is
+// (internal/argvguard.AllowlistKey), and for the same reason: a bare name would
+// exempt every function of that name anywhere in the module. An exemption here
+// covers one site in one file and nothing else, which
+// TestSingleSourceAllowlistDoesNotExemptTheRestOfItsFile plants a real shadow
+// table to prove.
+//
+// A name must not be added here without a reason written down, and a stale
+// entry is itself a defect: TestSingleSourceAllowlistHasNoUnusedEntries fails
+// on an exemption that no longer corresponds to a real site, because a
+// leftover exemption is a hole waiting for the next function to be given that
+// name.
+var singleSourceAllowlist = map[string]string{
+	singleSourceAllowlistKey("pkg/providerlimits/groups.go", "func HasClassifier"): "" +
+		"which BROKERS this build ships a rate-limit classifier for. It binds nothing — no runtime, no system, no vendor — and it is not the set of plugins: adding a vendor plugin must NOT add a classifier, because a classifier exists only where a real error shape was captured. Deriving it from the registry is the specific mistake it is written to refuse (see groups.go's own comment and the extraction source's design D4).",
+	singleSourceAllowlistKey("pkg/providerlimits/ladder.go", "var legacyLadderRuntimes"): "" +
+		"the FROZEN set of runtime-id spellings that were legal backoff-ladder keys before the extraction source re-keyed that table onto brokers, kept working for one release as a migration aid. It is history, not a plugin list: it must not grow when a runtime is added, and deriving it from the frozen table is exactly the widening the source refuses (a 'gemini' row was never a legal key and must keep being reported and dropped).",
+}
+
+// singleSourceAllowlistKey scopes an exemption to one site in one file.
+func singleSourceAllowlistKey(file, where string) string { return file + "::" + where }
+
+// withoutAllowedSites drops the violations named in singleSourceAllowlist.
+//
+// It is applied by the GATE only. Every mutant and narrowing test below scans
+// raw, so an allowlist entry can never make a rule stop firing in the tests
+// that prove the rule fires.
+func withoutAllowedSites(violations []bindingViolation) []bindingViolation {
+	kept := make([]bindingViolation, 0, len(violations))
+	for _, violation := range violations {
+		if _, allowed := singleSourceAllowlist[singleSourceAllowlistKey(violation.File, violation.Where)]; allowed {
+			continue
+		}
+		kept = append(kept, violation)
+	}
+	return kept
+}
+
 // knownPluginIDs is the identifier vocabulary a reintroduced binding would
 // spell. It holds the agentic system ids docs/architecture.md names, the
 // frozen runtime ids that feed admitted-pair digests and limit-state
@@ -1252,10 +1302,11 @@ func TestSingleSourceGuardScansTheWholeModule(t *testing.T) {
 
 // TestSingleSourceGuardFindsNoSecondBinding is the guard itself.
 func TestSingleSourceGuardFindsNoSecondBinding(t *testing.T) {
-	violations, err := scanSingleSource(moduleSources(t), bindingHomes)
+	raw, err := scanSingleSource(moduleSources(t), bindingHomes)
 	if err != nil {
 		t.Fatalf("scanSingleSource: %v", err)
 	}
+	violations := withoutAllowedSites(raw)
 	if len(violations) == 0 {
 		return
 	}
@@ -1335,6 +1386,48 @@ func TestSingleSourceGuardHomesAreDistinctFacts(t *testing.T) {
 	}
 }
 
+// TestSingleSourceAllowlistHasNoUnusedEntries refuses a stale exemption.
+//
+// An entry that no longer names a real site is not harmless: it sits in the
+// file waiting for somebody to give a new function that name in that file, and
+// the guard would then wave the new one through. So every exemption has to be
+// earning its place on the real tree, right now.
+func TestSingleSourceAllowlistHasNoUnusedEntries(t *testing.T) {
+	violations, err := scanSingleSource(moduleSources(t), bindingHomes)
+	if err != nil {
+		t.Fatalf("scanSingleSource: %v", err)
+	}
+	live := map[string]bool{}
+	for _, violation := range violations {
+		live[singleSourceAllowlistKey(violation.File, violation.Where)] = true
+	}
+	for key := range singleSourceAllowlist {
+		if !live[key] {
+			t.Errorf("the allowlist exempts %q, and the scan reports no such site; a leftover exemption is a hole waiting for the next function given that name", key)
+		}
+	}
+	if len(singleSourceAllowlist) == 0 {
+		return
+	}
+	if len(violations) == 0 {
+		t.Fatal("the raw scan found nothing at all, so every allowlist entry is stale and this test would have to report it")
+	}
+}
+
+// TestSingleSourceAllowlistEntriesCarryAReason refuses an exemption nobody
+// argued for. A one-word reason is how an allowlist turns into a denylist of
+// things somebody happened to hit.
+func TestSingleSourceAllowlistEntriesCarryAReason(t *testing.T) {
+	for key, reason := range singleSourceAllowlist {
+		if len(strings.TrimSpace(reason)) < 80 {
+			t.Errorf("the exemption for %q gives the reason %q; an exemption from this guard needs an argument, not a label", key, reason)
+		}
+		if !strings.Contains(key, "::") {
+			t.Errorf("the exemption key %q is not file-scoped; a bare name exempts every function of that name in the module", key)
+		}
+	}
+}
+
 // TestSingleSourceGuardHomesSplitByKind holds the line between the two kinds of
 // entry bindingHomes carries.
 //
@@ -1359,6 +1452,72 @@ func TestSingleSourceGuardHomesSplitByKind(t *testing.T) {
 	for _, key := range dispatchKeyTypes {
 		if !isGoIdentifier(key) {
 			t.Errorf("dispatchKeyTypes names %q, which is not a legal Go identifier and therefore cannot be the type the scanner resolves", key)
+		}
+	}
+}
+
+// TestSingleSourceAllowlistDoesNotExemptTheRestOfItsFile is the narrowing.
+//
+// A real shadow table is planted in an allowlisted FILE, under a different
+// name, and must still be reported. Without this, an exemption written for one
+// function would silently cover everything beside it — which is the failure
+// mode a per-file allowlist actually has, as opposed to the one people
+// imagine.
+func TestSingleSourceAllowlistDoesNotExemptTheRestOfItsFile(t *testing.T) {
+	for key := range singleSourceAllowlist {
+		file := strings.SplitN(key, "::", 2)[0]
+		t.Run(file, func(t *testing.T) {
+			corpus := map[string]string{
+				"pkg/agentic/registry.go": `package agentic
+
+type SystemID string
+type System interface{ ID() SystemID }
+
+type Registry struct{ systems map[SystemID]System }
+`,
+				file: `package shadow
+
+import "example/agentic"
+
+var shadowAdapters = map[agentic.SystemID]string{
+	"codex":       "codex",
+	"claude-code": "claude",
+}
+`,
+			}
+			violations, err := scanSingleSource(corpus, map[string]string{"SystemID": "pkg/agentic/registry.go"})
+			if err != nil {
+				t.Fatalf("scanSingleSource: %v", err)
+			}
+			if len(violations) == 0 {
+				t.Fatal("a shadow adapter table planted in this file was not reported at all; the scan did not reach it")
+			}
+			if kept := withoutAllowedSites(violations); len(kept) == 0 {
+				t.Fatalf("the allowlist entry for %q swallowed a real shadow table declared beside it in the same file", key)
+			}
+		})
+	}
+}
+
+// TestSingleSourceAllowlistedSitesAreReportedWhenNotExempt is the delete-only
+// half, and it is here so the two are not confused. Scanning raw, each
+// allowlisted site MUST still be reported — the exemption is the gate's
+// decision, never the scanner's, so a rule that quietly stopped matching one of
+// these would show up as a stale entry above and as a silent pass here.
+func TestSingleSourceAllowlistedSitesAreReportedWhenNotExempt(t *testing.T) {
+	violations, err := scanSingleSource(moduleSources(t), bindingHomes)
+	if err != nil {
+		t.Fatalf("scanSingleSource: %v", err)
+	}
+	for key := range singleSourceAllowlist {
+		found := false
+		for _, violation := range violations {
+			if singleSourceAllowlistKey(violation.File, violation.Where) == key {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("the raw scan does not report %q; the rule that would catch a real shadow table there has stopped matching", key)
 		}
 	}
 }

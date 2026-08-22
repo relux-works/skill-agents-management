@@ -3,6 +3,34 @@
 > Institutional memory. Concise, factual, high-signal.
 > Newest entries first. One block per insight.
 
+## 2026-08-23
+
+### 0059 — The provider-home table WAS a shadow table, and the harness plugin already held the fact
+- ROOT CAUSE: The source keeps `providerHomeRules` inside `pkg/providerlimits/identity.go` — a per-runtime row naming the home env var and the fallback dot-directory. Ported verbatim, `pkg/agentic/singlesource_guard_test.go` reported it. It was right: `pkg/agentic/systems/codex/codex.go:111` already declares `CODEX_HOME` / `~/.codex`, and the claude plugin's own comment (`claude.go:118`) says those fields exist "so a caller keying limit state by the resolved home has something to resolve". This is that caller.
+- FIX: `DefaultProviderHome` now walks runtime → `vendorplugin.RuntimeDeclarationOf` → `agentic.Registry.Lookup` → `Capabilities().HomeEnvVar/DefaultHome`. `pkg/providerlimits/identity.go`.
+- FINDING: Two source special-cases DISSOLVE rather than porting. (1) The source refuses to guess qwen's home because no evidence establishes which var qwen-code reads — here the qwen plugin declares empty for both, so the refusal falls out of the plugin's own finding. (2) The source needed a table row plus a paragraph for `qwen-codex` reusing CODEX_HOME; here an operator-declared runtime resolves through its declaration to the codex system and inherits it, with no row to write.
+- FINDING: The refusal arm is only reachable if ALL SIX system plugins are compiled into the test binary. With two blank imports the four home-less harnesses were never registered and `TestTheProviderHomeComesFromTheHarnessPluginNotFromATableHere` reported it had proved nothing.
+- NOTE: Cost — `pkg/providerlimits` now imports `pkg/agentic` as a second allowed intra-module import, and `AvailabilityFor` needs the harness plugin linked in. The error names the missing plugin, but a binary that forgot the import gets an error out of a plane that otherwise fails open. Flagged for the switch story.
+- SCOPE: `pkg/providerlimits/identity.go`, `boundary_test.go`, `store_testhelpers_test.go`, `identity_test.go`.
+- STATUS: TASK-260822-2jouz3 handed to review, uncommitted.
+
+### 0058 — probe_eligible has no honest verdict in the four-state vocabulary, so it is a CHECKED unknown
+- DECISION: `probe_eligible` and `probing` map to `AvailabilityUnknown` with a non-empty `Checked`, not to Healthy and not to Limited. `pkg/providerlimits/verdict.go` `probeGatedVerdict`.
+- ROOT CAUSE: Healthy is the collapse the source warns about — probe_eligible "is admitted to a claim holder only, and stays subtracted for every other caller", and treating it as available "is what lets every concurrent preflight admit an exhausted group at once". Limited is worse than it looks: a probe-eligible group's `next_probe_at` is in the PAST, and a caller is entitled to schedule a retry off `Until`, so it would retry immediately and skip the atomic claim entirely. A probing group's lease expiry is not a clear time at all — it is when somebody else's turn ends.
+- FINDING: The thing that would resolve it is the claim, and the claim is a WRITE. The verdict path is built on `LoadIdentityState` precisely so a read cannot hand out or withdraw a probe as a side effect of being looked at. So "checked, established not-available, established no time at which that changes" is the complete honest answer.
+- NOTE: `Serviceable()` is false, which is the safe direction; the observation names the claim so a caller knows what to do next.
+- SCOPE: `pkg/providerlimits/verdict.go`, `verdict_test.go`.
+- STATUS: TASK-260822-2jouz3 handed to review, uncommitted.
+
+### 0057 — Cross-binary round trip is the only thing that can settle a fail-open identity
+- FINDING: A round trip through one implementation agrees with itself for any formula. The source's own `TestIdentityKeyIsTheDocumentedHash` re-derives the hash with the same expression the production code just used, so it cannot catch a change to that expression.
+- FIX: `.scripts/capture-limit-state.sh` builds `.scripts/limitstate_xrt.go` against the SOURCE module in a scratch dir under `.temp/` (source tree read-only) and drives its real detection path to write a suppression; `.scripts/writestate` does the same with the ported code; the source's `Store.Report` then reads OUR bytes. Both directions produce byte-identical files (`sha256 3cbefb47…` claude, `660adaf6…` codex, source commit `ed48781`).
+- FINDING: The operator's LIVE pre-extraction state (`~/Library/Application Support/task-board/provider-limits/`) is the strongest fixture available and reproduces both filenames from `IdentityKey` — pinned as literals in `crossbinary_test.go`. Byte-for-byte re-encode catches the class value comparison misses: renamed tag, reordered field (Go marshals in declaration order), added/dropped `omitempty`, pointer→value on a `*time.Time`.
+- FINDING: The alias policy for broker-keyed backoff is probed BEHAVIOURALLY — the source's key resolution is unexported, so each candidate row is fed through its real `SpawnLimitsConfig` JSON decode. Result: `claude`/`codex`/`qwen` accepted as legacy runtime spellings, `gemini`/`agy`/`muse` rejected, brokers accepted. A re-typed list would have been one person's reading of a comment.
+- NOTE: `identities.json` is deliberately NOT captured on the generated path — its `first_seen` comes off a filesystem mtime and would put a wall clock in a fixture.
+- SCOPE: `.scripts/capture-limit-state.sh`, `.scripts/limitstate_xrt.go`, `.scripts/writestate/`, `pkg/providerlimits/{crossbinary_test.go,ladder_test.go,testdata/}`.
+- STATUS: TASK-260822-2jouz3 handed to review, uncommitted.
+
 ## 2026-08-22
 
 ### 2356 — Admission had to keep reading the FROZEN v2 snapshot, not the ranks this port derives

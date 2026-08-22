@@ -423,6 +423,52 @@ Identifier normalization for all three id kinds lives once, in
 duplicate-charset failure the extraction source paid for, and a test holds both
 layers to the same rule.
 
+### The limit plane: `pkg/providerlimits`
+
+The machine-scoped record of which subscription groups are believed exhausted,
+the classifiers that produce that belief from real provider output, the atomic
+probe claim that lets exactly one spawn test a suppressed group, and the seam
+that reports all of it as a `vendorplugin.Availability`.
+
+- **The on-disk identity is the thing that must not move.**
+  `IdentityKey(provider, home) = hex(sha256(provider‖0x00‖home))[:16]` names the
+  state file, and the plane fails open: a state file nobody can find reads as
+  "provider healthy" with no error anywhere. So the port is checked against
+  bytes this repository did not write — the operator's live pre-extraction state
+  files, a suppression written here and now by a program compiled against the
+  SOURCE module, and the source's own projection of a file this code wrote.
+  Every fixture round-trips byte for byte, and the two live filenames are pinned
+  as literals.
+- **Classification is owned by the BROKER, state is keyed by the RUNTIME.** A
+  429 shape is a property of the API behind an account, not of the harness that
+  drives it, so `HasClassifier` keys on the vendor id; `IdentityKey`,
+  `UnmappedGroup` and every persisted group key keep keying on the runtime id,
+  because those are already on disk. The runtime→broker binding is resolved
+  through `vendorplugin.FrozenRuntimes` — never a second table here.
+- **The verdict mapping is where the corrupt-state fix lands.** An absent state
+  file is Healthy (invariant 2, carried and not re-decided — a proven absence IS
+  a read, which is what satisfies the contract's evidence discipline). Every
+  INDETERMINATE read — unreadable, corrupt, schema-ahead, or degraded by a loss
+  tombstone — is Unknown with the read failure attached, and never Healthy. A
+  probe-eligible or probing group is not Healthy either: it is admitted to one
+  caller by winning an atomic claim, and a claim is a write the read path may
+  not take.
+- **Backoff ladders are keyed by broker**, with the extraction source's
+  one-release runtime-id aliases (`claude`, `codex`, `qwen` and nothing else)
+  carried as-is. The alias policy is pinned against the source's own decode
+  rather than against a re-typed list.
+- **The provider home comes from the harness plugin.** The source kept a
+  per-runtime home table inside this package; here `DefaultProviderHome`
+  resolves the runtime's agentic system and reads the `HomeEnvVar` /
+  `DefaultHome` that system declares. A runtime whose harness declares neither —
+  gemini, agy, muse, qwen — has no home, and that is reported rather than
+  guessed.
+
+Not ported: the dev-only fault injector (launch-plane behaviour, and its
+captured payload trips the codex argv guard on a field it did not construct),
+and the source's home table. Nothing is wired into a live vendor yet — consuming
+the verdict belongs to the switch story.
+
 ## Status
 
 Extraction in progress. The current scope is moving the vendors and agentic
@@ -545,4 +591,6 @@ concluding that a missing golden is permission.
 | codex mutation harness | narrow every codex gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-hp5fb4/mutants.py` | `.temp/TASK-260822-hp5fb4/mutants-*.log` |
 | claude mutation harness | narrow every claude gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-3u97y3/mutants.py` | `.temp/TASK-260822-3u97y3/mutants-*.log` |
 | qwen/gemini/muse/agy mutation harness | narrow every gate the four remaining ports wrote, plus the two shared internals, and confirm the suite goes red | `python3 .temp/TASK-260822-xz8rj5/mutants.py` | `.temp/TASK-260822-xz8rj5/mutants-*.log` |
+| limit-state capture | capture the operator's live limit state, a suppression written by the SOURCE module, and the source's own report over bytes this repo wrote | `.scripts/capture-limit-state.sh [SOURCE_REPO=/path/to/skill-project-management]` | `pkg/providerlimits/testdata/{real-state,source-written,source-read,source-tables.json}`, scratch in `.temp/TASK-260822-2jouz3/xrt/` |
+| limit-plane mutation harness | narrow every identity, schema, verdict, ladder and guard gate the limit-plane port wrote and confirm the suite goes red | `python3 .temp/TASK-260822-2jouz3/mutants.py` | `.temp/TASK-260822-2jouz3/mutants-*.log` |
 | vendor-layer mutation harness | narrow every gate the vendor port wrote — the admission expansion, the digest serialization, the ported rows and the per-vendor guard homes — and confirm the suite goes red | `python3 .temp/TASK-260822-3cknas/mutants.py` | `.temp/TASK-260822-3cknas/mutants-*.log` |
