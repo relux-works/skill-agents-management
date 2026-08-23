@@ -1,0 +1,21 @@
+killed    lifecycle: blank admitted <- TestAVendorUnresolvedRuntimesRowsAreHeldToTheSameStandard, TestRegisterRefusesAModelWithNoLineupState
+killed    lifecycle: an undeclared state admitted <- TestRegisterRefusesAModelWithNoLineupState
+killed    score: the zero value admitted as the bottom of the scale <- TestAVendorUnresolvedRuntimesRowsAreHeldToTheSameStandard, TestRegisterRefusesARankWithNoEvidence
+killed    supersession: a non-legacy row may name a successor <- TestRegisterRefusesAnUnusableSupersession
+killed    supersession: a model may name itself <- TestRegisterRefusesAnUnusableSupersession
+killed    supersession: a dangling successor admitted <- TestAVendorUnresolvedRuntimesRowsAreHeldToTheSameStandard, TestRegisterRefusesAnUnusableSupersession
+killed    recommendation: two picks for one system admitted <- TestAVendorUnresolvedRuntimesRowsAreHeldToTheSameStandard, TestRegisterRefusesTwoRecommendationsForOneSystem
+killed    context window: a negative admitted <- TestAVendorUnresolvedRuntimesRowsAreHeldToTheSameStandard, TestRegisterRefusesANegativeContextWindow
+killed    pricing: a promotion at or above list price admitted <- TestRegisterRefusesAnUnusablePricingContract
+killed    pricing: a contract for a different model admitted <- TestRegisterRefusesAnUnusablePricingContract
+killed    pricing: a free-form retrieval date admitted <- TestRegisterRefusesAnUnusablePricingContract
+killed    pricing: a contract with no plans admitted <- TestRegisterRefusesAnUnusablePricingContract
+killed    pricing: the pointer is shared rather than cloned <- TestPricingIsDeepCopiedOutOfAVendor
+killed    unresolved runtime: a resolved one may declare rows <- TestDeclaringModelsOnAResolvedRuntimeIsRefused
+killed    unresolved runtime: its rows skip Model.Validate <- TestAVendorUnresolvedRuntimesRowsAreHeldToTheSameStandard
+killed    unresolved runtime: a row its harness cannot drive admitted <- TestAVendorUnresolvedRuntimesRowsAreHeldToTheSameStandard
+killed    unresolved runtime: its rows are not deep-copied out <- TestCapabilityRanksAreNotTheAdmissionAuthority, TestDeclaredCrossRuntimeResolvesAndLaunches, TestEveryBoardFactIsPorted, TestIsolatedRegistryMirrorsTheDefault
+killed    lineup: ties broken by id instead of declaration order <- TestLineupDerivesATotalOrderFromScoresWithTies
+killed    lineup: a tie is never reported as one <- TestLineupDerivesATotalOrderFromScoresWithTies, TestPortedScoresAreTheSourceScoresAndTheDerivedOrderFollowsThem, TestRegisterAdmitsTwoModelsAtOneScoreAndTheDerivedOrderStaysTotal
+killed    lineup: sorted ascending instead of descending <- TestLineupDerivesATotalOrderFromScoresWithTies, TestPortedScoresAreTheSourceScoresAndTheDerivedOrderFollowsThem
+killed    digest: the lifecycle leaks into the canonical serialization <- TestAdmittedPairDigestsReproduceTheSourceBinary, TestCapabilityRanksAreNotTheAdmissionAuthority, TestIsolatedRegistryMirrorsTheDefault, TestTheCanonicalSerializationCarriesOnlyPairs
