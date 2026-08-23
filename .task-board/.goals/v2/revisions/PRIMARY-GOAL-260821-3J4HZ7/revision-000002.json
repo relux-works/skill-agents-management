@@ -1,0 +1,46 @@
+{
+  "contract_version": "board-goal-v2",
+  "goal_id": "PRIMARY-GOAL-260821-3j4hz7",
+  "revision": 2,
+  "expected_previous_revision": 1,
+  "previous_ref": {
+    "id": "PRIMARY-GOAL-260821-3j4hz7",
+    "revision": 1
+  },
+  "owner": {
+    "kind": "parent",
+    "id": "primary"
+  },
+  "kind": "alignment",
+  "objective": "Выделить спавн агентских систем из task-board в отдельный проект skill-agents-management (CLI: agents-management) с плагинной архитектурой, и перевести борду на него.\n\nУстройство нового проекта. Репозиторий ../skill-agents-management: git-репа, своя борда, игноры, локальные инструкции, усиленные скиллами project-management и go-tui-testing-tools. Архитектура плагинная, ДВУМЯ слоями: плагины агентских систем (claude-code, codex, qwen-code, gemini-cli, antigravity, muse — то, что крутит ход) и плагины вендоров (anthropic, openai, alibaba, google — кто владеет моделями, аутентификацией и квотой), причём плагин вендора ДЕПЕНДИТ на плагины агентских систем и декларирует, какие системы ему доступны. Интерфейс плагина вендора как минимум: доступные модели с ранжированием, описание каждой модели — для чего её лучше использовать, доступность системы (лимиты, живой health-check что реквесты в целле проходят), и спавн со всеми параметрами, которые борда умеет сегодня (роль-агностично: модель, эффорт, env, stdin, goal/budget/tier, композиция).\n\nГраницы. Роли, таски, обёртки отслеживания, Change Request-ы, worktree-изоляция — ОСТАЮТСЯ в борде. В тулу уходит чисто спавн и работа с агентскими системами и вендорами моделей: реестр рантаймов, таблица адаптеров, словари эффортов, ранжирование, лимит-плоскость (детекция, классификация, подавление, backoff), health/доступность.\n\nЧто делаем сейчас: только вынос УЖЕ добавленных вендоров и агентских систем из борды в тулу, без потери поведения — та же наблюдаемая поверхность запуска (argv, env, stdin, side effects), те же дайджесты допущенных пар, та же on-disk идентичность лимит-стейта. Борда становится потребителем тулы.\n\nПерспектива (проработать архитектурно и отразить в документации, НЕ реализовывать сейчас): локальные модели (muse, qwen и др.) получают отдельный плагин с суб-плагинами вендоров, который понимает состояние модели — загружена или нет, идёт ли инференс или простаивает, хватает ли памяти на подгрузку новой, и умеет дождаться завершения/погасить старую перед загрузкой новой. Новые агентские системы (opencode и др.) добавляются как новые плагины без правки ядра.\n\nСделано, когда: (1) новый репозиторий живёт со своей бордой и инструкциями; (2) agents-management CLI собирается и умеет всё, что борда умеет сегодня по спавну существующих систем/вендоров, через плагины двух слоёв; (3) task-board использует тулу вместо собственного спавн-кода, и его спавн-поверхность не изменилась наблюдаемо; (4) архитектура плагинов, включая слой локальных моделей, задокументирована в новом репозитории.",
+  "scope": {
+    "requested_ids": null,
+    "resolved_leaf_items": null
+  },
+  "mutation_authority": "agent_discretion",
+  "success_predicate": "alignment_handled",
+  "provider_condition": "The bound parent session has handled this exact alignment revision.",
+  "native_reflection": "required",
+  "state": "cleared",
+  "legacy_refs": [
+    {
+      "contract": "primary-goal-v1",
+      "id": "PRIMARY-GOAL-260821-3j4hz7",
+      "revision": 2
+    }
+  ],
+  "role_policy": {},
+  "mutation": {
+    "kind": "cleared",
+    "reason": "All four completion criteria met and verified: (1) the repository lives with its own board, instructions and remote, epic extract-spawn-plane-from-task-board done with six stories integrated; (2) agents-management builds and carries the full spawn plane behind two plugin layers - six system plugins golden-parity-proven, four vendor plugins with 43 ported model rows, digests reproduced from the source binary, limit plane with byte-compatible on-disk identity round-tripped in both directions; (3) task-board consumes the module - registry, launch adapters and limit plane swapped with observably unchanged surface (315-file capture diff zero, 16/16 launch parity, suppression survival demonstrated), ~15k duplicated lines deleted, source story done at b34aa20; (4) plugin architecture including the design-only local-model resource plane documented in SKILL.md, docs/architecture.md and the fact-checked shipped-state ledger. Remaining human step recorded on both boards: the RELUX_MODULES_TOKEN Actions secret.",
+    "actor_context": {
+      "kind": "agent",
+      "actor_id": "alexis"
+    },
+    "authority": "agent_discretion"
+  },
+  "created_at": "2026-08-21T13:52:43.788475Z",
+  "updated_at": "2026-08-23T06:24:15.447299Z",
+  "created_by": "alexis",
+  "reason": "All four completion criteria met and verified: (1) the repository lives with its own board, instructions and remote, epic extract-spawn-plane-from-task-board done with six stories integrated; (2) agents-management builds and carries the full spawn plane behind two plugin layers - six system plugins golden-parity-proven, four vendor plugins with 43 ported model rows, digests reproduced from the source binary, limit plane with byte-compatible on-disk identity round-tripped in both directions; (3) task-board consumes the module - registry, launch adapters and limit plane swapped with observably unchanged surface (315-file capture diff zero, 16/16 launch parity, suppression survival demonstrated), ~15k duplicated lines deleted, source story done at b34aa20; (4) plugin architecture including the design-only local-model resource plane documented in SKILL.md, docs/architecture.md and the fact-checked shipped-state ledger. Remaining human step recorded on both boards: the RELUX_MODULES_TOKEN Actions secret."
+}
