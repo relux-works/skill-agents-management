@@ -1,0 +1,13 @@
+baseline: make regress exit=0 in 0.7s
+caught    [delete] registration/skip-the-declared-system-check -> TestAVendorNamingAnUnregisteredSystemIsRefusedNamingBothIDs (0.8s)
+caught    [narrow] registration/refusal-names-only-the-vendor -> TestAVendorNamingAnUnregisteredSystemIsRefusedNamingBothIDs (0.8s)
+caught    [narrow] declaration/collision-compares-only-the-id -> TestAConflictingRedeclarationIsRefusedAndTheFirstStands (0.7s)
+caught    [narrow] declaration/collision-compares-the-provenance-too -> TestARedeclarationDifferingOnlyInProvenanceIsStillIdempotent (1.0s)
+caught    [narrow] declaration/refuse-but-write-anyway -> TestAConflictingRedeclarationIsRefusedAndTheFirstStands (1.5s)
+caught    [narrow] availability/a-failed-read-is-treated-as-an-absence -> TestAnUnreadableStateFileIsUnknownAndNeverHealthy (0.9s)
+caught    [narrow] availability/an-elapsed-window-reads-clear -> TestAnElapsedWindowIsNotServiceable (0.9s)
+caught    [narrow] availability/the-limited-verdict-forgets-its-window -> TestASourceWrittenSuppressionReadsAsLimitedAtItsOwnWindow (0.9s)
+caught    [narrow] parity/the-comparator-stops-looking-at-the-binary -> TestAWrongPlanFailsTheSmoke (0.9s)
+caught    [narrow] parity/one-plugin-loses-a-flag -> TestOneGoldenPerSystemStillBuilds (0.9s)
+
+all 10 mutants caught by make regress

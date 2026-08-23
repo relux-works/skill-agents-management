@@ -1,0 +1,1918 @@
+diff --git a/LOGBOOK.md b/LOGBOOK.md
+index a5315eb..29066ce 100644
+--- a/LOGBOOK.md
++++ b/LOGBOOK.md
+@@ -5,6 +5,22 @@
+ 
+ ## 2026-08-23
+ 
++### 0708 — The epic's docs closed on a board divergence: the switch story lives on the SOURCE board
++- FINDING: `STORY-260821-1c5o90` (switch-task-board-to-the-tool) on THIS board is `backlog` with zero tasks. The work is real and running elsewhere: `skill-project-management`'s `STORY-260823-1sxcmg`, in `development`, with `TASK-260823-1tis7o`/`io02de`/`1rj1gf` done and `TASK-260823-t2xuen` (CI) still open. Four of this epic's six stories are on `main`, not five.
++- DECISION: Documented as a board-hygiene divergence with THIS repository as owner, in `docs/shipped-state.md`, rather than silently closing either side. Two boards tracking one story is worse than one board tracking none.
++- FINDING: The CI arrangement is half done and the missing half is human. `v0.1.0` is tagged at `b722ace` and pushed (`git ls-remote --tags`). The consumer side — `require` with no `replace`, `GOPRIVATE=github.com/relux-works/*`, the `url.insteadOf` rewrite, a gitignored root `go.work` — is implemented and UNCOMMITTED in the switch story's worktree. The Actions credential (repo secret `RELUX_MODULES_TOKEN`, fine-grained PAT with Contents:read) is NOT provisioned and no agent can provision it.
++- NOTE: Two traps carried into `docs/consuming-the-module.md` rather than left to be rediscovered. (1) A committed root `go.work` APPLIES in CI — discovery walks UP from the working directory, so committing it reintroduces the sibling-checkout assumption removing the `replace` just took out. (2) The `secrets` context is not available to a workflow `if:` key; referencing it there is a syntax error that killed the consumer's whole CI run 2026-08-19 → 2026-08-23.
++- SCOPE: `SKILL.md`, `docs/shipped-state.md`, `docs/consuming-the-module.md`, `docs/architecture.md`, `README.md`.
++- STATUS: TASK-260823-4f5t1m handed to review, uncommitted.
++
++### 0707 — `make regress`: a landing gate is only worth its negatives, and it has to be cheap
++- DECISION: The regression net is `internal/regress`, a SEPARATE `make regress` target rather than a subset of `make test`, and it is appended to `spawn.worktree_isolation.validation.commands`. 14 tests, 0.45s. A landing gate that costs minutes gets skipped, and the per-package suites already own depth.
++- FINDING: The gate list resolves from the MAIN checkout, not from the candidate. A candidate that ADDS a command therefore lands under the old list and the new command starts gating the next one — the same bootstrapping shape as the original gate install and as the rev-2 republish in the source's `TASK-260823-1rj1gf`. Stated in `README.md` rather than left for a reviewer to notice.
++- FINDING: Class 1 needed BOTH halves to mean anything. The four real vendor plugins refused by an empty `agentic.Registry` is satisfied by a registry that refuses everything; the same vendors ADMITTED once their declared systems are moved into an isolated registry is what closes it. The declared systems are read off `Vendor.Models()`, so a vendor that grows a harness is covered with no edit.
++- FINDING: Class 3 could not use `testdata/real-state/` for the suppressed verdict. The operator's live file suppresses `codex-unmapped:`, which is not a table group, so an identity-wide query never sees it — `identityVerdict` ranges over `tableGroupsFor`, deliberately, so a dead model's singleton cannot outvote every real group. `testdata/source-written/` was used instead: real bytes from the SOURCE module with a manifest carrying identity, home, group and model.
++- NOTE: 10 mutants, 9 of them NARROWING production gates rather than deleting them, all caught: refuse-but-write-anyway, `SameBinding` comparing provenance, a failed read read as an absence, `probeGatedVerdict` answering healthy, a shifted suppression window, `parity.Compare` dropping the Binary field. `python3 .temp/TASK-260823-4f5t1m/mutants.py`.
++- SCOPE: `internal/regress/`, `Makefile`, `task-board.config.json`.
++
+ ### 0059 — The provider-home table WAS a shadow table, and the harness plugin already held the fact
+ - ROOT CAUSE: The source keeps `providerHomeRules` inside `pkg/providerlimits/identity.go` — a per-runtime row naming the home env var and the fallback dot-directory. Ported verbatim, `pkg/agentic/singlesource_guard_test.go` reported it. It was right: `pkg/agentic/systems/codex/codex.go:111` already declares `CODEX_HOME` / `~/.codex`, and the claude plugin's own comment (`claude.go:118`) says those fields exist "so a caller keying limit state by the resolved home has something to resolve". This is that caller.
+ - FIX: `DefaultProviderHome` now walks runtime → `vendorplugin.RuntimeDeclarationOf` → `agentic.Registry.Lookup` → `Capabilities().HomeEnvVar/DefaultHome`. `pkg/providerlimits/identity.go`.
+diff --git a/Makefile b/Makefile
+index 3aaaf61..5c453e0 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,4 +1,4 @@
+-.PHONY: all build test vet install clean
++.PHONY: all build test vet regress install clean
+ 
+ ROOT_DIR := $(shell pwd)
+ CLI_DIR  := $(ROOT_DIR)/tools/agents-management
+@@ -37,6 +37,18 @@ test:
+ vet:
+ 	@go vet $(GOFLAGS_MOD) ./...
+ 
++# The landing gate's regression net: one fast, cross-cutting check per class of
++# failure this repository has already paid for, each with the negative that
++# shows it bites. It is deliberately a SEPARATE target from `test` rather than
++# a subset of it — `test` is the deep per-package acceptance and takes as long
++# as that deserves, while this one sits in front of every landing and has to
++# stay cheap enough that nobody is tempted to skip it. See internal/regress.
++#
++# env -u TASK_BOARD_DIR: an inherited board directory reaches the test process
++# and is not this module's to read (the extraction source's BUG-260823-1tkumz).
++regress:
++	@env -u TASK_BOARD_DIR go test $(GOFLAGS_MOD) ./internal/regress/... -count=1
++
+ install: build
+ 	@mkdir -p $(BIN_DIR)
+ 	@rm -f $(BIN_DIR)/agents-management
+diff --git a/README.md b/README.md
+index 680d5ad..b6ec59b 100644
+--- a/README.md
++++ b/README.md
+@@ -3,6 +3,13 @@
+ A skill plus one CLI — **`agents-management`** — for spawning and managing
+ heterogeneous agentic systems and the model vendors behind them.
+ 
++Start at [SKILL.md](SKILL.md) if you are an agent wiring this in;
++[docs/architecture.md](docs/architecture.md) for the plugin contract,
++[docs/consuming-the-module.md](docs/consuming-the-module.md) for depending on
++the module, and [docs/shipped-state.md](docs/shipped-state.md) for what has
++actually landed and what is deliberately still open. This file is the long
++description of the parts.
++
+ ## Why this repository exists
+ 
+ `skill-project-management`'s `task-board` grew a complete spawn plane: launch
+@@ -343,9 +350,12 @@ The vendor plugin contract, its registry, and the runtime declarations.
+   limited-until(time, evidence), unreachable(evidence), or unknown — with
+   "checked and found nothing" distinguishable from "nobody looked" and from "the
+   read failed". The zero value is unknown, and only an observed healthy verdict
+-  is serviceable. The local-model resource plane described in
+-  `docs/architecture.md` reports through these same fields; a test demonstrates
+-  each of its five answers fitting with no interface change.
++  is serviceable. The local-model resource plane sketched in
++  `docs/architecture.md` is DESIGN ONLY and none of it is built; what this
++  layer owes it is a seam it can report through without an interface change,
++  and a test demonstrates five such answers fitting the existing fields. That
++  test exercises the verdict type, not a resource plane — there is no
++  local-models package anywhere in this module.
+ - **Runtimes are declared pairs.** `RuntimeDeclaration` binds a stable id to
+   one agentic system and one vendor, and the six historical ids (`claude`,
+   `codex`, `qwen`, `gemini`, `agy`, `muse`) are seeded from the extraction
+@@ -471,11 +481,31 @@ the verdict belongs to the switch story.
+ 
+ ## Status
+ 
+-Extraction in progress. The current scope is moving the vendors and agentic
+-systems that already exist in `task-board` into this tool without behaviour
+-change: same observable launch surface (argv, environment, stdin bytes, side
+-effects), same admitted-pair digests, same on-disk limit-state identity. New
+-plugins come after the extraction proves the seams.
++Extraction in progress, and **four of the epic's six stories are on `main`**:
++the core module and both plugin contracts, the six agentic-system plugins, the
++vendor layer with its registries and digests, and the limit plane with its
++availability seam. `main` is tagged **`v0.1.0`**, which is what a consumer
++requires.
++
++The fifth is this documentation and the regression harness. The sixth — making
++`task-board` consume the tool — is being done from the consumer's side, on
++`skill-project-management`'s board as `STORY-260823-1sxcmg`: three of its four
++tasks are done and the CI task is still in development, so **the switch has not
++landed**.
++
++The scope has not moved: the vendors and agentic systems that already exist in
++`task-board`, ported without behaviour change — same observable launch surface
++(argv, environment, stdin bytes, side effects), same admitted-pair digests,
++same on-disk limit-state identity. New plugins come after the extraction proves
++the seams.
++
++**[docs/shipped-state.md](docs/shipped-state.md) is the honest ledger**: what
++each story landed, the model-description divergence between the two
++repositories and who owns collapsing it, the spawn-plane code deliberately kept
++in `task-board` (exec ownership, the process-starting preflights, the
++composition validators with no cross-repository agreement check), the open
++child-environment leak pins and the qwen-codex auth-hint gap, and the exact
++state of the tag/`GOPRIVATE`/`go.work` CI arrangement.
+ 
+ ## Development
+ 
+@@ -494,6 +524,7 @@ as the extraction moves plugin contracts across.
+ make build     # build tools/agents-management/agents-management
+ make test      # go test ./... -count=1
+ make vet       # go vet ./...
++make regress   # the landing-gate regression net (internal/regress), ~1s
+ make install   # copy the binary to ~/.local/bin/agents-management
+ make clean     # remove the built binary
+ ```
+@@ -508,11 +539,39 @@ Every Go invocation passes `-mod=mod` explicitly. Go silently switches to
+ tree then fails every build — the extraction source dropped vendoring for
+ that reason.
+ 
+-`make vet`, `make build` and the test command are also this repository's
+-landing gate: `spawn.worktree_isolation.validation.commands` in
++`make vet`, `make build`, the test command and `make regress` are also this
++repository's landing gate: `spawn.worktree_isolation.validation.commands` in
+ `task-board.config.json` runs exactly that list before a Change Request may
+ land, so its evidence is bound to the tree being integrated.
+ 
++The gate list is resolved from the MAIN checkout, not from the candidate, so a
++change that adds a command to it only starts gating the NEXT landing. That is
++the same bootstrapping shape the original gate installation had, and it is
++stated here rather than discovered by a reviewer wondering why the new command
++does not appear in a publication transcript.
++
++### The regression net
++
++`make regress` runs `internal/regress`, which is not more unit tests. Each
++per-package suite proves one port against its own fixtures, mutant by mutant,
++and takes as long as that deserves. This one crosses the layers and stays under
++a second, because it sits in front of every landing and a slow gate taxes every
++future Change Request.
++
++Four classes, one per failure this repository has already paid for, each with
++the negative that makes it mean something:
++
++| Class | Driven through | The negative |
++| --- | --- | --- |
++| A vendor naming an unregistered agentic system is refused, with BOTH ids | the four real vendor plugins into a registry built on an EMPTY agentic registry | the same vendors are ADMITTED once their systems are registered, so "refuses everything" cannot pass; and a message naming only the vendor fails |
++| Runtime declaration and the F2 collision, both directions | `SeedFrozenRuntimes` plus `DeclareRuntime` on a fresh registry | a conflicting redeclaration must be refused AND the stored binding must be unchanged afterwards — refuse-and-write-anyway is caught; a redeclaration differing only in broker provenance must still be idempotent |
++| An availability verdict derived from a real state file | `providerlimits.Store.AvailabilityFor` over `testdata/source-written/`, written by a binary compiled against the SOURCE module | the same bytes filed one hex digit away read HEALTHY — the fail-open disaster, asserted; an elapsed window is not serviceable; an unreadable file is Unknown, never Healthy |
++| A `BuildPlan` parity smoke, one golden per Layer-1 system | the real `Registry` and `agentic.BuildPlan`, six systems | a wrong resolved binary and a truncated argv must each be reported in the field they were planted in, for all six; and a seventh registered plugin with no smoke case fails the suite |
++
++The whole net is held to ten mutants that narrow the production gates one at a
++time and require `make regress` to go red naming the right test:
++`python3 .temp/TASK-260823-4f5t1m/mutants.py`.
++
+ ### Current CLI surface
+ 
+ Four commands of its own, because this stage is about seams rather than
+@@ -527,10 +586,14 @@ agents-management runtimes [--json] # the declared (system x vendor) pairs
+ 
+ `plugins` and `vendors` read the `pkg/agentic` and `pkg/vendorplugin` default
+ registries — the same ones a plugin package registers into from its `init` —
+-and print the registered ids. Both print an empty list and exit 0 today. That
+-is the answer, not a stub: no plugin has been compiled in yet, which is a
+-different fact from a failure to look. `--json` renders the empty case as `[]`,
+-never `null`.
++and print the registered ids. **Both print an empty list and exit 0 in the
++shipped binary.** That is the answer, not a stub: all ten plugins exist and
++none is compiled into `tools/agents-management`, which imports no plugin
++package, and "nothing registered" is a different fact from a failure to look.
++`--json` renders the empty case as `[]`, never `null`. A consumer links the
++packages it needs directly — see
++[docs/consuming-the-module.md](docs/consuming-the-module.md) — and gets a
++populated registry in its own binary.
+ 
+ `runtimes` prints the six frozen declarations as `id⇥system⇥vendor`. A runtime
+ is a DECLARATION, so it lists what is declared rather than what can currently
+@@ -584,7 +647,7 @@ concluding that a missing golden is permission.
+ | Tool | Purpose | Entry point | Artifacts |
+ | --- | --- | --- | --- |
+ | `task-board` | board tracking for this repo's work | `task-board q/m/spawn ...` | `.task-board/` |
+-| `make` | build, test, vet and install the CLI | `make build` / `test` / `vet` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
++| `make` | build, test, vet, regress and install the CLI | `make build` / `test` / `vet` / `regress` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
+ | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
+ | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
+ | model registry capture | regenerate the vendor fixtures: the source's model rows and frozen v2 tiers (read from its Go sources) and the admitted-pair digests (read from its own binary) | `.scripts/capture-model-registry.sh` | `pkg/vendorplugin/testdata/source-model-registry.json`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`, scratch in `.temp/capture-model-registry/` |
+@@ -594,3 +657,4 @@ concluding that a missing golden is permission.
+ | limit-state capture | capture the operator's live limit state, a suppression written by the SOURCE module, and the source's own report over bytes this repo wrote | `.scripts/capture-limit-state.sh [SOURCE_REPO=/path/to/skill-project-management]` | `pkg/providerlimits/testdata/{real-state,source-written,source-read,source-tables.json}`, scratch in `.temp/TASK-260822-2jouz3/xrt/` |
+ | limit-plane mutation harness | narrow every identity, schema, verdict, ladder and guard gate the limit-plane port wrote and confirm the suite goes red | `python3 .temp/TASK-260822-2jouz3/mutants.py` | `.temp/TASK-260822-2jouz3/mutants-*.log` |
+ | vendor-layer mutation harness | narrow every gate the vendor port wrote — the admission expansion, the digest serialization, the ported rows and the per-vendor guard homes — and confirm the suite goes red | `python3 .temp/TASK-260822-3cknas/mutants.py` | `.temp/TASK-260822-3cknas/mutants-*.log` |
++| regress mutation harness | narrow every gate `make regress` claims to hold, one at a time, and confirm the net goes red naming the right test | `python3 .temp/TASK-260823-4f5t1m/mutants.py` | `.temp/TASK-260823-4f5t1m/mutants-*.log` |
+diff --git a/SKILL.md b/SKILL.md
+new file mode 100644
+index 0000000..0f5e9e6
+--- /dev/null
++++ b/SKILL.md
+@@ -0,0 +1,185 @@
++---
++name: agents-management
++description: >
++  Spawning and managing heterogeneous agentic systems and the model vendors
++  behind them, through the agents-management Go module and CLI. Use for
++  agentic-system plugins (claude-code, codex, qwen-code, gemini-cli,
++  antigravity, muse), vendor plugins (anthropic, openai, alibaba, google),
++  runtime declarations, per-model reasoning-effort vocabularies, capability
++  ranking, launch plans (argv/env/stdin), provider limit state and
++  availability verdicts. Not a task board: roles, tasks and reviews live in
++  project-management. Russian triggers: агент, спавн, раннтайм, вендор,
++  лимиты, модели, эффорт.
++triggers:
++  - agentic system, agent harness, spawn plane, launch surface, argv parity
++  - vendor plugin, model registry, capability rank, reasoning effort vocabulary
++  - runtime declaration, admitted pairs, provider limits, rate limit, availability
++  - агент, спавн, раннтайм, вендор, лимиты, модели, эффорт
++---
++
++# agents-management
++
++One Go module and one CLI for the question *which agent runs, on which model,
++and whether it may launch right now*. It is the spawn plane extracted from
++`skill-project-management`, behind a two-layer plugin architecture.
++
++**It knows how to run agents. It does not know what they should work on** —
++roles, tasks, Change Requests, review routing and worktree isolation stay in
++`task-board`, and this module never reads a board.
++
++**It builds plans; it does not execute.** Every entry point ends at a value:
++a binary, an argv, an environment, stdin bytes, a verdict. Nothing here starts
++a process.
++
++## The two layers
++
++An **agentic system** is the harness that runs a turn. A **vendor** owns
++models, authentication and quota. A **runtime** is a declared pair of the two,
++under a stable id.
++
++| Layer | Package | Plugins |
++| --- | --- | --- |
++| 1 — agentic systems | `pkg/agentic` | `claude-code`, `codex`, `qwen-code`, `gemini-cli`, `antigravity`, `muse` |
++| 2 — vendors | `pkg/vendorplugin` | `anthropic`, `openai`, `alibaba`, `google` |
++| runtimes (declarations) | `pkg/vendorplugin` | `claude`, `codex`, `qwen`, `gemini`, `agy`, `muse` — frozen |
++
++**Vendors depend on systems, never the reverse**, and the registry enforces it:
++a vendor naming an unregistered system is refused with BOTH ids in the message.
++A cross-runtime combination — Qwen models under the Codex harness — is one
++vendor declaring one more system, with no core change.
++
++A plugin id and a runtime id are different facts and often different spellings:
++the Layer-1 plugin is `claude-code`, `qwen-code`, `antigravity`; the frozen
++runtime is `claude`, `qwen`, `agy`. `muse` is the one case where they coincide,
++and they are still two facts.
++
++`muse`'s vendor is **unresolved** — looked for in the source's frozen table and
++never established. That is a complete declaration and an unlaunchable one,
++refused on its own terms. Nothing guesses a vendor for it.
++
++## The CLI
++
++Four commands, and this is the whole surface today. Cobra contributes `help`
++and `completion`.
++
++```
++agents-management version           # build version, commit, build date
++agents-management plugins  [--json] # agentic system plugins compiled in
++agents-management vendors  [--json] # vendor plugins compiled in
++agents-management runtimes [--json] # declared (system x vendor) pairs
++```
++
++`plugins` and `vendors` read the package-level default registries. **In the
++shipped binary both print an empty list and exit 0**, because
++`tools/agents-management` imports no plugin package. That is the answer, not a
++stub: nothing is compiled in, which is a different fact from a failure to look.
++`--json` renders it as `[]`, never `null`.
++
++`runtimes` prints `id⇥system⇥vendor` for all six regardless, because a runtime
++is a DECLARATION and does not need its plugins present. `muse` reads
++`vendor unresolved`; the JSON form carries the broker provenance — which source
++was checked, and that nothing established a vendor.
++
++```bash
++make build     # -> tools/agents-management/agents-management
++make install   # -> ~/.local/bin/agents-management
++make vet ; make test ; make regress
++```
++
++There is no `spawn`, no `availability` and no `models` command. The consumer
++links the packages; the binary is a listing surface.
++
++## Wiring it into a consumer
++
++```
++github.com/relux-works/skill-agents-management v0.1.0   # private module, no replace
++```
++
++A binary gets the plugins it blank-imports; each registers itself from its own
++`init`. Importing a vendor pulls in the systems its models declare, so a
++half-wired binary is not reachable. Sibling development goes through `go.work`
++(gitignored — a committed one applies in CI), never a committed `replace`,
++never vendoring.
++
++Full recipe, including `GOPRIVATE` and the Actions credential:
++**[docs/consuming-the-module.md](docs/consuming-the-module.md)**.
++
++## The three entry points
++
++| Question | Call |
++| --- | --- |
++| What exactly would this launch run? | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` |
++| The same, through a runtime and its vendor | `vendorplugin.BuildLaunch(registry, req, mode)` |
++| May it launch right now? | `providerlimits.Store.AvailabilityFor(VerdictQuery{…})` → `vendorplugin.Availability` |
++
++`BuildPlan` is the single Layer-1 dispatch site and `BuildLaunch` the single
++Layer-2 one. There is no switch over system ids anywhere, and a static guard
++fails the build if one appears.
++
++`Availability` is a structured verdict, never a boolean: healthy,
++limited-until(time, evidence), unreachable(evidence), or unknown. Only an
++OBSERVED healthy verdict is serviceable, and "checked and found nothing",
++"nobody looked" and "the read failed" stay three different answers.
++
++## Invariants — contracts, not suggestions
++
++1. **The observable launch surface is the parity bar.** A launch is argv,
++   environment, stdin bytes and side effects. Argv-string equality is not
++   parity. Goldens live in `pkg/agentic/parity/testdata/goldens/` and are
++   captured by the EXTRACTION SOURCE's harness, never here.
++2. **Limit state fails open.** An absent state file reads as "provider
++   healthy" with no error anywhere, so `IdentityKey(provider, home)` — which
++   names the state file — must never move without a demonstrated migration on
++   real state files. An indeterminate read is Unknown, never Healthy: an
++   absence and a failure to read are different facts.
++3. **Admitted-pair digests are frozen.** Downstream snapshots pin them; a
++   silent change is a compatibility break. Model MEMBERSHIP comes from the
++   frozen v2 snapshot, effort vocabularies from the vendor rows, and the two
++   stay apart — a capability rank is evidence, and the day it decides
++   admission a truthful re-rank silently moves who may spawn.
++4. **Effort is per-model and required.** Vocabularies live on the model row;
++   TRANSPORT (argv / stdin / none) lives on the system plugin. No default is
++   injected at any call site, and a refusal names the exact dotted config key
++   and the accepted values.
++5. **One source per fact.** One registry per layer, one identifier
++   normalization, one argv construction site per plugin. Guards make a second
++   one fail a test rather than fail a review.
++
++## Landing gate
++
++```bash
++make vet
++make build
++env -u TASK_BOARD_DIR go test -mod=mod ./... -count=1
++make regress
++gofmt -l pkg/ internal/
++```
++
++`make regress` (`internal/regress`) is the fast cross-cutting net: a plugin
++registration refusal naming both ids, a runtime declaration and its F2
++collision in both directions, an availability verdict derived from a real state
++file, and a `BuildPlan` parity smoke against one golden per Layer-1 system —
++each with the negative that shows it bites. It runs in about a second because
++it sits in front of every landing.
++
++`env -u TASK_BOARD_DIR` is not decoration: an inherited board directory reaches
++the test process and is not this module's to read.
++
++## Lazy reference routes
++
++| Need | Read |
++| --- | --- |
++| What the tool is, per-plugin behaviour, guards, fixtures, capture scripts | [README.md](README.md) |
++| The plugin contract, layering rules, invariants, boundaries with task-board | [docs/architecture.md](docs/architecture.md) |
++| Depending on the module, `GOPRIVATE`, `go.work`, declaring a runtime | [docs/consuming-the-module.md](docs/consuming-the-module.md) |
++| What shipped, what deliberately stayed behind, open pins, owners | [docs/shipped-state.md](docs/shipped-state.md) |
++| What the goldens prove and what the capture could NOT reach | [pkg/agentic/parity/testdata/goldens/README.md](pkg/agentic/parity/testdata/goldens/README.md) |
++
++The **local-model plugin** — load/unload awareness, inference-busy state,
++memory-pressure sequencing — is DESIGN ONLY in `docs/architecture.md`. None of
++it is built. What exists is the seam it must fit through: availability as a
++structured verdict rather than a boolean.
++
++Work in this repository is tracked on its own `.task-board/` through the
++`task-board` CLI; follow the `project-management` skill, and `go-testing-tools`
++for test authoring.
+diff --git a/docs/architecture.md b/docs/architecture.md
+index af69585..b5d7fb6 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -4,6 +4,12 @@
+ narrow core. The core owns registration, admission and observation; every
+ fact about a concrete harness or a concrete vendor lives in a plugin.
+ 
++This document is the CONTRACT. What is built against it, what is deliberately
++still open and who owns each residual is [shipped-state.md](shipped-state.md);
++how a program depends on the module is
++[consuming-the-module.md](consuming-the-module.md). Where the two disagree with
++this file, they are describing reality and this file is describing the rule.
++
+ ## The two layers
+ 
+ ### Layer 1 — agentic-system plugins
+@@ -109,6 +115,14 @@ contracts here, not suggestions:
+ 
+ ## Planned: the local-model plugin (design only, not in current scope)
+ 
++**Nothing in this section is built.** There is no local-models package, no
++sub-plugin contract, no resource plane and no admission queue anywhere in this
++module. What exists is the SEAM it has to fit through — availability as a
++structured verdict rather than a boolean, admission as a decision that can be
++deferred — and a test in `pkg/vendorplugin` demonstrating five such answers
++fitting the existing fields with no interface change. That test exercises the
++verdict type. Read the rest as a design note.
++
+ Local models (muse today; local qwen and others next) need what remote
+ vendors do not: **resource awareness**. A local vendor cannot answer
+ "available?" without knowing:
+@@ -138,20 +152,43 @@ in the current extraction scope.
+ | Change Requests, review routing | limit detection, classification, suppression, backoff |
+ | worktree isolation, integration | health/availability checks |
+ | goals, handoff, progress records | launch: argv/env/stdin/composition, spawn parameters |
++| exec mechanics, preflights that start processes, fault injection | the launch PLAN and the availability verdict |
+ 
+ `task-board` calls this tool for spawn decisions and launches; it never
+ reaches into plugin internals. This tool never reads a board.
+ 
++The last row is the boundary that is easiest to get wrong, because both halves
++are called "launch". This module ends at a VALUE — a binary, an argv, an
++environment, stdin bytes — and a consumer turns it into a process. That is why
++the Antigravity binary probe and Claude goal preparation stay on the consumer's
++side: both START PROCESSES, and `BuildPlan` calls every plugin method to build
++a DRY RUN, so a probe behind any of them would make a dry run execute the
++harness. Their RESULTS cross the boundary instead — `agy.NewWithRuntime` takes
++the preflighted executable at construction. `agy/runtime.go` and
++`claude/goal.go` state the whole of what stays behind and where it has to land
++if it ever moves.
++
+ ## Extraction plan (current scope)
+ 
+ Move the already-existing vendors and agentic systems out of
+ `skill-project-management` behind the plugin seams, proving at each step:
+ 
+-1. parity of the observable launch surface per (system, mode),
+-2. byte-stable admitted-pair digests over real configs,
+-3. unchanged on-disk limit-state identity, demonstrated on real state files,
++1. parity of the observable launch surface per (system, mode) — **done**, one
++   golden set per system, captured by the source's own harness and only
++   compared here;
++2. byte-stable admitted-pair digests over real configs — **done**, pinned
++   against values the SOURCE BINARY produced over the source repository's own
++   config;
++3. unchanged on-disk limit-state identity, demonstrated on real state files —
++   **done**, against the operator's live pre-extraction state, a suppression
++   written by a program compiled against the source module, and the source's
++   own projection of a file this code wrote;
+ 4. task-board consuming the tool with its own spawn surface observably
+-   unchanged.
++   unchanged — **in flight on the consumer's board** (`STORY-260823-1sxcmg`);
++   the three swaps are done and the CI arrangement has not landed.
+ 
+ Everything beyond that — new vendors, new agentic systems (opencode and
+ others), the local-model resource plane — is deliberately after.
++
++[shipped-state.md](shipped-state.md) carries the per-story detail and the
++outcomes that are true but easy to lose.
+diff --git a/docs/consuming-the-module.md b/docs/consuming-the-module.md
+new file mode 100644
+index 0000000..1b799e7
+--- /dev/null
++++ b/docs/consuming-the-module.md
+@@ -0,0 +1,169 @@
++# Consuming the module
++
++How another Go program depends on `agents-management`, what it gets, and what
++it must still own. Written from the first real consumer — `skill-project-management`,
++whose `tools/board-cli` swapped its whole spawn plane onto this module.
++
++## What you depend on
++
++One Go module, one path, one tag:
++
++```
++github.com/relux-works/skill-agents-management v0.1.0
++```
++
++It is a **private** repository in the `relux-works` organization. There is no
++`replace` on trunk and there must not be one: a committed sibling-path
++`replace` is a path that exists on exactly one machine, and CI is not that
++machine.
++
++```bash
++go get github.com/relux-works/skill-agents-management@v0.1.0
++```
++
++For a private module that needs two things in the environment doing the fetch:
++
++```bash
++export GOPRIVATE='github.com/relux-works/*'
++git config --global \
++  url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
++```
++
++`GOPRIVATE` keeps the module away from `proxy.golang.org` and `sum.golang.org`;
++the rewrite is what makes the fetch authenticate. A fine-grained PAT with
++`Contents:read` on this repository is enough. On GitHub Actions, read the secret
++through `env:` and fail loudly if it is missing — the `secrets` context is NOT
++available to an `if:` key, and referencing it there is a workflow syntax error
++that kills the run before any job starts.
++
++## Local development against a sibling checkout
++
++When you are changing both repositories at once, use a **Go workspace**, never
++a `replace`:
++
++```bash
++cd /path/to/consumer
++go work init ./tools/your-module
++go work use ../../skill-agents-management
++```
++
++`go.work` and `go.work.sum` belong in `.gitignore`. Two reasons, and the first
++one bites in CI:
++
++1. `go.work` is discovered by walking UP from the working directory, so a
++   committed root `go.work` applies on Actions runners too — reintroducing the
++   sibling-checkout assumption that removing the `replace` just took out.
++2. It is per-checkout. A story worktree under `.temp/` needs a different
++   relative path to the sibling than the main clone does.
++
++Do not vendor. Go auto-enables `-mod=vendor` the moment a `vendor/modules.txt`
++exists, and a stale vendor tree then fails every build rather than falling back;
++both repositories dropped vendoring for that reason and pass `-mod=mod`
++explicitly everywhere.
++
++## Wiring the two layers
++
++A binary gets the plugins it IMPORTS. Every plugin package registers itself
++into the package-level default registry from its own `init`, so a blank import
++is the whole wiring step:
++
++```go
++import (
++    // Layer 1 — the harnesses. Import only the ones this binary can run.
++    _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy"
++    _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
++    _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
++    _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini"
++    _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse"
++    _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen"
++
++    // Layer 2 — the vendors. Each blank-imports the systems its models
++    // declare, so importing a vendor pulls in its harnesses whether you
++    // named them or not.
++    _ "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba"
++    _ "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic"
++    _ "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google"
++    _ "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai"
++)
++```
++
++Registration order does not matter for DECLARATIONS — the six frozen runtimes
++are seeded into `vendorplugin.Default` before any plugin registers — but it
++does for the dependency check: a vendor whose declared system is not registered
++is refused at `init` with a panic naming both ids. That is why each vendor
++package blank-imports its own systems; you cannot get a half-wired binary.
++
++Prefer isolated registries in tests. `agentic.NewRegistry()` and
++`vendorplugin.NewRegistry(systems)` take no globals, and
++`vendorplugin.SeedFrozenRuntimes(registry)` gives you the frozen table without
++touching the process-wide default.
++
++## Declaring your own runtime
++
++A runtime is a **declaration**, not code. An operator-configured cross-runtime
++— alibaba models under the codex harness, say — is one call:
++
++```go
++err := vendorplugin.Default.DeclareRuntime(vendorplugin.RuntimeDeclaration{
++    ID:     "qwen-codex",
++    System: "codex",
++    Vendor: "alibaba",
++    Broker: vendorplugin.BrokerProvenance{
++        Checked: []string{"your-repo config (spawn.runtimes.qwen-codex)"},
++        Found:   "the operator declared this pair",
++    },
++})
++```
++
++`BrokerProvenance` is required, always. A blank vendor with no provenance and a
++blank vendor after a real search are different facts, and the type refuses to
++let them look the same.
++
++The collision policy is F2: a declaration matching an existing binding is
++idempotent, a conflicting one is refused and the FIRST declaration stands. Do
++not rebind a frozen id — it names limit-state files and feeds admitted-pair
++digests, and a rebind orphans that state with no error anywhere.
++
++## The three entry points
++
++| You want | Call | It does not |
++| --- | --- | --- |
++| The launch surface for one (system, mode) | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` | execute anything |
++| The same, resolved through a runtime and a vendor | `vendorplugin.BuildLaunch(registry, SpawnRequest{…}, mode)` — resolves the pair, validates the effort word against the model's own vocabulary, asks the vendor for a `LaunchRequest`, refuses one that redirects the launch, hands it to `BuildPlan` | execute anything, or inject a default effort |
++| Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |
++
++## What stays yours
++
++The module ends at a plan. A consumer still owns:
++
++- **Execution.** `*exec.Cmd`, working directory, process group, deadlines,
++  output capture, exit classification.
++- **Preflights that start processes.** The Antigravity binary probe and Claude
++  goal preparation both run the harness. `BuildPlan` calls every plugin method
++  to build a DRY RUN, so neither can live behind one; their RESULTS cross the
++  boundary instead — `agy.NewWithRuntime(agy.Runtime{Executable: …})` takes the
++  preflighted path.
++- **Everything about work.** Roles, tasks, Change Requests, review routing,
++  worktree isolation. This module never reads a board.
++- **Recording an observation.** `AvailabilityFor` is a read. Turning a
++  provider's refusal into a suppression is `providerlimits`' write path, and
++  claiming a probe is an atomic claim, not a read.
++
++## Verifying the swap
++
++Two things are worth checking on the consumer's side after wiring, because both
++fail silently:
++
++- **Limit state survives.** The plane fails open: if the post-swap reader
++  cannot find a pre-swap suppression, nothing errors and every exhausted group
++  reads available. Pin `IdentityKey(provider, home)` against state FILENAMES a
++  different binary chose, and assert the fail-open disaster too — the same
++  bytes under a key one digit away must read as available, or the positive test
++  proves nothing.
++- **The launch surface did not move.** Compare argv, environment added/removed
++  and stdin BYTES, not an argv string. `pkg/agentic/parity` holds the goldens
++  and the comparator; `pkg/agentic/parity/testdata/goldens/README.md` states
++  what the capture could not reach.
++
++See [shipped-state.md](shipped-state.md) for what the first consumer chose to
++keep on its own side and why.
+diff --git a/docs/shipped-state.md b/docs/shipped-state.md
+new file mode 100644
+index 0000000..e4fc78f
+--- /dev/null
++++ b/docs/shipped-state.md
+@@ -0,0 +1,222 @@
++# Shipped state and honest outcomes
++
++What this repository actually contains, story by story, and the outcomes that
++are true but easy to lose: divergences that were chosen, code that deliberately
++stayed behind in `skill-project-management`, defects pinned rather than fixed,
++and arrangements that are prepared rather than done.
++
++Each entry names an **owner**: the repository whose next change closes it.
++An outcome with no owner is a rumour.
++
++Written at the close of `EPIC-260821-1qvnz2`. Every claim below was read off
++the two boards and the two checkouts rather than remembered.
++
++## The stories
++
++`EPIC-260821-1qvnz2` decomposes into six stories. **Four are on `main`.**
++
++| Story | State | What landed |
++| --- | --- | --- |
++| `STORY-260821-224xfu` core-module-and-plugin-contracts | done | The Go module, the `agents-management` command tree, `pkg/agentic`'s system contract and registry, `pkg/vendorplugin`'s vendor contract, the structured `Availability` verdict, and the single-source guards |
++| `STORY-260821-1xppz3` port-agentic-system-plugins | done | All six Layer-1 plugins — `codex`, `claude-code`, `qwen-code`, `gemini-cli`, `muse`, `antigravity` — each proven against the extraction source's own launch-surface goldens through the real `Registry` and `BuildPlan`, plus `internal/{runtimeenv,mcpjson,paritycase,argvguard,gosources}` |
++| `STORY-260821-3b4ewr` port-vendor-plugins-and-registries | done | The four Layer-2 plugins and all 41 vendor-owned model rows, the frozen six runtime declarations, `ExpandV2Ceiling` and the admitted-pair digests pinned against the source binary's own output |
++| `STORY-260821-2m8cpr` port-limit-plane-and-availability | done | `pkg/providerlimits` — identity, state, groups, classifiers, ladder, leases, probe claims, report — and `AvailabilityFor`, the seam that projects limit state as a `vendorplugin.Availability` |
++| `STORY-260821-17pnec` docs-skill-and-regress | in progress | This document, `SKILL.md`, the README/architecture reconciliation, and `make regress` |
++| `STORY-260821-1c5o90` switch-task-board-to-the-tool | **not started on this board** | The consumer-side switch is being done on the SOURCE board instead, as `STORY-260823-1sxcmg` — see below |
++
++### Where the switch story actually lives
++
++The switch is consumer-side work, so it runs on `skill-project-management`'s
++board as `STORY-260823-1sxcmg` *consume-agents-management-for-the-spawn-plane*,
++in `development` at the time of writing:
++
++| Task | State |
++| --- | --- |
++| `TASK-260823-1tis7o` wire the module and swap the model registry | done |
++| `TASK-260823-io02de` swap launch adapters to system plugins | done |
++| `TASK-260823-1rj1gf` swap the limit plane and delete the rest | done |
++| `TASK-260823-t2xuen` make CI build the module dependency | **in development — not landed** |
++
++`STORY-260821-1c5o90` on this board is the same work seen from this side and is
++still in `backlog` with no tasks. That is a board-hygiene divergence, not a
++second piece of work. **Owner: this repository** — either close it against the
++source story or delete it.
++
++## Honest outcomes
++
++### 1. Model descriptions diverge between the two repositories, by design
++
++Every one of the 41 shared model rows carries a DIFFERENT usage description
++here and in `task-board`. Measured, not assumed: `TASK-260823-1tis7o` probed
++the module's live registry against the consumer's pre-change `models()` output
++field by field, and found the id set, the agentic-system bindings, the effort
++support, the vocabularies and the recommended efforts identical — and the
++description different on all 41.
++
++They are two authorings of one fact, not a drifted copy. This repository's
++texts are marked AUTHORED HERE in every vendor binding file: the extraction
++source has no what-is-this-model-best-for field, and `Model.Validate` refuses a
++blank description, so they had to be written. The consumer's texts are its own
++and its acceptance criteria required them byte-identical across the swap.
++
++**Owner: this repository.** Collapsing them means one side reads the other's
++string, and the module is the side that can be read. Until then the divergence
++is stated in both places rather than discovered.
++
++Two smaller residues of the same swap, both stated in the consumer's own notes
++and neither a duplicated fact: the consumer keeps `PolicyRank` as a SCORE
++(scores carry ties that this layer's tie-free `Rank.Position` cannot express,
++and two admission call sites compare them), and it keeps the two `muse` rows,
++which belong to no vendor here.
++
++### 2. Deliberate keeps in `task-board`
++
++The sweep in `TASK-260823-1rj1gf` walked the whole spawn plane for code still
++present in both repositories. Four things stay in the consumer on purpose:
++
++- **Exec mechanics** — `*exec.Cmd`, working directory, process group, deadline
++  plumbing. This module owns no execution: `BuildPlan` and `BuildLaunch` end at
++  a plan. Expected, and not a residual.
++- **Preflights that start processes** — the Antigravity probe (`agy --version`
++  / `agy --help`, validating a minimum version and seven headless flags) and
++  Claude goal preparation (a version gate, a `/goal` capability probe, a
++  session-state decision). Their RESULTS cross the boundary — `agy.NewWithRuntime`
++  takes the preflighted executable — but the probes cannot: `BuildPlan` calls
++  every plugin method to build a DRY RUN, so a probe behind any of them would
++  make a dry run execute the harness. `agy/runtime.go` and `claude/goal.go`
++  carry the whole boundary in prose.
++- **The dev-only fault injector** — launch-plane behaviour, and its captured
++  payload trips the codex argv guard on a field it did not construct. It is now
++  `tools/board-cli/internal/limitsimulate`, landing on the `Layout.SimulateFile()`
++  paths this module reserved for it.
++- **The launch-composition prefix validators** — `validateCodexLaunchCompositionPrefix`
++  and `validateClaudeLaunchCompositionPrefix` in the consumer, and
++  `codex/composition.go` / `claude/composition.go` here, which say they are the
++  source's rules ported rule for rule. The consumer's gate is board-facing and
++  validates against MCP metadata recorded on the board; the plugin validates the
++  same shape again inside `BuildPlan`.
++
++  **FLAGGED: nothing tests that the two rule sets agree.** ~150 lines of rules
++  in two places, with no cross-repository agreement check. An equality test is
++  the wrong instrument at that size; the right fix is for the board-facing gate
++  to call `System.ValidateComposition` for the shape and keep only the metadata
++  cross-check locally. **Owner: `skill-project-management`** — it is the caller,
++  and the fix is on its side of the seam.
++
++  The same shape one size down was closed: the auth-hint remediation text is
++  duplicated between the consumer's `providerAuthHint` and each plugin's
++  `Capabilities().AuthHint`, and `TestLocalAuthHintsAgreeWithTheAgenticPlugins`
++  now fails on any inequality.
++
++### 3. Open leak pins
++
++`BUG-260819-3qn52o` *child-env-filters-are-incomplete-and-asymmetric* is in
++**backlog on the source board, unfixed**, and was unfixed at the commit the
++parity goldens were captured from. Its shape is that each system's environment
++filter names only the runtimes its author knew about:
++
++| Plugin | What the child inherits that it should not |
++| --- | --- |
++| `codex` | the two board credentials the bug records |
++| `claude-code` | the whole `CODEX_*` family, the app-server and session-manager URLs, and the credentials their pointers name — the bug seen from the other side |
++| `qwen-code` | the two board credentials, plus `QWEN_CODE_SESSION_ID`, which nothing strips, so a qwen child spawned from inside a qwen session inherits its parent's session id |
++| `gemini-cli`, `muse`, `antigravity` | everything — their filters are EMPTY, and `env.go` says so rather than expressing it by omitting the file |
++
++Every one is pinned by a test asserting the CURRENT behaviour, so closing one
++has to be a deliberate edit to the pin and its comment. That is the port's
++contract: a parity port that quietly fixed a leak would be a behaviour change
++wearing a refactor's clothes, and the goldens would have to be recaptured to
++prove it.
++
++**Owner: `skill-project-management`**, which owns the bug. When it closes, the
++pins here are what tells the next reader which filters to widen and in what
++order.
++
++A second gap, found by the same sweep and outside this module: **qwen-codex has
++no `providerAuthHint` row**, so its authentication failures are not classified
++as capability failures and take the autonomous-recovery path — retrying into a
++locked-out account. Closing it changes an operator-visible outcome for that
++runtime (a fail-closed refusal instead of a retry), so it was named rather than
++patched: the consumer's `authHintGapsFoundByTheSwapSweep` makes a SECOND such
++gap fail its suite. **Owner: `skill-project-management`.**
++
++`qwen-codex` itself is not declared here and must not become a frozen runtime:
++it is the operator-declared cross-runtime (alibaba models under the codex
++harness), declared from the consumer's config. This repository proves the
++pairing works — `pkg/vendorplugin/admissionpin_test.go` builds a real launch
++through it — without seeding it.
++
++### 4. The CI arrangement: module side done, consumer side in flight
++
++Since the consumer's first swap, `tools/board-cli/go.mod` replaced this module
++with a SIBLING checkout path. GitHub Actions cannot check out a second
++repository above the workspace, so the consumer's `test-cli` and `test-tui`
++jobs could not build at all. `TASK-260823-1rj1gf` flagged it as needing a
++decision rather than a patch; `TASK-260823-t2xuen` is that decision. State at
++the time of writing:
++
++| Half | State |
++| --- | --- |
++| **This module is tagged** `v0.1.0`, at `b722ace`, pushed to `origin` | **done** |
++| Consumer requires the tag with **no `replace`** on trunk | implemented, UNCOMMITTED in the story worktree |
++| `GOPRIVATE=github.com/relux-works/*` and a `url.insteadOf` rewrite in the consumer's CI | implemented, UNCOMMITTED |
++| The Actions credential — repository secret `RELUX_MODULES_TOKEN`, a fine-grained PAT with `Contents:read` on this repository | **NOT provisioned. Owner action required** |
++| Local sibling development via a root `go.work`, gitignored | implemented, UNCOMMITTED |
++| `TASK-260823-t2xuen` | `development` — **not landed** |
++
++Two traps are worth carrying rather than rediscovering:
++
++- **A committed root `go.work` applies in CI.** `go.work` is discovered by
++  walking UP from the working directory, so committing it reintroduces exactly
++  the sibling-checkout assumption the `replace` removal took out of `go.mod`.
++  It is also per-checkout: a story worktree under `.temp/` needs a different
++  relative path to the sibling than the main clone does. It stays gitignored.
++- **`secrets` is not available to a workflow `if:` key.** Referencing it there
++  is a syntax error that kills the whole run before a single job starts, which
++  is what happened to the consumer's CI file between 2026-08-19 and 2026-08-23.
++  The token check reads the secret through `env:` and fails loudly with the fix
++  in the message instead.
++
++Alternatives closed earlier and not reopened: vendoring was deliberately
++dropped (`TASK-260819-3vr8j3` — Go auto-enables `-mod=vendor` the moment
++`vendor/modules.txt` exists, and a stale tree then fails every build), and
++committing the `replace` means CI can never build.
++
++**Owner: `skill-project-management`** for the workflow, the `go.mod` and the
++`go.work` documentation; **the repository owner** for the `RELUX_MODULES_TOKEN`
++secret, which no agent can provision. Nothing in THIS repository's CI depends on
++any of it — see [consuming-the-module.md](consuming-the-module.md) for what a
++consumer writes today.
++
++### 5. The local-model plugin is design only
++
++[architecture.md](architecture.md) describes a local-models plugin owning a
++shared resource plane — load/unload awareness, inference-busy observation,
++memory-pressure sequencing, eviction ordering. **None of it is built.**
++
++What exists is the SEAM it has to fit through, and only that: `Availability` is
++a structured verdict rather than a boolean, so a local runtime's answer
++composes without an interface change. `pkg/vendorplugin/availability_test.go`
++demonstrates five such answers fitting — it exercises the verdict type, not a
++resource plane, and there is no local-models package, no sub-plugin contract
++and no admission queue anywhere in this module.
++
++**Owner: this repository**, after the extraction proves the seams. The section
++in `architecture.md` is titled *design only, not in current scope* and should
++keep saying so until something is built.
++
++### 6. What the CLI answers today, and what that answer means
++
++`agents-management plugins` and `agents-management vendors` print an empty list
++and exit 0 in the shipped binary. That is the truthful answer, not a stub: the
++command tree reads `agentic.Default` and `vendorplugin.Default`, and
++`tools/agents-management` imports no plugin package, so none is compiled in.
++An empty list and a failure to look are different facts, and only the first is
++being reported.
++
++`agents-management runtimes` prints all six frozen declarations regardless,
++because a runtime is a DECLARATION and does not need its plugins present.
++
++**Owner: this repository.** Whether the shipped binary should carry the plugins
++is a decision the switch story's shape will settle — the consumer links the
++packages directly and never runs this binary.
+diff --git a/internal/regress/availability_test.go b/internal/regress/availability_test.go
+new file mode 100644
+index 0000000..c42411c
+--- /dev/null
++++ b/internal/regress/availability_test.go
+@@ -0,0 +1,302 @@
++package regress
++
++import (
++	"encoding/json"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/relux-works/skill-agents-management/pkg/providerlimits"
++	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
++)
++
++// CLASS 3 — an availability verdict derived from a real state file.
++//
++// The limit plane FAILS OPEN. A state file nobody can find reads as "provider
++// healthy" with no error anywhere: no exception, no warning, no operator-
++// visible symptom until the provider says no again. That makes every check in
++// this file a negative one at heart — a green suite proves nothing unless the
++// disaster it guards against is demonstrated happening.
++//
++// So the fixtures are bytes this repository did not write. testdata/
++// source-written/ holds suppressions written by a program compiled against the
++// EXTRACTION SOURCE's own providerlimits, through its production classify ->
++// Observe chain, with a manifest recording the identity, home, group and model
++// behind each one. Reading them here through providerlimits.Store.
++// AvailabilityFor is the whole seam: source bytes in, vendorplugin.Availability
++// out.
++
++// sourceWrittenDir is the fixture set, addressed relative to this package.
++//
++// It is the limit plane's own testdata rather than a copy: a second copy of a
++// captured fixture is a second thing to re-capture, and the day the two
++// disagree neither is evidence of anything.
++const sourceWrittenDir = "../../pkg/providerlimits/testdata/source-written"
++
++// xrtFixedNow is the instant the capture harness anchored on. Reading the
++// captured suppressions at it puts them INSIDE their window, which is what
++// makes them Limited rather than probe-eligible.
++var xrtFixedNow = time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
++
++// xrtEntry is one manifest row: everything a caller needs to ask the question
++// the fixture answers, recorded by the capture rather than restated here.
++type xrtEntry struct {
++	Provider       string `json:"provider"`
++	HomeNormalized string `json:"home_normalized"`
++	IdentityKey    string `json:"identity_key"`
++	Group          string `json:"group"`
++	Model          string `json:"model"`
++	StateFile      string `json:"state_file"`
++}
++
++func xrtManifest(t *testing.T) []xrtEntry {
++	t.Helper()
++	raw, err := os.ReadFile(filepath.Join(sourceWrittenDir, "xrt-manifest.json"))
++	if err != nil {
++		// A failed read is not an empty manifest. Ranging over nothing would
++		// report a green gate that never looked at a fixture.
++		t.Fatalf("reading the cross-binary manifest: %v", err)
++	}
++	var entries []xrtEntry
++	if err := json.Unmarshal(raw, &entries); err != nil {
++		t.Fatalf("decoding the cross-binary manifest: %v", err)
++	}
++	if len(entries) == 0 {
++		t.Fatal("the cross-binary manifest is empty, so every check below would range over nothing")
++	}
++	return entries
++}
++
++// plantState copies one captured state file into a scratch layout under the
++// name identityKey, and returns a store reading it at now.
++//
++// The name is a PARAMETER because that is the mutation this class needs: the
++// same bytes filed under a key one digit away is the moved-identity disaster,
++// and it has to be produced the way it would really happen — the file is where
++// it always was, and the reader looks somewhere else.
++func plantState(t *testing.T, fixture, identityKey string, now time.Time) *providerlimits.Store {
++	t.Helper()
++	bytes, err := os.ReadFile(filepath.Join(sourceWrittenDir, fixture))
++	if err != nil {
++		t.Fatalf("reading the captured state file %s: %v", fixture, err)
++	}
++	layout := providerlimits.LayoutAt(t.TempDir())
++	if err := os.MkdirAll(layout.Root, 0o755); err != nil {
++		t.Fatalf("creating the scratch state root: %v", err)
++	}
++	if err := os.WriteFile(layout.StateFile(identityKey), bytes, 0o644); err != nil {
++		t.Fatalf("planting the captured state file: %v", err)
++	}
++	store, err := providerlimits.NewStore(providerlimits.Options{
++		Layout: layout,
++		Now:    func() time.Time { return now },
++	})
++	if err != nil {
++		t.Fatalf("NewStore: %v", err)
++	}
++	return store
++}
++
++// nextProbeAt reads the window out of the fixture's own bytes, so the
++// assertion below compares the verdict against what the SOURCE computed rather
++// than against a number retyped here.
++func nextProbeAt(t *testing.T, fixture, group string) time.Time {
++	t.Helper()
++	raw, err := os.ReadFile(filepath.Join(sourceWrittenDir, fixture))
++	if err != nil {
++		t.Fatalf("reading the captured state file %s: %v", fixture, err)
++	}
++	var decoded struct {
++		Groups map[string]struct {
++			NextProbeAt *time.Time `json:"next_probe_at"`
++			Evidence    *struct {
++				Marker string `json:"marker"`
++				RunID  string `json:"run_id"`
++			} `json:"evidence"`
++		} `json:"groups"`
++	}
++	if err := json.Unmarshal(raw, &decoded); err != nil {
++		t.Fatalf("decoding %s: %v", fixture, err)
++	}
++	record, ok := decoded.Groups[group]
++	if !ok {
++		t.Fatalf("%s carries no group %q; the manifest and the fixture disagree", fixture, group)
++	}
++	if record.NextProbeAt == nil {
++		t.Fatalf("%s suppressed %q with no next_probe_at; this fixture cannot pin a window", fixture, group)
++	}
++	return *record.NextProbeAt
++}
++
++func verdictDetails(verdict vendorplugin.Availability) string {
++	var b strings.Builder
++	for _, observation := range verdict.Observed {
++		b.WriteString(observation.Source)
++		b.WriteString(": ")
++		b.WriteString(observation.Detail)
++		b.WriteString("\n")
++	}
++	for _, failure := range verdict.Failures {
++		b.WriteString(failure.Source)
++		b.WriteString(": ")
++		b.WriteString(failure.Reason)
++		b.WriteString("\n")
++	}
++	return b.String()
++}
++
++// TestASourceWrittenSuppressionReadsAsLimitedAtItsOwnWindow is the positive,
++// driven through the real verdict entry point.
++func TestASourceWrittenSuppressionReadsAsLimitedAtItsOwnWindow(t *testing.T) {
++	for _, entry := range xrtManifest(t) {
++		t.Run(entry.Provider, func(t *testing.T) {
++			// The identity is recomputed here, not taken from the manifest:
++			// the filename a DIFFERENT binary chose has to be the one this
++			// code would choose, or the read finds nothing and fails open.
++			if got := providerlimits.IdentityKey(entry.Provider, entry.HomeNormalized); got != entry.IdentityKey {
++				t.Fatalf("IdentityKey(%q, %q) = %q, want the captured %q — the on-disk identity MOVED and every suppression on every machine is orphaned",
++					entry.Provider, entry.HomeNormalized, got, entry.IdentityKey)
++			}
++
++			store := plantState(t, entry.StateFile, entry.IdentityKey, xrtFixedNow)
++			verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{
++				Runtime: entry.Provider,
++				Model:   entry.Model,
++				Home:    entry.HomeNormalized,
++			})
++			if err != nil {
++				t.Fatalf("AvailabilityFor: %v", err)
++			}
++			if err := verdict.Validate(); err != nil {
++				t.Fatalf("the verdict does not satisfy the vendor contract: %v", err)
++			}
++			if verdict.State != vendorplugin.AvailabilityLimited {
++				t.Fatalf("a group the source suppressed reads %s, want limited\n%s", verdict.State, verdictDetails(verdict))
++			}
++			if verdict.Serviceable() {
++				t.Error("a suppressed group reads as serviceable")
++			}
++			if want := nextProbeAt(t, entry.StateFile, entry.Group); !verdict.Until.Equal(want) {
++				t.Errorf("verdict.Until = %s, want the source's own next_probe_at %s", verdict.Until, want)
++			}
++			if len(verdict.Checked) == 0 {
++				t.Error("the verdict names no source, so nothing says where it came from")
++			}
++		})
++	}
++}
++
++// TestAMovedIdentityKeyMakesTheSuppressionVanishFailOpen is THE DISASTER,
++// asserted rather than described. It is what gives the test above its bite:
++// without it, a verdict path that ignored the file entirely and a verdict path
++// that read it would be told apart by nothing.
++func TestAMovedIdentityKeyMakesTheSuppressionVanishFailOpen(t *testing.T) {
++	for _, entry := range xrtManifest(t) {
++		t.Run(entry.Provider, func(t *testing.T) {
++			moved := moveOneHexDigit(t, entry.IdentityKey)
++			store := plantState(t, entry.StateFile, moved, xrtFixedNow)
++			verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{
++				Runtime: entry.Provider,
++				Model:   entry.Model,
++				Home:    entry.HomeNormalized,
++			})
++			if err != nil {
++				t.Fatalf("AvailabilityFor: %v", err)
++			}
++			if !verdict.Serviceable() {
++				t.Fatalf("the same bytes filed one hex digit away still read %s; this test no longer demonstrates the fail-open behaviour it exists to demonstrate, and the positive test above has lost its bite",
++					verdict.State)
++			}
++		})
++	}
++}
++
++// TestAnElapsedWindowIsNotServiceable narrows the bound from the other side.
++//
++// A reader that treated every suppression as permanent would pass the positive
++// test; a reader that treated an elapsed window as clear would pass it too and
++// walk the next spawn into the exhausted subscription. Past next_probe_at the
++// group is probe-eligible, which is admitted to ONE caller by winning an atomic
++// claim — and a claim is a write the read path may not take, so the read must
++// not report it healthy.
++func TestAnElapsedWindowIsNotServiceable(t *testing.T) {
++	for _, entry := range xrtManifest(t) {
++		t.Run(entry.Provider, func(t *testing.T) {
++			after := nextProbeAt(t, entry.StateFile, entry.Group).Add(time.Hour)
++			store := plantState(t, entry.StateFile, entry.IdentityKey, after)
++			verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{
++				Runtime: entry.Provider,
++				Model:   entry.Model,
++				Home:    entry.HomeNormalized,
++			})
++			if err != nil {
++				t.Fatalf("AvailabilityFor: %v", err)
++			}
++			if verdict.Serviceable() {
++				t.Errorf("past its window the group reads serviceable from a READ path; a probe is won by an atomic claim, not by looking\n%s", verdictDetails(verdict))
++			}
++		})
++	}
++}
++
++// TestAnUnreadableStateFileIsUnknownAndNeverHealthy is the absence/failure
++// distinction, which is the one the fail-open default is most likely to eat.
++//
++// An absent file is a proven absence and reads healthy by design. A file that
++// is THERE and cannot be parsed is not an absence, and a fallback defined for
++// absence must not fire on a read failure.
++func TestAnUnreadableStateFileIsUnknownAndNeverHealthy(t *testing.T) {
++	for _, entry := range xrtManifest(t) {
++		t.Run(entry.Provider, func(t *testing.T) {
++			layout := providerlimits.LayoutAt(t.TempDir())
++			if err := os.MkdirAll(layout.Root, 0o755); err != nil {
++				t.Fatalf("creating the scratch state root: %v", err)
++			}
++			if err := os.WriteFile(layout.StateFile(entry.IdentityKey), []byte("{\"version\": 3, \"groups\": {"), 0o644); err != nil {
++				t.Fatalf("planting a truncated state file: %v", err)
++			}
++			store, err := providerlimits.NewStore(providerlimits.Options{
++				Layout: layout,
++				Now:    func() time.Time { return xrtFixedNow },
++			})
++			if err != nil {
++				t.Fatalf("NewStore: %v", err)
++			}
++			verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{
++				Runtime: entry.Provider,
++				Model:   entry.Model,
++				Home:    entry.HomeNormalized,
++			})
++			if err != nil {
++				t.Fatalf("AvailabilityFor: %v", err)
++			}
++			if verdict.Serviceable() {
++				t.Fatalf("a state file that could not be read reports the provider healthy; an absence and a failure to read are different facts\n%s", verdictDetails(verdict))
++			}
++			if verdict.State != vendorplugin.AvailabilityUnknown {
++				t.Errorf("an unreadable state file reads %s, want unknown", verdict.State)
++			}
++			if len(verdict.Failures) == 0 {
++				t.Error("the verdict carries no read failure, so nothing downstream can say why it is unknown")
++			}
++		})
++	}
++}
++
++// moveOneHexDigit returns the key with its last hex digit advanced by one,
++// which is the smallest change that still names a different file.
++func moveOneHexDigit(t *testing.T, key string) string {
++	t.Helper()
++	if key == "" {
++		t.Fatal("cannot move an empty identity key")
++	}
++	const digits = "0123456789abcdef"
++	last := key[len(key)-1]
++	index := strings.IndexByte(digits, last)
++	if index < 0 {
++		t.Fatalf("identity key %q does not end in a hex digit", key)
++	}
++	return key[:len(key)-1] + string(digits[(index+1)%len(digits)])
++}
+diff --git a/internal/regress/declaration_test.go b/internal/regress/declaration_test.go
+new file mode 100644
+index 0000000..0d1b1c5
+--- /dev/null
++++ b/internal/regress/declaration_test.go
+@@ -0,0 +1,184 @@
++package regress
++
++import (
++	"errors"
++	"strings"
++	"testing"
++
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
++	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
++)
++
++// CLASS 2 — runtime declarations and the F2 collision policy.
++//
++// A runtime is a stable id bound to one (agentic system x vendor) pair. The id
++// feeds admitted-pair digests and limit-state filenames, so the two directions
++// of a redeclaration are not symmetric and the asymmetry is the whole rule:
++//
++//   - A declaration MATCHING an existing one is legal and idempotent. Two
++//     packages declaring the same pair have not disagreed, and refusing the
++//     second would make declaration order load-bearing.
++//   - A CONFLICTING declaration is refused and the FIRST declaration stands.
++//     Letting the second win is a silent rebind, and a rebind orphans every
++//     suppression filed under the old pair with no error anywhere.
++//
++// Both are checked here, and so is the thing a refusal alone does not
++// establish: that the stored binding did not move while the caller was being
++// told no.
++
++// seededRegistry is a fresh registry carrying the frozen table, built through
++// the same seed the default registry's init calls.
++func seededRegistry(t *testing.T) *vendorplugin.Registry {
++	t.Helper()
++	registry := vendorplugin.NewRegistry(agentic.NewRegistry())
++	if err := vendorplugin.SeedFrozenRuntimes(registry); err != nil {
++		t.Fatalf("seeding the frozen runtime table: %v", err)
++	}
++	return registry
++}
++
++// TestTheDefaultRegistryCarriesTheFrozenRuntimesBeforeAnyPluginRegisters is
++// the production call site: vendorplugin's own init seeds the six, so every
++// binary declares them whether or not their plugins are compiled in.
++func TestTheDefaultRegistryCarriesTheFrozenRuntimesBeforeAnyPluginRegisters(t *testing.T) {
++	frozen := vendorplugin.FrozenRuntimes()
++	if len(frozen) == 0 {
++		t.Fatal("the frozen runtime table is empty, so every check in this file would range over nothing")
++	}
++	for _, want := range frozen {
++		got, declared := vendorplugin.Default.RuntimeDeclarationOf(want.ID)
++		if !declared {
++			t.Errorf("runtime %q is frozen and the default registry does not declare it", want.ID)
++			continue
++		}
++		if !got.SameBinding(want) {
++			t.Errorf("runtime %q is declared as (%s x %s); the frozen table binds it to (%s x %s)",
++				want.ID, got.System, got.VendorLabel(), want.System, want.VendorLabel())
++		}
++	}
++}
++
++// TestAMatchingRedeclarationIsIdempotent is the accepting direction.
++func TestAMatchingRedeclarationIsIdempotent(t *testing.T) {
++	registry := seededRegistry(t)
++	before := registry.RuntimeDeclarations()
++	if err := vendorplugin.SeedFrozenRuntimes(registry); err != nil {
++		t.Fatalf("re-seeding a registry that already carries the frozen table must be a no-op: %v", err)
++	}
++	after := registry.RuntimeDeclarations()
++	if len(before) != len(after) {
++		t.Fatalf("re-seeding changed the declaration count from %d to %d", len(before), len(after))
++	}
++	for i := range before {
++		if !before[i].SameBinding(after[i]) {
++			t.Errorf("re-seeding moved %q from (%s x %s) to (%s x %s)",
++				before[i].ID, before[i].System, before[i].VendorLabel(), after[i].System, after[i].VendorLabel())
++		}
++	}
++}
++
++// TestARedeclarationDifferingOnlyInProvenanceIsStillIdempotent narrows the
++// idempotency rule from the side that would break real callers.
++//
++// SameBinding compares (id, system, vendor) and deliberately not the broker
++// provenance: two callers declaring the same pair with differently worded
++// evidence have not disagreed about anything. A registry that compared the
++// prose would refuse a legitimate second declaration, and this is the mutant
++// that catches it.
++func TestARedeclarationDifferingOnlyInProvenanceIsStillIdempotent(t *testing.T) {
++	registry := seededRegistry(t)
++	for _, original := range vendorplugin.FrozenRuntimes() {
++		reworded := original
++		reworded.Broker = vendorplugin.BrokerProvenance{
++			Checked: []string{"a second caller that looked somewhere else"},
++			Found:   original.Broker.Found,
++		}
++		if !original.VendorResolved() {
++			reworded.Broker.Found = ""
++		}
++		if err := registry.DeclareRuntime(reworded); err != nil {
++			t.Errorf("redeclaring %q with the same binding and different provenance was refused: %v", original.ID, err)
++		}
++	}
++}
++
++// TestAConflictingRedeclarationIsRefusedAndTheFirstStands is the refusing
++// direction, on BOTH axes of the pair.
++//
++// The assertion that matters most is the last one in each case: after the
++// refusal the stored declaration is still the original. A registry that
++// returned an error and wrote anyway would pass an error check and orphan the
++// state regardless.
++func TestAConflictingRedeclarationIsRefusedAndTheFirstStands(t *testing.T) {
++	// Spellings that name nothing in this module: no plugin, no frozen row,
++	// no vendor. A declaration does not require its plugins to exist, so these
++	// are legal declarations and illegal REdeclarations, which is exactly the
++	// shape under test. Reusing a real id would make some frozen row conflict
++	// with itself and quietly test nothing.
++	const (
++		foreignSystem = agentic.SystemID("opencode")
++		foreignVendor = vendorplugin.VendorID("mistral")
++	)
++	for _, original := range vendorplugin.FrozenRuntimes() {
++		conflicts := []struct {
++			axis        string
++			declaration vendorplugin.RuntimeDeclaration
++		}{}
++		if original.System != foreignSystem {
++			rebound := original
++			rebound.System = foreignSystem
++			conflicts = append(conflicts, struct {
++				axis        string
++				declaration vendorplugin.RuntimeDeclaration
++			}{"system", rebound})
++		}
++		if original.Vendor != foreignVendor {
++			rebound := original
++			rebound.Vendor = foreignVendor
++			rebound.Broker = vendorplugin.BrokerProvenance{
++				Checked: []string{"a second declaration that believes it knows better"},
++				Found:   "asserted by the second declaration",
++			}
++			conflicts = append(conflicts, struct {
++				axis        string
++				declaration vendorplugin.RuntimeDeclaration
++			}{"vendor", rebound})
++		}
++		if len(conflicts) == 0 {
++			t.Fatalf("runtime %q could not be made to conflict on either axis; this case tests nothing", original.ID)
++		}
++
++		for _, conflict := range conflicts {
++			t.Run(string(original.ID)+"/"+conflict.axis, func(t *testing.T) {
++				registry := seededRegistry(t)
++				err := registry.DeclareRuntime(conflict.declaration)
++				if err == nil {
++					t.Fatalf("rebinding runtime %q to (%s x %s) was accepted; every limit-state file and admitted-pair digest filed under the old pair is now orphaned",
++						original.ID, conflict.declaration.System, conflict.declaration.VendorLabel())
++				}
++				if !errors.Is(err, vendorplugin.ErrRuntimeConflict) {
++					t.Fatalf("rebinding %q was refused, but not as a conflict: %v", original.ID, err)
++				}
++				for _, want := range []string{
++					string(original.ID),
++					original.System.String(),
++					original.VendorLabel(),
++					conflict.declaration.System.String(),
++					conflict.declaration.VendorLabel(),
++				} {
++					if !strings.Contains(err.Error(), want) {
++						t.Errorf("the conflict message does not name %q, so a reader cannot see which binding won: %v", want, err)
++					}
++				}
++				stored, declared := registry.RuntimeDeclarationOf(original.ID)
++				if !declared {
++					t.Fatalf("runtime %q vanished from the registry when a conflicting declaration was refused", original.ID)
++				}
++				if !stored.SameBinding(original) {
++					t.Errorf("the refused declaration won anyway: %q now reads (%s x %s), want the first declaration (%s x %s)",
++						original.ID, stored.System, stored.VendorLabel(), original.System, original.VendorLabel())
++				}
++			})
++		}
++	}
++}
+diff --git a/internal/regress/doc.go b/internal/regress/doc.go
+new file mode 100644
+index 0000000..8f0eab6
+--- /dev/null
++++ b/internal/regress/doc.go
+@@ -0,0 +1,42 @@
++// Package regress is this module's landing-gate regression net.
++//
++// It holds no production code and is linked into no binary. What it holds is
++// one fast, cross-cutting check per class of failure this repository has
++// already decided it cannot afford to reintroduce, each driven through the
++// same entry point a caller would use and each paired with a demonstration
++// that the check bites.
++//
++// # Why a separate package rather than more tests in the packages themselves
++//
++// The per-package suites are deep: they prove one port against its own
++// fixtures, mutant by mutant, and they take as long as that deserves. This
++// one is the opposite shape. It crosses the layers — a Layer-2 registration
++// refusing on a Layer-1 fact, a runtime declaration, a limit-state file
++// projected as a vendor verdict, a plan built through the registry — and it
++// is kept small enough to sit in front of every landing without taxing one.
++//
++// The four classes, and the incident behind each:
++//
++//   - REGISTRATION. A vendor plugin naming an agentic system nobody
++//     registered must be refused with BOTH ids in the message. Admitting it
++//     leaves a model that resolves to a harness the binary does not carry,
++//     and the failure then surfaces at launch, far from the declaration that
++//     caused it.
++//   - DECLARATION. A runtime is a declared (system x vendor) pair, and the
++//     collision policy is F2: a matching redeclaration is idempotent, a
++//     conflicting one is refused and the FIRST declaration stands. The ids
++//     feed admitted-pair digests and limit-state filenames, so a silent
++//     rebind orphans state.
++//   - AVAILABILITY. The limit plane fails open: a state file nobody can find
++//     reads as "provider healthy" with no error anywhere. So the verdict has
++//     to be derived from bytes a different binary wrote, and the moved-key
++//     disaster has to be demonstrated rather than described.
++//   - PARITY. One golden per Layer-1 system, rebuilt through the real
++//     registry and agentic.BuildPlan. It is a smoke, not the acceptance —
++//     each plugin's own parity file remains that — and its job is to catch a
++//     core change that breaks every system at once.
++//
++// Every test here is in a _test.go file; this file exists so the directory is
++// an ordinary package for `go build ./...` and so the reason the package
++// exists is written down next to it rather than in a Makefile comment.
++package regress
+diff --git a/internal/regress/parity_smoke_test.go b/internal/regress/parity_smoke_test.go
+new file mode 100644
+index 0000000..13ba763
+--- /dev/null
++++ b/internal/regress/parity_smoke_test.go
+@@ -0,0 +1,290 @@
++package regress
++
++import (
++	"path/filepath"
++	"testing"
++
++	"github.com/relux-works/skill-agents-management/internal/paritycase"
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
++	"github.com/relux-works/skill-agents-management/pkg/agentic/parity"
++	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy"
++	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
++	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
++	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini"
++	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse"
++	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen"
++)
++
++// CLASS 4 — one launch-surface golden per Layer-1 system, rebuilt through the
++// real registry and agentic.BuildPlan.
++//
++// This is a SMOKE, and saying so is not a hedge. Each plugin's own
++// parity_test.go remains the acceptance: it covers every golden its system
++// has, with the mutants that hold each field. What this file covers is the
++// failure those files are structurally bad at seeing — a change in the CORE
++// that breaks all six at once and is diagnosed six times in six packages
++// before anyone notices it is one bug. Six cases, one per system, under a
++// second.
++//
++// Nothing here reads an expected value out of the golden it compares to. The
++// requests are the source capture's own configs, spelled out, so a comparison
++// that passes means the plan reproduces the captured surface rather than that
++// JSON round-trips.
++
++// smokeCase is one golden and the machine state that reproduces it.
++type smokeCase struct {
++	goldenID  string
++	tempSlots int
++	usesStub  bool
++	// noPath withholds the PATH entry entirely. agy's dry run resolves nothing
++	// from PATH, and an environment with none is what proves it.
++	noPath bool
++	mode   agentic.LaunchMode
++	build  func(t *testing.T, dirs paritycase.Dirs) (agentic.System, agentic.LaunchRequest, []string)
++}
++
++// smokeCases is one case per Layer-1 plugin. The dry-run golden is preferred
++// where a system has one — it is the cheapest surface that still exercises
++// binary resolution and the whole argv grammar. claude has no dry-run capture,
++// so its exec prompt-mode golden stands in.
++var smokeCases = []smokeCase{
++	{
++		goldenID:  "codex/dry-run",
++		tempSlots: 1,
++		usesStub:  true,
++		mode:      agentic.LaunchModeDryRun,
++		build: func(t *testing.T, dirs paritycase.Dirs) (agentic.System, agentic.LaunchRequest, []string) {
++			paritycase.WriteStubExecutable(t, dirs.Stub, "codex")
++			workDir := dirs.Temp[0]
++			return codex.New(), agentic.LaunchRequest{
++				System:      codex.New().ID(),
++				Model:       agentic.Model{ID: "gpt-5.6-terra", Effort: agentic.EffortSupportRequired},
++				Effort:      "high",
++				ServiceTier: "priority",
++				Profile:     "parity-profile",
++				WorkDir:     workDir,
++				Run: agentic.RunContext{
++					RunID:    "RUN-parity-codex",
++					TaskID:   "TASK-parity-codex",
++					BoardDir: filepath.Join(workDir, ".task-board"),
++				},
++			}, []string{dirs.Stub}
++		},
++	},
++	{
++		// claude captured no dry run, so the smoke drives its exec surface:
++		// a stub binary, an assignment on disk, and the environment strip.
++		goldenID:  "claude/prompt-mode",
++		tempSlots: 2,
++		mode:      agentic.LaunchModeExec,
++		build: func(t *testing.T, dirs paritycase.Dirs) (agentic.System, agentic.LaunchRequest, []string) {
++			binDir, workDir := dirs.Temp[0], dirs.Temp[1]
++			paritycase.WriteStubExecutable(t, binDir, "claude")
++			return claude.New(), agentic.LaunchRequest{
++				System:     claude.New().ID(),
++				Model:      agentic.Model{ID: "claude-opus-5", Effort: agentic.EffortSupportRequired},
++				Effort:     "high",
++				WorkDir:    workDir,
++				PromptPath: paritycase.WritePromptFile(t, workDir, "claude prompt-mode body"),
++				Run: agentic.RunContext{
++					RunID:  "RUN-parity-claude",
++					TaskID: "TASK-parity-claude",
++				},
++			}, []string{binDir}
++		},
++	},
++	{
++		goldenID:  "qwen/dry-run",
++		tempSlots: 1,
++		usesStub:  true,
++		mode:      agentic.LaunchModeDryRun,
++		build: func(t *testing.T, dirs paritycase.Dirs) (agentic.System, agentic.LaunchRequest, []string) {
++			paritycase.WriteStubExecutable(t, dirs.Stub, "qwen")
++			return qwen.New(), agentic.LaunchRequest{
++				System:  qwen.New().ID(),
++				Model:   agentic.Model{ID: "qwen3.7-max", Effort: agentic.EffortSupportRequired},
++				Effort:  "high",
++				WorkDir: dirs.Temp[0],
++			}, []string{dirs.Stub}
++		},
++	},
++	{
++		goldenID:  "gemini/dry-run",
++		tempSlots: 1,
++		usesStub:  true,
++		mode:      agentic.LaunchModeDryRun,
++		build: func(t *testing.T, dirs paritycase.Dirs) (agentic.System, agentic.LaunchRequest, []string) {
++			paritycase.WriteStubExecutable(t, dirs.Stub, "gemini")
++			return gemini.New(), agentic.LaunchRequest{
++				System:  gemini.New().ID(),
++				Model:   agentic.Model{ID: "gemini-3.5-flash"},
++				WorkDir: dirs.Temp[0],
++			}, []string{dirs.Stub}
++		},
++	},
++	{
++		goldenID:  "muse/dry-run",
++		tempSlots: 1,
++		usesStub:  true,
++		mode:      agentic.LaunchModeDryRun,
++		build: func(t *testing.T, dirs paritycase.Dirs) (agentic.System, agentic.LaunchRequest, []string) {
++			paritycase.WriteStubExecutable(t, dirs.Stub, "muse")
++			return muse.New(), agentic.LaunchRequest{
++				System:  muse.New().ID(),
++				Model:   agentic.Model{ID: "muse-spark"},
++				WorkDir: dirs.Temp[0],
++			}, []string{dirs.Stub}
++		},
++	},
++	{
++		// agy's dry run carries NO preflight evidence, which is why its
++		// golden's binary is the bare placeholder rather than a path — and why
++		// this case seeds neither a stub nor a PATH.
++		goldenID:  "agy/dry-run",
++		tempSlots: 1,
++		noPath:    true,
++		mode:      agentic.LaunchModeDryRun,
++		build: func(t *testing.T, dirs paritycase.Dirs) (agentic.System, agentic.LaunchRequest, []string) {
++			return agy.New(), agentic.LaunchRequest{
++				System:  agy.New().ID(),
++				Model:   agentic.Model{ID: "gemini-3.6-flash-high"},
++				WorkDir: dirs.Temp[0],
++			}, nil
++		},
++	},
++}
++
++func prepareSmokeCase(t *testing.T, c smokeCase) (parity.Golden, paritycase.Dirs, agentic.System, agentic.LaunchRequest) {
++	t.Helper()
++	g, err := parity.Load(c.goldenID)
++	if err != nil {
++		t.Fatalf("Load(%q): %v", c.goldenID, err)
++	}
++	dirs := paritycase.Make(t, c.tempSlots, c.usesStub)
++	system, req, pathDirs := c.build(t, dirs)
++	if c.noPath {
++		req.Env = append([]string(nil), g.Capture.ParentEnv...)
++	} else {
++		req.Env = paritycase.WithPathEntry(g.Capture.ParentEnv, pathDirs...)
++	}
++	return g, dirs, system, req
++}
++
++// TestOneGoldenPerSystemStillBuilds is the smoke.
++func TestOneGoldenPerSystemStillBuilds(t *testing.T) {
++	for _, c := range smokeCases {
++		t.Run(c.goldenID, func(t *testing.T) {
++			g, dirs, system, req := prepareSmokeCase(t, c)
++			plan := paritycase.BuildPlan(t, system, req, c.mode)
++			if diffs := parity.ComparePlan(g, plan, dirs.Substitutions()); len(diffs) != 0 {
++				for _, d := range diffs {
++					t.Errorf("%s does not match its golden:\n  %s", c.goldenID, d)
++				}
++			}
++		})
++	}
++}
++
++// TestEveryLayerOneSystemHasASmokeCase fails if a seventh plugin lands and
++// this file does not grow with it.
++//
++// Without it the smoke would silently stop covering the newest system, which
++// is the one most likely to need it. The plugin ids come from the default
++// registry — every plugin registers into it from its own init — rather than
++// from a list here.
++func TestEveryLayerOneSystemHasASmokeCase(t *testing.T) {
++	covered := map[agentic.SystemID]string{}
++	for _, c := range smokeCases {
++		g, err := parity.Load(c.goldenID)
++		if err != nil {
++			t.Fatalf("Load(%q): %v", c.goldenID, err)
++		}
++		_, _, system, _ := prepareSmokeCase(t, c)
++		if existing, already := covered[system.ID()]; already {
++			t.Errorf("system %q has two smoke cases (%s and %s); the smoke is one per system by design", system.ID(), existing, c.goldenID)
++		}
++		covered[system.ID()] = g.ID
++	}
++	ids := agentic.Default.IDs()
++	if len(ids) == 0 {
++		t.Fatal("no agentic system plugin is compiled into this test binary, so this check ranged over nothing")
++	}
++	for _, id := range ids {
++		if _, ok := covered[id]; !ok {
++			t.Errorf("agentic system %q is registered and has no smoke case in this file", id)
++		}
++	}
++}
++
++// TestAWrongPlanFailsTheSmoke is what makes the smoke mean something.
++//
++// Two defects, planted on an otherwise-correct plan built through the real
++// BuildPlan, applied to EVERY case: the binary the launch would actually run,
++// and the argv it would run with. Each must be reported in the field it was
++// planted in — a failure naming the wrong surface sends the next reader to the
++// wrong file.
++//
++// They are deliberately generic rather than system-specific. A per-system
++// defect is the per-plugin suite's job; what this one has to prove is that the
++// comparison in this file is wired to a real plan at all, for all six.
++func TestAWrongPlanFailsTheSmoke(t *testing.T) {
++	mutants := []struct {
++		name      string
++		wantField string
++		defect    string
++		wrap      func(agentic.System) agentic.System
++	}{
++		{
++			name:      "the resolved binary is not the one that would run",
++			wantField: "Binary",
++			defect:    "ResolveBinary answers a plausible-looking path that is not the launch target — the source's own display-placeholder bug, which no argv comparison can see",
++			wrap:      func(s agentic.System) agentic.System { return wrongBinarySystem{System: s} },
++		},
++		{
++			name:      "the last argument is dropped",
++			wantField: "Args",
++			defect:    "Argv loses its final element, the shape a retyped grammar produces; for most systems that is the model, the workspace or the prompt",
++			wrap:      func(s agentic.System) agentic.System { return truncatedArgvSystem{System: s} },
++		},
++	}
++	for _, c := range smokeCases {
++		for _, mutant := range mutants {
++			t.Run(c.goldenID+"/"+mutant.name, func(t *testing.T) {
++				g, dirs, system, req := prepareSmokeCase(t, c)
++				plan := paritycase.BuildPlan(t, mutant.wrap(system), req, c.mode)
++				diffs := parity.ComparePlan(g, plan, dirs.Substitutions())
++				if len(diffs) == 0 {
++					t.Fatalf("%s: %s, and the smoke reported no difference", c.goldenID, mutant.defect)
++				}
++				if !paritycase.NamesField(diffs, mutant.wantField) {
++					t.Errorf("%s: the defect was planted in %s and the smoke reported %v", c.goldenID, mutant.wantField, diffs)
++				}
++			})
++		}
++	}
++}
++
++// wrongBinarySystem answers a path that is not the one the launch resolved.
++type wrongBinarySystem struct{ agentic.System }
++
++func (w wrongBinarySystem) ResolveBinary(req agentic.LaunchRequest) (string, error) {
++	resolved, err := w.System.ResolveBinary(req)
++	if err != nil {
++		return "", err
++	}
++	return filepath.Join(filepath.Dir(resolved), "not-"+filepath.Base(resolved)), nil
++}
++
++// truncatedArgvSystem drops the last argument.
++type truncatedArgvSystem struct{ agentic.System }
++
++func (a truncatedArgvSystem) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
++	argv, err := a.System.Argv(req, mode)
++	if err != nil {
++		return nil, err
++	}
++	if len(argv) == 0 {
++		return argv, nil
++	}
++	return argv[:len(argv)-1], nil
++}
+diff --git a/internal/regress/registration_test.go b/internal/regress/registration_test.go
+new file mode 100644
+index 0000000..37188f2
+--- /dev/null
++++ b/internal/regress/registration_test.go
+@@ -0,0 +1,172 @@
++package regress
++
++import (
++	"errors"
++	"strings"
++	"testing"
++
++	"github.com/relux-works/skill-agents-management/pkg/agentic"
++	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
++
++	// The six Layer-1 plugins and the four Layer-2 plugins, compiled in so
++	// this package can drive the REAL registrations rather than a double. Each
++	// import runs the plugin's own init, which is the production registration
++	// path, into the package-level defaults.
++	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy"
++	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
++	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
++	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/gemini"
++	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse"
++	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen"
++
++	_ "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba"
++	_ "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/anthropic"
++	_ "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/google"
++	_ "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/openai"
++)
++
++// CLASS 1 — the dependency direction, enforced at registration.
++//
++// A vendor plugin depends on the agentic systems that drive its models, never
++// the other way round, and vendorplugin.Registry.Register is where that is
++// checked. This file drives the REAL vendor plugins into registries built
++// against a deliberately empty agentic registry and requires the refusal —
++// then registers the systems those same plugins name and requires the
++// admission.
++//
++// Both halves are needed and neither is decoration. The refusal alone is
++// satisfied by a registry that refuses everything; the admission alone is
++// satisfied by a registry that checks nothing.
++
++// realVendors is every Layer-2 plugin this binary carries, read from the
++// default registry rather than listed here. A vendor added later is covered
++// with no edit, and a list here would be the second binding the single-source
++// guard exists to prevent.
++func realVendors(t *testing.T) []vendorplugin.Vendor {
++	t.Helper()
++	ids := vendorplugin.Default.VendorIDs()
++	if len(ids) == 0 {
++		t.Fatal("no vendor plugin is compiled into this test binary, so every check below would range over nothing")
++	}
++	vendors := make([]vendorplugin.Vendor, 0, len(ids))
++	for _, id := range ids {
++		vendor, ok := vendorplugin.Default.Lookup(id)
++		if !ok {
++			t.Fatalf("the default registry lists %q and then cannot look it up", id)
++		}
++		vendors = append(vendors, vendor)
++	}
++	return vendors
++}
++
++// declaredSystems is the set of agentic systems a vendor's own model rows
++// name, in declaration order and deduplicated. It is READ FROM THE PLUGIN, so
++// a vendor that grows a harness is covered without this file knowing.
++func declaredSystems(vendor vendorplugin.Vendor) []agentic.SystemID {
++	var out []agentic.SystemID
++	for _, model := range vendor.Models() {
++		for _, system := range model.Systems {
++			known := false
++			for _, already := range out {
++				if already == system {
++					known = true
++					break
++				}
++			}
++			if !known {
++				out = append(out, system)
++			}
++		}
++	}
++	return out
++}
++
++// TestAVendorNamingAnUnregisteredSystemIsRefusedNamingBothIDs is the refusal.
++//
++// The agentic registry is empty on purpose: every system every vendor names is
++// therefore unregistered, and the message has to name the vendor AND the
++// system. A refusal that named only one of them sends an operator to the wrong
++// repository — "anthropic will not register" and "the claude-code plugin is
++// not compiled in" are the same fact with two very different fixes.
++func TestAVendorNamingAnUnregisteredSystemIsRefusedNamingBothIDs(t *testing.T) {
++	for _, vendor := range realVendors(t) {
++		t.Run(vendor.ID().String(), func(t *testing.T) {
++			systems := declaredSystems(vendor)
++			if len(systems) == 0 {
++				t.Fatalf("%s declares no agentic system at all; there is no dependency here to check", vendor.ID())
++			}
++
++			registry := vendorplugin.NewRegistry(agentic.NewRegistry())
++			err := registry.Register(vendor)
++			if err == nil {
++				t.Fatalf("%s registered against an EMPTY agentic registry; every model it carries now resolves to a harness nobody compiled in, and the failure will surface at launch", vendor.ID())
++			}
++			if !errors.Is(err, vendorplugin.ErrUnknownAgenticSystem) {
++				t.Fatalf("%s was refused, but not as an unknown agentic system: %v", vendor.ID(), err)
++			}
++			if !strings.Contains(err.Error(), vendor.ID().String()) {
++				t.Errorf("the refusal does not name the vendor %q: %v", vendor.ID(), err)
++			}
++			named := false
++			for _, system := range systems {
++				if strings.Contains(err.Error(), system.String()) {
++					named = true
++					break
++				}
++			}
++			if !named {
++				t.Errorf("the refusal names none of the systems %v that %s declares: %v", systems, vendor.ID(), err)
++			}
++			if _, registered := registry.Lookup(vendor.ID()); registered {
++				t.Errorf("%s was refused and is in the registry anyway", vendor.ID())
++			}
++		})
++	}
++}
++
++// TestAVendorWhoseSystemsAreRegisteredIsAdmitted is the narrowing, and it is
++// what stops the test above from passing against a registry that refuses
++// everything.
++//
++// The systems are taken from the DEFAULT agentic registry — the real plugin
++// values, registered by their own init functions — and moved into an isolated
++// registry, so the admission is the production pairing rather than a double
++// standing in for one.
++func TestAVendorWhoseSystemsAreRegisteredIsAdmitted(t *testing.T) {
++	for _, vendor := range realVendors(t) {
++		t.Run(vendor.ID().String(), func(t *testing.T) {
++			systems := agentic.NewRegistry()
++			for _, id := range declaredSystems(vendor) {
++				plugin, ok := agentic.Default.Lookup(id)
++				if !ok {
++					t.Fatalf("%s declares agentic system %q and no such plugin is compiled in; the two layers disagree about what ships", vendor.ID(), id)
++				}
++				if err := systems.Register(plugin); err != nil {
++					t.Fatalf("registering the real %q plugin into an isolated registry: %v", id, err)
++				}
++			}
++			registry := vendorplugin.NewRegistry(systems)
++			if err := registry.Register(vendor); err != nil {
++				t.Fatalf("%s was refused with every system it names registered: %v", vendor.ID(), err)
++			}
++			if _, registered := registry.Lookup(vendor.ID()); !registered {
++				t.Fatalf("%s registered without error and is not in the registry", vendor.ID())
++			}
++		})
++	}
++}
++
++// TestAVendorRegistryWithNoAgenticRegistryRefusesEveryVendor is the third
++// state, and the one an implementation is most likely to get wrong by being
++// helpful: a registry with nothing to check against must refuse rather than
++// admit, because admitting means the dependency check was skipped and nothing
++// says so.
++func TestAVendorRegistryWithNoAgenticRegistryRefusesEveryVendor(t *testing.T) {
++	registry := vendorplugin.NewRegistry(nil)
++	for _, vendor := range realVendors(t) {
++		err := registry.Register(vendor)
++		if !errors.Is(err, vendorplugin.ErrNoAgenticRegistry) {
++			t.Errorf("registering %s into a registry with no agentic registry returned %v, want ErrNoAgenticRegistry", vendor.ID(), err)
++		}
++	}
++}
+diff --git a/task-board.config.json b/task-board.config.json
+index 14fe5a6..36597cc 100644
+--- a/task-board.config.json
++++ b/task-board.config.json
+@@ -33,7 +33,8 @@
+         "commands": [
+           "make vet",
+           "make build",
+-          "env -u TASK_BOARD_DIR go test -mod=mod ./... -count=1"
++          "env -u TASK_BOARD_DIR go test -mod=mod ./... -count=1",
++          "make regress"
+         ]
+       }
+     }
