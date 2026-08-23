@@ -493,10 +493,11 @@ The fifth is the switch — making `task-board` consume the tool. It is consumer
 side work, so it landed on the consumer's trunk rather than this one, as
 `skill-project-management`'s `STORY-260823-1sxcmg` at **`b34aa20`**: all four
 tasks done, including the CI arrangement (the tag required with no `replace`,
-`GOPRIVATE` and the credential rewrite, a gitignored `go.work` for local
-sibling work, and the pinned-`actionlint`/`ciguard` pair that keeps it that
-way). One human step remains and no agent can take it: the `RELUX_MODULES_TOKEN`
-repository secret.
+a gitignored `go.work` for local sibling work, and the pinned-`actionlint`/
+`ciguard` pair that keeps it that way). This repository went **public** on
+2026-08-23, so the consumer fetches it through the default proxy with sum-db
+verification — the credential arrangement the switch story originally built
+was removed the same day, and the consumer's guard now enforces its ABSENCE.
 
 The sixth is this documentation and the regression harness.
 

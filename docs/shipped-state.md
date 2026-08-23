@@ -161,10 +161,10 @@ landed with `STORY-260823-1sxcmg` at **`b34aa20`** on the consumer's trunk:
 | --- | --- |
 | **This module is tagged** `v0.1.0`, at `b722ace`, pushed to `origin` | **done** |
 | Consumer requires the tag with **no `replace`** on trunk | **done**, on `b34aa20` |
-| `GOPRIVATE=github.com/relux-works/*` and a `url.insteadOf` rewrite in the consumer's CI | **done**, on `b34aa20` |
+| ~~`GOPRIVATE` and a `url.insteadOf` rewrite in the consumer's CI~~ | **retired 2026-08-23**: the repo went public, the consumer fetches via the default proxy with sum-db on, and its guard now refuses leftover credential plumbing |
 | Local sibling development via a root `go.work`, gitignored | **done**, on `b34aa20` |
 | The guard pair: pinned `actionlint` (`v1.7.12`, in the consumer's Makefile and its own CI job) plus `tools/board-cli/internal/ciguard` | **done**, on `b34aa20` |
-| The Actions credential — repository secret `RELUX_MODULES_TOKEN`, a fine-grained PAT with `Contents:read` on this repository | **STILL NOT provisioned. Owner action required** |
+| ~~The Actions credential (`RELUX_MODULES_TOKEN`)~~ | **not needed**: the owner made this repository public on 2026-08-23 instead |
 
 The guard pair is what keeps the arrangement from silently unravelling again,
 and the split between its two halves is deliberate. `actionlint` owns workflow
@@ -197,11 +197,9 @@ dropped (`TASK-260819-3vr8j3` — Go auto-enables `-mod=vendor` the moment
 committing the `replace` means CI can never build.
 
 The workflow, the `go.mod` and the `go.work` documentation are all on the
-consumer's trunk, so the only thing still open here is **the repository owner's**:
-the `RELUX_MODULES_TOKEN` secret, which no agent can provision. Until it exists,
-the consumer's private-module jobs fail loudly with the fix in the message —
-which is the intended state, not a regression. Nothing in THIS repository's CI
-depends on any of it — see
+consumer's trunk, and nothing is open: the owner made this repository public on
+2026-08-23, which retired the credential half entirely. Nothing in THIS
+repository's CI depended on any of it — see
 [consuming-the-module.md](consuming-the-module.md) for what a consumer writes
 today.
 

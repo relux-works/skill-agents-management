@@ -190,9 +190,9 @@ Move the already-existing vendors and agentic systems out of
 4. task-board consuming the tool with its own spawn surface observably
    unchanged — **done**, on the consumer's trunk rather than this one, since
    the work is consumer-side: `STORY-260823-1sxcmg`, integrated at `b34aa20`.
-   All three swaps and the CI arrangement landed together; the only step left
-   is the `RELUX_MODULES_TOKEN` secret, which is the repository owner's to
-   provision.
+   All three swaps and the CI arrangement landed together; the credential
+   half was retired the same day when the owner made this repository public,
+   and the consumer's guard now enforces that no credential plumbing returns.
 
 Everything beyond that — new vendors, new agentic systems (opencode and
 others), the local-model resource plane — is deliberately after.
