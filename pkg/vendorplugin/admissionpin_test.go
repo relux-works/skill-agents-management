@@ -178,10 +178,24 @@ func TestCapabilityRanksAreNotTheAdmissionAuthority(t *testing.T) {
 	fixture := loadSourceAdmission(t)
 	for runtime, pinned := range fixture.Ceilings {
 		vendor := vendorOfRuntime(t, vendorplugin.RuntimeID(runtime))
-		count := len(mustModels(t, vendorplugin.Default, vendor))
+		// The reversal is over the SCORES, and it is arithmetic on the real
+		// ones rather than a fixed constant so that every row genuinely moves:
+		// (max + min) - score maps the top of the lineup onto the bottom and
+		// back, and it preserves the ties, which is what keeps this a pure
+		// re-rank rather than a re-rank plus a tie break.
+		scores := mustModels(t, vendorplugin.Default, vendor)
+		low, high := scores[0].Rank.Score, scores[0].Rank.Score
+		for _, model := range scores {
+			if model.Rank.Score < low {
+				low = model.Rank.Score
+			}
+			if model.Rank.Score > high {
+				high = model.Rank.Score
+			}
+		}
 		registry := isolatedRegistry(t, map[vendorplugin.VendorID]func(vendorplugin.Model) vendorplugin.Model{
 			vendor: func(m vendorplugin.Model) vendorplugin.Model {
-				m.Rank.Position = count + 1 - m.Rank.Position
+				m.Rank.Score = high + low - m.Rank.Score
 				return m
 			},
 		})

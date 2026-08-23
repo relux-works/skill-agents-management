@@ -21,6 +21,11 @@ import "github.com/relux-works/skill-agents-management/pkg/agentic"
 // one of them would otherwise share a backing array with the declaration, so
 // `models[0].Systems[0] = "muse"` in any caller would rebind a model for the
 // whole process.
+//
+// Pricing is a POINTER, which is the same hazard one level deeper: a shallow
+// copy hands every caller the plugin's own contract, and one caller writing
+// through it changes the published price everywhere. Pricing.Clone chases it,
+// including the *float64 behind each plan's promotional price.
 func CloneModels(models []Model) []Model {
 	out := make([]Model, 0, len(models))
 	for _, model := range models {
@@ -28,6 +33,7 @@ func CloneModels(models []Model) []Model {
 		copied.Rank.Basis = append([]RankEvidence(nil), model.Rank.Basis...)
 		copied.Effort.Vocabulary = append([]string(nil), model.Effort.Vocabulary...)
 		copied.Systems = append([]agentic.SystemID(nil), model.Systems...)
+		copied.Pricing = model.Pricing.Clone()
 		out = append(out, copied)
 	}
 	return out

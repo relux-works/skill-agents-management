@@ -335,11 +335,16 @@ signature and demonstrated staying open.
 The vendor plugin contract, its registry, and the runtime declarations.
 
 - `Vendor` is the plugin interface: identity, `Models()`, `Availability()` and
-  `Spawn()`. A model row carries its capability rank WITH the evidence behind
-  it (a rank with no observation is refused at registration — ranking is never
-  policy), a usage description that cannot be silently empty, its
-  reasoning-effort vocabulary and the vendor's recommended word, and the
-  agentic systems that can drive it. Effort TRANSPORT is not repeated here: it
+  `Spawn()`. A model row carries its capability score WITH the evidence behind
+  it (a score with no observation is refused at registration — ranking is never
+  policy), a usage description that cannot be silently empty, its lineup state,
+  its supersession, the vendor's display recommendation, its context window, its
+  billing contract, its reasoning-effort vocabulary and the vendor's recommended
+  word, and the agentic systems that can drive it. Every field with a legal
+  empty value states what that empty MEANS, and each is refused where it cannot
+  hold together: a successor no model answers to, a non-legacy row that has
+  already been replaced, two display picks for one harness, a negative context
+  window, a "promotion" at or above list price. Effort TRANSPORT is not repeated here: it
   belongs to the system plugin, and a launch needs both halves from their own
   owners.
 - **The dependency direction is enforced at registration.** A vendor naming an
@@ -396,14 +401,24 @@ accounts for them explicitly rather than dropping them.
   per-model effort vocabularies and the recommended efforts. A full-set pin
   compares both directions against a fixture captured from the source's own
   sources, and six drift mutants prove the pin fires.
-- **Derived**: the capability rank position. The source scores per broker with
-  ties allowed; this layer numbers 1..n with ties refused, ordering by score and
-  breaking ties on the source's declaration order. Each position's basis carries
-  the source score it came from.
+- **Ported verbatim, since v0.2.0**: the capability SCORE, the lifecycle, the
+  supersession, the display recommendation, the context window and the vendor
+  billing contract. Until v0.2.0 the score was reshaped here into a tie-free
+  rank POSITION, which asserted an ordering nobody had observed wherever the
+  source's scores tied. The score is now carried as it stands and the total
+  order some callers need is DERIVED by `vendorplugin.Lineup` — see *Rank: a
+  score, and a position derived from it* below.
 - **Authored here**: the usage descriptions. The source has no
   what-is-this-model-best-for field and the contract refuses a blank one, so
   these were written for this repository — marked as such in every binding file,
   with a test that fails if the note is removed.
+- **The two `muse` rows** live on the vendor-unresolved runtime declaration
+  rather than in a vendor plugin, because no vendor owns them. "No plugin owns
+  this model" is not evidence that the model has no lifecycle, no context window
+  and no effort axis, so the unresolved declaration carries the rows and
+  `Validate` holds them to exactly the standard a registered vendor's rows are
+  held to. A resolved runtime declaring model rows is REFUSED — that would be
+  the second table.
 - `alibaba` is the architecture's own argument: five rows under the `qwen-code`
   harness and one under `codex`. A cross-runtime pair is one vendor declaring
   one more system, and a test builds a real launch through it.
@@ -427,6 +442,31 @@ digest computed by the port and pinned by the port proves only that the port
 agrees with itself. Three vocabulary-drift mutants prove the digest moves when
 the rows do, and one lineup-reversal mutant proves it does not move when the
 ranks do.
+
+The digest is **byte-stable across every presentation fact**, which v0.2.0 had
+to prove rather than assert: eight mutants — every row marked legacy, every
+recommendation withdrawn, every score flattened, every price doubled, every
+contract dropped, every description replaced — re-expand the real ceilings and
+must produce a byte-identical canonical serialization. Two more mutants move the
+model id and the effort vocabulary and MUST change the digest, so the stability
+claim cannot be satisfied by a serializer that covers nothing.
+
+### Rank: a score, and a position derived from it
+
+A `CapabilityRank` declares a SCORE. Higher is more capable, comparison is only
+ever within one vendor, and **ties are legal** — they are the vendor stating
+that two models are equal. Three real ties exist in the ported table: an alias
+and its dated snapshot under `anthropic`, a cross-runtime mirror under
+`alibaba`, and five gemini-cli/antigravity pairs under `google`, whose two
+harnesses were ranked from two catalogues against one broker.
+
+The total order some callers need — printing a picker, numbering a listing — is
+DERIVED: `vendorplugin.Lineup` orders by score descending, breaks ties by
+declaration order, numbers 1..n, and marks every tied row `Tied`. A position is
+presentation, not evidence: swapping two equal declarations swaps their
+positions without a single observation having changed, which is exactly why it
+is not a field. A score with no `Basis` behind it is still refused — that rule
+did not move, because it was never about the position.
 
 Identifier normalization for all three id kinds lives once, in
 `internal/ident`. Two folds that agree today and drift tomorrow is the
@@ -489,6 +529,25 @@ contracts, the six agentic-system plugins, the vendor layer with its registries
 and digests, and the limit plane with its availability seam. `main` is tagged
 **`v0.1.0`**, which is what a consumer requires.
 
+**`v0.2.0` is pending**: the module half of single-sourcing the model facts.
+This module now owns everything the board's own model table still declared —
+the capability score with its ties, the lifecycle, the supersession, the display
+recommendation, the context window and the vendor billing contract — plus the
+two `muse` rows that belong to no vendor. POLICY did not move: the frozen v2
+tier table and the configured ceilings stay on the consumer side, which is what
+lets a score be corrected without moving who may spawn.
+
+It carries **one breaking API change**: `CapabilityRank.Position int` became
+`CapabilityRank.Score int`, and the total order is now derived by
+`vendorplugin.Lineup` rather than declared per row. A caller that read
+`.Position` reads `Lineup(models)[i].Position` instead, and gains `Tied` —
+which is the point, because the positions it used to read invented an ordering
+wherever the scores tied. `Registry.Register` no longer refuses two models at
+one rank; it refuses two DISPLAY PICKS for one agentic system, a successor no
+model answers to, a non-legacy row that has already been replaced, a negative
+context window and a billing contract that does not price its own model.
+`go get ...@v0.2.0` and update the `.Position` reads; nothing else moves.
+
 The fifth is the switch — making `task-board` consume the tool. It is consumer-
 side work, so it landed on the consumer's trunk rather than this one, as
 `skill-project-management`'s `STORY-260823-1sxcmg` at **`b34aa20`**: all four
@@ -513,8 +572,9 @@ repositories and who owns collapsing it, the spawn-plane code deliberately kept
 in `task-board` (exec ownership, the process-starting preflights, the
 composition validators with no cross-repository agreement check), the open
 child-environment leak pins and the qwen-codex auth-hint gap, and the exact
-state of the tag/`GOPRIVATE`/`go.work` CI arrangement and the one secret it
-still waits on.
+state of the tag/`go.work` CI arrangement — whose credential half was RETIRED
+when this repository went public on 2026-08-23, and whose absence the consumer's
+own guard now enforces.
 
 ## Development
 
@@ -660,10 +720,12 @@ concluding that a missing golden is permission.
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
 | model registry capture | regenerate the vendor fixtures: the source's model rows and frozen v2 tiers (read from its Go sources) and the admitted-pair digests (read from its own binary) | `.scripts/capture-model-registry.sh` | `pkg/vendorplugin/testdata/source-model-registry.json`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`, scratch in `.temp/capture-model-registry/` |
+| board model-facts capture (TRANSITIONAL) | regenerate the frozen capture of the BOARD table's own model facts — score, lifecycle, supersession, recommendation, context window, pricing — read from the board binary's `q 'models()'` projection at a named commit. Dies with the board's half of the swap: when the board reads these facts from this module, delete the fixture and `pkg/vendorplugin/boardfacts_test.go` rather than regenerating them | `.scripts/capture-board-model-facts.sh [--source /path/to/skill-project-management]` | `pkg/vendorplugin/testdata/board-model-facts.json`, scratch in `.temp/capture-board-model-facts/` |
 | codex mutation harness | narrow every codex gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-hp5fb4/mutants.py` | `.temp/TASK-260822-hp5fb4/mutants-*.log` |
 | claude mutation harness | narrow every claude gate one at a time and confirm the suite goes red | `python3 .temp/TASK-260822-3u97y3/mutants.py` | `.temp/TASK-260822-3u97y3/mutants-*.log` |
 | qwen/gemini/muse/agy mutation harness | narrow every gate the four remaining ports wrote, plus the two shared internals, and confirm the suite goes red | `python3 .temp/TASK-260822-xz8rj5/mutants.py` | `.temp/TASK-260822-xz8rj5/mutants-*.log` |
 | limit-state capture | capture the operator's live limit state, a suppression written by the SOURCE module, and the source's own report over bytes this repo wrote | `.scripts/capture-limit-state.sh [SOURCE_REPO=/path/to/skill-project-management]` | `pkg/providerlimits/testdata/{real-state,source-written,source-read,source-tables.json}`, scratch in `.temp/TASK-260822-2jouz3/xrt/` |
 | limit-plane mutation harness | narrow every identity, schema, verdict, ladder and guard gate the limit-plane port wrote and confirm the suite goes red | `python3 .temp/TASK-260822-2jouz3/mutants.py` | `.temp/TASK-260822-2jouz3/mutants-*.log` |
 | vendor-layer mutation harness | narrow every gate the vendor port wrote — the admission expansion, the digest serialization, the ported rows and the per-vendor guard homes — and confirm the suite goes red | `python3 .temp/TASK-260822-3cknas/mutants.py` | `.temp/TASK-260822-3cknas/mutants-*.log` |
+| board-facts mutation harness | narrow every gate the board-facts port added — lifecycle, score, supersession, recommendation, context window, pricing, the vendor-unresolved runtime's rows, the derived lineup and the digest serialization — and confirm the suite goes red naming the right test. Every mutant is a compile-clean NARROWING rather than a deletion, so a kill proves the class is covered rather than the line is present | `python3 .temp/TASK-260824-y7gyco/mutants.py` | `.temp/TASK-260824-y7gyco/mutants-01.log` |
 | regress mutation harness | narrow every gate `make regress` claims to hold, one at a time, and confirm the net goes red naming the right test | `python3 .temp/TASK-260823-4f5t1m/mutants.py` | `.temp/TASK-260823-4f5t1m/mutants-*.log` |

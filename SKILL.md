@@ -101,7 +101,7 @@ links the packages; the binary is a listing surface.
 ## Wiring it into a consumer
 
 ```
-github.com/relux-works/skill-agents-management v0.1.0   # private module, no replace
+github.com/relux-works/skill-agents-management v0.1.0   # public module, no replace, no credential
 ```
 
 A binary gets the plugins it blank-imports; each registers itself from its own
@@ -110,7 +110,8 @@ half-wired binary is not reachable. Sibling development goes through `go.work`
 (gitignored — a committed one applies in CI), never a committed `replace`,
 never vendoring.
 
-Full recipe, including `GOPRIVATE` and the Actions credential:
+Full recipe, including the `v0.2.0` breaking change (`CapabilityRank.Position`
+became `.Score`; the total order is derived by `vendorplugin.Lineup`):
 **[docs/consuming-the-module.md](docs/consuming-the-module.md)**.
 
 ## The three entry points
@@ -144,8 +145,11 @@ OBSERVED healthy verdict is serviceable, and "checked and found nothing",
 3. **Admitted-pair digests are frozen.** Downstream snapshots pin them; a
    silent change is a compatibility break. Model MEMBERSHIP comes from the
    frozen v2 snapshot, effort vocabularies from the vendor rows, and the two
-   stay apart — a capability rank is evidence, and the day it decides
-   admission a truthful re-rank silently moves who may spawn.
+   stay apart — a capability score is evidence, and the day it decides
+   admission a truthful re-rank silently moves who may spawn. The same rule
+   covers every other presentation fact a row carries (lifecycle, supersession,
+   display recommendation, context window, price): none of them reaches the
+   digest, and eight mutants prove it rather than a comment asserting it.
 4. **Effort is per-model and required.** Vocabularies live on the model row;
    TRANSPORT (argv / stdin / none) lives on the system plugin. No default is
    injected at any call site, and a refusal names the model, the runtime, the
@@ -182,7 +186,7 @@ the test process and is not this module's to read.
 | --- | --- |
 | What the tool is, per-plugin behaviour, guards, fixtures, capture scripts | [README.md](README.md) |
 | The plugin contract, layering rules, invariants, boundaries with task-board | [docs/architecture.md](docs/architecture.md) |
-| Depending on the module, `GOPRIVATE`, `go.work`, declaring a runtime | [docs/consuming-the-module.md](docs/consuming-the-module.md) |
+| Depending on the module, the version to require, `go.work`, declaring a runtime | [docs/consuming-the-module.md](docs/consuming-the-module.md) |
 | What shipped, what deliberately stayed behind, open pins, owners | [docs/shipped-state.md](docs/shipped-state.md) |
 | What the goldens prove and what the capture could NOT reach | [pkg/agentic/parity/testdata/goldens/README.md](pkg/agentic/parity/testdata/goldens/README.md) |
 

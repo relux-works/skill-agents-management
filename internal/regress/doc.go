@@ -15,7 +15,7 @@
 // projected as a vendor verdict, a plan built through the registry — and it
 // is kept small enough to sit in front of every landing without taxing one.
 //
-// The four classes, and the incident behind each:
+// The five classes, and the incident behind each:
 //
 //   - REGISTRATION. A vendor plugin naming an agentic system nobody
 //     registered must be refused with BOTH ids in the message. Admitting it
@@ -35,6 +35,14 @@
 //     registry and agentic.BuildPlan. It is a smoke, not the acceptance —
 //     each plugin's own parity file remains that — and its job is to catch a
 //     core change that breaks every system at once.
+//   - MODEL FACTS. The rows live in TWO homes since v0.2.0 — the vendor
+//     plugins, and the vendor-unresolved runtime declaration that carries the
+//     rows no vendor owns — so a check walking only the registered vendors
+//     reports green on 41 of 43 rows. And every fact those rows gained is
+//     display and migration evidence: the day a lifecycle, a recommendation, a
+//     score or a price reaches an admitted-pair digest, a truthful correction
+//     silently changes who may spawn, which is the regression the extraction
+//     source spent a task removing from its own ordered ceilings.
 //
 // Every test here is in a _test.go file; this file exists so the directory is
 // an ordinary package for `go build ./...` and so the reason the package

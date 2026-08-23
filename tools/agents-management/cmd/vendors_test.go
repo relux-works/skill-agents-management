@@ -144,8 +144,9 @@ func (v stubVendor) Models() []vendorplugin.Model {
 	return []vendorplugin.Model{{
 		ID:          "stub-1",
 		Description: "the only model this stub declares",
+		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Rank: vendorplugin.CapabilityRank{
-			Position: 1,
+			Score: 1,
 			Basis: []vendorplugin.RankEvidence{{
 				Source:      "this test",
 				Observation: "it is the only row, so it is the top of its own lineup",

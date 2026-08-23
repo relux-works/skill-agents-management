@@ -12,29 +12,42 @@ One Go module, one path, one tag:
 github.com/relux-works/skill-agents-management v0.1.0
 ```
 
-It is a **private** repository in the `relux-works` organization. There is no
-`replace` on trunk and there must not be one: a committed sibling-path
-`replace` is a path that exists on exactly one machine, and CI is not that
-machine.
+There is no `replace` on trunk and there must not be one: a committed
+sibling-path `replace` is a path that exists on exactly one machine, and CI is
+not that machine.
 
 ```bash
 go get github.com/relux-works/skill-agents-management@v0.1.0
 ```
 
-For a private module that needs two things in the environment doing the fetch:
+**Nothing else.** This repository went PUBLIC on 2026-08-23, so the fetch goes
+through the default proxy with sum-db verification and needs no credential at
+all. It was private before that, and the arrangement it needed — a `GOPRIVATE`
+setting and a `url.insteadOf` rewrite carrying a PAT — was removed the same day.
+Do not reintroduce either: the first consumer's own CI guard
+(`tools/board-cli/internal/ciguard`) now enforces the ABSENCE of that plumbing,
+so a helpful re-addition fails its build rather than helping.
 
-```bash
-export GOPRIVATE='github.com/relux-works/*'
-git config --global \
-  url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-```
+## The version to require
 
-`GOPRIVATE` keeps the module away from `proxy.golang.org` and `sum.golang.org`;
-the rewrite is what makes the fetch authenticate. A fine-grained PAT with
-`Contents:read` on this repository is enough. On GitHub Actions, read the secret
-through `env:` and fail loudly if it is missing — the `secrets` context is NOT
-available to an `if:` key, and referencing it there is a workflow syntax error
-that kills the run before any job starts.
+`v0.1.0` is the first tag and what the first consumer requires.
+
+**`v0.2.0` carries one breaking change.** `CapabilityRank.Position int` became
+`CapabilityRank.Score int`: this module now records the vendor's capability
+SCORE with its ties intact rather than a tie-free position, because a position
+numbering two equal models 7 and 8 asserts an ordering nobody observed. If you
+read `.Position`, read `vendorplugin.Lineup(models)` instead — it derives the
+total order (score descending, ties broken by declaration order, positions
+1..n) and marks every tied row `Tied`, which is the fact the old field could
+not carry.
+
+`v0.2.0` also moves six facts INTO the module that a consumer may have been
+declaring itself: `Model.Lifecycle`, `Model.SupersededBy`, `Model.Recommended`,
+`Model.ContextWindowTokens`, `Model.Pricing`, and the model rows of a
+vendor-unresolved runtime (`RuntimeDeclaration.Models`, which is how the two
+`muse` rows reach a consumer). Read them from here and delete your own copies —
+that is the point of the release. What does NOT move is POLICY: which models a
+repository may spawn stays your configuration's decision.
 
 ## Local development against a sibling checkout
 

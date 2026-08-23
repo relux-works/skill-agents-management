@@ -65,11 +65,34 @@ and its acceptance criteria required them byte-identical across the swap.
 string, and the module is the side that can be read. Until then the divergence
 is stated in both places rather than discovered.
 
-Two smaller residues of the same swap, both stated in the consumer's own notes
-and neither a duplicated fact: the consumer keeps `PolicyRank` as a SCORE
-(scores carry ties that this layer's tie-free `Rank.Position` cannot express,
-and two admission call sites compare them), and it keeps the two `muse` rows,
-which belong to no vendor here.
+Both of the smaller residues of that swap CLOSED in v0.2.0, and the way they
+closed is worth recording, because the first was a real design defect rather
+than a scheduling gap.
+
+The consumer kept `PolicyRank` as a SCORE because scores carry ties that this
+layer's tie-free `Rank.Position` could not express, and two of its admission
+call sites compare them. That was not a residue to be swept up later: it was
+this layer's rank type being WRONG. A position numbering two equal models 7 and
+8 states that 7 is better, which is a fact nobody observed, and the consumer
+swap is what surfaced it — its ranking consumers read the ties. `CapabilityRank`
+now declares a score with ties legal, and the total order callers need is
+derived by `vendorplugin.Lineup` (score descending, ties broken by declaration
+order, every tied row marked). The evidence requirement did not move; it was
+never about the position.
+
+The two `muse` rows belonged to no vendor here, and still do — that part was
+never going to change, because the runtime's broker is recorded as
+checked-and-never-established. What changed is that they are now DECLARED:
+they live on the vendor-unresolved runtime declaration, which carries model rows
+and holds them to exactly the standard a registered vendor's rows are held to. A
+resolved runtime declaring rows of its own is refused, so the shape cannot
+become a second table.
+
+**What is still owned on the consumer side: POLICY.** The frozen v2 tier table
+and the configured ceilings stay there. This module carries the facts a model
+row states about itself; which of them a repository may spawn is a decision its
+own configuration makes, and the split is the whole reason a capability score
+can be corrected without moving who may spawn.
 
 ### 2. Deliberate keeps in `task-board`
 

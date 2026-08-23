@@ -23,14 +23,24 @@ import (
 // of them against a fixture captured from that repository's own sources, so a
 // dropped or drifted row fails rather than passes quietly.
 //
-// DERIVED from the source: the capability rank POSITION. The source records a
-// per-broker PolicyRank score where a higher number is more capable and ties
-// are allowed; this layer records a position where 1 is most capable and ties
-// are refused, because a lineup that cannot order itself is not a ranking. The
-// positions below are the source's scores in descending order, ties broken by
-// the source's own declaration order, and the score each position came from
-// travels with it in the rank's basis. No tie exists here: the twelve
-// openai rows carry twelve distinct scores.
+// PORTED VERBATIM as well, since v0.2.0: the capability SCORE, the lineup
+// state, the supersession, the display recommendation, the context window and
+// the billing contract. Until v0.2.0 this file DERIVED a tie-free position from
+// the score, and that reshape asserted an ordering nobody had observed wherever
+// the source's scores tied. The score is now carried as it stands, ties and
+// all, and the total order some callers need is derived by vendorplugin.Lineup
+// from the list rather than declared per row — see lineup.go on why a position
+// is presentation and a score is evidence.
+//
+// The board-owned fields are pinned row by row against a frozen capture of the
+// board's own table (pkg/vendorplugin/testdata/board-model-facts.json, read by
+// pkg/vendorplugin/boardfacts_test.go), so a slipped digit in a price or a
+// swapped lifecycle fails rather than passing quietly.
+//
+// NO TIE EXISTS HERE: the twelve openai rows carry twelve distinct scores, so
+// the derived presentation order is the score order with nothing invented in
+// it. That is a fact about this vendor's table rather than a property of the
+// type — the anthropic, alibaba and google files each carry real ties.
 //
 // AUTHORED HERE, not ported: every Description. The source's rows carry a
 // short display string and no what-is-this-model-best-for field at all, while
@@ -39,9 +49,16 @@ import (
 // They are the ONLY field in this file that is not a source fact, and they must
 // never be cited as one.
 
-// sourceRegistry is the table every rank position in this file was read from.
-// It names the exact commit so a reader chasing a position has a revision to
+// sourceRegistry is the table every capability score in this file was read
+// from. It names the exact commit so a reader chasing a score has a revision to
 // open rather than a moving target.
+//
+// The board-owned facts the rows gained in v0.2.0 — the score again, the
+// lifecycle, the supersession, the recommendation, the context window and the
+// billing contract — were re-read from that same table at a LATER commit and
+// pinned against a capture of it; testdata/board-model-facts.json records which.
+// The two captures agree on every column they share, which is what makes them
+// corroboration rather than two chances to be wrong.
 const sourceRegistry = "skill-project-management tools/board-cli/internal/spawn/models.go (knownModels, commit ed4878123061b39fdae67160f6b5632117b48a2f)"
 
 // lineup is the vendor-side evidence every rank in this file also rests on.
@@ -62,13 +79,13 @@ var lineup = vendorplugin.RankEvidence{
 // PolicyRank score, the fact the position was derived FROM. A reader who
 // distrusts a position can check it against a number in another repository
 // rather than against this file's own opinion of itself.
-func rank(position, policyRank int, note string, evidence vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+func rank(score int, note string, evidence vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
 	return vendorplugin.CapabilityRank{
-		Position: position,
+		Score: score,
 		Basis: []vendorplugin.RankEvidence{
 			{
 				Source:      sourceRegistry,
-				Observation: fmt.Sprintf("the row carries PolicyRank %d, %s", policyRank, note),
+				Observation: fmt.Sprintf("the row carries PolicyRank %d, %s", score, note),
 			},
 			evidence,
 		},
@@ -92,84 +109,97 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.6-sol",
 		Description: "The frontier Codex model: the hardest agentic coding work, at the highest cost per turn",
-		Rank:        rank(1, 120, "the highest of the twelve openai rows", lineup),
+		Rank:        rank(120, "the highest of the twelve openai rows", lineup),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
+		Recommended: true,
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.6-terra",
 		Description: "Balanced agentic coding for everyday work; the usual pick when sol is more than the task needs",
-		Rank:        rank(2, 110, "below sol and above luna", lineup),
+		Rank:        rank(110, "below sol and above luna", lineup),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.6-luna",
 		Description: "Fast and cheaper agentic coding, for high-volume or latency-sensitive turns",
-		Rank:        rank(3, 100, "below terra and above gpt-5.5", lineup),
+		Rank:        rank(100, "below terra and above gpt-5.5", lineup),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.5",
 		Description: "General frontier reasoning for complex coding and research; not coding-specialized",
-		Rank:        rank(4, 90, "below luna and above gpt-5.4", lineup),
+		Rank:        rank(90, "below luna and above gpt-5.4", lineup),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.4",
 		Description: "Solid everyday coding one generation behind gpt-5.5",
-		Rank:        rank(5, 80, "below gpt-5.5 and above gpt-5.4-mini", lineup),
+		Rank:        rank(80, "below gpt-5.5 and above gpt-5.4-mini", lineup),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.4-mini",
 		Description: "Small and cheap: simple edits, boilerplate and mechanical work",
-		Rank:        rank(6, 70, "below gpt-5.4 and above the spark row", lineup),
+		Rank:        rank(70, "below gpt-5.4 and above the spark row", lineup),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.3-codex-spark",
 		Description: "The lowest-latency coding row, for tight interactive loops rather than long autonomous runs",
-		Rank:        rank(7, 60, "the lowest of the current rows, above every legacy one", lineup),
+		Rank:        rank(60, "the lowest of the current rows, above every legacy one", lineup),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.3-codex",
 		Description: "Legacy coding-specialized frontier model for invocations pinned to it; it still accepts the minimal effort",
-		Rank:        rank(8, 50, "the highest of the legacy rows", lineup),
+		Rank:        rank(50, "the highest of the legacy rows", lineup),
+		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.2-codex",
 		Description: "Legacy agentic coding model for invocations pinned to it; it still accepts the minimal effort",
-		Rank:        rank(9, 40, "below gpt-5.3-codex and above gpt-5.1-codex-max", lineup),
+		Rank:        rank(40, "below gpt-5.3-codex and above gpt-5.1-codex-max", lineup),
+		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.1-codex-max",
 		Description: "Legacy Codex flagship for invocations pinned to it; it still accepts the minimal effort",
-		Rank:        rank(10, 30, "below gpt-5.2-codex and above gpt-5.2", lineup),
+		Rank:        rank(30, "below gpt-5.2-codex and above gpt-5.2", lineup),
+		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.2",
 		Description: "Legacy general-purpose reasoning model for invocations pinned to it; it still accepts the minimal effort",
-		Rank:        rank(11, 20, "below gpt-5.1-codex-max and above gpt-5.1-codex-mini", lineup),
+		Rank:        rank(20, "below gpt-5.1-codex-max and above gpt-5.1-codex-mini", lineup),
+		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.1-codex-mini",
 		Description: "The cheapest row this vendor still registers, kept for invocations pinned to it",
-		Rank:        rank(12, 10, "the lowest of the twelve openai rows", lineup),
+		Rank:        rank(10, "the lowest of the twelve openai rows", lineup),
+		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("high", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
 	},

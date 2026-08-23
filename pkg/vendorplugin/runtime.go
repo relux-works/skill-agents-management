@@ -89,6 +89,38 @@ type RuntimeDeclaration struct {
 	System agentic.SystemID
 	Vendor VendorID
 	Broker BrokerProvenance
+
+	// Models are the model rows of a VENDOR-UNRESOLVED runtime, and they are
+	// legal on no other kind.
+	//
+	// # Why they live here at all
+	//
+	// Every other runtime's rows come from the vendor plugin that owns them,
+	// which is the whole point of the vendor contract. A runtime whose broker
+	// was looked for and never established has no such plugin — and "no plugin
+	// owns this model" is not evidence that the model has no context window,
+	// no lineup state and no effort axis. Letting the fields go unstated would
+	// be an absence read as a finding, which is the one mistake
+	// BrokerProvenance exists to prevent one field earlier.
+	//
+	// So the unresolved-vendor shape carries them. That is the shape being
+	// used as designed rather than extended for a special case: an unresolved
+	// declaration is already a COMPLETE and UNLAUNCHABLE declaration, and
+	// these rows make it complete about its models too without making it any
+	// more launchable. ResolveRuntime still refuses it with
+	// ErrRuntimeVendorUnresolved, unchanged.
+	//
+	// # Why a resolved runtime may not carry them
+	//
+	// Because that is the second table. A runtime whose vendor is established
+	// reads its models from that vendor's plugin, and a list here as well
+	// would be two declarations of one fact, agreeing until one of them was
+	// edited. Validate refuses it.
+	//
+	// The escape stays a declaration rather than a code change, as it is for
+	// the vendor itself: the day this runtime's broker is established, a
+	// vendor plugin takes the rows and the declaration drops them.
+	Models []Model
 }
 
 // VendorResolved reports whether this declaration names a vendor at all.
@@ -163,8 +195,59 @@ func (d RuntimeDeclaration) Validate() error {
 		return fmt.Errorf("%w: runtime %q has an unresolved vendor but records %q as having established one; an unresolved broker is a checked-and-EMPTY finding",
 			ErrRuntimeInvalid, d.ID, d.Broker.Found)
 	}
+	return d.validateModels()
+}
+
+// validateModels holds the rows a vendor-unresolved declaration carries to the
+// SAME standard a registered vendor's rows are held to, and refuses rows on a
+// declaration that has a vendor to get them from.
+//
+// "The same standard" is the load-bearing half. A row that reached this module
+// through the unresolved shape and skipped Model.Validate would be a second,
+// weaker admission path for exactly the models nobody else checks — the ones
+// with no plugin behind them.
+func (d RuntimeDeclaration) validateModels() error {
+	if d.VendorResolved() {
+		if len(d.Models) > 0 {
+			return fmt.Errorf("%w: runtime %q names vendor %q and also declares %d model rows; a runtime whose vendor is established reads its models from that vendor's plugin, and a second list here is two declarations of one fact",
+				ErrRuntimeInvalid, d.ID, d.Vendor, len(d.Models))
+		}
+		return nil
+	}
+	seen := make([]ModelID, 0, len(d.Models))
+	for _, model := range d.Models {
+		if err := model.Validate(); err != nil {
+			return fmt.Errorf("%w: runtime %q: %w", ErrRuntimeInvalid, d.ID, err)
+		}
+		for _, already := range seen {
+			if already == model.ID {
+				return fmt.Errorf("%w: runtime %q declares model %q twice", ErrRuntimeInvalid, d.ID, model.ID)
+			}
+		}
+		seen = append(seen, model.ID)
+		// The row must name the runtime's OWN harness. A model listed under a
+		// runtime that cannot drive it is a row no launch could ever reach,
+		// and the check is here rather than at resolution because an
+		// unresolved runtime never resolves — there would be no later moment
+		// to catch it.
+		if !model.DrivenBy(d.System) {
+			return fmt.Errorf("%w: runtime %q is driven by agentic system %q and its model %q declares %v; a row under a runtime whose harness cannot drive it is unreachable",
+				ErrRuntimeInvalid, d.ID, d.System, model.ID, model.Systems)
+		}
+	}
+	if err := checkSupersession(d.Models); err != nil {
+		return fmt.Errorf("%w: runtime %q: %w", ErrRuntimeInvalid, d.ID, err)
+	}
+	if err := checkRecommendations(d.Models); err != nil {
+		return fmt.Errorf("%w: runtime %q: %w", ErrRuntimeInvalid, d.ID, err)
+	}
 	return nil
 }
+
+// LineupOfDeclaration is the derived total order over a vendor-unresolved
+// runtime's own rows, and it answers the empty list for every other runtime —
+// whose lineup is its vendor's, through LineupOf.
+func (d RuntimeDeclaration) LineupOfDeclaration() []RankedModel { return Lineup(d.Models) }
 
 // runtimeIDSource names where the frozen bindings were read from. Every seed's
 // provenance points at it, so a reader chasing "why is agy bound to google"
@@ -221,7 +304,83 @@ var frozenRuntimes = []RuntimeDeclaration{
 		System: "muse",
 		Vendor: VendorUnresolved,
 		Broker: BrokerProvenance{Checked: []string{runtimeIDSource}},
+		Models: museModels(),
 	},
+}
+
+// boardRegistry is where the muse rows' facts were read from. It names the
+// exact commit so a reader chasing a score or a context window has a revision
+// to open rather than a moving target.
+const boardRegistry = "skill-project-management tools/board-cli/internal/spawn/models.go (modelRegistrations, commit dbd905b9259fba229f623a560140a049c47a2a5c)"
+
+// museModels is THE muse model list.
+//
+// # Why it is here and not in a vendor plugin
+//
+// Because no vendor owns it. The frozen runtimeid table records muse's broker
+// as looked-for and never established, and the board that declares the same two
+// rows says the same thing in its own words: they are "the only ones that may
+// declare their own effort axis", because there is no plugin to read one from.
+// This module's carrying of that finding is VendorUnresolved, and the rows sit
+// on the unresolved declaration itself.
+//
+// # Provenance, field by field
+//
+// PORTED from skill-project-management's board table: the model ids, the
+// capability scores, the lineup states, the display recommendation, the context
+// windows and the effort axis. pkg/vendorplugin/boardfacts_test.go pins every
+// one of them against a frozen capture of that table, so a slipped digit fails
+// rather than passes quietly.
+//
+// AUTHORED HERE, not ported: every Description, exactly as in the four vendor
+// binding files. The board's rows carry a short display string and no
+// what-is-this-model-best-for field, the model contract requires one and
+// refuses a blank, and the board's own texts die with its half of this swap.
+// They are the ONLY field here that is not a source fact, and they must never
+// be cited as one.
+//
+// # The tie
+//
+// Both rows score 10 and that is not a transcription accident: muse-spark is an
+// ALIAS of muse-spark-1.2-contributor, so they are the same model reached by two
+// names and no observation could separate them. The score says so; the
+// presentation position that Lineup derives is declaration order and carries no
+// claim, which is what RankedModel.Tied reports.
+func museModels() []Model {
+	source := RankEvidence{
+		Source:      boardRegistry,
+		Observation: "both muse rows carry PolicyRank 10, the only score the table gives this runtime, and the pair is a contributor model and its alias",
+	}
+	alias := RankEvidence{
+		Source:      "the two rows' own ids and the board's descriptions of them",
+		Observation: "muse-spark is recorded as an alias of muse-spark-1.2-contributor rather than as a second model, so the equal scores are an identity rather than a judgement nobody could defend",
+	}
+	// 1_048_576 is the board's own figure for both rows, the same 1M-token
+	// window its google rows carry. It is transcribed, not derived from a
+	// vendor page: no vendor was ever established for this runtime, so there
+	// is no page to derive it from.
+	const contextWindow = 1_048_576
+	return []Model{
+		{
+			ID:                  "muse-spark-1.2-contributor",
+			Description:         "The Muse Spark contributor harness: a local-first runtime whose broker this module has looked for and never established; pick it only where that unresolved binding is acceptable",
+			Rank:                CapabilityRank{Score: 10, Basis: []RankEvidence{source, alias}},
+			Lifecycle:           LifecycleCurrent,
+			Effort:              EffortDeclaration{Support: agentic.EffortSupportNone},
+			Recommended:         true,
+			ContextWindowTokens: contextWindow,
+			Systems:             []agentic.SystemID{"muse"},
+		},
+		{
+			ID:                  "muse-spark",
+			Description:         "The short alias of muse-spark-1.2-contributor, for an invocation that spells the runtime's model without its version",
+			Rank:                CapabilityRank{Score: 10, Basis: []RankEvidence{source, alias}},
+			Lifecycle:           LifecycleCurrent,
+			Effort:              EffortDeclaration{Support: agentic.EffortSupportNone},
+			ContextWindowTokens: contextWindow,
+			Systems:             []agentic.SystemID{"muse"},
+		},
+	}
 }
 
 // FrozenRuntimes returns the seeded declarations in their declared order.
@@ -242,6 +401,9 @@ func (d RuntimeDeclaration) clone() RuntimeDeclaration {
 	copied := d
 	if d.Broker.Checked != nil {
 		copied.Broker.Checked = append([]string(nil), d.Broker.Checked...)
+	}
+	if d.Models != nil {
+		copied.Models = CloneModels(d.Models)
 	}
 	return copied
 }

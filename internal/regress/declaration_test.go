@@ -119,6 +119,14 @@ func TestAConflictingRedeclarationIsRefusedAndTheFirstStands(t *testing.T) {
 		foreignSystem = agentic.SystemID("opencode")
 		foreignVendor = vendorplugin.VendorID("mistral")
 	)
+	// The rebound declarations drop the original's model rows, and the drop is
+	// what keeps this a test of the CONFLICT rule rather than of the validation
+	// in front of it. A second declaration claiming a different pair is not
+	// claiming the first's rows: carried across a system rebind they would name
+	// a harness the new pair cannot drive, and carried across a vendor rebind
+	// they would be the resolved-runtime-declaring-models shape that Validate
+	// refuses one step earlier. Either way the registry would answer "malformed"
+	// where this test needs it to answer "already declared for another pair".
 	for _, original := range vendorplugin.FrozenRuntimes() {
 		conflicts := []struct {
 			axis        string
@@ -127,6 +135,7 @@ func TestAConflictingRedeclarationIsRefusedAndTheFirstStands(t *testing.T) {
 		if original.System != foreignSystem {
 			rebound := original
 			rebound.System = foreignSystem
+			rebound.Models = nil
 			conflicts = append(conflicts, struct {
 				axis        string
 				declaration vendorplugin.RuntimeDeclaration
@@ -135,6 +144,7 @@ func TestAConflictingRedeclarationIsRefusedAndTheFirstStands(t *testing.T) {
 		if original.Vendor != foreignVendor {
 			rebound := original
 			rebound.Vendor = foreignVendor
+			rebound.Models = nil
 			rebound.Broker = vendorplugin.BrokerProvenance{
 				Checked: []string{"a second declaration that believes it knows better"},
 				Found:   "asserted by the second declaration",

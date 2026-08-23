@@ -682,11 +682,12 @@ func (v *limitPlaneVendor) Models() []vendorplugin.Model {
 	return []vendorplugin.Model{{
 		ID:          "claude-opus-5",
 		Description: "the model the limit-plane seam is exercised through in tests",
+		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Rank: vendorplugin.CapabilityRank{
-			Position: 1,
+			Score: 1,
 			Basis: []vendorplugin.RankEvidence{{
 				Source:      "pkg/providerlimits/verdict_test.go",
-				Observation: "the only row this double declares, so its position carries no claim beyond being first",
+				Observation: "the only row this double declares, so its score carries no claim beyond placing it in a lineup of one",
 			}},
 		},
 		Effort: vendorplugin.EffortDeclaration{

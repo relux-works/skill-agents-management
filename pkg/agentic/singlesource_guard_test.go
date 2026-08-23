@@ -237,6 +237,19 @@ var bindingHomes = map[string]string{
 	"openai models":    "pkg/vendorplugin/vendors/openai/models.go",
 	"alibaba models":   "pkg/vendorplugin/vendors/alibaba/models.go",
 	"google models":    "pkg/vendorplugin/vendors/google/models.go",
+
+	// The muse rows, which belong to NO vendor. Their runtime's broker was
+	// looked for and never established, so there is no vendor plugin to put
+	// them in and they live on the vendor-unresolved runtime declaration
+	// itself. They are the same KIND of fact as the four above — a model list
+	// declaring which harness drives each row — so they get the same treatment:
+	// exactly one home, named here, and a "muse" spelled in a composite literal
+	// anywhere else still fails.
+	//
+	// This entry is what makes that home a permission rather than an accident.
+	// Without it the rows could not be written at all; with a second file for
+	// them, the guard reports the second.
+	"muse models": "pkg/vendorplugin/runtime.go",
 }
 
 // dispatchKeyTypes are the entries of bindingHomes that name a Go type the
@@ -1347,7 +1360,11 @@ func TestSingleSourceGuardRulesFireOnRealCode(t *testing.T) {
 	// a home, so a file that stays silent under displacement is a file the
 	// composite-literal rule cannot see — and its silence in the real run
 	// would then mean nothing at all.
-	required := []string{"pkg/agentic/registry.go", "pkg/vendorplugin/registry.go"}
+	// pkg/vendorplugin/runtime.go is required alongside the vendor tables even
+	// though it is not one: it holds the muse rows, whose home is granted by
+	// bindingHomes just as theirs are, and a home nothing fires on under
+	// displacement is a permission the guard cannot see being used.
+	required := []string{"pkg/agentic/registry.go", "pkg/vendorplugin/registry.go", "pkg/vendorplugin/runtime.go"}
 	for _, home := range vendorBindingHomes {
 		required = append(required, home)
 	}

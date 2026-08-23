@@ -52,8 +52,16 @@ vendor declaring support for one more system, with no core change.
 A vendor plugin's interface, at minimum:
 
 - **Models** — the model list, each with:
-  - capability ranking (evidence-based; ranking is never policy),
+  - a capability SCORE (evidence-based; ranking is never policy; ties are legal
+    because two models really can be equal, and the total order some callers
+    need is derived from the list rather than declared per row),
   - a description of what the model is best used for,
+  - provider-lineup state: lifecycle, supersession, and the vendor's display
+    recommendation (display and migration evidence only — no admission path
+    reads any of them),
+  - the context window and the vendor billing contract, each with a stated
+    meaning for its empty value: no window recorded is not a window of zero, and
+    no contract registered is not free use,
   - its reasoning-effort vocabulary and recommended effort (effort is a
     required per-model axis; no defaults are injected anywhere),
 - **Availability** — limit state (if the vendor rate-limits), and a health

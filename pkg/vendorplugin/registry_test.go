@@ -153,16 +153,20 @@ func TestRegisterRefusesAModelWithNoUsageDescription(t *testing.T) {
 // production call site that has to refuse them, Registry.Register.
 func TestRegisterRefusesARankWithNoEvidence(t *testing.T) {
 	cases := map[string]CapabilityRank{
-		"no basis at all":                   {Position: 1},
-		"an empty basis":                    {Position: 1, Basis: []RankEvidence{}},
-		"an evidence with no source":        {Position: 1, Basis: []RankEvidence{{Observation: "it feels stronger"}}},
-		"an evidence that observed nothing": {Position: 1, Basis: []RankEvidence{{Source: "a hallway conversation"}}},
-		"a source that is only whitespace":  {Position: 1, Basis: []RankEvidence{{Source: "   ", Observation: "41/50"}}},
-		"an observation that is whitespace": {Position: 1, Basis: []RankEvidence{{Source: "eval", Observation: "\t"}}},
-		"neither half more than whitespace": {Position: 1, Basis: []RankEvidence{{Source: " ", Observation: "\n "}}},
-		"one sound evidence and one blank":  {Position: 1, Basis: []RankEvidence{{Source: "eval", Observation: "41/50"}, {Source: "  ", Observation: "  "}}},
-		"a position outside the lineup":     {Position: 0, Basis: []RankEvidence{{Source: "eval", Observation: "41/50"}}},
-		"a position below the start of it":  {Position: -1, Basis: []RankEvidence{{Source: "eval", Observation: "41/50"}}},
+		"no basis at all":                   {Score: 10},
+		"an empty basis":                    {Score: 10, Basis: []RankEvidence{}},
+		"an evidence with no source":        {Score: 10, Basis: []RankEvidence{{Observation: "it feels stronger"}}},
+		"an evidence that observed nothing": {Score: 10, Basis: []RankEvidence{{Source: "a hallway conversation"}}},
+		"a source that is only whitespace":  {Score: 10, Basis: []RankEvidence{{Source: "   ", Observation: "41/50"}}},
+		"an observation that is whitespace": {Score: 10, Basis: []RankEvidence{{Source: "eval", Observation: "\t"}}},
+		"neither half more than whitespace": {Score: 10, Basis: []RankEvidence{{Source: " ", Observation: "\n "}}},
+		"one sound evidence and one blank":  {Score: 10, Basis: []RankEvidence{{Source: "eval", Observation: "41/50"}, {Source: "  ", Observation: "  "}}},
+		// The zero value must not pass for the bottom of the scale. A model
+		// with no score has not been placed in the lineup, and admitting it
+		// would put an unplaced row at the end of every derived ordering as
+		// though somebody had put it there.
+		"no score at all":                {Basis: []RankEvidence{{Source: "eval", Observation: "41/50"}}},
+		"a score below the start of one": {Score: -1, Basis: []RankEvidence{{Source: "eval", Observation: "41/50"}}},
 	}
 	for name, rank := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -179,15 +183,47 @@ func TestRegisterRefusesARankWithNoEvidence(t *testing.T) {
 	}
 }
 
-// A lineup that cannot order itself is not a ranking, so two models at one
-// position is a refusal rather than a tie.
-func TestRegisterRefusesTwoModelsAtOneRank(t *testing.T) {
+// A tie is a statement, so two models at one SCORE is admitted — and the
+// derived ordering still has to be total.
+//
+// This replaced a refusal in v0.2.0 and the replacement is the point of the
+// change: the board that owns the same lineups records genuine ties (an alias
+// and its dated snapshot; two harnesses' catalogues scored against one broker),
+// and a refusal here forced the declaration to invent an ordering nobody
+// observed. What the tie must NOT do is leave a caller without an order, so
+// this asserts both halves: the registration is admitted, and Lineup numbers
+// the two rows 1 and 2 by declaration order while marking both tied.
+func TestRegisterAdmitsTwoModelsAtOneScoreAndTheDerivedOrderStaysTotal(t *testing.T) {
 	vendor := newNarwhal()
-	vendor.models[1].Rank.Position = vendor.models[0].Rank.Position
+	vendor.models[1].Rank.Score = vendor.models[0].Rank.Score
 
-	_, err := mustRegister(t, vendor, systemsWithPangolin(t))
-	requireErrorIs(t, err, ErrDuplicateRank, "Register(vendor ranking two models at one position)")
-	requireMentions(t, err, "narwhal-deep", "narwhal-flat")
+	registry, err := mustRegister(t, vendor, systemsWithPangolin(t))
+	if err != nil {
+		t.Fatalf("Register(vendor scoring two models equally): %v; a tie is the vendor stating the two are equal, not a malformed lineup", err)
+	}
+	plugin, ok := registry.Lookup(narwhalID)
+	if !ok {
+		t.Fatalf("vendor %s is not registered after a successful Register", narwhalID)
+	}
+
+	ranked := LineupOf(plugin)
+	if len(ranked) != 2 {
+		t.Fatalf("Lineup returned %d rows for a two-model vendor", len(ranked))
+	}
+	if ranked[0].Position != 1 || ranked[1].Position != 2 {
+		t.Errorf("the tied lineup derived positions %d and %d; a derived order must still be total and gapless",
+			ranked[0].Position, ranked[1].Position)
+	}
+	if string(ranked[0].Model.ID) != "narwhal-deep" || string(ranked[1].Model.ID) != "narwhal-flat" {
+		t.Errorf("the tie broke to %q then %q; declaration order puts narwhal-deep first",
+			ranked[0].Model.ID, ranked[1].Model.ID)
+	}
+	for _, row := range ranked {
+		if !row.Tied {
+			t.Errorf("model %q sits at position %d on a shared score and does not report Tied; a caller reading the position alone would take an invented order for an observed one",
+				row.Model.ID, row.Position)
+		}
+	}
 }
 
 // Effort is a required per-model axis and no default is injected anywhere, so
@@ -259,7 +295,6 @@ func TestRegisterRefusesUnusableModelRows(t *testing.T) {
 	t.Run("the same model id twice", func(t *testing.T) {
 		vendor := newNarwhal()
 		vendor.models[1].ID = vendor.models[0].ID
-		vendor.models[1].Rank.Position = 2
 
 		_, err := mustRegister(t, vendor, systemsWithPangolin(t))
 		requireErrorIs(t, err, ErrDuplicateModel, "Register(vendor declaring one model id twice)")

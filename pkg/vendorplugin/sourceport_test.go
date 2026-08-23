@@ -47,6 +47,9 @@ type sourceModel struct {
 	Broker            string   `json:"broker"`
 	AgenticSystems    []string `json:"agentic_systems"`
 	PolicyRank        int      `json:"policy_rank"`
+	Lifecycle         string   `json:"lifecycle"`
+	SupersededBy      string   `json:"superseded_by"`
+	Recommended       bool     `json:"recommended"`
 	Reasoning         string   `json:"reasoning"`
 	SupportedEfforts  []string `json:"supported_efforts"`
 	RecommendedEffort string   `json:"recommended_effort"`
@@ -503,14 +506,22 @@ func mutateSourceRow(models []sourceModel, id string, apply func(*sourceModel)) 
 	panic("mutateSourceRow: no such row " + id)
 }
 
-// TestCapabilityRankOrderingMatchesTheSourceScores pins the derived half.
+// TestPortedScoresAreTheSourceScoresAndTheDerivedOrderFollowsThem pins both
+// halves of the rank: the ported fact and the derived presentation.
 //
-// The source scores per broker with ties allowed; this layer numbers positions
-// from 1 with ties refused. What must survive that reshape is the ORDER, so
-// this recomputes the expected order from the fixture — score descending, ties
-// broken by the source's own declaration order — and requires the ported
-// positions to be exactly that sequence with no gaps.
-func TestCapabilityRankOrderingMatchesTheSourceScores(t *testing.T) {
+// The FACT half is a straight comparison — this layer now carries the source's
+// own per-broker score, so a ported score that is not the source's score is a
+// transcription error and nothing else. Until v0.2.0 this test could only check
+// the ORDER, because the score was reshaped into a tie-free position on the way
+// in and the reshape destroyed the ties.
+//
+// The DERIVED half is what Lineup produces from those scores: positions running
+// 1..n with no gaps, in score-descending order with ties broken by declaration
+// order, and every row on a shared score reporting Tied. That last assertion is
+// the one the reshape used to make impossible, and it is the reason this story
+// exists: the board's ranking consumers read ties, and a port that flattened
+// them was lying about equality in the quietest possible way.
+func TestPortedScoresAreTheSourceScoresAndTheDerivedOrderFollowsThem(t *testing.T) {
 	fixture := loadSourceRegistry(t)
 
 	for vendor := range portedVendors {
@@ -523,20 +534,93 @@ func TestCapabilityRankOrderingMatchesTheSourceScores(t *testing.T) {
 		sort.SliceStable(want, func(i, j int) bool { return want[i].PolicyRank > want[j].PolicyRank })
 
 		plugin, _ := vendorplugin.Default.Lookup(vendor)
-		got := plugin.Models()
-		sort.Slice(got, func(i, j int) bool { return got[i].Rank.Position < got[j].Rank.Position })
+		got := vendorplugin.LineupOf(plugin)
 
 		if len(got) != len(want) {
 			t.Fatalf("vendor %s declares %d models and the source table gives it %d", vendor, len(got), len(want))
 		}
 		for i := range want {
-			if got[i].Rank.Position != i+1 {
-				t.Errorf("vendor %s's model %q sits at position %d where the ordering expects %d; positions must run 1..n with no gaps",
-					vendor, got[i].ID, got[i].Rank.Position, i+1)
+			if got[i].Position != i+1 {
+				t.Errorf("vendor %s's model %q sits at derived position %d where the ordering expects %d; positions must run 1..n with no gaps",
+					vendor, got[i].Model.ID, got[i].Position, i+1)
 			}
-			if string(got[i].ID) != want[i].ID {
-				t.Errorf("vendor %s ranks %q at position %d; the source's scores in descending declaration order put %q there",
-					vendor, got[i].ID, i+1, want[i].ID)
+			if string(got[i].Model.ID) != want[i].ID {
+				t.Errorf("vendor %s's derived lineup puts %q at position %d; the source's scores in descending declaration order put %q there",
+					vendor, got[i].Model.ID, i+1, want[i].ID)
+			}
+			if got[i].Model.Rank.Score != want[i].PolicyRank {
+				t.Errorf("vendor %s's model %q carries score %d and the source scores it %d",
+					vendor, got[i].Model.ID, got[i].Model.Rank.Score, want[i].PolicyRank)
+			}
+			// Tied is checked against the SOURCE's scores rather than against
+			// the ported ones, so a port that dropped a tie by nudging one
+			// score is reported here rather than agreeing with itself.
+			shared := 0
+			for _, other := range want {
+				if other.PolicyRank == want[i].PolicyRank {
+					shared++
+				}
+			}
+			if wantTied := shared > 1; got[i].Tied != wantTied {
+				t.Errorf("vendor %s's model %q reports Tied=%v and the source's score %d is carried by %d of its rows",
+					vendor, got[i].Model.ID, got[i].Tied, want[i].PolicyRank, shared)
+			}
+		}
+	}
+}
+
+// TestTheSourceTiesSurviveThePort names the ties instead of counting them.
+//
+// A property test over "Tied agrees with the fixture" passes on a table with no
+// ties at all, so it is equally consistent with a port that flattened every one
+// of them and a fixture regenerated to match. These are the ties the board's
+// own table carries, written down here independently of the fixture, exactly as
+// sourceModelCount is: losing one has to be argued rather than absorbed.
+func TestTheSourceTiesSurviveThePort(t *testing.T) {
+	ties := map[vendorplugin.VendorID][][]string{
+		"anthropic": {{"claude-haiku-4-5", "claude-haiku-4-5-20251001"}},
+		"alibaba":   {{"qwen3.7-plus", "qwen3.7-plus-via-codex"}},
+		"google": {
+			{"gemini-3.1-pro-preview", "gemini-3.6-flash-high"},
+			{"gemini-3.5-flash", "gemini-3.6-flash-medium"},
+			{"gemini-3-flash-preview", "gemini-3.6-flash-low"},
+			{"gemini-3.1-flash-lite", "gemini-3.5-flash-high"},
+			{"gemini-2.5-pro", "gemini-3.5-flash-medium"},
+		},
+		// openai's twelve rows carry twelve distinct scores. The empty entry
+		// is deliberate: it states that this vendor was checked and has none,
+		// which is a different fact from this vendor being absent from the map.
+		"openai": {},
+	}
+	if len(ties) != len(portedVendors) {
+		t.Fatalf("this test names ties for %d vendors and %d are ported; a vendor nobody checked could flatten every tie it has", len(ties), len(portedVendors))
+	}
+
+	for vendor, groups := range ties {
+		plugin, registered := vendorplugin.Default.Lookup(vendor)
+		if !registered {
+			t.Fatalf("vendor %s is not registered", vendor)
+		}
+		scoreOf := map[vendorplugin.ModelID]int{}
+		for _, model := range plugin.Models() {
+			scoreOf[model.ID] = model.Rank.Score
+		}
+		for _, group := range groups {
+			first, known := scoreOf[vendorplugin.ModelID(group[0])]
+			if !known {
+				t.Errorf("vendor %s does not declare %q, which this port records as one half of a tie", vendor, group[0])
+				continue
+			}
+			for _, id := range group[1:] {
+				score, known := scoreOf[vendorplugin.ModelID(id)]
+				if !known {
+					t.Errorf("vendor %s does not declare %q, which this port records as tied with %q", vendor, id, group[0])
+					continue
+				}
+				if score != first {
+					t.Errorf("vendor %s scores %q at %d and %q at %d; the source ties them, and a port that separates two equal models states an ordering nobody observed",
+						vendor, group[0], first, id, score)
+				}
 			}
 		}
 	}
@@ -580,8 +664,8 @@ func TestEveryRankCarriesTheSourceEvidence(t *testing.T) {
 				}
 			}
 			if !carried {
-				t.Errorf("vendor %s model %q ranks at position %d and no basis entry records the source's own %q; the position would then rest on this repository's say-so",
-					vendor, model.ID, model.Rank.Position, needle)
+				t.Errorf("vendor %s model %q scores %d and no basis entry records the source's own %q; the score would then rest on this repository's say-so",
+					vendor, model.ID, model.Rank.Score, needle)
 			}
 			if !named {
 				t.Errorf("vendor %s model %q carries no basis entry naming the source registry file; evidence a reader cannot open is prose", vendor, model.ID)

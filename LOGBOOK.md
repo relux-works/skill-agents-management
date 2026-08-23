@@ -3,6 +3,40 @@
 > Institutional memory. Concise, factual, high-signal.
 > Newest entries first. One block per insight.
 
+## 2026-08-24
+
+### 0048 — A tie-free rank POSITION was a design defect, not a scheduling residue
+- ROOT CAUSE: `CapabilityRank.Position` numbered a vendor's lineup 1..n with ties REFUSED, so wherever the board's scores tied — `claude-haiku-4-5` and its dated snapshot, `qwen3.7-plus` and its cross-runtime mirror, five gemini-cli/antigravity pairs under one broker — the port asserted an ordering nobody observed. `docs/shipped-state.md` had recorded this as a small residue of the consumer swap ("the consumer keeps `PolicyRank` as a SCORE"). It was the consumer telling us our rank type was wrong: its ranking consumers READ the ties.
+- FIX: `CapabilityRank.Score int`, ties legal, `Basis` still required. The total order some callers need is DERIVED by `vendorplugin.Lineup` (score desc, ties broken by declaration order, `Tied` reported). `pkg/vendorplugin/lineup.go:1`. Position is no longer a field precisely because a number sitting next to an evidence-bearing score reads as a second evidence-bearing fact.
+- DECISION: `Registry.Register` dropped `ErrDuplicateRank`. A shared score is the vendor STATING two models are equal; refusing it forced the declaration to invent an ordering. It gained gates that are real instead: two display picks for one agentic system, a dangling successor, a non-legacy row already replaced, a negative context window, an unquotable billing contract.
+- SCOPE: `pkg/vendorplugin/{vendor,registry,runtime,lineup,plugin}.go`, all four `vendors/*/models.go`, `docs/shipped-state.md`.
+
+### 0044 — The board's own binary is better evidence than its sources, and the sources stopped parsing
+- FINDING: `.scripts/extract-model-registry.py` text-parses the board's `models.go` and can no longer read it. Since the board's `TASK-260823-1tis7o` its rows carry no `Broker`, `AgenticSystems` or `SupportedEfforts` — those come back from THIS module — so the parser `KeyError`s on `fields["Broker"]`. The existing `source-model-registry.json` is a frozen capture at `ed48781` and must NOT be regenerated.
+- DECISION: New capture reads the board BINARY's own `q 'models()'` projection instead of its sources — `.scripts/capture-board-model-facts.sh`, fixture at `dbd905b`. No parser, and it cannot disagree with the binary an operator runs.
+- FINDING: That projection is CIRCULAR for four columns — it joins the board's rows to this module's plugins, so `agenticSystems`/`reasoning`/`supportedEfforts`/`recommendedEffort` come BACK from here for every row with an established broker. Pinning them would be the port agreeing with itself. Fixture segregates them under `joined_from_vendor_module`; the pin skips them. The two `muse` rows are the exception the board itself names — no vendor owns them, so their effort axis is the board's own declaration and IS pinned.
+- NOTE: Two captures by different means at different commits agree on all 43 ids, scores, lifecycles, 5 supersessions and 6 recommendations (`TestTheBoardFixtureAndTheOlderSourceCaptureAgree`). One capture cannot notice itself going stale.
+- SCOPE: `.scripts/capture-board-model-facts.sh`, `pkg/vendorplugin/testdata/board-model-facts.json`, `pkg/vendorplugin/boardfacts_test.go`.
+
+### 0040 — `if false` mutants die on the compiler and prove nothing
+- FINDING: First mutation pass over the new gates killed 20/21, but three "kills" were Go build failures (`declared and not used`) rather than test failures. A build-failure kill proves the line exists and says nothing about the class it covers.
+- FIX: Every mutant rewritten as a compile-clean NARROWING — `|| true`, `&& false` on an already-used condition, `score-1`, `len(...) > 99`, a regexp relaxed to `.`. 21/21 now killed by named tests. `.temp/TASK-260824-y7gyco/mutants.py`.
+- ROOT CAUSE: One genuine survivor. Narrowing the "billing contract with no plans" refusal left the suite green — with `Plans` nil the plan loop never runs, `pricesThisModel` stays false, and the *names-this-model* refusal fires instead. Same sentinel error, different fact, test could not tell.
+- FIX: `TestRegisterRefusesAnUnusablePricingContract` now states the phrase each of its 19 cases must see in its OWN refusal, and asserts case count == reason count so a case cannot be added without one. `pkg/vendorplugin/boardfields_test.go`.
+- NOTE: General lesson for this repo — when every refusal in a family wraps one sentinel, `errors.Is` alone lets a broken check hide behind whichever downstream one fires next.
+
+### 0036 — muse's rows extend the vendor-unresolved shape rather than being special-cased
+- DECISION: `RuntimeDeclaration.Models`, legal ONLY when `Vendor == VendorUnresolved`; a RESOLVED runtime declaring rows is refused as "two declarations of one fact". The unresolved declaration was already COMPLETE and UNLAUNCHABLE; carrying rows makes it complete about its models without making it launchable — `ResolveRuntime` still returns `ErrRuntimeVendorUnresolved`.
+- FINDING: The rows go through the same `Model.Validate` a vendor's do, plus two rules only a declaration can state (the row must name the runtime's own harness; ids unique). A second, weaker path here would be weakest exactly where nothing else is looking — these are the rows with no plugin behind them.
+- FINDING: `pkg/agentic/singlesource_guard_test.go` correctly failed the build the moment `[]agentic.SystemID{"muse"}` appeared in `runtime.go`. Granted `"muse models"` → `pkg/vendorplugin/runtime.go` in `bindingHomes`, and added that file to `TestSingleSourceGuardRulesFireOnRealCode`'s required list so the new home is a permission the guard can SEE being used.
+- REGRESSION: `internal/regress/declaration_test.go` F2 conflict cases broke — rebinding muse's system/vendor carried its `Models` along, so `Validate` fired before the conflict check and the test got "malformed" where it needed "already declared for another pair". Rebound declarations now drop `Models`, with the reason written down.
+- SCOPE: `pkg/vendorplugin/runtime.go:270`, `pkg/agentic/singlesource_guard_test.go`, `internal/regress/declaration_test.go`.
+
+### 0032 — Consuming docs told readers to build plumbing the consumer's own CI guard now refuses
+- FINDING: `docs/consuming-the-module.md` and `SKILL.md` still described this as a **private** module needing `GOPRIVATE` and a `url.insteadOf` PAT rewrite. Stale since 2026-08-23 (repo went public, credential half retired, commit `92e6d8b`) — and worse than stale: the first consumer's `tools/board-cli/internal/ciguard` now enforces the ABSENCE of that plumbing, so a reader following the doc fails their build.
+- FIX: Corrected in both, plus a dangling `tag/GOPRIVATE/go.work` phrase in `README.md`. Found while updating the same doc for the `v0.2.0` API change; flagged as out-of-scope rather than folded in silently.
+- NOTE: `docs/shipped-state.md:187` already carried the retirement struck through. The ledger was right and the how-to was wrong — worth checking both directions next time a fact retires.
+
 ## 2026-08-23
 
 ### 0708 — The epic's docs closed on a board divergence: the switch story lives on the SOURCE board

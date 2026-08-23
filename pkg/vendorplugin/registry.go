@@ -94,9 +94,24 @@ var (
 	ErrNoModels = errors.New("vendorplugin: vendor declares no models")
 	// ErrDuplicateModel is returned when one vendor declares a model id twice.
 	ErrDuplicateModel = errors.New("vendorplugin: vendor declares a model id twice")
-	// ErrDuplicateRank is returned when two of a vendor's models claim the
-	// same position in its lineup.
-	ErrDuplicateRank = errors.New("vendorplugin: vendor declares two models at the same capability rank")
+	// ErrLifecycleInvalid is returned when a model's lineup state is blank or
+	// outside the three declared states.
+	ErrLifecycleInvalid = errors.New("vendorplugin: model lifecycle is not a declared lineup state")
+	// ErrSupersessionInvalid is returned when a model's named successor
+	// contradicts something: it is not a usable id, it is the model itself, it
+	// sits on a row that is not legacy, or no model of that vendor answers to
+	// it.
+	ErrSupersessionInvalid = errors.New("vendorplugin: model supersession is unusable")
+	// ErrRecommendationAmbiguous is returned when a vendor marks two models
+	// recommended for one agentic system. A display pick that names two rows
+	// picks nothing, and the operator-facing surfaces would then choose by
+	// iteration order.
+	ErrRecommendationAmbiguous = errors.New("vendorplugin: vendor recommends two models for one agentic system")
+	// ErrPricingInvalid is returned when a model's billing contract could not
+	// be quoted to anyone: a missing currency, source or date, a plan that
+	// prices nothing, a promotion that is not one, or a contract attached to a
+	// model its own plans never name.
+	ErrPricingInvalid = errors.New("vendorplugin: model pricing contract is unusable")
 	// ErrModelInvalid is returned when a model row is not a usable
 	// declaration.
 	ErrModelInvalid = errors.New("vendorplugin: model declaration is unusable")
@@ -190,7 +205,6 @@ func (r *Registry) Register(vendor Vendor) error {
 		return fmt.Errorf("%w: %s", ErrNoModels, id)
 	}
 	seenModels := map[ModelID]bool{}
-	seenRanks := map[int]ModelID{}
 	for _, model := range models {
 		if err := model.Validate(); err != nil {
 			return fmt.Errorf("vendorplugin: vendor %s: %w", id, err)
@@ -199,17 +213,25 @@ func (r *Registry) Register(vendor Vendor) error {
 			return fmt.Errorf("%w: %s declares %q twice", ErrDuplicateModel, id, model.ID)
 		}
 		seenModels[model.ID] = true
-		if other, taken := seenRanks[model.Rank.Position]; taken {
-			return fmt.Errorf("%w: %s ranks both %q and %q at position %d; a lineup that cannot order itself is not a ranking",
-				ErrDuplicateRank, id, other, model.ID, model.Rank.Position)
-		}
-		seenRanks[model.Rank.Position] = model.ID
+		// No duplicate-SCORE refusal, and its absence is the change v0.2.0
+		// made rather than an omission. A shared score is the vendor stating
+		// that two models are equally capable — an alias and its dated
+		// snapshot, two harnesses' catalogues scored against one broker — and
+		// refusing it would force a declaration to invent an ordering nobody
+		// observed. The total order some callers need is derived instead; see
+		// lineup.go.
 		for _, system := range model.Systems {
 			if _, ok := r.systems.Lookup(system); !ok {
 				return fmt.Errorf("%w: vendor %q declares agentic system %q for model %q, and no plugin is registered for %q; register the agentic system plugin first — a vendor depends on the systems that drive it, never the other way round",
 					ErrUnknownAgenticSystem, id, system, model.ID, system)
 			}
 		}
+	}
+	if err := checkSupersession(models); err != nil {
+		return fmt.Errorf("vendorplugin: vendor %s: %w", id, err)
+	}
+	if err := checkRecommendations(models); err != nil {
+		return fmt.Errorf("vendorplugin: vendor %s: %w", id, err)
 	}
 
 	r.mu.Lock()
