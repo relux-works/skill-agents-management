@@ -1,6 +1,7 @@
 package vendorplugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -89,7 +90,8 @@ func (p *pangolinSystem) ChildEnv(parent []string, req agentic.LaunchRequest) ([
 	if home == "" {
 		home = p.caps.DefaultHome
 	}
-	return append(append([]string(nil), parent...), p.caps.HomeEnvVar+"="+home), nil
+	env := append(append([]string(nil), parent...), p.caps.HomeEnvVar+"="+home)
+	return agentic.WithRunContext(env, req), nil
 }
 
 func (p *pangolinSystem) Stdin(req agentic.LaunchRequest) (agentic.StdinPayload, error) {
@@ -120,6 +122,7 @@ type narwhalVendor struct {
 	spawnModelID       string
 	spawnEffortSupport *agentic.EffortSupport
 	spawnEffort        *string
+	spawnRun           *agentic.RunContext
 	spawnDropGoal      bool
 	spawnDropBudget    bool
 	spawnTier          *string
@@ -212,6 +215,7 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 		WorkDir:     req.WorkDir,
 		Home:        req.Home,
 		Env:         append(append([]string(nil), req.Env...), narwhalAuthEnv),
+		Run:         req.Run,
 		Goal:        req.Goal,
 		Budget:      req.Budget,
 		ServiceTier: req.ServiceTier,
@@ -231,6 +235,9 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 	}
 	if n.spawnEffort != nil {
 		launch.Effort = *n.spawnEffort
+	}
+	if n.spawnRun != nil {
+		launch.Run = *n.spawnRun
 	}
 	if n.spawnDropGoal {
 		launch.Goal = nil
@@ -282,13 +289,19 @@ func registerNarwhal(t *testing.T, vendor *narwhalVendor) *Registry {
 // exercise one refusal starts from a request that would otherwise succeed.
 func narwhalRequest() SpawnRequest {
 	return SpawnRequest{
-		Runtime:     tuskID,
-		Model:       "narwhal-deep",
-		Effort:      "deep",
-		PromptPath:  "/tmp/assignment.md",
-		Prompt:      []byte("do the thing"),
-		WorkDir:     "/work/story",
-		Env:         []string{"PATH=/usr/bin", "HOME=/home/agent"},
+		Runtime:    tuskID,
+		Model:      "narwhal-deep",
+		Effort:     "deep",
+		PromptPath: "/tmp/assignment.md",
+		Prompt:     []byte("do the thing"),
+		WorkDir:    "/work/story",
+		Env:        []string{"PATH=/usr/bin", "HOME=/home/agent"},
+		Run: agentic.RunContext{
+			RunID:     "RUN-1",
+			TaskID:    "TASK-1",
+			BoardDir:  "/work/.task-board",
+			ContextID: "CTX-1",
+		},
 		Goal:        &agentic.Goal{ID: "GOAL-1", Objective: "ship the contract", Revision: 3},
 		Budget:      &agentic.Budget{USD: 12.5},
 		ServiceTier: "priority",
@@ -313,7 +326,7 @@ func TestRegisteringOneVendorDrivesEveryDispatchSurface(t *testing.T) {
 		t.Fatalf("ResolveRuntime(tusk): %v", err)
 	}
 	for _, mode := range []agentic.LaunchMode{agentic.LaunchModeExec, agentic.LaunchModeDryRun, agentic.LaunchModeManagedSession} {
-		if _, err := BuildLaunch(registry, narwhalRequest(), mode); err != nil {
+		if _, err := BuildLaunch(context.Background(), registry, narwhalRequest(), mode); err != nil {
 			t.Fatalf("BuildLaunch(tusk, %s): %v", mode, err)
 		}
 	}

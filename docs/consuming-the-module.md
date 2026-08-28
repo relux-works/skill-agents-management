@@ -106,6 +106,33 @@ does for the dependency check: a vendor whose declared system is not registered
 is refused at `init` with a panic naming both ids. That is why each vendor
 package blank-imports its own systems; you cannot get a half-wired binary.
 
+`local-models` is the one vendor that does NOT belong in that blank-import
+list: its catalog depends on a machine-local `~/.agents/.configs/local-models.toml`
+that may not exist, and `Registry.Register` refuses ANY vendor whose
+`Models()` returns zero rows — a blank import would make an absent file on
+one operator's machine fail registration for every OTHER vendor and system in
+the same binary. Register it conditionally instead, reading
+`localmodels.Peek()`'s three-way `{Absent, Err, Config}` result first:
+
+```go
+switch result := localmodels.Peek(); {
+case result.Absent:
+    // no local-models.toml on this machine — register nothing
+case result.Err != nil:
+    // present but malformed — note it so a later resolution of "local-qwen"
+    // gets a distinct, typed error instead of the generic "unknown runtime"
+    _ = registry.NoteUnregistered("local-qwen", vendorplugin.RegistrationDiagnostic{
+        Reason: "malformed", Err: result.Err,
+    })
+default:
+    _ = registry.Register(localmodels.New(result.Config))
+    _ = registry.DeclareRuntime(vendorplugin.RuntimeDeclaration{
+        ID: "local-qwen", System: "pi", Vendor: localmodels.VendorID,
+        Broker: vendorplugin.BrokerProvenance{Checked: []string{"local-models.toml"}, Found: "declared once local-models registers"},
+    })
+}
+```
+
 Prefer isolated registries in tests. `agentic.NewRegistry()` and
 `vendorplugin.NewRegistry(systems)` take no globals, and
 `vendorplugin.SeedFrozenRuntimes(registry)` gives you the frozen table without
@@ -142,7 +169,7 @@ digests, and a rebind orphans that state with no error anywhere.
 | You want | Call | It does not |
 | --- | --- | --- |
 | The launch surface for one (system, mode) | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` | execute anything |
-| The same, resolved through a runtime and a vendor | `vendorplugin.BuildLaunch(registry, SpawnRequest{…}, mode)` — resolves the pair, validates the effort word against the model's own vocabulary, asks the vendor for a `LaunchRequest`, refuses one that redirects the launch, hands it to `BuildPlan` | execute anything, or inject a default effort |
+| The same, resolved through a runtime launch binding | `vendorplugin.BuildLaunch(ctx, registry, SpawnRequest{…}, mode)` — resolves either an established vendor binding or an explicit declaration-owned system-only binding, validates the effort word against the owning model row, preserves typed `RunContext`, asks a vendor for a `LaunchRequest` when one exists (refusing redirects, including changed/dropped tracked-run identity), otherwise projects the validated declaration losslessly, runs the resolved system's `Preflightable` check unless dry-run, then hands it to `BuildPlan` | execute anything, fabricate a vendor for a system-only runtime, inject a default effort, or ask callers to duplicate run identity in `Env` |
 | Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |
 
 ## What stays yours

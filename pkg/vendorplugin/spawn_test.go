@@ -1,6 +1,7 @@
 package vendorplugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,7 +20,7 @@ import (
 func TestBuildLaunchCarriesTheFullSpawnParameterSurface(t *testing.T) {
 	registry := registerNarwhal(t, newNarwhal())
 
-	plan, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+	plan, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
 	if err != nil {
 		t.Fatalf("BuildLaunch: %v", err)
 	}
@@ -51,6 +52,16 @@ func TestBuildLaunchCarriesTheFullSpawnParameterSurface(t *testing.T) {
 	if !containsEnv(plan.Env, "PATH=/usr/bin") {
 		t.Errorf("plan.Env = %v, want the parent environment the caller supplied", plan.Env)
 	}
+	for _, want := range []string{
+		"TASK_BOARD_RUN_ID=RUN-1",
+		"TASK_BOARD_TASK_ID=TASK-1",
+		"TASK_BOARD_DIR=/work/.task-board",
+		"TASK_BOARD_CONTEXT_ID=CTX-1",
+	} {
+		if !containsEnv(plan.Env, want) {
+			t.Errorf("plan.Env = %v, want tracked-run identity %q", plan.Env, want)
+		}
+	}
 }
 
 func containsEnv(env []string, want string) bool {
@@ -60,6 +71,19 @@ func containsEnv(env []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestPassthroughLaunchPreservesTheTypedRunContext(t *testing.T) {
+	req := narwhalRequest()
+	launch := PassthroughLaunch(SpawnContext{
+		Runtime: Runtime{SystemID: pangolinID},
+		Model:   newNarwhal().models[0],
+		Effort:  req.Effort,
+		Request: req,
+	})
+	if launch.Run != req.Run {
+		t.Fatalf("PassthroughLaunch.Run = %#v, want %#v", launch.Run, req.Run)
+	}
 }
 
 // The goal, the budget and the service tier are gated by the SYSTEM's
@@ -82,7 +106,7 @@ func TestBuildLaunchDefersTheLayerOneRefusalsRatherThanSwallowingThem(t *testing
 		t.Fatalf("DeclareRuntime: %v", err)
 	}
 
-	_, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+	_, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
 	requireErrorIs(t, err, agentic.ErrBudgetUnsupported, "BuildLaunch(budget on a system that declares none)")
 }
 
@@ -105,7 +129,7 @@ func TestBuildLaunchRefusesAnEffortTheSystemCannotCarry(t *testing.T) {
 		t.Fatalf("DeclareRuntime: %v", err)
 	}
 
-	_, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+	_, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
 	requireErrorIs(t, err, agentic.ErrEffortNotTransportable, "BuildLaunch(required effort on a system with no transport)")
 }
 
@@ -118,7 +142,7 @@ func TestBuildLaunchRefusesAMissingEffortAndNamesTheVocabulary(t *testing.T) {
 	req := narwhalRequest()
 	req.Effort = "   "
 
-	_, err := BuildLaunch(registry, req, agentic.LaunchModeExec)
+	_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
 	requireErrorIs(t, err, ErrEffortMissing, "BuildLaunch(required-effort model with no effort)")
 	requireMentions(t, err, "narwhal-deep", "shallow", "deep")
 }
@@ -133,7 +157,7 @@ func TestAVendorNeverSeesAnUnadmittedEffort(t *testing.T) {
 	req := narwhalRequest()
 	req.Effort = ""
 
-	if _, err := BuildLaunch(registry, req, agentic.LaunchModeExec); err == nil {
+	if _, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec); err == nil {
 		t.Fatal("a launch was built with no effort for a required-effort model")
 	}
 	if vendor.calls["Spawn"] != 0 {
@@ -141,7 +165,7 @@ func TestAVendorNeverSeesAnUnadmittedEffort(t *testing.T) {
 	}
 
 	req.Effort = "medium"
-	if _, err := BuildLaunch(registry, req, agentic.LaunchModeExec); err == nil {
+	if _, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec); err == nil {
 		t.Fatal("a launch was built with an effort outside the vocabulary")
 	}
 	if vendor.calls["Spawn"] != 0 {
@@ -154,7 +178,7 @@ func TestBuildLaunchRefusesAnEffortOutsideTheVocabulary(t *testing.T) {
 	req := narwhalRequest()
 	req.Effort = "medium"
 
-	_, err := BuildLaunch(registry, req, agentic.LaunchModeExec)
+	_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
 	requireErrorIs(t, err, ErrEffortNotInVocabulary, "BuildLaunch(effort outside the model's vocabulary)")
 	requireMentions(t, err, "medium", "shallow", "deep")
 }
@@ -177,7 +201,7 @@ func TestBuildLaunchDoesNotFoldTheEffortVocabulary(t *testing.T) {
 		req := narwhalRequest()
 		req.Effort = word
 
-		_, err := BuildLaunch(registry, req, agentic.LaunchModeExec)
+		_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
 		requireErrorIs(t, err, ErrEffortNotInVocabulary, "BuildLaunch(effort "+word+", vocabulary [shallow deep])")
 		requireMentions(t, err, word, "shallow", "deep")
 		if vendor.calls["Spawn"] != 0 {
@@ -190,7 +214,7 @@ func TestBuildLaunchDoesNotFoldTheEffortVocabulary(t *testing.T) {
 		req := narwhalRequest()
 		req.Effort = word
 
-		if _, err := BuildLaunch(registry, req, agentic.LaunchModeExec); err != nil {
+		if _, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec); err != nil {
 			t.Errorf("a published effort surrounded by whitespace (%q) was refused: %v", word, err)
 		}
 	}
@@ -229,7 +253,7 @@ func TestBuildLaunchRefusesAnEffortForAModelWithNoEffortAxis(t *testing.T) {
 	req.Model = "narwhal-flat"
 	req.Effort = "deep"
 
-	_, err := BuildLaunch(registry, req, agentic.LaunchModeExec)
+	_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
 	requireErrorIs(t, err, ErrEffortNotInVocabulary, "BuildLaunch(effort on a model with no effort axis)")
 	requireMentions(t, err, "narwhal-flat")
 }
@@ -240,7 +264,7 @@ func TestBuildLaunchAcceptsAModelWithNoEffortAxisAndNoEffort(t *testing.T) {
 	req.Model = "narwhal-flat"
 	req.Effort = ""
 
-	plan, err := BuildLaunch(registry, req, agentic.LaunchModeExec)
+	plan, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
 	if err != nil {
 		t.Fatalf("BuildLaunch(effortless model): %v", err)
 	}
@@ -256,7 +280,7 @@ func TestBuildLaunchRefusesAModelTheVendorDoesNotDeclare(t *testing.T) {
 	req := narwhalRequest()
 	req.Model = "narwhal-imaginary"
 
-	_, err := BuildLaunch(registry, req, agentic.LaunchModeExec)
+	_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
 	requireErrorIs(t, err, ErrUnknownModel, "BuildLaunch(model the vendor does not declare)")
 	requireMentions(t, err, "narwhal-imaginary", "narwhal-deep")
 }
@@ -279,7 +303,7 @@ func TestBuildLaunchRefusesAModelTheRuntimesSystemCannotDrive(t *testing.T) {
 		t.Fatalf("DeclareRuntime: %v", err)
 	}
 
-	_, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+	_, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
 	requireErrorIs(t, err, ErrModelNotDrivenBySystem, "BuildLaunch(model that does not declare the runtime's system)")
 	requireMentions(t, err, "narwhal-deep", string(pangolinID), string(tuskID))
 }
@@ -316,6 +340,15 @@ func TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch(t *testing.T) {
 	tier := "batch"
 	effort := "shallow"
 	support := agentic.EffortSupportNone
+	baseRun := narwhalRequest().Run
+	wrongRunID := baseRun
+	wrongRunID.RunID = "RUN-OTHER"
+	wrongTaskID := baseRun
+	wrongTaskID.TaskID = "TASK-OTHER"
+	wrongBoardDir := baseRun
+	wrongBoardDir.BoardDir = "/other/.task-board"
+	droppedContextID := baseRun
+	droppedContextID.ContextID = ""
 
 	cases := map[string]func(v *narwhalVendor){
 		"a different agentic system": func(v *narwhalVendor) { v.spawnSystem = "muse" },
@@ -323,10 +356,16 @@ func TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch(t *testing.T) {
 		"a different model":          func(v *narwhalVendor) { v.spawnModelID = "narwhal-flat" },
 		"a different effort":         func(v *narwhalVendor) { v.spawnEffort = &effort },
 		"a different effort support": func(v *narwhalVendor) { v.spawnEffortSupport = &support },
-		"the goal dropped":           func(v *narwhalVendor) { v.spawnDropGoal = true },
-		"the budget dropped":         func(v *narwhalVendor) { v.spawnDropBudget = true },
-		"a different service tier":   func(v *narwhalVendor) { v.spawnTier = &tier },
-		"the composition dropped":    func(v *narwhalVendor) { v.spawnDropComposit = true },
+		"a different run id":         func(v *narwhalVendor) { v.spawnRun = &wrongRunID },
+		"a different task id":        func(v *narwhalVendor) { v.spawnRun = &wrongTaskID },
+		"a different board dir":      func(v *narwhalVendor) { v.spawnRun = &wrongBoardDir },
+		"the writable context dropped": func(v *narwhalVendor) {
+			v.spawnRun = &droppedContextID
+		},
+		"the goal dropped":         func(v *narwhalVendor) { v.spawnDropGoal = true },
+		"the budget dropped":       func(v *narwhalVendor) { v.spawnDropBudget = true },
+		"a different service tier": func(v *narwhalVendor) { v.spawnTier = &tier },
+		"the composition dropped":  func(v *narwhalVendor) { v.spawnDropComposit = true },
 	}
 	for name, redirect := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -334,7 +373,7 @@ func TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch(t *testing.T) {
 			redirect(vendor)
 			registry := registerNarwhal(t, vendor)
 
-			_, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+			_, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
 			requireErrorIs(t, err, ErrVendorContract, "BuildLaunch(vendor returning "+name+")")
 		})
 	}
@@ -347,7 +386,7 @@ func TestBuildLaunchSurfacesAVendorsOwnSpawnError(t *testing.T) {
 	vendor.spawnErr = errors.New("no narwhal credentials in this home")
 	registry := registerNarwhal(t, vendor)
 
-	_, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+	_, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
 	if err == nil {
 		t.Fatal("a vendor that could not build a launch produced no error")
 	}
@@ -362,7 +401,7 @@ func TestBuildLaunchKeepsTheVendorsOwnAdditions(t *testing.T) {
 	vendor.spawnSkipAuthEnv = true
 	registry := registerNarwhal(t, vendor)
 
-	plan, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+	plan, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
 	if err != nil {
 		t.Fatalf("BuildLaunch: %v", err)
 	}
@@ -376,8 +415,113 @@ func TestBuildLaunchRefusesUnresolvableRuntimes(t *testing.T) {
 	req := narwhalRequest()
 	req.Runtime = "nosuch"
 
-	_, err := BuildLaunch(registry, req, agentic.LaunchModeExec)
+	_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
 	requireErrorIs(t, err, ErrUnknownRuntime, "BuildLaunch(undeclared runtime)")
+}
+
+// A system-only runtime is not a degraded vendor runtime. Its declaration is
+// the explicit owner of the model and effort facts because no vendor was ever
+// established, and BuildLaunch must still reach the ordinary Layer-1 plan
+// without inventing a vendor or naming the historical muse id in dispatch.
+func TestBuildLaunchUsesADeclarationOwnedSystemOnlyBinding(t *testing.T) {
+	registry := NewRegistry(systemsNamed(t, "muse"))
+	if err := SeedFrozenRuntimes(registry); err != nil {
+		t.Fatalf("SeedFrozenRuntimes: %v", err)
+	}
+
+	request := SpawnRequest{
+		Runtime:    "muse",
+		Model:      "muse-spark",
+		PromptPath: "/tmp/assignment.md",
+		WorkDir:    "/work/story",
+		Env:        []string{"PATH=/usr/bin"},
+		Run: agentic.RunContext{
+			RunID:     "RUN-MUSE",
+			TaskID:    "TASK-MUSE",
+			BoardDir:  "/work/.task-board",
+			ContextID: "CTX-MUSE",
+		},
+	}
+	plan, err := BuildLaunch(context.Background(), registry, request, agentic.LaunchModeDryRun)
+	if err != nil {
+		t.Fatalf("BuildLaunch(system-only runtime): %v", err)
+	}
+	if plan.System != "muse" {
+		t.Fatalf("plan.System = %q, want muse", plan.System)
+	}
+	if !strings.Contains(strings.Join(plan.Argv, " "), "muse-spark") {
+		t.Fatalf("plan.Argv = %v, want the declaration-owned model", plan.Argv)
+	}
+	for _, want := range []string{
+		"TASK_BOARD_RUN_ID=RUN-MUSE",
+		"TASK_BOARD_TASK_ID=TASK-MUSE",
+		"TASK_BOARD_DIR=/work/.task-board",
+		"TASK_BOARD_CONTEXT_ID=CTX-MUSE",
+	} {
+		if !containsEnv(plan.Env, want) {
+			t.Errorf("plan.Env = %v, want %q", plan.Env, want)
+		}
+	}
+}
+
+func TestBuildLaunchValidatesDeclarationOwnedModelAndEffortFacts(t *testing.T) {
+	declaration := RuntimeDeclaration{
+		ID:     "system-only",
+		System: pangolinID,
+		Vendor: VendorUnresolved,
+		Broker: BrokerProvenance{Checked: []string{"test fixture"}},
+		Models: []Model{{
+			ID:          "declared-reasoner",
+			Description: "a declaration-owned model used to prove effort validation",
+			Lifecycle:   LifecycleCurrent,
+			Rank: CapabilityRank{Score: 10, Basis: []RankEvidence{{
+				Source: "test fixture", Observation: "the system-only binding carries this row",
+			}}},
+			Effort: EffortDeclaration{
+				Support:     agentic.EffortSupportRequired,
+				Vocabulary:  []string{"low", "high"},
+				Recommended: "high",
+			},
+			Systems: []agentic.SystemID{pangolinID},
+		}},
+	}
+	registry := NewRegistry(systemsWithPangolin(t))
+	if err := registry.DeclareRuntime(declaration); err != nil {
+		t.Fatalf("DeclareRuntime(system-only): %v", err)
+	}
+	base := narwhalRequest()
+	base.Runtime = declaration.ID
+	base.Model = declaration.Models[0].ID
+
+	t.Run("unknown model", func(t *testing.T) {
+		req := base
+		req.Model = "self-minted"
+		_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeDryRun)
+		requireErrorIs(t, err, ErrUnknownModel, "BuildLaunch(system-only unknown model)")
+	})
+	t.Run("missing effort", func(t *testing.T) {
+		req := base
+		req.Effort = ""
+		_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeDryRun)
+		requireErrorIs(t, err, ErrEffortMissing, "BuildLaunch(system-only missing effort)")
+	})
+	t.Run("forged effort", func(t *testing.T) {
+		req := base
+		req.Effort = "ultra"
+		_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeDryRun)
+		requireErrorIs(t, err, ErrEffortNotInVocabulary, "BuildLaunch(system-only forged effort)")
+	})
+	t.Run("declared effort", func(t *testing.T) {
+		req := base
+		req.Effort = "high"
+		plan, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeDryRun)
+		if err != nil {
+			t.Fatalf("BuildLaunch(system-only declared effort): %v", err)
+		}
+		if !strings.Contains(strings.Join(plan.Argv, " "), "high") {
+			t.Fatalf("plan.Argv = %v, want declared effort", plan.Argv)
+		}
+	})
 }
 
 // The dry run must mirror the real launch's target. It is the bug the source
@@ -386,11 +530,11 @@ func TestBuildLaunchRefusesUnresolvableRuntimes(t *testing.T) {
 func TestDryRunThroughBothLayersMirrorsTheRealLaunch(t *testing.T) {
 	registry := registerNarwhal(t, newNarwhal())
 
-	real, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeExec)
+	real, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
 	if err != nil {
 		t.Fatalf("BuildLaunch(exec): %v", err)
 	}
-	dry, err := BuildLaunch(registry, narwhalRequest(), agentic.LaunchModeDryRun)
+	dry, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeDryRun)
 	if err != nil {
 		t.Fatalf("BuildLaunch(dry-run): %v", err)
 	}

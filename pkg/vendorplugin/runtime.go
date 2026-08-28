@@ -2,6 +2,8 @@ package vendorplugin
 
 import (
 	"fmt"
+	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/relux-works/skill-agents-management/internal/ident"
@@ -44,12 +46,14 @@ func NormalizeRuntimeID(raw string) (RuntimeID, error) {
 //
 // It is not a vendor. Nothing implements it, nothing can be registered under
 // it, and no code path treats an unresolved vendor as a degraded vendor with
-// empty models. A declaration carrying it is a complete, legal RUNTIME
-// declaration and an UNLAUNCHABLE one: Registry.ResolveRuntime refuses it with
+// empty models. Registry.ResolveRuntime refuses it with
 // ErrRuntimeVendorUnresolved, naming the runtime and saying the broker was
-// never established, so a caller learns the fact rather than receiving a
-// half-vendor it has to null-check. Every other runtime resolves to a real
-// Vendor with the full interface behind it, unchanged.
+// never established, so a caller never receives a half-vendor it has to
+// null-check. BuildLaunch has one narrower, explicit system-only binding for
+// such a declaration when it carries validated declaration-owned model rows;
+// it launches through the system without pretending those rows came from a
+// vendor. Every other runtime resolves to a real Vendor with the full
+// interface behind it, unchanged.
 //
 // The escape is a declaration, not a code change: the day muse's broker is
 // established, the declaration names it and the runtime becomes launchable.
@@ -104,11 +108,11 @@ type RuntimeDeclaration struct {
 	// BrokerProvenance exists to prevent one field earlier.
 	//
 	// So the unresolved-vendor shape carries them. That is the shape being
-	// used as designed rather than extended for a special case: an unresolved
-	// declaration is already a COMPLETE and UNLAUNCHABLE declaration, and
-	// these rows make it complete about its models too without making it any
-	// more launchable. ResolveRuntime still refuses it with
-	// ErrRuntimeVendorUnresolved, unchanged.
+	// used as designed rather than extended for a special case: these rows make
+	// the declaration complete about its models and form BuildLaunch's explicit
+	// system-only binding. ResolveRuntime still refuses it with
+	// ErrRuntimeVendorUnresolved, unchanged, because that public API promises a
+	// fully materialized vendor pair.
 	//
 	// # Why a resolved runtime may not carry them
 	//
@@ -136,6 +140,38 @@ func (d RuntimeDeclaration) VendorResolved() bool { return d.Vendor != VendorUnr
 // prose.
 func (d RuntimeDeclaration) SameBinding(other RuntimeDeclaration) bool {
 	return d.ID == other.ID && d.System == other.System && d.Vendor == other.Vendor
+}
+
+// sameSystemOnlyAuthority reports whether two vendor-unresolved declarations
+// carry the same complete launch authority.
+//
+// A system-only runtime has no vendor plugin from which BuildLaunch could read
+// its model and effort facts, so Models is authority rather than descriptive
+// metadata. Equality therefore covers every Model field recursively: identity,
+// system membership, effort support/vocabulary/recommendation, rank and its
+// evidence, lifecycle/supersession, display recommendation, context, pricing,
+// publisher/family and usage description. Adding a field to Model also adds it
+// to this comparison through the whole-value comparison below.
+//
+// Top-level model row order is deliberately NOT authority. Models are selected
+// by ID and ranked by their explicit Rank; declaration order is only a stable
+// presentation tie-break. The comparison sorts copies by ID and never rewrites
+// either declaration or the first stored winner. Ordering inside an individual
+// row remains significant because those slices are themselves published facts
+// (for example effort vocabulary and rank evidence), not table presentation.
+func (d RuntimeDeclaration) sameSystemOnlyAuthority(other RuntimeDeclaration) bool {
+	return systemOnlyModelAuthorityEqual(d.Models, other.Models)
+}
+
+func systemOnlyModelAuthorityEqual(left, right []Model) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	leftCanonical := CloneModels(left)
+	rightCanonical := CloneModels(right)
+	sort.Slice(leftCanonical, func(i, j int) bool { return leftCanonical[i].ID < leftCanonical[j].ID })
+	sort.Slice(rightCanonical, func(i, j int) bool { return rightCanonical[i].ID < rightCanonical[j].ID })
+	return reflect.DeepEqual(leftCanonical, rightCanonical)
 }
 
 // VendorLabel renders the vendor for human-facing output, so an unresolved
