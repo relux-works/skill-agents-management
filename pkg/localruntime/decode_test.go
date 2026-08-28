@@ -59,13 +59,149 @@ func TestDecodeStatusHappyPath(t *testing.T) {
 // every currently-read field must still populate identically.
 func TestDecodeStatusExtraTopLevelFieldIsIgnored(t *testing.T) {
 	fixture := validFixture()
-	fixture["restart_count"] = 7 // an extension #1 field, unknown to this decoder
+	fixture["future_extension_field"] = map[string]any{"value": 7}
 	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", time.Now())
 	if err != nil {
 		t.Fatalf("decodeStatus with an unknown extra field: %v", err)
 	}
 	if status.BrokerState != "serving" {
 		t.Fatalf("BrokerState = %q, want serving (an unknown field must not disturb known ones)", status.BrokerState)
+	}
+}
+
+// TestDecodeStatusPreRestartDeadlineFixture is adversarial case 27a. The
+// first restart-status extension remains valid compatibility input: its facts
+// are consumed, while the later restart_not_before/half_open facts remain
+// explicitly absent rather than being fabricated from restart_count.
+func TestDecodeStatusPreRestartDeadlineFixture(t *testing.T) {
+	fixture := validFixture()
+	fixture["restart_count"] = 2
+	fixture["quarantined_until"] = nil
+	fixture["last_readiness_match"] = "2026-08-29T12:00:00Z"
+	fixture["manual_quarantine"] = false
+	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", time.Now())
+	if err != nil {
+		t.Fatalf("decodeStatus(pre-extension fixture): %v", err)
+	}
+	if !status.RestartCountPresent || status.RestartCount != 2 {
+		t.Fatalf("restart_count = %d present=%t, want 2/true", status.RestartCount, status.RestartCountPresent)
+	}
+	if !status.QuarantinedUntilPresent || status.QuarantinedUntil != nil {
+		t.Fatalf("quarantined_until = %v present=%t, want nil/true", status.QuarantinedUntil, status.QuarantinedUntilPresent)
+	}
+	wantReady := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	if !status.LastReadinessMatchPresent || status.LastReadinessMatch == nil || !status.LastReadinessMatch.Equal(wantReady) {
+		t.Fatalf("last_readiness_match = %v present=%t, want %v/true", status.LastReadinessMatch, status.LastReadinessMatchPresent, wantReady)
+	}
+	if !status.ManualQuarantinePresent || status.ManualQuarantine {
+		t.Fatalf("manual_quarantine = %t present=%t, want false/true", status.ManualQuarantine, status.ManualQuarantinePresent)
+	}
+	if status.RestartNotBeforePresent || status.RestartNotBefore != nil || status.HalfOpenPresent || status.HalfOpen {
+		t.Fatalf("pre-extension fixture fabricated later facts: %+v", status)
+	}
+}
+
+// TestDecodeStatusPostRestartDeadlineFixture is adversarial case 27b's wire
+// half. It pins the exact landed Handoff-A follow-up shape, including a
+// present deadline and half-open lifecycle evidence.
+func TestDecodeStatusPostRestartDeadlineFixture(t *testing.T) {
+	fixture := validFixture()
+	fixture["restart_count"] = 2
+	fixture["restart_not_before"] = "2026-08-29T12:00:04Z"
+	fixture["quarantined_until"] = nil
+	fixture["last_readiness_match"] = "2026-08-29T12:00:00Z"
+	fixture["manual_quarantine"] = false
+	fixture["half_open"] = true
+	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", time.Now())
+	if err != nil {
+		t.Fatalf("decodeStatus(post-extension fixture): %v", err)
+	}
+	wantDeadline := time.Date(2026, 8, 29, 12, 0, 4, 0, time.UTC)
+	if !status.RestartNotBeforePresent || status.RestartNotBefore == nil || !status.RestartNotBefore.Equal(wantDeadline) {
+		t.Fatalf("restart_not_before = %v present=%t, want %v/true", status.RestartNotBefore, status.RestartNotBeforePresent, wantDeadline)
+	}
+	if !status.HalfOpenPresent || !status.HalfOpen {
+		t.Fatalf("half_open = %t present=%t, want true/true", status.HalfOpen, status.HalfOpenPresent)
+	}
+	if !status.ManualQuarantinePresent || status.ManualQuarantine {
+		t.Fatalf("manual_quarantine = %t present=%t, want false/true", status.ManualQuarantine, status.ManualQuarantinePresent)
+	}
+}
+
+// TestDecodeStatusRestartExtensionWrongTypesAreRefused pins the extension's
+// presence/type matrix. Present malformed facts are read failures, not legacy
+// absence and not zero values.
+func TestDecodeStatusRestartExtensionWrongTypesAreRefused(t *testing.T) {
+	for _, tc := range []struct {
+		field string
+		value any
+	}{
+		{"restart_count", "two"},
+		{"restart_count", nil},
+		{"restart_count", -1},
+		{"restart_not_before", "not-a-timestamp"},
+		{"restart_not_before", 42},
+		{"quarantined_until", "not-a-timestamp"},
+		{"last_readiness_match", "not-a-timestamp"},
+		{"manual_quarantine", "false"},
+		{"manual_quarantine", nil},
+		{"half_open", "true"},
+		{"half_open", nil},
+	} {
+		t.Run(tc.field, func(t *testing.T) {
+			fixture := validFixture()
+			for key, value := range map[string]any{
+				"restart_count":        2,
+				"restart_not_before":   "2026-08-29T12:00:04Z",
+				"quarantined_until":    nil,
+				"last_readiness_match": "2026-08-29T12:00:00Z",
+				"manual_quarantine":    false,
+				"half_open":            false,
+			} {
+				fixture[key] = value
+			}
+			fixture[tc.field] = tc.value
+			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+			if !errors.Is(err, ErrDecodeFailure) {
+				t.Fatalf("%s=%v: err = %v, want ErrDecodeFailure", tc.field, tc.value, err)
+			}
+		})
+	}
+}
+
+// TestDecodeStatusRestartExtensionPartialCohortsAreRefused proves the cohort
+// boundary by narrowing it one member at a time. The producer serializes all
+// members of each cohort without omitempty, so a mixed response is a failed
+// read rather than an older producer shape.
+func TestDecodeStatusRestartExtensionPartialCohortsAreRefused(t *testing.T) {
+	current := map[string]any{
+		"restart_count":        2,
+		"restart_not_before":   "2026-08-29T12:00:04Z",
+		"quarantined_until":    nil,
+		"last_readiness_match": "2026-08-29T12:00:00Z",
+		"manual_quarantine":    false,
+		"half_open":            false,
+	}
+	for field := range current {
+		t.Run("current missing "+field, func(t *testing.T) {
+			fixture := validFixture()
+			for key, value := range current {
+				if key != field {
+					fixture[key] = value
+				}
+			}
+			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+			if !errors.Is(err, ErrDecodeFailure) {
+				t.Fatalf("current cohort missing %s: err = %v, want ErrDecodeFailure", field, err)
+			}
+		})
+	}
+
+	fixture := validFixture()
+	fixture["restart_count"] = 2
+	_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+	if !errors.Is(err, ErrDecodeFailure) {
+		t.Fatalf("partial pre-extension cohort: err = %v, want ErrDecodeFailure", err)
 	}
 }
 

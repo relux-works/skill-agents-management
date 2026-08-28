@@ -5,6 +5,21 @@
 
 ## 2026-08-29
 
+### 1907 — Partial restart-status cohorts fail closed
+- ROOT CAUSE: The decoder validated lifecycle fields independently, so omission from a recognizable current response could be laundered into legacy absence and reach `Healthy`. `pkg/localruntime/decode.go`.
+- FIX: One cohort gate now accepts only zero lifecycle fields, the complete four-field pre-deadline fixture, or the complete six-field current fixture; `manual_quarantine` is type-checked and mirrored for wire integrity.
+- TEST: Removing each lifecycle field independently now yields `Unknown` with read-failure evidence through `CLIStatusReader` and production `vendorplugin.CheckAvailability`. `pkg/vendorplugin/vendors/local-models/availability_test.go`.
+
+### 1834 — Restart status absence remains distinct from explicit null
+- DECISION: A legacy status response missing `restart_not_before` maps to checked `Unknown`; only a present future deadline maps to `Limited`, while present `null` or an elapsed deadline continues through attested broker facts. `pkg/vendorplugin/vendors/local-models/availability.go`.
+- TEST: Case 27b drives pre/post fixtures through `localruntime.CLIStatusReader` and production `vendorplugin.CheckAvailability`; disabling the presence gate makes the named legacy-fixture test fail by returning false `Healthy`.
+- FINDING: `restart_count` and `half_open` remain historical lifecycle evidence and never mint an active backoff verdict.
+
+### 1834 — JSON null bypasses scalar type checks unless rejected explicitly
+- ROOT CAUSE: Go `encoding/json` accepts JSON `null` into non-pointer `int` and `bool` destinations without error, leaving zero values; `Unmarshal` alone therefore does not enforce the restart-extension presence/type matrix.
+- FIX: Present `null` now refuses for `restart_count` and `half_open`; nullable timestamp fields retain `null` as their defined no-deadline/no-observation value. `pkg/localruntime/decode.go`.
+- TEST: Extension wrong-type cases pin null, malformed timestamps, negative counts, and string-encoded scalars as `ErrDecodeFailure`. `pkg/localruntime/decode_test.go`.
+
 ### 1744 — Pricing authority refuses IEEE-754 non-finite values
 - ROOT CAUSE: `Pricing.Validate` used ordinary `<`/`>=` comparisons; those admit `NaN`, while infinities could pass the non-negative list-price gate and make exact system-only redeclaration unstable.
 - FIX: The canonical validator now refuses `NaN`, `+Inf`, and `-Inf` for list and promotional prices before ordering checks. `pkg/vendorplugin/vendor.go`.
