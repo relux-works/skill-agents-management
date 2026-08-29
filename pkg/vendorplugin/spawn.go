@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
 
 // preflightTimeout bounds every Preflightable.Preflight call BuildLaunch
@@ -65,6 +66,9 @@ type SpawnRequest struct {
 	// for a model whose effort support is required, refused for a model with
 	// no effort axis, and never defaulted.
 	Effort string
+	// Engine is an optional caller expectation. When present it must exactly
+	// match the runtime/model declaration and the graph-resolved identity.
+	Engine plugin.Ref
 
 	// PromptPath is the assignment prompt file on disk; Prompt is its bytes
 	// for a system whose transport is stdin. Which one a harness reads is the
@@ -138,6 +142,10 @@ func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	if err != nil {
 		return agentic.Plan{}, err
 	}
+	requestedEngine, resolvedEngine, err := resolveInferenceEngine(r, binding.Engine, model.Engine, req.Engine)
+	if err != nil {
+		return agentic.Plan{}, err
+	}
 	if !model.DrivenBy(binding.SystemID) {
 		return agentic.Plan{}, fmt.Errorf("%w: runtime %s runs on %q and model %q declares %v",
 			ErrModelNotDrivenBySystem, binding.ID, binding.SystemID, model.ID, model.Systems)
@@ -146,6 +154,15 @@ func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	effort, err := resolveEffort(binding.ID, model, req.Effort)
 	if err != nil {
 		return agentic.Plan{}, err
+	}
+	if requestedEngine != (plugin.Ref{}) && mode != agentic.LaunchModeDryRun {
+		if _, err := resolveEngineObservations(ctx, r.engineFacts, requestedEngine, engineObservationQuery{
+			Runtime: binding.ID,
+			Profile: req.Profile,
+			Model:   model.ID,
+		}); err != nil {
+			return agentic.Plan{}, fmt.Errorf("vendorplugin: inference-engine observations refused before launch: %w", err)
+		}
 	}
 
 	var launch agentic.LaunchRequest
@@ -187,7 +204,18 @@ func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 		}
 	}
 
-	return agentic.BuildPlan(r.systems, launch, mode)
+	plan, err := agentic.BuildPlan(r.systems, launch, mode)
+	if err != nil {
+		return agentic.Plan{}, err
+	}
+	if requestedEngine != (plugin.Ref{}) {
+		plan.Provenance = agentic.LaunchProvenance{
+			Broker: string(binding.VendorID), Runtime: string(binding.ID), Profile: launch.Profile, Model: string(model.ID),
+			Publisher: model.Publisher, Family: model.Family,
+			RequestedEngine: requestedEngine, ResolvedEngine: resolvedEngine,
+		}
+	}
+	return plan, nil
 }
 
 // launchBinding is the one internal shape BuildLaunch dispatches through.
@@ -203,12 +231,13 @@ type launchBinding struct {
 	VendorID VendorID
 	Vendor   Vendor
 	Models   []Model
+	Engine   plugin.Ref
 }
 
 func (b launchBinding) SystemOnly() bool { return b.Vendor == nil }
 
 func (b launchBinding) Runtime() Runtime {
-	return Runtime{ID: b.ID, SystemID: b.SystemID, System: b.System, VendorID: b.VendorID, Vendor: b.Vendor}
+	return Runtime{ID: b.ID, SystemID: b.SystemID, System: b.System, VendorID: b.VendorID, Vendor: b.Vendor, Engine: b.Engine}
 }
 
 // resolveLaunchBinding preserves ResolveRuntime's public strictness while
@@ -220,7 +249,7 @@ func resolveLaunchBinding(r *Registry, id RuntimeID) (launchBinding, error) {
 	if err == nil {
 		return launchBinding{
 			ID: runtime.ID, SystemID: runtime.SystemID, System: runtime.System,
-			VendorID: runtime.VendorID, Vendor: runtime.Vendor, Models: runtime.Vendor.Models(),
+			VendorID: runtime.VendorID, Vendor: runtime.Vendor, Models: runtime.Vendor.Models(), Engine: runtime.Engine,
 		}, nil
 	}
 	if !errors.Is(err, ErrRuntimeVendorUnresolved) {
@@ -246,7 +275,7 @@ func resolveLaunchBinding(r *Registry, id RuntimeID) (launchBinding, error) {
 	}
 	return launchBinding{
 		ID: normalized, SystemID: declaration.System, System: system,
-		Models: CloneModels(declaration.Models),
+		Models: CloneModels(declaration.Models), Engine: declaration.Engine,
 	}, nil
 }
 

@@ -2,14 +2,42 @@ package localmodels
 
 import (
 	"errors"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
 
 const validTOML = `
+inference_engines = ["mlx"]
+
+[runtimes.local-qwen]
+system = "pi"
+engine = "mlx"
+
+[runtimes.local-qwen.models."qwen-3.8-27b-mlx-8bit"]
+description           = "Local Qwen3.8-27B, MLX 8-bit"
+publisher             = "alibaba"
+family                = "qwen"
+lifecycle             = "current"
+context_window_tokens = 131072
+effort_support        = "none"
+engine                = "mlx"
+
+[runtimes.local-qwen.models."qwen-3.8-27b-mlx-8bit".pointer]
+agents_infra_project  = "/Users/op/skill-agents-management"
+agents_infra_profile  = "local-qwen"
+`
+
+// legacyTOML is the exact pre-inference-engine configuration shape accepted
+// by v0.4.0. The absent fields mean "no engine requirement"; they are not a
+// failed or partial read and must remain source-compatible.
+const legacyTOML = `
 [runtimes.local-qwen]
 system = "pi"
 
@@ -25,6 +53,25 @@ effort_support        = "none"
 agents_infra_project  = "/Users/op/skill-agents-management"
 agents_infra_profile  = "local-qwen"
 `
+
+func TestShippedLocalQwenFixtureMatchesTheConfiguredAxes(t *testing.T) {
+	body, err := os.ReadFile("testdata/local-qwen.toml")
+	if err != nil {
+		t.Fatalf("ReadFile local-qwen fixture: %v", err)
+	}
+	result := newConfigLoader(func() ([]byte, bool, error) { return body, false, nil }).load()
+	if result.Err != nil || result.Absent {
+		t.Fatalf("local-qwen fixture result = %+v", result)
+	}
+	runtime, ok := runtimeEntry(result.Config, "local-qwen")
+	if !ok || runtime.System != "pi" || runtime.Engine.ID != "mlx" {
+		t.Fatalf("runtime axes = %#v", runtime)
+	}
+	model, ok := runtime.Models["qwen-3.8-27b-mlx-8bit"]
+	if !ok || model.Publisher != "alibaba" || model.Family != "qwen" || model.Engine != runtime.Engine || model.Pointer.AgentsInfraProfile != "local-qwen" {
+		t.Fatalf("model axes = %#v", model)
+	}
+}
 
 // fakeFileReader is the "fake filesystem for local-models.toml's single-tier,
 // memoize-forever load" the adversarial plan's §1 fakes section describes: a
@@ -140,6 +187,10 @@ func TestLoadConfigValidResolvesExactly(t *testing.T) {
 	if entry.System != agentic.SystemID("pi") {
 		t.Fatalf("system = %q, want pi", entry.System)
 	}
+	wantEngine := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
+	if entry.Engine != wantEngine {
+		t.Fatalf("runtime engine = %#v, want %#v", entry.Engine, wantEngine)
+	}
 	model, ok := entry.Models[vendorplugin.ModelID("qwen-3.8-27b-mlx-8bit")]
 	if !ok {
 		t.Fatal("model qwen-3.8-27b-mlx-8bit not found")
@@ -150,6 +201,48 @@ func TestLoadConfigValidResolvesExactly(t *testing.T) {
 	if model.Publisher != "alibaba" || model.Family != "qwen" {
 		t.Fatalf("publisher/family = %q/%q, want alibaba/qwen", model.Publisher, model.Family)
 	}
+	if model.Engine != wantEngine {
+		t.Fatalf("model engine = %#v, want %#v", model.Engine, wantEngine)
+	}
+}
+
+func TestLoadConfigRefusesUnknownAndPreservesMismatchedEngineReferences(t *testing.T) {
+	t.Run("present blank runtime engine", func(t *testing.T) {
+		body := strings.Replace(validTOML, "engine = \"mlx\"", "engine = \"\"", 1)
+		result := newConfigLoader(func() ([]byte, bool, error) { return []byte(body), false, nil }).load()
+		if !errors.Is(result.Err, ErrConfigMalformed) || !strings.Contains(result.Err.Error(), "present but blank") {
+			t.Fatalf("blank runtime engine err = %v, want typed present-but-blank refusal", result.Err)
+		}
+	})
+
+	t.Run("unknown runtime engine", func(t *testing.T) {
+		body := strings.Replace(validTOML, "engine = \"mlx\"", "engine = \"unknown\"", 1)
+		result := newConfigLoader(func() ([]byte, bool, error) { return []byte(body), false, nil }).load()
+		if !errors.Is(result.Err, ErrConfigMalformed) || !strings.Contains(result.Err.Error(), "not declared") {
+			t.Fatalf("unknown runtime engine err = %v, want typed not-declared refusal", result.Err)
+		}
+	})
+
+	t.Run("unknown engine on a zero-model runtime", func(t *testing.T) {
+		body := "inference_engines = [\"mlx\"]\n[runtimes.local-qwen]\nsystem = \"pi\"\nengine = \"unknown\"\n"
+		result := newConfigLoader(func() ([]byte, bool, error) { return []byte(body), false, nil }).load()
+		if !errors.Is(result.Err, ErrConfigMalformed) || !strings.Contains(result.Err.Error(), "not declared") {
+			t.Fatalf("zero-model unknown engine err = %v, want typed not-declared refusal", result.Err)
+		}
+	})
+
+	t.Run("runtime and model engine mismatch", func(t *testing.T) {
+		body := strings.Replace(validTOML, "inference_engines = [\"mlx\"]", "inference_engines = [\"mlx\", \"other\"]", 1)
+		body = strings.Replace(body, "engine                = \"mlx\"", "engine                = \"other\"", 1)
+		result := newConfigLoader(func() ([]byte, bool, error) { return []byte(body), false, nil }).load()
+		if result.Err != nil {
+			t.Fatalf("parse should preserve both configured refs for BuildLaunch mismatch refusal: %v", result.Err)
+		}
+		entry, _ := runtimeEntry(result.Config, "local-qwen")
+		if entry.Engine == entry.Models["qwen-3.8-27b-mlx-8bit"].Engine {
+			t.Fatal("test fixture did not produce distinct runtime/model engine refs")
+		}
+	})
 }
 
 // TestLoadConfigZeroModelsIsAValidNonEmptyResult is case 4(d): a file that

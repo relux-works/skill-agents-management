@@ -39,6 +39,7 @@ type Registry struct {
 	runtimes    map[RuntimeID]RuntimeDeclaration
 	diagnostics map[RuntimeID]RegistrationDiagnostic
 	graph       *plugin.Registry
+	engineFacts engineFactSource
 }
 
 // NewRegistry returns an empty registry bound to the agentic registry its
@@ -54,7 +55,14 @@ func NewRegistry(systems *agentic.Registry) *Registry {
 		runtimes:    map[RuntimeID]RuntimeDeclaration{},
 		diagnostics: map[RuntimeID]RegistrationDiagnostic{},
 		graph:       plugin.NewRegistry(),
+		engineFacts: productionEngineFactSource{},
 	}
+}
+
+func newRegistryWithEngineFactSource(systems *agentic.Registry, source engineFactSource) *Registry {
+	registry := NewRegistry(systems)
+	registry.engineFacts = source
+	return registry
 }
 
 // Default is the registry vendor plugin packages register into from their init
@@ -246,7 +254,7 @@ func (r *Registry) Register(vendor Vendor) error {
 		return fmt.Errorf("%w: %s", ErrNoModels, id)
 	}
 	seenModels := map[ModelID]bool{}
-	seenDependencies := map[plugin.ID]bool{}
+	seenDependencies := map[plugin.ID]plugin.Ref{}
 	dependencies := make([]plugin.Ref, 0)
 	var unknownSystem agentic.SystemID
 	var unknownModel ModelID
@@ -273,9 +281,19 @@ func (r *Registry) Register(vendor Vendor) error {
 					unknownModel = model.ID
 				}
 			}
-			if !seenDependencies[graphID] {
-				seenDependencies[graphID] = true
-				dependencies = append(dependencies, plugin.Ref{ID: graphID, Kind: agentic.PluginKind})
+			if _, seen := seenDependencies[graphID]; !seen {
+				ref := plugin.Ref{ID: graphID, Kind: agentic.PluginKind}
+				seenDependencies[graphID] = ref
+				dependencies = append(dependencies, ref)
+			}
+		}
+		if model.Engine != (plugin.Ref{}) {
+			if existing, seen := seenDependencies[model.Engine.ID]; seen && existing != model.Engine {
+				return fmt.Errorf("%w: vendor %q requires plugin %q as both %q and %q",
+					plugin.ErrUnsatisfiableDeclaration, id, model.Engine.ID, existing.Kind, model.Engine.Kind)
+			} else if !seen {
+				seenDependencies[model.Engine.ID] = model.Engine
+				dependencies = append(dependencies, model.Engine)
 			}
 		}
 	}
@@ -381,6 +399,24 @@ func (r *Registry) Graph() *plugin.Registry {
 		r.graph = plugin.NewRegistry()
 	}
 	return r.graph
+}
+
+// RegisterPlugin adds a non-vendor plugin to the same graph used by runtime
+// launch resolution. It is the generic path for configured inference engines
+// and future kinds; no kind switch is performed here.
+func (r *Registry) RegisterPlugin(p plugin.Plugin) error {
+	if r == nil {
+		return errors.New("vendorplugin: cannot register a plugin into a nil registry")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.graph == nil {
+		r.graph = plugin.NewRegistry()
+	}
+	if err := r.syncAgenticGraph(); err != nil {
+		return err
+	}
+	return r.graph.Register(p)
 }
 
 // Lookup returns the vendor registered under id, normalizing the identifier
@@ -570,6 +606,7 @@ type Runtime struct {
 	System   agentic.System
 	VendorID VendorID
 	Vendor   Vendor
+	Engine   plugin.Ref
 }
 
 // ResolveRuntime materializes a declared pair, or says exactly what is missing.
@@ -617,6 +654,7 @@ func (r *Registry) ResolveRuntime(id RuntimeID) (Runtime, error) {
 		System:   system,
 		VendorID: declaration.Vendor,
 		Vendor:   vendor,
+		Engine:   declaration.Engine,
 	}, nil
 }
 

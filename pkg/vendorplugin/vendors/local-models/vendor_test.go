@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
 
@@ -37,14 +39,20 @@ func registryWithPi(t *testing.T) *vendorplugin.Registry {
 	if err := systems.Register(fakePiSystem{}); err != nil {
 		t.Fatalf("registering the fake pi system: %v", err)
 	}
-	return vendorplugin.NewRegistry(systems)
+	registry := vendorplugin.NewRegistry(systems)
+	if err := registry.RegisterPlugin(inferenceengine.NewConfigured("mlx")); err != nil {
+		t.Fatalf("registering configured mlx engine: %v", err)
+	}
+	return registry
 }
 
 func validConfig() Config {
-	return Config{Runtimes: []RuntimeEntry{
+	engine := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
+	return Config{InferenceEngines: []plugin.ID{"mlx"}, Runtimes: []RuntimeEntry{
 		{
 			ID:     "local-qwen",
 			System: "pi",
+			Engine: engine,
 			Models: map[vendorplugin.ModelID]ModelEntry{
 				"qwen-3.8-27b-mlx-8bit": {
 					Description:         "Local Qwen3.8-27B, MLX 8-bit",
@@ -53,6 +61,7 @@ func validConfig() Config {
 					Lifecycle:           vendorplugin.LifecycleCurrent,
 					ContextWindowTokens: 131072,
 					EffortSupport:       agentic.EffortSupportNone,
+					Engine:              engine,
 					Pointer: Pointer{
 						AgentsInfraProject: "/Users/op/skill-agents-management",
 						AgentsInfraProfile: "local-qwen",

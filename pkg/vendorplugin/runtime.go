@@ -8,6 +8,7 @@ import (
 
 	"github.com/relux-works/skill-agents-management/internal/ident"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
 
 // RuntimeID is the stable identifier of a declared (agentic system × vendor)
@@ -93,6 +94,9 @@ type RuntimeDeclaration struct {
 	System agentic.SystemID
 	Vendor VendorID
 	Broker BrokerProvenance
+	// Engine is the runtime/profile's requested inference-engine dependency.
+	// Zero means this runtime has no engine requirement.
+	Engine plugin.Ref
 
 	// Models are the model rows of a VENDOR-UNRESOLVED runtime, and they are
 	// legal on no other kind.
@@ -139,7 +143,7 @@ func (d RuntimeDeclaration) VendorResolved() bool { return d.Vendor != VendorUnr
 // anything, and refusing the second would make the F2 idempotency rule turn on
 // prose.
 func (d RuntimeDeclaration) SameBinding(other RuntimeDeclaration) bool {
-	return d.ID == other.ID && d.System == other.System && d.Vendor == other.Vendor
+	return d.ID == other.ID && d.System == other.System && d.Vendor == other.Vendor && d.Engine == other.Engine
 }
 
 // sameSystemOnlyAuthority reports whether two vendor-unresolved declarations
@@ -212,6 +216,9 @@ func (d RuntimeDeclaration) Validate() error {
 			return fmt.Errorf("%w: runtime %q declares vendor %q, which normalizes to %q",
 				ErrRuntimeInvalid, d.ID, d.Vendor, normalizedVendor)
 		}
+	}
+	if err := validateInferenceEngineRef("runtime "+d.ID.String(), d.Engine); err != nil {
+		return err
 	}
 	if len(d.Broker.Checked) == 0 {
 		return fmt.Errorf("%w: runtime %q records no source for its vendor binding; a binding nobody looked for is not a declaration",

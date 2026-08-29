@@ -14,6 +14,26 @@ import (
 // Kind is declared here, as plugin data, rather than in the registry.
 const Kind plugin.Kind = "inference-engine"
 
+// Configured is an identity-only inference-engine plugin supplied by operator
+// configuration. Process construction is deliberately separate: an engine may
+// already be supervised outside the agent launch, or contribute a PlanNode
+// through NewPlanNode when the consumer owns that lifecycle.
+type Configured struct {
+	id           plugin.ID
+	dependencies []plugin.Ref
+}
+
+// NewConfigured declares one configured engine identity. The shared graph
+// validates normalization, duplicate ids, missing/wrong-kind dependencies and
+// cycles; this constructor does not duplicate those rules.
+func NewConfigured(id plugin.ID, dependencies ...plugin.Ref) Configured {
+	return Configured{id: id, dependencies: append([]plugin.Ref(nil), dependencies...)}
+}
+
+func (e Configured) PluginDeclaration() plugin.Declaration {
+	return plugin.Declaration{ID: e.id, Kind: Kind, Dependencies: append([]plugin.Ref(nil), e.dependencies...)}
+}
+
 var ErrWrongKind = errors.New("inferenceengine: plugin does not declare the inference-engine kind")
 
 // NewPlanNode turns an inference-engine declaration and its process value into

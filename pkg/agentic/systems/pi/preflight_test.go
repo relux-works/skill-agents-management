@@ -2,6 +2,7 @@ package pi
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -49,6 +50,9 @@ func TestPreflightAdmitRefuseTable(t *testing.T) {
 			if admitted != tc.admit {
 				t.Fatalf("admitted=%v (err=%v), want admit=%v", admitted, err, tc.admit)
 			}
+			if !tc.admit && !errors.Is(err, ErrPreflightRefused) {
+				t.Fatalf("refusal error = %v, want ErrPreflightRefused", err)
+			}
 		})
 	}
 }
@@ -90,8 +94,12 @@ func TestPreflightAdmitRefuseAcrossRepeatedCalls(t *testing.T) {
 func TestPreflightReadFailureRefuses(t *testing.T) {
 	reader := &fakeStatusReader{err: context.DeadlineExceeded}
 	system := New(reader)
-	if _, err := system.Preflight(context.Background(), agenticRequest()); err == nil {
-		t.Fatal("a StatusReader read failure was admitted")
+	_, err := system.Preflight(context.Background(), agenticRequest())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("read failure = %v, want context.DeadlineExceeded", err)
+	}
+	if errors.Is(err, ErrPreflightRefused) {
+		t.Fatalf("read failure was misclassified as ErrPreflightRefused: %v", err)
 	}
 }
 
@@ -111,8 +119,11 @@ func TestPreflightRealTimeoutFires(t *testing.T) {
 	start := time.Now()
 	_, err := system.Preflight(ctx, agenticRequest())
 	elapsed := time.Since(start)
-	if err == nil {
-		t.Fatal("Preflight admitted after its ctx was cancelled")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Preflight timeout = %v, want context.DeadlineExceeded", err)
+	}
+	if errors.Is(err, ErrPreflightRefused) {
+		t.Fatalf("Preflight timeout was misclassified as ErrPreflightRefused: %v", err)
 	}
 	if elapsed > 2*time.Second {
 		t.Fatalf("Preflight took %v to return after ctx cancellation", elapsed)

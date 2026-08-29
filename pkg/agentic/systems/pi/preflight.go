@@ -2,12 +2,18 @@ package pi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/relux-works/skill-agents-management/internal/launchenv"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/localruntime"
 )
+
+// ErrPreflightRefused classifies a successful status read whose broker state
+// is not safe to launch. Read failures retain their original wrapped cause so
+// callers can distinguish an operational read error from a policy refusal.
+var ErrPreflightRefused = errors.New("pi: preflight refused")
 
 // agentsInfraCallerCWDEnv mirrors local-models's own constant of the same
 // name — the one environment variable Preflight reads to recover which
@@ -65,11 +71,11 @@ func admitOrRefuse(status localruntime.Status) error {
 		case "starting", "serving", "lingering":
 			return nil
 		case "draining":
-			return fmt.Errorf("pi: preflight refused: broker is draining (attested); its listener is already closed")
+			return fmt.Errorf("%w: broker is draining (attested); its listener is already closed", ErrPreflightRefused)
 		default:
-			return fmt.Errorf("pi: preflight refused: attested but unrecognized broker state %q", status.BrokerState)
+			return fmt.Errorf("%w: attested but unrecognized broker state %q", ErrPreflightRefused, status.BrokerState)
 		}
 	}
-	return fmt.Errorf("pi: preflight refused: unattested/indeterminate broker read (state=%q source=%q); only a live attested connection or a positively-determined absence may admit",
+	return fmt.Errorf("%w: unattested/indeterminate broker read (state=%q source=%q); only a live attested connection or a positively-determined absence may admit", ErrPreflightRefused,
 		status.BrokerState, status.BrokerSource)
 }

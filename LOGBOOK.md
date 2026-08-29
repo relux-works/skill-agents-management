@@ -5,6 +5,113 @@
 
 ## 2026-08-30
 
+### 1058 — Accepted snapshot reconciled by blob authority
+- FINDING: Accepted revision-3 attachment `06d9d0c…36a4df` contains later provenance/Pi/test blobs than related commit `8cdc8a4`; commit-level merge alone omitted the trusted Registry consumer gate.
+- DECISION: Classified all 40 attachment paths by accepted blob hash, applied later accepted blobs exactly, and semantically reconciled overlaps while retaining v0.4.3's 12-path/37-mutant refusal matrix and typed-nil vendor guard.
+- TEST: Trusted-gate narrowing to attacker-controlled persisted refs made the real `BuildLaunch` `attacker-engine` negative fail exit 1; restored focused/full/race/vet/build/regress/format/diff/static no-live gates exit 0.
+
+### 1027 — Persisted engine refs require registry authority
+- ROOT CAUSE: `LaunchProvenanceV1.Validate` compared `configured_engine` with `resolved_engine` inside one untrusted JSON record; equal normalized `attacker-engine` refs passed without any configured declaration or graph resolution. `pkg/agentic/provenance.go`.
+- DECISION: No-argument self-validation is removed. Persisted consumers call `Registry.ValidateLaunchProvenance`, which reconstructs configured authority from runtime/model declarations, resolves it through the plugin graph, and supplies both refs to `ValidateAgainst`. `pkg/vendorplugin/provenance.go`.
+- TEST: Real local-Qwen `BuildLaunch` provenance crosses JSON persistence, replaces both refs with correct-kind `attacker-engine`, and must return `ErrLaunchProvenanceMismatch` through the registry-backed consumer gate. `pkg/vendorplugin/vendors/local-models/buildlaunch_test.go`.
+
+### 1007 — MLX observation refusal masked Pi preflight probes
+- REGRESSION: Two local-Qwen `BuildLaunch` tests used the configured MLX fixture, so the production MLX unsupported-observation gate returned before the claimed Pi draining and timeout paths; non-nil assertions passed without a status read. `pkg/vendorplugin/vendors/local-models/buildlaunch_test.go`.
+- FIX: Pi seam probes use the explicit no-engine fixture, require one status read, and assert `ErrPreflightRefused` or `context.DeadlineExceeded`; a separate configured-MLX probe requires `ErrObservationUnsupported` and zero Pi reads.
+- DECISION: Pi policy refusals expose `ErrPreflightRefused`; status read failures preserve their wrapped operational cause and never acquire the policy sentinel. `pkg/agentic/systems/pi/preflight.go`.
+
+### 0952 — Producer-scoped Story handoff gate restored
+- FIX: The Story checklist now requires accepted child Change Requests plus cumulative exact-head validation; PR merge and immutable release tagging remain explicit Orchestrator delivery gates rather than producer handoff prerequisites.
+- MILESTONE: Story head `8cdc8a4` revalidated with focused production-entry negatives, uncached full tests, vet, regress, scratch build, formatting, and diff checks; every gate exited 0 without live-runtime contact.
+- STATUS: The prior 0939 circular handoff blocker no longer applies; the cumulative Story candidate is ready for Change Request publication and independent review.
+
+### 0939 — Story handoff is circular with its post-review landing checklist
+- ROOT CAUSE: `task-board handoff STORY-260830-2g4sdf --role developer` requires every checklist item, while item 1 requires independent Story review, trunk integration, PR merge, and immutable `v0.5.0` tagging before the developer can create the `to-review` handoff that starts those operations.
+- FINDING: All three child CRs are accepted and checkpointed at Story head `8cdc8a4`; focused production-entry tests, full uncached tests, vet, scratch build, regress, gofmt, and diff checks exited 0 without live-runtime contact.
+- BLOCKED: Checking item 1 now would falsely attest review, merge, and tag evidence and violate the managed-worktree ownership boundary. The Orchestrator must move the post-review landing requirement out of the producer handoff gate, or provide a workflow that permits reviewed landing before requiring the developer handoff.
+
+### 0918 — Engine observation provenance moved into the launch boundary
+- ROOT CAUSE: `NewProductionComposition(Readers)` still let an ordinary resolver caller retain and substitute the producer, used implementation kinds as graph IDs, and was never called by a launch consumer.
+- DECISION: `vendorplugin.Registry` now owns a package-private engine fact source with no public injection route; non-dry-run `BuildLaunch` validates its facts before `Vendor.Spawn`, `Preflight`, or plan materialization. The shipped graph ID `mlx` maps separately to `native-transformer`.
+- SAFETY: `inferenceengine.ValidateReadings` is explicitly schema-only. The production MLX source returns unsupported until agents-infra supplies the concrete adapter; it does not synthesize positive facts.
+- TEST: Real `BuildLaunch` negatives cover wrong identity/kind, missing adapter, read failure versus absence, arbitrary readiness/busy/pressure JSON, and simultaneous local/SSH facts with zero launch effects.
+
+### 0844 — Previous observation-composition attempt (superseded at 0918)
+- ROOT CAUSE: `ResolveObserved(ctx, registry, id)` let an ordinary caller register an `Engine` and mint canonical evidence; generic JSON-object validation then accepted semantically false readiness, busy, and pressure values.
+- DECISION: `observed-process/v2` binds closed concrete engine kinds to agents-infra readers once; invocation receives no registry, observer, origin label, or caller-stamped metadata. `pkg/inferenceengine/contract.go`.
+- FIX: Fact-specific closed schemas and a cross-fact local-versus-SSH invariant reject arbitrary JSON, partial profiles, and simultaneous local/remote execution before any downstream launch, signal, pressure, or supervision action.
+- TEST: That revision drove `vendorplugin.ResolveEngineObservations` across every measured fact and the five independent reviewer mutants.
+- STATUS: Superseded after independent review showed the public `Readers` constructor remained caller-controlled and the resolver was uncalled from launch production.
+
+### 0823 — Story landing waits for review of the current observer-contract head
+- FINDING: PR #8 is open at `8f4a848`; its only recorded review is a developer comment on superseded head `4fa4e25`, so no independent acceptance covers the current candidate.
+- MILESTONE: The cumulative MLX story candidate at `9e2a72d` passes focused production-entry negatives, uncached full tests, vet, build, regress, gofmt, and diff checks without contacting a live model/runtime/service/socket.
+- BLOCKED: Story integration, merge, and immutable `v0.5.0` tagging remain orchestrator-owned and must wait for `TASK-260830-q4vvvn` review acceptance at the exact current head.
+
+### 0804 — No-engine provenance is corroborated by its identity shape
+- ROOT CAUSE: A persistence caller could downgrade `engine_binding` to `none` and delete both refs while retaining every local-Qwen axis; `LaunchProvenanceV1.Validate` trusted the self-minted discriminator and accepted the forged record. `pkg/agentic/provenance.go`.
+- FIX: `none` now requires a system identity and refuses broker, publisher, family, runtime, profile, or model axes; discriminator plus record shape distinguish genuine legacy absence from engine-bound evidence removal.
+- TEST: Real `BuildLaunch(local-qwen)` provenance crosses JSON persistence, receives the binding downgrade plus pair removal, and must return `ErrLaunchProvenanceMismatch`; the exact pre-extension launch still serializes byte-identically as `system=pi, engine_binding=none`. `pkg/vendorplugin/vendors/local-models/buildlaunch_test.go`.
+- STATUS: F4 resolved for TASK-260830-2i3jbw revision-4 rework; full static-only landing gate exited 0 and immutable CR revision publication is pending.
+
+### 0744 — Provenance rework passed full gates and killed narrowed bypasses
+- MILESTONE: Focused production/persistence suites, `make vet`, scoped `make build`, `make test`, `make regress`, uncached full `go test`, repository `gofmt -l`, and `git diff --check` all exited 0; no live runtime contacted.
+- TEST: A both-refs-absent admission mutant and a wrong-kind acceptance mutant each made its named real-`BuildLaunch` JSON-persistence test exit 1, then the restored tests exited 0.
+- DELIVERY: Producer outcome `TASK-260830-2i3jbw_results.md` updated; circular post-handoff CR checklist copy removed while task AC and completion-hook CR enforcement remain authoritative.
+- STATUS: TASK-260830-2i3jbw ready for immutable CR publication and independent review.
+
+### 0738 — Engine provenance needs an independent binding fact
+- ROOT CAUSE: `LaunchProvenanceV1.Validate` inferred engine requirement only from the two refs, so removing both laundered an engine-bound local-Qwen record into legitimate legacy absence; equal forged refs also bypassed kind and canonical-identity checks. `pkg/agentic/provenance.go`.
+- FIX: Schema v1 now requires `engine_binding=none|required`; `required` refuses either or both missing refs, and each ref must be a normalized graph identity of kind `inference-engine` before equality is considered.
+- TEST: Real `BuildLaunch(local-qwen)` projections cross JSON persistence and refuse both-ref removal, equal wrong-kind refs, and equal non-normalized ids/kinds; exact pre-extension TOML still produces unchanged Pi launch fields and an explicit no-engine projection. `pkg/vendorplugin/vendors/local-models/buildlaunch_test.go`.
+- STATUS: F1/F2 resolved for TASK-260830-2i3jbw revision-3 rework; landing gates and immutable CR publication pending.
+
+### 0715 — MLX registration and consumer provenance stay separate from execution
+- DECISION: `pkg/inferenceengine/engines/mlx` owns the concrete stable `mlx` declaration, but registers through the existing opaque graph. Generic registry/runtime code contains no MLX selection branch.
+- DECISION: task-board-facing metadata is a separate `agents-management.launch-provenance` schema v1. It spells configured and resolved refs independently and validates them after unmarshalling; partial or unequal evidence refuses.
+- COMPATIBILITY: the internal `Plan` launch surface and zero-engine behavior remain unchanged. The local-Qwen axes are configuration/fixture data, and no test or production path contacts a model process, service, endpoint, or socket.
+- DELIVERY: `v0.5.0` is only a release target until independent review, Story integration, and immutable signed tagging occur.
+
+### 0631 — Genericity proof moved from semantic interpretation to observable behavior
+- ROOT CAUSE: Revision 4's 529-line AST dataflow scanner remained bypassable by an ordinary family-to-engine `map[string]string`; each repair only moved the representation boundary.
+- DECISION: Removed `pkg/vendorplugin/engine_dispatch_guard_{test,mutants_test}.go`. Genericity is now bounded by production-entry `BuildLaunch` identity-renaming invariance plus exact shipped-literal placement in generic core.
+- TEST: Success and eleven refusal/registration classes run across the shipped-shaped tuple, two opaque tuples, and a fixed-seed corpus; literal mutants cover every shipped identity and map values. `pkg/vendorplugin/{engine_launch,identity_literal_boundary}_test.go`.
+- NOTE: Runtime assembly, imported/decoded values, reflection, and obfuscation remain code-review concerns; no scanner claims arbitrary Go semantic coverage.
+
+### 0615 — Function literals and function values bypassed the identity-dispatch guard
+- REGRESSION: Revision 3 summarized only package-level `FuncDecl` helpers. A concrete Family predicate carried by a local closure, or a named helper assigned to a local function value, reached an engine-selecting branch with zero reported violations.
+- FIX: The scanner now resolves typed identity aliases and concrete predicates inside function literals, inherits captured aliases, and propagates both closure and named-helper function values through local assignments.
+- TEST: Permanent closure and named-function-value narrowing mutants each failed with `violations=[]` before the fix; both now fail closed while generic blank validation and declaration-to-expectation equality remain admitted.
+- STATUS: Resolved in TASK-260830-1b0kmt revision 4 rework; full landing gates pending rerun.
+
+### 0543 — Omitted engine is compatibility; explicit blank is malformed
+- REGRESSION: Revision 2 made every non-empty local-model runtime require engine fields, rejecting the exact v0.4.0 TOML shape before `BuildLaunch`. `pkg/vendorplugin/vendors/local-models/config.go`.
+- FIX: Wire engine fields are pointers: omitted preserves a zero `plugin.Ref`; present blank and unknown refs remain typed malformed config; one-sided and mismatched refs remain `BuildLaunch` refusals.
+- TEST: Exact pre-extension TOML now reaches production `BuildLaunch` with unchanged Pi argv and zero engine provenance; narrowing omission back to required makes the named regression exit 1.
+- STATUS: Resolved in TASK-260830-1b0kmt revision 3 rework.
+
+### 0543 — Function-local source guards admit helper-indirected dispatch
+- ROOT CAUSE: Revision 2 tracked identity aliases and predicates only within one function; a concrete family comparison returned by a package-local helper reached a caller branch unseen.
+- FIX: `pkg/vendorplugin/engine_dispatch_guard_test.go` computes a package-wide fixpoint of concrete-predicate helper returns and applies it to caller branches and helper chains.
+- TEST: Permanent cross-function family mutant is rejected; narrowing only call-summary consumption makes that test exit 1 while restored focused suites exit 0.
+- STATUS: Resolved in TASK-260830-1b0kmt revision 3 rework.
+
+### 0512 — Inference-engine static-guard rework passed landing gates
+- MILESTONE: Final revision-2 tree passes `make vet`, `make build`, uncached full `go test`, `make regress`, repository-wide `gofmt -l`, and `git diff --check`; every command exited 0.
+- TEST: Scope-narrowing and Family-axis-narrowing mutants each exited 1 before exact source restoration; restored focused guard suite exited 0.
+- STATUS: TASK-260830-1b0kmt ready for independent revision-2 review; no live runtime contacted.
+
+### 0507 — Concrete-identity guards must compose scope and vocabulary
+- ROOT CAUSE: Revision 1 scanned only `spawn.go`, `engine.go`, and `registry.go` for five known literals; a new core file branching on an emergent `Model.Family` bypassed the guard.
+- FIX: `pkg/vendorplugin/engine_dispatch_guard_test.go` composes every production Go file in the core package and detects non-empty runtime/profile/publisher/family/model/engine branches through typed fields, scalar IDs, local aliases, conversions, and switches.
+- TEST: New-file family and indirect model mutants are permanent; narrowing the file scope or removing only the Family axis makes the named focused tests fail with exit 1. Generic equality, blank validation, and multi-return error checks remain accepted.
+- STATUS: Resolved in TASK-260830-1b0kmt revision 2 rework; full landing gates pending rerun.
+
+### 0445 — Engine provenance must not perturb zero-engine launch parity
+- FINDING: `v0.4.0` had the generic `inference-engine` kind but no runtime/model ref, configured engine plugin, or `BuildLaunch` resolution/provenance path. `pkg/{inferenceengine,vendorplugin}`.
+- DECISION: Runtime and model declarations carry one exact `plugin.Ref`; optional caller expectation must match; publisher, family, profile, runtime, and model never infer or select the engine.
+- FIX: `BuildLaunch` resolves requested/resolved engine identity through the shared graph and attaches `Plan.Provenance` only for engine-bound launches. Zero-engine launches retain a zero provenance field and pre-extension observable parity.
+- TEST: Production-entry negatives cover missing, wrong-kind, duplicate, cycle, malformed, dropped, mismatched, and substituted engine shapes; static guard rejects concrete identity literals in core dispatch.
 ### 0623 — v0.4.3 closes the re-derived resolution inventory
 - MILESTONE: Signed commit `82db6b1774fa90b4fb2943ec5375a71d4ca9b964` fast-forwarded through PR #6 and signed tag `v0.4.3`; public Go proxy resolves the tag to the same hash.
 - TEST: Owning-repo vet/build/full/regress/race/format gates and 37/37 narrowed mutants pass. Task-board `e4022da4` internal spawn suite, CLI build, and authoritative read-only query pass against public `v0.4.3` with no agents-management module replace.

@@ -24,6 +24,8 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
 
@@ -56,6 +58,7 @@ type ModelEntry struct {
 	ContextWindowTokens int
 	EffortSupport       agentic.EffortSupport
 	Pointer             Pointer
+	Engine              plugin.Ref
 }
 
 // RuntimeEntry is one declared runtime: its id, which agentic system drives
@@ -71,13 +74,25 @@ type ModelEntry struct {
 type RuntimeEntry struct {
 	ID     vendorplugin.RuntimeID
 	System agentic.SystemID
+	Engine plugin.Ref
 	Models map[vendorplugin.ModelID]ModelEntry
 }
 
 // Config is the fully parsed, fully validated content of one
 // local-models.toml.
 type Config struct {
-	Runtimes []RuntimeEntry
+	InferenceEngines []plugin.ID
+	Runtimes         []RuntimeEntry
+}
+
+// EnginePlugins materializes configured inference-engine identities without
+// interpreting their names. The shared graph owns validation and edges.
+func (c Config) EnginePlugins() []plugin.Plugin {
+	out := make([]plugin.Plugin, 0, len(c.InferenceEngines))
+	for _, id := range c.InferenceEngines {
+		out = append(out, inferenceengine.NewConfigured(id))
+	}
+	return out
 }
 
 // ConfigResult is loadConfig's three-way answer: the machine genuinely has
@@ -179,11 +194,13 @@ func Peek() ConfigResult { return homeLoader.load() }
 // --- TOML schema and parsing/validation ---
 
 type wireFile struct {
-	Runtimes map[string]wireRuntime `toml:"runtimes"`
+	InferenceEngines []string               `toml:"inference_engines"`
+	Runtimes         map[string]wireRuntime `toml:"runtimes"`
 }
 
 type wireRuntime struct {
 	System string               `toml:"system"`
+	Engine *string              `toml:"engine"`
 	Models map[string]wireModel `toml:"models"`
 }
 
@@ -194,6 +211,7 @@ type wireModel struct {
 	Lifecycle           string      `toml:"lifecycle"`
 	ContextWindowTokens int         `toml:"context_window_tokens"`
 	EffortSupport       string      `toml:"effort_support"`
+	Engine              *string     `toml:"engine"`
 	Pointer             wirePointer `toml:"pointer"`
 }
 
@@ -214,6 +232,18 @@ func parseConfig(data []byte) (Config, error) {
 	}
 
 	var cfg Config
+	for _, rawEngineID := range file.InferenceEngines {
+		probe := plugin.NewRegistry()
+		if err := probe.Register(inferenceengine.NewConfigured(plugin.ID(rawEngineID))); err != nil {
+			return Config{}, fmt.Errorf("%w: inference engine %q: %v", ErrConfigMalformed, rawEngineID, err)
+		}
+		for _, existing := range cfg.InferenceEngines {
+			if existing == plugin.ID(rawEngineID) {
+				return Config{}, fmt.Errorf("%w: inference engine %q is declared twice", ErrConfigMalformed, rawEngineID)
+			}
+		}
+		cfg.InferenceEngines = append(cfg.InferenceEngines, plugin.ID(rawEngineID))
+	}
 	for rawRuntimeID, wireRt := range file.Runtimes {
 		runtimeID, err := vendorplugin.NormalizeRuntimeID(rawRuntimeID)
 		if err != nil {
@@ -223,13 +253,17 @@ func parseConfig(data []byte) (Config, error) {
 		if err != nil {
 			return Config{}, fmt.Errorf("%w: runtime %q names system %q: %v", ErrConfigMalformed, rawRuntimeID, wireRt.System, err)
 		}
-		entry := RuntimeEntry{ID: runtimeID, System: system, Models: map[vendorplugin.ModelID]ModelEntry{}}
+		runtimeEngine, err := configuredEngineRef(cfg, wireRt.Engine)
+		if err != nil {
+			return Config{}, fmt.Errorf("%w: runtime %q: %v", ErrConfigMalformed, rawRuntimeID, err)
+		}
+		entry := RuntimeEntry{ID: runtimeID, System: system, Engine: runtimeEngine, Models: map[vendorplugin.ModelID]ModelEntry{}}
 		for rawModelID, wireM := range wireRt.Models {
 			modelID := vendorplugin.ModelID(rawModelID)
 			if err := vendorplugin.ValidateModelID(modelID); err != nil {
 				return Config{}, fmt.Errorf("%w: runtime %q: %v", ErrConfigMalformed, rawRuntimeID, err)
 			}
-			model, err := parseModel(rawRuntimeID, rawModelID, wireM)
+			model, err := parseModel(cfg, rawRuntimeID, rawModelID, wireM)
 			if err != nil {
 				return Config{}, err
 			}
@@ -240,7 +274,7 @@ func parseConfig(data []byte) (Config, error) {
 	return cfg, nil
 }
 
-func parseModel(runtimeID, modelID string, wireM wireModel) (ModelEntry, error) {
+func parseModel(cfg Config, runtimeID, modelID string, wireM wireModel) (ModelEntry, error) {
 	if strings.TrimSpace(wireM.Pointer.AgentsInfraProject) == "" {
 		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: pointer.agents_infra_project is required", ErrConfigMalformed, runtimeID, modelID)
 	}
@@ -261,6 +295,10 @@ func parseModel(runtimeID, modelID string, wireM wireModel) (ModelEntry, error) 
 	if wireM.ContextWindowTokens < 0 {
 		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: context_window_tokens is negative", ErrConfigMalformed, runtimeID, modelID)
 	}
+	engine, err := configuredEngineRef(cfg, wireM.Engine)
+	if err != nil {
+		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: %v", ErrConfigMalformed, runtimeID, modelID, err)
+	}
 	return ModelEntry{
 		Description:         wireM.Description,
 		Publisher:           wireM.Publisher,
@@ -268,11 +306,27 @@ func parseModel(runtimeID, modelID string, wireM wireModel) (ModelEntry, error) 
 		Lifecycle:           lifecycle,
 		ContextWindowTokens: wireM.ContextWindowTokens,
 		EffortSupport:       effort,
+		Engine:              engine,
 		Pointer: Pointer{
 			AgentsInfraProject: wireM.Pointer.AgentsInfraProject,
 			AgentsInfraProfile: wireM.Pointer.AgentsInfraProfile,
 		},
 	}, nil
+}
+
+func configuredEngineRef(cfg Config, raw *string) (plugin.Ref, error) {
+	if raw == nil {
+		return plugin.Ref{}, nil
+	}
+	if strings.TrimSpace(*raw) == "" {
+		return plugin.Ref{}, errors.New("engine is present but blank")
+	}
+	for _, id := range cfg.InferenceEngines {
+		if string(id) == *raw {
+			return plugin.Ref{ID: id, Kind: inferenceengine.Kind}, nil
+		}
+	}
+	return plugin.Ref{}, fmt.Errorf("engine %q is not declared in inference_engines", *raw)
 }
 
 // parseEffortSupport reads the TOML's plain-word effort vocabulary into

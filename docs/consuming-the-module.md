@@ -12,6 +12,9 @@ One Go module, one path, one tag:
 github.com/relux-works/skill-agents-management v0.4.3
 ```
 
+Continue requiring published `v0.4.3` until an immutable `v0.5.0` tag exists;
+the Story branch is not a dependency version.
+
 There is no `replace` on trunk and there must not be one: a committed
 sibling-path `replace` is a path that exists on exactly one machine, and CI is
 not that machine.
@@ -128,6 +131,7 @@ the same binary. Register it conditionally instead, reading
 `localmodels.Peek()`'s three-way `{Absent, Err, Config}` result first:
 
 ```go
+// import "github.com/relux-works/skill-agents-management/pkg/inferenceengine/engines/mlx"
 switch result := localmodels.Peek(); {
 case result.Absent:
     // no local-models.toml on this machine — register nothing
@@ -138,9 +142,13 @@ case result.Err != nil:
         Reason: "malformed", Err: result.Err,
     })
 default:
+	// The concrete plugin registers through the generic graph. This does not
+	// probe or start an MLX process.
+	_ = registry.RegisterPlugin(mlx.New())
     _ = registry.Register(localmodels.New(result.Config))
     _ = registry.DeclareRuntime(vendorplugin.RuntimeDeclaration{
         ID: "local-qwen", System: "pi", Vendor: localmodels.VendorID,
+		Engine: result.Config.Runtimes[0].Engine,
         Broker: vendorplugin.BrokerProvenance{Checked: []string{"local-models.toml"}, Found: "declared once local-models registers"},
     })
 }
@@ -204,6 +212,8 @@ digests, and a rebind orphans that state with no error anywhere.
 | The launch surface for one (system, mode) | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` | execute anything |
 | Add engine/sidecar process nodes | `agentic.BuildMultiNodePlan(primary, primaryDependencies, nodes...)` → the same primary fields plus dependency-ordered `Plan.Nodes` | execute, supervise or attest a process |
 | The same, resolved through a runtime launch binding | `vendorplugin.BuildLaunch(ctx, registry, SpawnRequest{…}, mode)` — resolves either an established vendor binding or an explicit declaration-owned system-only binding, validates the effort word against the owning model row, preserves typed `RunContext`, asks a vendor for a `LaunchRequest` when one exists (refusing redirects, including changed/dropped tracked-run identity), otherwise projects the validated declaration losslessly, runs the resolved system's `Preflightable` check unless dry-run, then hands it to `BuildPlan` | execute anything, fabricate a vendor for a system-only runtime, inject a default effort, or ask callers to duplicate run identity in `Env` |
+| Versioned configured/resolved engine metadata | `plan.ConsumerProvenance()` → `LaunchProvenanceV1`; after unmarshalling call `registry.ValidateLaunchProvenance(record)`, which obtains configured authority from runtime/model declarations and resolved authority from that registry's graph; `ValidateAgainst(configured, resolved)` is the lower-level gate and neither argument may come from the record; inspect mandatory `engine_binding` (`none|required`); `none` requires a system-only legacy shape | execute or attest a model runtime; treat two equal persisted refs as corroboration; accept a downgraded engine-bound shape or absent/partial/malformed/wrong-kind/unconfigured/mismatched required engine refs |
+| Observed engine contract | call `vendorplugin.BuildLaunch(ctx, registry, request, nonDryRunMode)`; its package-owned source resolves `mlx` to `native-transformer` and validates facts before `Spawn`, `Preflight`, or plan materialization | inject a reader/observer/value through public API; treat schema validation as authorization; treat absence as read failure; run process, SSH, pressure, or supervision actions in this module |
 | Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |
 
 ## What stays yours
