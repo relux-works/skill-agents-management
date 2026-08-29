@@ -130,8 +130,73 @@ func TestVendorRegistrationRefusesAShadowSystemDeclarationWithNarrowerDependenci
 	if !errors.Is(err, plugin.ErrUnsatisfiableDeclaration) {
 		t.Fatalf("Register(vendor over shadow system declaration) error = %v, want ErrUnsatisfiableDeclaration", err)
 	}
+	requireMentions(t, err, "compatibility sync requires the exact dependency declaration")
 	if _, ok := registry.Lookup(narwhalID); ok {
 		t.Fatal("vendor registered through a shadow system declaration that dropped its engine dependency")
+	}
+}
+
+func TestVendorRegistrationRefusesShadowDeclarationsWithEqualWidthButDifferentData(t *testing.T) {
+	tests := map[string]func(t *testing.T, systems *agentic.Registry, registry *Registry){
+		"different dependency": func(t *testing.T, systems *agentic.Registry, registry *Registry) {
+			otherEngine := staticGraphPlugin{declaration: plugin.Declaration{ID: "ollama", Kind: "inference-engine"}}
+			if err := registry.Graph().Register(otherEngine); err != nil {
+				t.Fatalf("seed alternate engine: %v", err)
+			}
+			shadow := staticGraphPlugin{declaration: plugin.Declaration{
+				ID:   plugin.ID(pangolinID),
+				Kind: agentic.PluginKind,
+				Dependencies: []plugin.Ref{
+					{ID: "ollama", Kind: "inference-engine"},
+				},
+			}}
+			if err := registry.Graph().Register(shadow); err != nil {
+				t.Fatalf("seed equal-width shadow with different dependency: %v", err)
+			}
+		},
+		"different kind": func(t *testing.T, systems *agentic.Registry, registry *Registry) {
+			sourceEngine, ok := systems.Graph().Lookup("llama-cpp")
+			if !ok {
+				t.Fatal("source graph has no llama-cpp engine")
+			}
+			if err := registry.Graph().Register(sourceEngine); err != nil {
+				t.Fatalf("seed source engine: %v", err)
+			}
+			shadow := staticGraphPlugin{declaration: plugin.Declaration{
+				ID:   plugin.ID(pangolinID),
+				Kind: "agent-environment",
+				Dependencies: []plugin.Ref{
+					{ID: "llama-cpp", Kind: "inference-engine"},
+				},
+			}}
+			if err := registry.Graph().Register(shadow); err != nil {
+				t.Fatalf("seed equal-width shadow with different kind: %v", err)
+			}
+		},
+	}
+
+	for name, seedShadow := range tests {
+		t.Run(name, func(t *testing.T) {
+			systems := agentic.NewRegistry()
+			engine := staticGraphPlugin{declaration: plugin.Declaration{ID: "llama-cpp", Kind: "inference-engine"}}
+			if err := systems.RegisterPlugin(engine); err != nil {
+				t.Fatalf("RegisterPlugin(engine): %v", err)
+			}
+			if err := systems.RegisterWithDependencies(newPangolinSystem(), plugin.Ref{ID: "llama-cpp", Kind: "inference-engine"}); err != nil {
+				t.Fatalf("RegisterWithDependencies(pangolin): %v", err)
+			}
+
+			registry := NewRegistry(systems)
+			seedShadow(t, systems, registry)
+			err := registry.Register(newNarwhal())
+			if !errors.Is(err, plugin.ErrUnsatisfiableDeclaration) {
+				t.Fatalf("Register(vendor over %s shadow) error = %v, want ErrUnsatisfiableDeclaration", name, err)
+			}
+			requireMentions(t, err, "compatibility sync requires the exact dependency declaration")
+			if _, ok := registry.Lookup(narwhalID); ok {
+				t.Fatalf("vendor registered through %s shadow declaration", name)
+			}
+		})
 	}
 }
 

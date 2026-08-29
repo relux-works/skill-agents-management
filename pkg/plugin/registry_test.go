@@ -86,6 +86,27 @@ func TestRegisterRefusesMissingDependencyAtTheProductionEntryPoint(t *testing.T)
 	}
 }
 
+func TestRegisterRefusesALaterMissingDependencyInANonEmptyGraph(t *testing.T) {
+	registry := plugin.NewRegistry()
+	if err := registry.Register(node("inference-engine", "engine")); err != nil {
+		t.Fatalf("Register(engine): %v", err)
+	}
+
+	err := registry.Register(node("agent-environment", "worktree",
+		plugin.Ref{ID: "engine", Kind: "inference-engine"},
+		plugin.Ref{ID: "missing-weights", Kind: "weight-artifact"},
+	))
+	if !errors.Is(err, plugin.ErrMissingDependency) {
+		t.Fatalf("Register(plugin whose later dependency is missing) error = %v, want ErrMissingDependency", err)
+	}
+	if registry.Len() != 1 {
+		t.Fatalf("Len() = %d after refusal, want the pre-existing engine only", registry.Len())
+	}
+	if _, ok := registry.Lookup("worktree"); ok {
+		t.Fatal("the plugin with a later missing dependency was registered")
+	}
+}
+
 func TestRegisterRefusesDependencyWhoseDeclaredKindCannotBeSatisfied(t *testing.T) {
 	registry := plugin.NewRegistry()
 	if err := registry.Register(node("model-vendor", "broker")); err != nil {
@@ -103,6 +124,53 @@ func TestRegisterRefusesDependencyWhoseDeclaredKindCannotBeSatisfied(t *testing.
 	}
 }
 
+func TestRegisterAllRefusesALaterKindMismatchAgainstABatchNode(t *testing.T) {
+	registry := plugin.NewRegistry()
+	engine := node("inference-engine", "engine")
+	weights := node("weight-artifact", "weights")
+	environment := node("agent-environment", "worktree",
+		plugin.Ref{ID: "engine", Kind: "inference-engine"},
+		plugin.Ref{ID: "weights", Kind: "artifact-store"},
+	)
+
+	err := registry.RegisterAll(engine, weights, environment)
+	if !errors.Is(err, plugin.ErrUnsatisfiableDeclaration) {
+		t.Fatalf("RegisterAll(batch with later kind mismatch) error = %v, want ErrUnsatisfiableDeclaration", err)
+	}
+	if registry.Len() != 0 {
+		t.Fatalf("Len() = %d after refused kind-mismatched batch, want zero", registry.Len())
+	}
+}
+
+func TestRegisterRefusesSameKindDuplicate(t *testing.T) {
+	registry := plugin.NewRegistry()
+	metrics := node("sidecar", "metrics")
+	if err := registry.Register(metrics); err != nil {
+		t.Fatalf("first Register(sidecar/metrics): %v", err)
+	}
+
+	err := registry.Register(metrics)
+	if !errors.Is(err, plugin.ErrDuplicatePlugin) {
+		t.Fatalf("second Register(sidecar/metrics) error = %v, want ErrDuplicatePlugin", err)
+	}
+	if registry.Len() != 1 {
+		t.Fatalf("Len() = %d after refused same-kind duplicate, want one", registry.Len())
+	}
+}
+
+func TestRegisterAllRefusesSameKindDuplicateWithinBatchAtomically(t *testing.T) {
+	registry := plugin.NewRegistry()
+	metrics := node("sidecar", "metrics")
+
+	err := registry.RegisterAll(metrics, metrics)
+	if !errors.Is(err, plugin.ErrDuplicatePlugin) {
+		t.Fatalf("RegisterAll(sidecar/metrics twice) error = %v, want ErrDuplicatePlugin", err)
+	}
+	if registry.Len() != 0 {
+		t.Fatalf("Len() = %d after refused duplicate batch, want zero", registry.Len())
+	}
+}
+
 func TestRegisterAllRefusesCycleAtomically(t *testing.T) {
 	registry := plugin.NewRegistry()
 	a := node("sidecar", "a", plugin.Ref{ID: "b", Kind: "sidecar"})
@@ -114,6 +182,35 @@ func TestRegisterAllRefusesCycleAtomically(t *testing.T) {
 	}
 	if registry.Len() != 0 {
 		t.Fatalf("Len() = %d after cyclic batch refusal, want atomic zero", registry.Len())
+	}
+}
+
+func TestRegisterAllRefusesSelfAndMultiHopCycles(t *testing.T) {
+	tests := map[string][]declaredPlugin{
+		"self cycle": {
+			node("sidecar", "metrics", plugin.Ref{ID: "metrics", Kind: "sidecar"}),
+		},
+		"three node cycle": {
+			node("sidecar", "a", plugin.Ref{ID: "b", Kind: "sidecar"}),
+			node("sidecar", "b", plugin.Ref{ID: "c", Kind: "sidecar"}),
+			node("sidecar", "c", plugin.Ref{ID: "a", Kind: "sidecar"}),
+		},
+	}
+	for name, nodes := range tests {
+		t.Run(name, func(t *testing.T) {
+			registry := plugin.NewRegistry()
+			plugins := make([]plugin.Plugin, len(nodes))
+			for i := range nodes {
+				plugins[i] = nodes[i]
+			}
+			err := registry.RegisterAll(plugins...)
+			if !errors.Is(err, plugin.ErrDependencyCycle) {
+				t.Fatalf("RegisterAll(%s) error = %v, want ErrDependencyCycle", name, err)
+			}
+			if registry.Len() != 0 {
+				t.Fatalf("Len() = %d after refused %s, want zero", registry.Len(), name)
+			}
+		})
 	}
 }
 
@@ -130,5 +227,32 @@ func TestRegisterAllRefusesAValidNodeAlongsideAnInvalidOneAtomically(t *testing.
 	}
 	if registry.Len() != 0 {
 		t.Fatalf("Len() = %d after refused transaction, want zero", registry.Len())
+	}
+}
+
+func TestRegisterAllPreservesExistingGraphWhenANewBatchIsRefused(t *testing.T) {
+	registry := plugin.NewRegistry()
+	if err := registry.Register(node("artifact-store", "store")); err != nil {
+		t.Fatalf("Register(pre-existing store): %v", err)
+	}
+	valid := node("inference-engine", "engine")
+	invalid := node("weight-artifact", "weights",
+		plugin.Ref{ID: "missing-store", Kind: "artifact-store"},
+	)
+
+	err := registry.RegisterAll(invalid, valid)
+	if !errors.Is(err, plugin.ErrMissingDependency) {
+		t.Fatalf("RegisterAll(invalid, valid) error = %v, want ErrMissingDependency", err)
+	}
+	if registry.Len() != 1 {
+		t.Fatalf("Len() = %d after refused batch, want the pre-existing store only", registry.Len())
+	}
+	if _, ok := registry.Lookup("store"); !ok {
+		t.Fatal("the refused batch removed the pre-existing graph")
+	}
+	for _, id := range []plugin.ID{"engine", "weights"} {
+		if _, ok := registry.Lookup(id); ok {
+			t.Fatalf("the refused batch partially registered %q", id)
+		}
 	}
 }

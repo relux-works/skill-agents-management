@@ -69,6 +69,40 @@ func TestSystemMayDeclareAnEngineDependencyWithoutChangingSystem(t *testing.T) {
 	}
 }
 
+func TestRegisterWithDependenciesRefusesMissingAndKindMismatchedPluginsAtomically(t *testing.T) {
+	t.Run("missing dependency", func(t *testing.T) {
+		registry := NewRegistry()
+		err := registry.RegisterWithDependencies(newPangolin(), plugin.Ref{ID: "missing-engine", Kind: "inference-engine"})
+		if !errors.Is(err, plugin.ErrMissingDependency) {
+			t.Fatalf("RegisterWithDependencies(missing engine) error = %v, want ErrMissingDependency", err)
+		}
+		if registry.Len() != 0 {
+			t.Fatalf("Len() = %d after refusal, want zero", registry.Len())
+		}
+		if _, ok := registry.Graph().Lookup(plugin.ID(pangolinID)); ok {
+			t.Fatal("the compatibility registry published a system whose dependency is missing")
+		}
+	})
+
+	t.Run("kind mismatch", func(t *testing.T) {
+		registry := NewRegistry()
+		artifact := graphPlugin{declaration: plugin.Declaration{ID: "engine", Kind: "weight-artifact"}}
+		if err := registry.RegisterPlugin(artifact); err != nil {
+			t.Fatalf("RegisterPlugin(weight artifact): %v", err)
+		}
+		err := registry.RegisterWithDependencies(newPangolin(), plugin.Ref{ID: "engine", Kind: "inference-engine"})
+		if !errors.Is(err, plugin.ErrUnsatisfiableDeclaration) {
+			t.Fatalf("RegisterWithDependencies(kind-mismatched engine) error = %v, want ErrUnsatisfiableDeclaration", err)
+		}
+		if registry.Len() != 0 {
+			t.Fatalf("Len() = %d after refusal, want zero", registry.Len())
+		}
+		if _, ok := registry.Graph().Lookup(plugin.ID(pangolinID)); ok {
+			t.Fatal("the compatibility registry published a system through a kind-mismatched dependency")
+		}
+	})
+}
+
 // Duplicate registration is a bug, not a no-op. Same-binding idempotency is
 // deliberately not offered here: silently accepting the second registration is
 // how a shadow binding gets in without anyone reading a diff.

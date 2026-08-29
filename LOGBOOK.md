@@ -5,6 +5,12 @@
 
 ## 2026-08-30
 
+### 0439 — A refusal exemplar did not prove the refusal class
+- ROOT CAUSE: The v0.4.0 graph tests named one two-node cycle, one first-edge missing dependency, one kind pair and one narrower shadow; compile-clean gates restricted to those subsets stayed green, including same-kind duplicate overwrite and multi-node self-cycle admission.
+- FIX: Production-entry negatives now cover same-kind duplicates across sequential/batch registration, self and multi-hop cycles, later-edge missing/kind mismatch, non-empty atomic batches, equal-width shadow divergence, implicit-primary/later-edge plan dependencies, and compatibility adapter atomicity. `pkg/{plugin,agentic,vendorplugin}/*_test.go`.
+- TEST: Eight narrowed mutants independently returned exit 1 under named `-count=1` tests; production files were restored and the unmutated targeted suite returned exit 0.
+- DECISION: `v0.4.1` is a test-strengthening patch over v0.4.0. Rollback remains a consumer pin to `v0.3.0`; no runtime, board or limit-state data migrates.
+
 ### 0340 — Same kind is not the same dependency declaration
 - ROOT CAUSE: Vendor graph sync initially accepted an existing agentic node when only `ID` and `Kind` matched; a caller could pre-seed a shadow node that dropped the real system's engine dependency.
 - FIX: `vendorplugin.Registry.Register` now requires the exact source declaration before reusing a synced node and refuses mismatch as `plugin.ErrUnsatisfiableDeclaration`. `pkg/vendorplugin/registry.go`.

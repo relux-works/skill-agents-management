@@ -558,14 +558,16 @@ cheaper than discovering it.
 
 ## Status
 
-`v0.4.0` is the general-plugin-graph release. It retains the seven shipped
+`v0.4.1` is the refusal-proof patch for the general-plugin-graph release. It
+adds mutation-proven negative coverage for duplicate, dependency, cycle,
+atomicity, compatibility-sync and multi-node-plan refusals while retaining the seven shipped
 agentic systems, five model vendors (including conditional `local-models`),
 frozen runtime ids, launch-surface goldens, admitted-pair digests and on-disk
 limit-state identity. The new graph and multi-node plan are additive; task-board
 keeps its existing v0.3.0-facing registration and launch calls until its
 separate migration task adopts the native graph.
 
-Rollback is a consumer pin to `v0.3.0`; this release performs no persisted data
+Rollback is a consumer pin to `v0.3.0`; this patch performs no persisted data
 migration. Published tags are immutable, so any compatibility repair ships as a
 new signed patch tag.
 

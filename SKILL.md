@@ -108,7 +108,7 @@ links the packages; the binary is a listing surface.
 ## Wiring it into a consumer
 
 ```
-github.com/relux-works/skill-agents-management v0.4.0   # public module, no replace, no credential
+github.com/relux-works/skill-agents-management v0.4.1   # public module, no replace, no credential
 ```
 
 A binary gets the plugins it blank-imports; each registers itself from its own

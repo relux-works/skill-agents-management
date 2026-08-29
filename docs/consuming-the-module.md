@@ -9,7 +9,7 @@ whose `tools/board-cli` swapped its whole spawn plane onto this module.
 One Go module, one path, one tag:
 
 ```
-github.com/relux-works/skill-agents-management v0.4.0
+github.com/relux-works/skill-agents-management v0.4.1
 ```
 
 There is no `replace` on trunk and there must not be one: a committed
@@ -17,7 +17,7 @@ sibling-path `replace` is a path that exists on exactly one machine, and CI is
 not that machine.
 
 ```bash
-go get github.com/relux-works/skill-agents-management@v0.4.0
+go get github.com/relux-works/skill-agents-management@v0.4.1
 ```
 
 **Nothing else.** This repository went PUBLIC on 2026-08-23, so the fetch goes
@@ -30,14 +30,16 @@ so a helpful re-addition fails its build rather than helping.
 
 ## The version to require
 
-`v0.4.0` is the general-plugin-graph release. It is additive over the v0.3.0
+`v0.4.1` is the refusal-proof patch for the general-plugin-graph release. It
+adds mutation-proven negative coverage for graph and multi-node refusal bounds
+without changing the v0.4.0 API. The graph remains additive over the v0.3.0
 System/Vendor/runtime surface: task-board can upgrade without changing its
 registration or launch calls, then migrate deliberately to `pkg/plugin` later.
 
 The release adds `plugin.Declaration{ID, Kind, Dependencies}`, atomic graph
 registration/resolution, the `inference-engine` kind, and typed multi-node
 launch plans. The rollback is a dependency pin to `v0.3.0`; no persisted board,
-runtime or limit-state data is migrated by v0.4.0. Never rewrite a published
+runtime or limit-state data is migrated by v0.4.1. Never rewrite a published
 tag—publish a patch release if the compatibility surface needs repair.
 
 Historical version note: `v0.1.0` was the first tag.
