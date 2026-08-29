@@ -23,6 +23,12 @@ type Plan struct {
 	Stdin   StdinPayload
 	WorkDir string
 	Home    string
+
+	// Nodes is empty for the source-compatible single-process plan. A
+	// consumer that needs an inference engine or sidecar calls
+	// BuildMultiNodePlan, which preserves every field above as the primary
+	// process and adds a validated, dependency-ordered node graph here.
+	Nodes []PlanNode `json:"nodes,omitempty"`
 }
 
 var (

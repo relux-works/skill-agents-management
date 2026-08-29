@@ -3,6 +3,19 @@
 > Institutional memory. Concise, factual, high-signal.
 > Newest entries first. One block per insight.
 
+## 2026-08-30
+
+### 0340 — Same kind is not the same dependency declaration
+- ROOT CAUSE: Vendor graph sync initially accepted an existing agentic node when only `ID` and `Kind` matched; a caller could pre-seed a shadow node that dropped the real system's engine dependency.
+- FIX: `vendorplugin.Registry.Register` now requires the exact source declaration before reusing a synced node and refuses mismatch as `plugin.ErrUnsatisfiableDeclaration`. `pkg/vendorplugin/registry.go`.
+- TEST: Production registration refuses a same-id/same-kind Pangolin shadow with the `llama-cpp` dependency narrowed away. `pkg/vendorplugin/registry_test.go`.
+
+### 0326 — Plugin direction belongs to declarations, not registry kinds
+- ROOT CAUSE: `vendorplugin.Registry.Register` encoded vendor→system as the only legal edge, while `agentic.Plan` could represent only one process; Process-B needed a third package position and a consumer-side shadow plan.
+- DECISION: `pkg/plugin.Registry` treats normalized kind and dependencies as opaque data, validates batches atomically, and resolves dependency-first without a kind switch. Existing System/Vendor registries are compatibility adapters; vendor→system semantics remain intact.
+- FIX: Added `pkg/plugin`, first new kind `pkg/inferenceengine`, and `agentic.BuildMultiNodePlan`; missing dependencies, kind mismatch, graph/plan cycles, and invalid nodes refuse at production registration/plan entry points.
+- DECISION: Release v0.4.0 before task-board's deliberate native-graph migration. Rollback is a consumer pin to v0.3.0; no persisted data migration or tag rewrite.
+
 ## 2026-08-29
 
 ### 1907 — Partial restart-status cohorts fail closed

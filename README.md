@@ -28,9 +28,9 @@ right now*.
 ## What the tool does
 
 - **Declares runtimes** — an agentic system (the harness that runs a turn:
-  claude-code, codex, qwen-code, gemini-cli, antigravity, muse) combined with a
+  claude-code, codex, qwen-code, gemini-cli, antigravity, muse, pi) combined with a
   model vendor (who owns the models, the authentication and the quota:
-  anthropic, openai, alibaba, google).
+  anthropic, openai, alibaba, google, local-models).
 - **Ranks and describes models** — each vendor plugin publishes its models,
   their capability ranking, their reasoning-effort vocabularies, and guidance
   on what each model is best used for.
@@ -48,12 +48,23 @@ this tool knows how to run agents; the board knows what they should work on.
 
 ## Architecture
 
-Two plugin layers — vendor plugins depend on agentic-system plugins and
-declare which systems they support. See [docs/architecture.md](docs/architecture.md)
-for the contract, the layering rules, and the planned local-model plugin
-(load/unload awareness, inference-busy state, memory-pressure sequencing).
+One general plugin graph: every plugin declares an opaque kind and dependencies
+on other plugin ids. The registry validates missing dependencies, kind
+mismatches and cycles atomically; it never assigns layer numbers or assumes an
+edge direction. The existing `pkg/agentic` and `pkg/vendorplugin` registries are
+source-compatible adapters, so their shipped vendor→system semantics and launch
+surfaces remain unchanged. See [docs/architecture.md](docs/architecture.md).
 
-### Layer 1: `pkg/agentic`
+### General graph: `pkg/plugin`
+
+- `Declaration{ID, Kind, Dependencies}` is the registry contract.
+- `RegisterAll` admits a transaction or none of it; `Resolve` and
+  `TopologicalOrder` materialize declared edges dependency-first.
+- `pkg/inferenceengine` declares the first new kind without a registry edit.
+- `agentic.BuildMultiNodePlan` adds typed engine and sidecar process nodes while
+  preserving the legacy primary `Plan` fields.
+
+### Agentic systems: `pkg/agentic`
 
 The agentic-system plugin contract and its registry.
 
@@ -98,7 +109,7 @@ The agentic-system plugin contract and its registry.
   neither miss the machine-local case nor quietly widen into ignoring real
   code.
 
-All six concrete system plugins ship: `pkg/agentic/systems/{codex,claude,qwen,gemini,muse,agy}`.
+All seven concrete system plugins ship: `pkg/agentic/systems/{codex,claude,qwen,gemini,muse,agy,pi}`.
 Every one of them is proven against the launch-surface goldens its system has,
 through the real `Registry` and `BuildPlan`. See below.
 
@@ -330,7 +341,7 @@ Every plugin carries a cross-plugin false-positive check against all five of its
 siblings' real sources, and the residual each exclusion leaves is named on the
 signature and demonstrated staying open.
 
-### Layer 2: `pkg/vendorplugin`
+### Model vendors: `pkg/vendorplugin`
 
 The vendor plugin contract, its registry, and the runtime declarations.
 
@@ -347,7 +358,7 @@ The vendor plugin contract, its registry, and the runtime declarations.
   window, a "promotion" at or above list price. Effort TRANSPORT is not repeated here: it
   belongs to the system plugin, and a launch needs both halves from their own
   owners.
-- **The dependency direction is enforced at registration.** A vendor naming an
+- **The shipped vendor→system dependency is enforced at registration.** A vendor naming an
   agentic system that is not registered is refused, with both ids in the error.
   A registry built without an agentic registry refuses every vendor rather than
   admitting one whose declared systems nobody checked.
@@ -389,7 +400,7 @@ The vendor plugin contract, its registry, and the runtime declarations.
   equal model/effort authority. Model row order is presentation-only and may
   differ, but changing any model field is a typed conflict; the first complete
   authority stands unchanged.
-- `BuildLaunch` is the module's single Layer-2 dispatch API. It resolves an
+- `BuildLaunch` is the module's runtime/vendor compatibility dispatch API. It resolves an
   explicit launch binding, selects the model, validates the effort word against
   the model's own vocabulary (never substituting the recommendation — no
   default is injected anywhere), asks a resolved vendor to build an
@@ -547,48 +558,16 @@ cheaper than discovering it.
 
 ## Status
 
-Extraction all but complete: **five of the epic's six stories are landed.**
-Four are on this repository's `main` — the core module and both plugin
-contracts, the six agentic-system plugins, the vendor layer with its registries
-and digests, and the limit plane with its availability seam. `main` is tagged
-**`v0.1.0`**, which is what a consumer requires.
+`v0.4.0` is the general-plugin-graph release. It retains the seven shipped
+agentic systems, five model vendors (including conditional `local-models`),
+frozen runtime ids, launch-surface goldens, admitted-pair digests and on-disk
+limit-state identity. The new graph and multi-node plan are additive; task-board
+keeps its existing v0.3.0-facing registration and launch calls until its
+separate migration task adopts the native graph.
 
-**`v0.2.0` is pending**: the module half of single-sourcing the model facts.
-This module now owns everything the board's own model table still declared —
-the capability score with its ties, the lifecycle, the supersession, the display
-recommendation, the context window and the vendor billing contract — plus the
-two `muse` rows that belong to no vendor. POLICY did not move: the frozen v2
-tier table and the configured ceilings stay on the consumer side, which is what
-lets a score be corrected without moving who may spawn.
-
-It carries **one breaking API change**: `CapabilityRank.Position int` became
-`CapabilityRank.Score int`, and the total order is now derived by
-`vendorplugin.Lineup` rather than declared per row. A caller that read
-`.Position` reads `Lineup(models)[i].Position` instead, and gains `Tied` —
-which is the point, because the positions it used to read invented an ordering
-wherever the scores tied. `Registry.Register` no longer refuses two models at
-one rank; it refuses two DISPLAY PICKS for one agentic system, a successor no
-model answers to, a non-legacy row that has already been replaced, a negative
-context window and a billing contract that does not price its own model.
-`go get ...@v0.2.0` and update the `.Position` reads; nothing else moves.
-
-The fifth is the switch — making `task-board` consume the tool. It is consumer-
-side work, so it landed on the consumer's trunk rather than this one, as
-`skill-project-management`'s `STORY-260823-1sxcmg` at **`b34aa20`**: all four
-tasks done, including the CI arrangement (the tag required with no `replace`,
-a gitignored `go.work` for local sibling work, and the pinned-`actionlint`/
-`ciguard` pair that keeps it that way). This repository went **public** on
-2026-08-23, so the consumer fetches it through the default proxy with sum-db
-verification — the credential arrangement the switch story originally built
-was removed the same day, and the consumer's guard now enforces its ABSENCE.
-
-The sixth is this documentation and the regression harness.
-
-The scope has not moved: the vendors and agentic systems that already exist in
-`task-board`, ported without behaviour change — same observable launch surface
-(argv, environment, stdin bytes, side effects), same admitted-pair digests,
-same on-disk limit-state identity. New plugins come after the extraction proves
-the seams.
+Rollback is a consumer pin to `v0.3.0`; this release performs no persisted data
+migration. Published tags are immutable, so any compatibility repair ships as a
+new signed patch tag.
 
 **[docs/shipped-state.md](docs/shipped-state.md) is the honest ledger**: what
 each story landed, the model-description divergence between the two
@@ -659,7 +638,7 @@ the negative that makes it mean something:
 | A vendor naming an unregistered agentic system is refused, with BOTH ids | the four real vendor plugins into a registry built on an EMPTY agentic registry | the same vendors are ADMITTED once their systems are registered, so "refuses everything" cannot pass; and a message naming only the vendor fails |
 | Runtime declaration and the F2 collision, both directions | `SeedFrozenRuntimes` plus `DeclareRuntime` on a fresh registry | a conflicting redeclaration must be refused AND the stored binding must be unchanged afterwards — refuse-and-write-anyway is caught; a redeclaration differing only in broker provenance must still be idempotent; system-only model/effort authority conflicts and concurrent contenders must leave exactly one complete winner |
 | An availability verdict derived from a real state file | `providerlimits.Store.AvailabilityFor` over `testdata/source-written/`, written by a binary compiled against the SOURCE module | the same bytes filed one hex digit away read HEALTHY — the fail-open disaster, asserted; an elapsed window is not serviceable; an unreadable file is Unknown, never Healthy |
-| A `BuildPlan` parity smoke, one golden per Layer-1 system | the real `Registry` and `agentic.BuildPlan`, six systems | a wrong resolved binary and a truncated argv must each be reported in the field they were planted in, for all six; and a seventh registered plugin with no smoke case fails the suite |
+| A `BuildPlan` parity smoke over the six original golden-backed systems | the real `Registry` and `agentic.BuildPlan` | a wrong resolved binary and a truncated argv must each be reported in the field it was planted in; Pi's separately pinned prefix/preflight suite remains outside this historical smoke until its turn grammar is frozen |
 
 The whole net is held to ten mutants that narrow the production gates one at a
 time and require `make regress` to go red naming the right test:

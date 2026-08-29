@@ -3,15 +3,21 @@ package vendorplugin
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"sync"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
+
+// PluginKind is the compatibility declaration kind for model vendors. It is
+// data consumed by pkg/plugin.Registry, not a layer known by that registry.
+const PluginKind plugin.Kind = "model-vendor"
 
 // This file is the ONLY place a vendor binding or a runtime binding may live.
 //
-// It is the Layer-2 half of invariant 5 in docs/architecture.md, and the same
+// It is the vendor compatibility half of invariant 5 in docs/architecture.md, and the same
 // guard enforces it: pkg/agentic/singlesource_guard_test.go walks the whole
 // module, and its ONE list of dispatch key types names SystemID, VendorID and
 // RuntimeID with the single file each may be bound in. A `map[VendorID]T` in
@@ -22,16 +28,17 @@ import (
 // Registry holds the vendor plugins compiled into a binary and the runtime
 // declarations they can be paired through.
 //
-// It is built AGAINST an agentic registry rather than owning one. That is the
-// dependency direction made structural: this type cannot exist without the
-// layer it depends on, and Register consults that registry to refuse a vendor
-// naming a system nobody has registered.
+// It is built against an agentic compatibility registry so existing callers
+// keep their constructor and lookup surface. Register publishes the vendor and
+// its model-derived system edges into the general graph and refuses a vendor
+// naming a system nobody registered.
 type Registry struct {
 	mu          sync.RWMutex
 	systems     *agentic.Registry
 	vendors     map[VendorID]Vendor
 	runtimes    map[RuntimeID]RuntimeDeclaration
 	diagnostics map[RuntimeID]RegistrationDiagnostic
+	graph       *plugin.Registry
 }
 
 // NewRegistry returns an empty registry bound to the agentic registry its
@@ -46,6 +53,7 @@ func NewRegistry(systems *agentic.Registry) *Registry {
 		vendors:     map[VendorID]Vendor{},
 		runtimes:    map[RuntimeID]RuntimeDeclaration{},
 		diagnostics: map[RuntimeID]RegistrationDiagnostic{},
+		graph:       plugin.NewRegistry(),
 	}
 }
 
@@ -238,6 +246,10 @@ func (r *Registry) Register(vendor Vendor) error {
 		return fmt.Errorf("%w: %s", ErrNoModels, id)
 	}
 	seenModels := map[ModelID]bool{}
+	seenDependencies := map[plugin.ID]bool{}
+	dependencies := make([]plugin.Ref, 0)
+	var unknownSystem agentic.SystemID
+	var unknownModel ModelID
 	for _, model := range models {
 		if err := model.Validate(); err != nil {
 			return fmt.Errorf("vendorplugin: vendor %s: %w", id, err)
@@ -254,9 +266,16 @@ func (r *Registry) Register(vendor Vendor) error {
 		// observed. The total order some callers need is derived instead; see
 		// lineup.go.
 		for _, system := range model.Systems {
+			graphID := plugin.ID(system)
 			if _, ok := r.systems.Lookup(system); !ok {
-				return fmt.Errorf("%w: vendor %q declares agentic system %q for model %q, and no plugin is registered for %q; register the agentic system plugin first — a vendor depends on the systems that drive it, never the other way round",
-					ErrUnknownAgenticSystem, id, system, model.ID, system)
+				if unknownSystem == "" {
+					unknownSystem = system
+					unknownModel = model.ID
+				}
+			}
+			if !seenDependencies[graphID] {
+				seenDependencies[graphID] = true
+				dependencies = append(dependencies, plugin.Ref{ID: graphID, Kind: agentic.PluginKind})
 			}
 		}
 	}
@@ -275,8 +294,80 @@ func (r *Registry) Register(vendor Vendor) error {
 	if _, exists := r.vendors[id]; exists {
 		return fmt.Errorf("%w: %s", ErrDuplicateVendor, id)
 	}
+	if r.graph == nil {
+		r.graph = plugin.NewRegistry()
+	}
+	if err := r.syncAgenticGraph(); err != nil {
+		return fmt.Errorf("vendorplugin: syncing plugin graph before registering %s: %w", id, err)
+	}
+	graphPlugin := vendorGraphPlugin{
+		declaration: plugin.Declaration{
+			ID:           plugin.ID(id),
+			Kind:         PluginKind,
+			Dependencies: dependencies,
+		},
+		vendor: vendor,
+	}
+	if err := r.graph.Register(graphPlugin); err != nil {
+		if unknownSystem != "" {
+			return fmt.Errorf("%w: vendor %q declares agentic system %q for model %q, and no plugin is registered for %q: %w",
+				ErrUnknownAgenticSystem, id, unknownSystem, unknownModel, unknownSystem, err)
+		}
+		return fmt.Errorf("vendorplugin: registering vendor %s in plugin graph: %w", id, err)
+	}
 	r.vendors[id] = vendor
 	return nil
+}
+
+type vendorGraphPlugin struct {
+	declaration plugin.Declaration
+	vendor      Vendor
+}
+
+func (p vendorGraphPlugin) PluginDeclaration() plugin.Declaration { return p.declaration }
+
+// Vendor exposes the unchanged compatibility plugin held by this graph node.
+func (p vendorGraphPlugin) Vendor() Vendor { return p.vendor }
+
+// syncAgenticGraph imports every dependency-first node visible to the agentic
+// compatibility registry. That includes future inference-engine prerequisites,
+// not only System nodes, and does not teach this registry any kind names.
+func (r *Registry) syncAgenticGraph() error {
+	source := r.systems.Graph()
+	if source == nil {
+		return ErrNoAgenticRegistry
+	}
+	for _, id := range source.TopologicalOrder() {
+		if existing, found := r.graph.Declaration(id); found {
+			sourceDeclaration, ok := source.Declaration(id)
+			if !ok || !reflect.DeepEqual(existing, sourceDeclaration) {
+				return fmt.Errorf("%w: plugin %q is declared as %#v in the vendor graph and %#v in the agentic graph; compatibility sync requires the exact dependency declaration",
+					plugin.ErrUnsatisfiableDeclaration, id, existing, sourceDeclaration)
+			}
+			continue
+		}
+		graphPlugin, ok := source.Lookup(id)
+		if !ok {
+			return fmt.Errorf("vendorplugin: agentic graph lists %q and cannot look it up", id)
+		}
+		if err := r.graph.Register(graphPlugin); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Graph returns the kind-agnostic graph backing this compatibility registry.
+func (r *Registry) Graph() *plugin.Registry {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.graph == nil {
+		r.graph = plugin.NewRegistry()
+	}
+	return r.graph
 }
 
 // Lookup returns the vendor registered under id, normalizing the identifier

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
 
 // This file is the ONLY place an agentic system binding may live.
@@ -28,13 +30,14 @@ import (
 type Registry struct {
 	mu      sync.RWMutex
 	systems map[SystemID]System
+	graph   *plugin.Registry
 }
 
 // NewRegistry returns an empty registry. An empty registry is a valid state,
 // not a failure: a binary with no plugins compiled in answers "nothing
 // registered", which is a different fact from a lookup that broke.
 func NewRegistry() *Registry {
-	return &Registry{systems: map[SystemID]System{}}
+	return &Registry{systems: map[SystemID]System{}, graph: plugin.NewRegistry()}
 }
 
 // Default is the registry plugin packages register into from their init
@@ -115,6 +118,14 @@ var (
 // plugin that answers a second spelling of its own id is a shadow binding one
 // layer up from the map this file guards.
 func (r *Registry) Register(sys System) error {
+	return r.RegisterWithDependencies(sys)
+}
+
+// RegisterWithDependencies is the compatibility bridge from an unchanged
+// System implementation into the general graph. Existing plugins call
+// Register and therefore declare no new prerequisites; a system that needs an
+// inference engine can add that edge without changing the System interface.
+func (r *Registry) RegisterWithDependencies(sys System, dependencies ...plugin.Ref) error {
 	if r == nil {
 		return errors.New("agentic: cannot register into a nil registry")
 	}
@@ -156,8 +167,59 @@ func (r *Registry) Register(sys System) error {
 	if _, exists := r.systems[id]; exists {
 		return fmt.Errorf("%w: %s", ErrDuplicateSystem, id)
 	}
+	if r.graph == nil {
+		r.graph = plugin.NewRegistry()
+	}
+	graphPlugin := systemGraphPlugin{
+		declaration: plugin.Declaration{
+			ID:           plugin.ID(id),
+			Kind:         PluginKind,
+			Dependencies: append([]plugin.Ref(nil), dependencies...),
+		},
+		system: sys,
+	}
+	if err := r.graph.Register(graphPlugin); err != nil {
+		return fmt.Errorf("agentic: registering system %s in plugin graph: %w", id, err)
+	}
 	r.systems[id] = sys
 	return nil
+}
+
+type systemGraphPlugin struct {
+	declaration plugin.Declaration
+	system      System
+}
+
+func (p systemGraphPlugin) PluginDeclaration() plugin.Declaration { return p.declaration }
+
+// System exposes the unchanged compatibility plugin held by this graph node.
+func (p systemGraphPlugin) System() System { return p.system }
+
+// RegisterPlugin adds a non-system plugin, such as an inference engine, to the
+// same graph that future system dependency declarations resolve against.
+func (r *Registry) RegisterPlugin(p plugin.Plugin) error {
+	if r == nil {
+		return errors.New("agentic: cannot register a plugin into a nil registry")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.graph == nil {
+		r.graph = plugin.NewRegistry()
+	}
+	return r.graph.Register(p)
+}
+
+// Graph returns the general graph backing this compatibility registry.
+func (r *Registry) Graph() *plugin.Registry {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.graph == nil {
+		r.graph = plugin.NewRegistry()
+	}
+	return r.graph
 }
 
 // Lookup returns the system registered under id, normalizing the identifier

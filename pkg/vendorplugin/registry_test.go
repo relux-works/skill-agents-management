@@ -1,10 +1,16 @@
 package vendorplugin
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
+
+type staticGraphPlugin struct{ declaration plugin.Declaration }
+
+func (p staticGraphPlugin) PluginDeclaration() plugin.Declaration { return p.declaration }
 
 // TestRegisteringAVendorNamingAnUnknownSystemIsRefused is AC2, and it is the
 // negative test the whole layering rests on.
@@ -21,6 +27,9 @@ func TestRegisteringAVendorNamingAnUnknownSystemIsRefused(t *testing.T) {
 
 	registry, err := mustRegister(t, vendor, systemsWithPangolin(t))
 	requireErrorIs(t, err, ErrUnknownAgenticSystem, "Register(vendor declaring an unregistered system)")
+	if !errors.Is(err, plugin.ErrMissingDependency) {
+		t.Fatalf("Register(vendor declaring an unregistered system) error = %v, want the production graph's ErrMissingDependency too", err)
+	}
 	requireMentions(t, err, string(narwhalID), "opencode", "narwhal-deep")
 
 	if _, found := registry.Lookup(narwhalID); found {
@@ -80,6 +89,49 @@ func TestRegisteringAVendorWhoseSystemsAreRegisteredSucceeds(t *testing.T) {
 	}
 	if _, found := registry.Lookup("NARWHAL"); !found {
 		t.Error("a lookup under an unnormalized spelling missed the registration; the registry does not normalize on the way in")
+	}
+}
+
+func TestVendorRegistrationPublishesVendorToSystemEdgesToTheGeneralGraph(t *testing.T) {
+	registry := registerNarwhal(t, newNarwhal())
+	resolved, err := registry.Graph().Resolve(plugin.ID(narwhalID))
+	if err != nil {
+		t.Fatalf("Resolve(narwhal): %v", err)
+	}
+	if resolved.Declaration.Kind != PluginKind {
+		t.Fatalf("narwhal kind = %q, want %q", resolved.Declaration.Kind, PluginKind)
+	}
+	if len(resolved.Dependencies) != 1 {
+		t.Fatalf("narwhal dependencies = %#v, want one deduplicated system edge", resolved.Dependencies)
+	}
+	dependency := resolved.Dependencies[0].Declaration
+	if dependency.ID != plugin.ID(pangolinID) || dependency.Kind != agentic.PluginKind {
+		t.Fatalf("narwhal dependency = %#v, want pangolin agentic-system", dependency)
+	}
+}
+
+func TestVendorRegistrationRefusesAShadowSystemDeclarationWithNarrowerDependencies(t *testing.T) {
+	systems := agentic.NewRegistry()
+	engine := staticGraphPlugin{declaration: plugin.Declaration{ID: "llama-cpp", Kind: "inference-engine"}}
+	if err := systems.RegisterPlugin(engine); err != nil {
+		t.Fatalf("RegisterPlugin(engine): %v", err)
+	}
+	if err := systems.RegisterWithDependencies(newPangolinSystem(), plugin.Ref{ID: "llama-cpp", Kind: "inference-engine"}); err != nil {
+		t.Fatalf("RegisterWithDependencies(pangolin): %v", err)
+	}
+
+	registry := NewRegistry(systems)
+	shadow := staticGraphPlugin{declaration: plugin.Declaration{ID: plugin.ID(pangolinID), Kind: agentic.PluginKind}}
+	if err := registry.Graph().Register(shadow); err != nil {
+		t.Fatalf("seeding narrowed shadow declaration: %v", err)
+	}
+
+	err := registry.Register(newNarwhal())
+	if !errors.Is(err, plugin.ErrUnsatisfiableDeclaration) {
+		t.Fatalf("Register(vendor over shadow system declaration) error = %v, want ErrUnsatisfiableDeclaration", err)
+	}
+	if _, ok := registry.Lookup(narwhalID); ok {
+		t.Fatal("vendor registered through a shadow system declaration that dropped its engine dependency")
 	}
 }
 

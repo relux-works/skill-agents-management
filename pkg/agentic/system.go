@@ -1,6 +1,7 @@
-// Package agentic is Layer 1 of agents-management: the contract an agentic
-// system plugin implements, and the registry that is the only place a system
-// binding may live.
+// Package agentic defines the agentic-system compatibility kind: the contract
+// a harness plugin implements, its compatibility registry, and typed single-
+// and multi-node launch plans. The registry publishes system declarations into
+// the general pkg/plugin graph; the graph itself assigns no layer number.
 //
 // An agentic system is the harness that runs a turn — Claude Code, Codex,
 // Qwen Code, Gemini CLI, Antigravity, Muse. It owns the binary, the argv
@@ -10,7 +11,7 @@
 // knows only the shape of the declaration and how to dispatch through it.
 //
 // Nothing about a vendor — models, effort vocabularies, authentication, quota
-// — lives here. The one vendor-shaped fact this layer needs is whether a model
+// — lives here. The one vendor-shaped fact this package needs is whether a model
 // requires a reasoning effort at all (EffortSupport), because a system whose
 // declared transport cannot carry effort can never launch such a model, and
 // that has to be decidable by a caller holding only these types.

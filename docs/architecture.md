@@ -1,8 +1,9 @@
 # Architecture
 
-`agents-management` is a plugin system with two layers and a deliberately
-narrow core. The core owns registration, admission and observation; every
-fact about a concrete harness or a concrete vendor lives in a plugin.
+`agents-management` is a general plugin graph with a deliberately narrow core.
+The core owns registration, dependency resolution, admission and observation;
+every fact about a concrete harness, vendor or inference engine lives in a
+plugin.
 
 This document is the CONTRACT. What is built against it, what is deliberately
 still open and who owns each residual is [shipped-state.md](shipped-state.md);
@@ -10,9 +11,49 @@ how a program depends on the module is
 [consuming-the-module.md](consuming-the-module.md). Where the two disagree with
 this file, they are describing reality and this file is describing the rule.
 
-## The two layers
+## The plugin graph
 
-### Layer 1 — agentic-system plugins
+`pkg/plugin.Registry` stores `plugin.Declaration{ID, Kind, Dependencies}`.
+`Kind` is an opaque normalized string declared by the package that owns the
+kind. The registry never switches on it, assigns a layer number, or carries an
+allowlist. Adding `pkg/inferenceengine.Kind == "inference-engine"` required no
+registry change; a future `weight-artifact` or `agent-environment` kind has the
+same contract.
+
+Plugin ids are global within one registry. Every dependency names both an id
+and the kind it requires. Registration is atomic and fails before a plugin is
+visible when:
+
+- an id or kind is invalid, unstable or duplicated;
+- a dependency is missing (`plugin.ErrMissingDependency`);
+- the named plugin exists under a different kind
+  (`plugin.ErrUnsatisfiableDeclaration`); or
+- the candidate graph contains a cycle (`plugin.ErrDependencyCycle`).
+
+`RegisterAll` validates a batch, which distinguishes a genuine cycle from the
+missing dependency either half would report if registered alone. `Resolve` and
+`TopologicalOrder` follow declared edges dependency-first; no direction is
+inferred from kind. A model vendor may depend on an agentic system, an agentic
+system may depend on an inference engine, and a future declaration may point
+the other way when that is the fact it owns.
+
+The existing `agentic.Registry` and `vendorplugin.Registry` APIs are
+compatibility adapters over this graph. Existing concrete plugins keep their
+interfaces and registration calls unchanged:
+
+- `agentic.Register` publishes kind `agentic-system` with no new dependencies;
+  `RegisterWithDependencies` is the additive path for a system that needs an
+  engine or another plugin;
+- `vendorplugin.Register` publishes kind `model-vendor` and derives its
+  existing vendor→system edges from `Model.Systems`;
+- `Graph()` exposes the resolved declarations without asking callers to infer
+  a package position.
+
+This compatibility surface is what lets task-board continue using the v0.3.0
+System/Vendor/runtime API unchanged while its native graph migration is handled
+separately.
+
+### Agentic-system plugins
 
 An **agentic system** is the harness that runs a turn: it owns the binary,
 the argv grammar, the environment contract, the stdin protocol, the launch
@@ -41,16 +82,16 @@ extraction source already proved out):
 - composition grammar,
 - default home and auth hint.
 
-### Layer 2 — vendor plugins
+### Model-vendor plugins
 
 A **vendor** owns models, authentication and quota: anthropic, openai,
 alibaba, google, and `local-models` — the generic resource plane for
-locally-running models (§ below, "The local-model plugin"). A vendor plugin
-**depends on agentic-system plugins** and
-declares which systems can drive its models. That dependency direction is the
-load-bearing decision: a runtime is the *pair* (agentic system × vendor), so
-cross-runtime combinations — Qwen models under the Codex harness — are just a
-vendor declaring support for one more system, with no core change.
+locally-running models (§ below, "The local-model plugin"). Existing vendor
+plugins declare dependencies on the agentic systems in their model rows. That
+edge keeps its shipped meaning; it is no longer the only direction the
+registry can represent. A runtime remains the compatibility pair (agentic
+system × vendor), so cross-runtime combinations — Qwen models under the Codex
+harness — are still one vendor declaration with no core change.
 
 A vendor plugin's interface, at minimum:
 
@@ -72,6 +113,20 @@ A vendor plugin's interface, at minimum:
 - **Spawn** — launching a model under one of its supported agentic systems
   with the full parameter surface: model, effort, environment, stdin,
   goal/budget/tier, composition.
+
+### Inference-engine plugins
+
+`pkg/inferenceengine` owns the first post-v0.3.0 kind. An inference engine is
+Process B: the executable that serves a model to an agent harness. It is a
+plugin identity and plan contributor, not process-lifecycle authority.
+`inferenceengine.NewPlanNode` converts an engine declaration and its
+`agentic.ProcessPlan` into a typed launch node; the consumer still starts,
+supervises, stops and attests the process.
+
+Both `pi` and `local-models` can depend on the same engine node while retaining
+the existing vendor→system edge: engine → system → vendor in dependency-first
+order, with an optional direct vendor→engine edge. No cycle or third registry
+layer is needed.
 
 ### Runtimes
 
@@ -141,6 +196,21 @@ and the fidelity check refuses a vendor that changes or drops any of `RunID`,
 `TaskID`, `BoardDir`, or `ContextID`; the resolved system remains the one owner
 that exports those values through `agentic.WithRunContext`.
 
+## Typed multi-node launch plans
+
+`agentic.BuildPlan` remains source- and behavior-compatible: it returns the
+same primary `Plan{System, Mode, Binary, Argv, Env, Stdin, WorkDir, Home}` and
+leaves `Plan.Nodes` empty. `agentic.BuildMultiNodePlan` adds a validated node
+graph while preserving those legacy fields verbatim.
+
+Each `PlanNode` carries a node id, the contributing `plugin.Ref`, declared
+node dependencies and a `ProcessPlan`. The builder refuses duplicate nodes,
+missing dependencies, cycles, invalid process values and stdin contradictions,
+then stores nodes dependency-first. The stable primary node is `agent`; engine
+and sidecar nodes are ordinary declared plugin contributions. This module still
+returns a value only — ordering is evidence for a consumer, not an executor or
+supervisor hidden inside the plan.
+
 ## `Preflightable` — the second generic extension point
 
 `agentic.Preflightable` (`Preflight(ctx context.Context, req LaunchRequest)
@@ -175,10 +245,11 @@ contracts here, not suggestions:
    key: this module has no config file, and the key that has to change lives
    in whichever consumer supplied the effort. Naming it is the consumer's
    half of the same error.
-5. **Single source per fact.** One adapter table, one runtime registry, one
-   normalization for identifiers. The extraction source paid repeatedly for
-   shadow tables and duplicate charsets; the plugin registry is the only
-   place a binding may live, and guards should make a second one fail a test.
+5. **Single source per fact.** One general plugin graph, one runtime
+   compatibility registry, one normalization for identifiers. The extraction
+   source paid repeatedly for shadow tables and duplicate charsets; a plugin
+   declaration is the only place its kind and dependency edges may live, and
+   guards should make a second binding fail a test.
 
 ## The local-model plugin: module-side M1 candidate, end-to-end M1 pending
 
@@ -197,7 +268,7 @@ two DISTINCT, typed outcomes (`ConfigResult{Absent: true}` vs
 `Registry.NoteUnregistered`/`ErrRuntimeConfigMalformed` so the coordinated
 consumer's `ResolveRuntime` call can surface it, not only a separate status
 CLI. `pkg/agentic/systems/pi` is
-Process A's harness plugin (see the Layer-1 table above) and implements
+Process A's harness plugin (see the agentic-system table above) and implements
 `Preflightable`: a context-bounded, fail-closed admit/refuse check against
 `pkg/localruntime`'s machine-local `StatusReader` — `("absent", "determined")`
 is the sole non-attested admit; every other unattested/indeterminate broker

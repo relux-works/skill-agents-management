@@ -6,7 +6,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
+
+type graphPlugin struct{ declaration plugin.Declaration }
+
+func (p graphPlugin) PluginDeclaration() plugin.Declaration { return p.declaration }
 
 // withID builds a variant of the one test double rather than a second fake,
 // so a refusal test and the seam test are measuring the same implementation.
@@ -28,6 +34,38 @@ func TestEmptyRegistryAnswersNothingRegistered(t *testing.T) {
 	}
 	if _, ok := registry.Lookup("codex"); ok {
 		t.Error("Lookup found a system in an empty registry")
+	}
+}
+
+func TestSystemRegistrationPublishesKindDataToTheGeneralGraph(t *testing.T) {
+	registry := NewRegistry()
+	if err := registry.Register(newPangolin()); err != nil {
+		t.Fatalf("Register(pangolin): %v", err)
+	}
+	declaration, ok := registry.Graph().Declaration(plugin.ID(pangolinID))
+	if !ok {
+		t.Fatal("the compatibility registry accepted pangolin but did not publish it to the plugin graph")
+	}
+	if declaration.Kind != PluginKind {
+		t.Fatalf("pangolin kind = %q, want %q", declaration.Kind, PluginKind)
+	}
+}
+
+func TestSystemMayDeclareAnEngineDependencyWithoutChangingSystem(t *testing.T) {
+	registry := NewRegistry()
+	engine := graphPlugin{declaration: plugin.Declaration{ID: "llama-cpp", Kind: "inference-engine"}}
+	if err := registry.RegisterPlugin(engine); err != nil {
+		t.Fatalf("RegisterPlugin(engine): %v", err)
+	}
+	if err := registry.RegisterWithDependencies(newPangolin(), plugin.Ref{ID: "llama-cpp", Kind: "inference-engine"}); err != nil {
+		t.Fatalf("RegisterWithDependencies(pangolin -> engine): %v", err)
+	}
+	resolved, err := registry.Graph().Resolve(plugin.ID(pangolinID))
+	if err != nil {
+		t.Fatalf("Resolve(pangolin): %v", err)
+	}
+	if len(resolved.Dependencies) != 1 || resolved.Dependencies[0].Declaration.ID != "llama-cpp" {
+		t.Fatalf("pangolin graph dependencies = %#v, want llama-cpp", resolved.Dependencies)
 	}
 }
 

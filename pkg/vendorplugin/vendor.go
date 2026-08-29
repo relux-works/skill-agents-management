@@ -1,7 +1,8 @@
-// Package vendorplugin is Layer 2 of agents-management: the contract a vendor
-// plugin implements, the registry that is the only place a vendor or runtime
-// binding may live, and the declared (agentic system × vendor) pairs those
-// bindings resolve to.
+// Package vendorplugin defines the model-vendor compatibility kind: the
+// contract a vendor plugin implements, the registry that is the only place a
+// vendor or runtime binding may live, and the declared (agentic system ×
+// vendor) pairs those bindings resolve to. Vendor registrations publish their
+// dependency edges into the general pkg/plugin graph.
 //
 // A vendor owns models, authentication and quota — anthropic, openai, alibaba,
 // google. It does NOT own the harness: the binary, the argv grammar, the
@@ -11,24 +12,20 @@
 // the recommended value; how a word reaches a harness is the system's business
 // and is not repeated in this package.
 //
-// # The dependency direction
+// # The compatibility dependency
 //
 // A vendor plugin depends on agentic-system plugins and declares which systems
-// can drive each of its models. docs/architecture.md calls that the
-// load-bearing decision, and Registry.Register enforces it: a vendor naming an
+// can drive each of its models. Registry.Register preserves and enforces that
+// shipped edge: a vendor naming an
 // agentic system that is not registered is REFUSED, with both identifiers in
-// the error. The direction is what makes a cross-runtime combination — Qwen
+// the error. The edge is what makes a cross-runtime combination — Qwen
 // models under the Codex harness — a vendor declaring one more system rather
 // than a core change.
 //
-// # What is deliberately not here
-//
-// No concrete vendor plugins: they are the next story. No spawn EXECUTION:
-// BuildLaunch produces the agentic.Plan and stops, and the process start is a
-// port story. No limit plane: Availability is the verdict TYPE that plane will
-// report through, and the resource-awareness design docs/architecture.md
-// sketches for local models fits behind it without an interface break —
-// availability.go documents exactly where.
+// This edge is compatibility data, not a general registry direction rule.
+// Other kinds may declare dependencies in either direction through pkg/plugin.
+// BuildLaunch produces agentic.Plan and stops; process execution remains a
+// consumer responsibility.
 package vendorplugin
 
 import (

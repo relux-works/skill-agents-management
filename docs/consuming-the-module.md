@@ -9,7 +9,7 @@ whose `tools/board-cli` swapped its whole spawn plane onto this module.
 One Go module, one path, one tag:
 
 ```
-github.com/relux-works/skill-agents-management v0.1.0
+github.com/relux-works/skill-agents-management v0.4.0
 ```
 
 There is no `replace` on trunk and there must not be one: a committed
@@ -17,7 +17,7 @@ sibling-path `replace` is a path that exists on exactly one machine, and CI is
 not that machine.
 
 ```bash
-go get github.com/relux-works/skill-agents-management@v0.1.0
+go get github.com/relux-works/skill-agents-management@v0.4.0
 ```
 
 **Nothing else.** This repository went PUBLIC on 2026-08-23, so the fetch goes
@@ -30,7 +30,17 @@ so a helpful re-addition fails its build rather than helping.
 
 ## The version to require
 
-`v0.1.0` is the first tag and what the first consumer requires.
+`v0.4.0` is the general-plugin-graph release. It is additive over the v0.3.0
+System/Vendor/runtime surface: task-board can upgrade without changing its
+registration or launch calls, then migrate deliberately to `pkg/plugin` later.
+
+The release adds `plugin.Declaration{ID, Kind, Dependencies}`, atomic graph
+registration/resolution, the `inference-engine` kind, and typed multi-node
+launch plans. The rollback is a dependency pin to `v0.3.0`; no persisted board,
+runtime or limit-state data is migrated by v0.4.0. Never rewrite a published
+tag—publish a patch release if the compatibility surface needs repair.
+
+Historical version note: `v0.1.0` was the first tag.
 
 **`v0.2.0` carries one breaking change.** `CapabilityRank.Position int` became
 `CapabilityRank.Score int`: this module now records the vendor's capability
@@ -74,7 +84,7 @@ exists, and a stale vendor tree then fails every build rather than falling back;
 both repositories dropped vendoring for that reason and pass `-mod=mod`
 explicitly everywhere.
 
-## Wiring the two layers
+## Wiring the compatibility packages
 
 A binary gets the plugins it IMPORTS. Every plugin package registers itself
 into the package-level default registry from its own `init`, so a blank import
@@ -82,7 +92,7 @@ is the whole wiring step:
 
 ```go
 import (
-    // Layer 1 — the harnesses. Import only the ones this binary can run.
+    // Agentic systems — import only the harnesses this binary can run.
     _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy"
     _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
     _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
@@ -90,7 +100,7 @@ import (
     _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse"
     _ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/qwen"
 
-    // Layer 2 — the vendors. Each blank-imports the systems its models
+    // Model vendors. Each blank-imports the systems its models
     // declare, so importing a vendor pulls in its harnesses whether you
     // named them or not.
     _ "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/alibaba"
@@ -138,6 +148,26 @@ Prefer isolated registries in tests. `agentic.NewRegistry()` and
 `vendorplugin.SeedFrozenRuntimes(registry)` gives you the frozen table without
 touching the process-wide default.
 
+For a new plugin kind, use the general graph directly. The registry does not
+need an edit for the kind:
+
+```go
+registry := plugin.NewRegistry()
+err := registry.Register(enginePlugin) // declares Kind: inferenceengine.Kind
+```
+
+Use `RegisterAll` when a set is intended to arrive together; cycles, missing
+dependencies and kind mismatches are refused atomically with named errors.
+Existing system plugins can opt into a graph prerequisite without changing the
+`System` interface:
+
+```go
+_ = systems.RegisterPlugin(enginePlugin)
+_ = systems.RegisterWithDependencies(piSystem,
+    plugin.Ref{ID: "llama-cpp", Kind: inferenceengine.Kind},
+)
+```
+
 ## Declaring your own runtime
 
 A runtime is a **declaration**, not code. An operator-configured cross-runtime
@@ -164,11 +194,12 @@ idempotent, a conflicting one is refused and the FIRST declaration stands. Do
 not rebind a frozen id — it names limit-state files and feeds admitted-pair
 digests, and a rebind orphans that state with no error anywhere.
 
-## The three entry points
+## Launch and availability entry points
 
 | You want | Call | It does not |
 | --- | --- | --- |
 | The launch surface for one (system, mode) | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` | execute anything |
+| Add engine/sidecar process nodes | `agentic.BuildMultiNodePlan(primary, primaryDependencies, nodes...)` → the same primary fields plus dependency-ordered `Plan.Nodes` | execute, supervise or attest a process |
 | The same, resolved through a runtime launch binding | `vendorplugin.BuildLaunch(ctx, registry, SpawnRequest{…}, mode)` — resolves either an established vendor binding or an explicit declaration-owned system-only binding, validates the effort word against the owning model row, preserves typed `RunContext`, asks a vendor for a `LaunchRequest` when one exists (refusing redirects, including changed/dropped tracked-run identity), otherwise projects the validated declaration losslessly, runs the resolved system's `Preflightable` check unless dry-run, then hands it to `BuildPlan` | execute anything, fabricate a vendor for a system-only runtime, inject a default effort, or ask callers to duplicate run identity in `Env` |
 | Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |
 
