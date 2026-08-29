@@ -66,9 +66,11 @@ surfaces remain unchanged. See [docs/architecture.md](docs/architecture.md).
   memory accounting, speculative decoding, load/unload, inference-busy,
   pressure sequencing, and model-harness local/SSH profile expansion.
   `ResolveContract` returns declaration data only and never calls plugin
-  derivation; `ValidateCandidateValue` checks fact-specific shape only. Neither
-  is a production observation gate. Read-failed, malformed, and unsupported
-  derivations refuse, while agents-infra owns process-derived values.
+  derivation; `ValidateCandidateValue` checks fact-specific shape only. Every
+  non-optional structured field must be present and non-null, so an omitted Go
+  zero value cannot become observed data. Neither API is a production
+  observation gate. Read-failed, malformed, and unsupported derivations refuse,
+  while agents-infra owns process-derived values.
 - `agentic.BuildMultiNodePlan` adds typed engine and sidecar process nodes while
   preserving the legacy primary `Plan` fields.
 
@@ -760,4 +762,4 @@ concluding that a missing golden is permission.
 | board-facts mutation harness | narrow every gate the board-facts port added — lifecycle, score, supersession, recommendation, context window, pricing, the vendor-unresolved runtime's rows, the derived lineup and the digest serialization — and confirm the suite goes red naming the right test. Every mutant is a compile-clean NARROWING rather than a deletion, so a kill proves the class is covered rather than the line is present | `python3 .temp/TASK-260824-y7gyco/mutants.py` | `.temp/TASK-260824-y7gyco/mutants-01.log` |
 | regress mutation harness | narrow every gate `make regress` claims to hold, one at a time, and confirm the net goes red naming the right test | `python3 .temp/TASK-260823-4f5t1m/mutants.py` | `.temp/TASK-260823-4f5t1m/mutants-*.log` |
 | refusal-matrix harness | copy the current tree, narrow each raw plugin, typed plan and vendor-registration error class independently, and require its named production-entry negative to fail with exit `1` | `python3 .scripts/verify-refusal-matrix.py` | `.temp/TASK-260830-1jpse1/mutants/{summary.tsv,*.log}` |
-| inference-engine contract mutant harness | narrow the declaration-only trust boundary, readiness residency predicate, and unsupported-refusal check independently, requiring each named external-package test to fail compile-clean with exit `1` | `make contract-mutants` | `.temp/TASK-260830-ter72z/contract-mutants/{summary.tsv,*.log}` |
+| inference-engine contract mutant harness | narrow the declaration-only trust boundary, readiness residency predicate, unsupported-refusal check, speculative `active` presence, and restart `max_restarts` presence independently, requiring each named external-package test to fail compile-clean with exit `1` | `make contract-mutants` | `.temp/TASK-260830-ter72z/contract-mutants/{summary.tsv,*.log}` |

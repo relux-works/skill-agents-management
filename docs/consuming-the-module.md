@@ -184,6 +184,12 @@ binds local executable/argv versus SSH forwarding plus stress/restart policy to
 `ExecutionOwner == "agents-infra"`; this module runs no process, SSH, polling,
 or supervision operation.
 
+Structured candidates must include every field whose contract tag is not
+optional. Omission is refused with the fact and field name, and JSON `null` is
+not a substitute for a required scalar. Explicit zero remains valid where the
+fact permits it, including speculative `active=false` and restart
+`max_restarts=0`.
+
 There is no production observation caller in this module or agents-infra at
 this revision. `ResolveContract` is therefore not a production gate. Adoption
 must add the agents-infra call site and real-entry negatives before any consumer

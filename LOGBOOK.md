@@ -5,6 +5,13 @@
 
 ## 2026-08-30
 
+### 1038 — Required fact fields cannot default into evidence
+- ROOT CAUSE: `decodeStrict` rejected unknown JSON fields but decoded omitted or `null` scalar fields into ordinary Go zero values; `active=false` and `max_restarts=0` then passed `ValidateCandidateValue` as if reported.
+- FIX: One reflection-driven strict object decoder requires every non-`omitempty` JSON tag to be present and non-null before semantic validation. `pkg/inferenceengine/contract.go`.
+- FINDING: Audit covered 10 struct shapes, 11 JSON fact schemas, 35 distinct required tags, and 38 fact-field occurrences. Only speculative `active` and restart `max_restarts` omissions previously returned nil; all other omissions failed later without naming the missing field.
+- TEST: External-package matrix removes and nulls all 38 required occurrences; explicit `active=false` and `max_restarts=0` remain valid. Two compile-clean narrowing mutants exempt one field each and are killed through `ValidateCandidateValue`.
+- STATUS: Revision 4 candidate; `ExecutionOwner` remains `agents-infra` and no process, SSH, polling, or supervision execution moved.
+
 ### 0832 — Plugin registration repeated the observer trust regression
 - REGRESSION: Revision 2 renamed caller-owned `Observer` to caller-registered `Engine`; public `DeriveObservation` plus `ObserveValue` still let a consumer mint canonical argv and expose it through `ResolveObserved`.
 - ROOT CAUSE: Registration identity was mistaken for evidence authority. A public plugin callback cannot prove that agents-infra derived a value from its observed process.

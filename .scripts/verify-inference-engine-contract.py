@@ -39,6 +39,18 @@ MUTATIONS = [
         "\t\tgotWithoutUnsupported := got\n\t\twantWithoutUnsupported := want\n\t\tgotWithoutUnsupported.OnFailure.Unsupported = FailureActionRefuse\n\t\twantWithoutUnsupported.OnFailure.Unsupported = FailureActionRefuse\n\t\tif gotWithoutUnsupported != wantWithoutUnsupported {\n\t\t\treturn Contract{}, fmt.Errorf(\"%w: %s must use source %q, value contract %q, and refuse read-failed, malformed, and unsupported derivations\", ErrContractInvalid, want.Fact, want.Source, want.ValueContract)\n\t\t}",
         "TestResolveContractRefusesFallbacksAndUntrustedSources/unsupported_silently_dropped",
     ),
+    Mutation(
+        "required-speculative-active-presence",
+        "\t\trawValue, found := supplied[name]\n\t\tif !found {",
+        "\t\trawValue, found := supplied[name]\n\t\tif !found && name != \"active\" {",
+        "TestZeroValuedRequiredFieldsDistinguishExplicitFromOmitted/speculative_active_false",
+    ),
+    Mutation(
+        "required-restart-max-presence",
+        "\t\trawValue, found := supplied[name]\n\t\tif !found {",
+        "\t\trawValue, found := supplied[name]\n\t\tif !found && name != \"max_restarts\" {",
+        "TestZeroValuedRequiredFieldsDistinguishExplicitFromOmitted/restart_max_zero",
+    ),
 ]
 
 

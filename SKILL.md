@@ -68,10 +68,12 @@ it returns no observations and never calls plugin derivation. The facts cover
 argv spelling, stream field, health/readiness, artifact shape, mapping-aware
 memory, speculative decoding, load/unload, inference-busy, pressure ordering,
 and local/SSH model-harness expansion. `ValidateCandidateValue` validates only
-fact-specific shape, never provenance or admission. Read-failed, malformed, and
-unsupported derivations must refuse. agents-infra retains OS process, SSH,
-polling, and supervision execution and must derive any effective value through
-its own non-replaceable composition path.
+fact-specific shape, never provenance or admission. Structured candidates must
+report every non-optional field explicitly and non-null; omission never defaults
+to a Go zero value. Read-failed, malformed, and unsupported derivations must
+refuse. agents-infra retains OS process, SSH, polling, and supervision execution
+and must derive any effective value through its own non-replaceable composition
+path.
 
 A plugin id and a runtime id are different facts and often different spellings:
 the agentic-system plugin is `claude-code`, `qwen-code`, `antigravity`; the frozen

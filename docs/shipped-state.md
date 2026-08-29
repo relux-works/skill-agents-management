@@ -45,15 +45,20 @@ task-cited engine difference inventory. `Engine` is declaration-only;
 Every fact has its own closed value contract, and every rule fixes explicit
 refusal for read-failed, malformed, and unsupported derivations.
 `ValidateCandidateValue` validates shape only: it is not provenance or an
-admission gate. Model-harness local executable/argv versus SSH forwarding and
-stress/restart policy are declaration data with `agents-infra` pinned as the
-execution owner. No process, signal, SSH, readiness polling, or supervision
-execution moved into this repository.
+admission gate. Revision 4 additionally requires every non-optional structured
+field to be present and non-null before semantic validation. The audit covered
+35 distinct required tags / 38 fact-field occurrences across 11 JSON facts;
+only speculative `active` and restart `max_restarts` had previously admitted an
+omitted field with a nil error. Model-harness local executable/argv versus SSH
+forwarding and stress/restart policy are declaration data with `agents-infra`
+pinned as the execution owner. No process, signal, SSH, readiness polling, or
+supervision execution moved into this repository.
 
 **Production status:** unconsumed. Neither this repository nor agents-infra has
-a production caller for the candidate contract. Revision 3 removes the earlier
+a production caller for the candidate contract. Revision 3 removed the earlier
 false production-gate claim instead of pretending a plugin callback is an
-agents-infra trust boundary. Actual adoption remains agents-infra-owned and
+agents-infra trust boundary; revision 4 closes absent required evidence inside
+the remaining shape validator. Actual adoption remains agents-infra-owned and
 requires real-entry tests over its process-derived evidence.
 
 ## The stories

@@ -146,6 +146,17 @@ canonicalizes candidate shape only. Passing it says nothing about who obtained
 the bytes; only agents-infra's non-replaceable process composition may decide
 that a candidate is observed.
 
+For every structured fact schema, all fields without `omitempty` are required
+evidence. The strict object decoder first rejects unknown fields, then checks
+presence and rejects JSON `null` before semantic validation. This preserves the
+difference between an explicit legitimate zero (`active=false` or
+`max_restarts=0`) and no report at all. Revision 4 audited 10 struct shapes used
+by 11 JSON fact schemas: 35 distinct required JSON tags and 38 fact-field
+occurrences because load and unload share the three-field transition shape.
+Only two omissions had previously reached a nil error: speculative `active` and
+restart `max_restarts`; every other omission already failed a downstream
+semantic predicate but did not name the missing evidence.
+
 The v1 fact inventory is closed and came from the measured engine comparison:
 
 | Fact | Closed value and required semantics | Cannot express | Measurement provenance |

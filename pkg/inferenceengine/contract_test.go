@@ -1,9 +1,11 @@
 package inferenceengine_test
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
@@ -158,6 +160,114 @@ func TestValidateCandidateValueAcceptsClosedFactSpecificShapes(t *testing.T) {
 		t.Run(string(definition.Fact), func(t *testing.T) {
 			if canonical, err := inferenceengine.ValidateCandidateValue(definition.Fact, raw); err != nil || canonical == "" {
 				t.Fatalf("ValidateCandidateValue(%s) = %q, %v", definition.Fact, canonical, err)
+			}
+		})
+	}
+}
+
+func TestStructuredFactSchemasRequireEveryDeclaredField(t *testing.T) {
+	abs := func(path string) string {
+		value, err := filepath.Abs(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	tests := []struct {
+		fact     inferenceengine.Fact
+		value    map[string]any
+		required []string
+	}{
+		{inferenceengine.FactHealth, map[string]any{"process_alive": true, "endpoint_answering": true}, []string{"process_alive", "endpoint_answering"}},
+		{inferenceengine.FactReadiness, map[string]any{"endpoint_answering": true, "weights_resident": true}, []string{"endpoint_answering", "weights_resident"}},
+		{inferenceengine.FactWeightArtifact, map[string]any{"shape": "gguf", "weight_files": []string{abs("model.gguf")}}, []string{"shape", "weight_files"}},
+		{inferenceengine.FactMemoryAccounting, map[string]any{"artifact_mapping": "memory-mapped", "method": "process-footprint-plus-mapped-resident-pages", "bytes": 4096}, []string{"artifact_mapping", "method", "bytes"}},
+		{inferenceengine.FactSpeculativeDecoding, map[string]any{"capability": "supported", "active": false}, []string{"capability", "active"}},
+		{inferenceengine.FactLoadState, map[string]any{"state": "resident", "transition": "loaded", "sequence": 1}, []string{"state", "transition", "sequence"}},
+		{inferenceengine.FactUnloadState, map[string]any{"state": "not-resident", "transition": "unloaded", "sequence": 2}, []string{"state", "transition", "sequence"}},
+		{inferenceengine.FactInferenceBusy, map[string]any{"state": "idle", "sequence": 3}, []string{"state", "sequence"}},
+		{inferenceengine.FactMemoryPressureSequence, map[string]any{"pressure_state": "pressured", "load_state": "resident", "unload_state": "loaded", "inference_busy": "idle", "order": []string{"pressure", "load-state", "unload-state", "inference-busy", "relief-action"}, "action": "drain-idle"}, []string{"pressure_state", "load_state", "unload_state", "inference_busy", "order", "action"}},
+		{inferenceengine.FactSSHForwarding, map[string]any{"mode": "ssh", "profile": "qwen-remote", "local_host": "127.0.0.1", "local_port": 18011, "remote_host": "127.0.0.1", "remote_port": 18011}, []string{"mode", "profile", "local_host", "local_port", "remote_host", "remote_port"}},
+		{inferenceengine.FactStressPolicy, map[string]any{"mode": "synthetic-prefill", "prompt_tokens": 4096, "output_tokens": 32, "memory_sample": "process-and-mappings"}, []string{"mode", "prompt_tokens", "output_tokens", "memory_sample"}},
+		{inferenceengine.FactRestartSupervisionPolicy, map[string]any{"mode": "bounded-backoff", "max_restarts": 0, "backoff_seconds": []int{1, 2, 4}}, []string{"mode", "max_restarts", "backoff_seconds"}},
+	}
+	requiredOccurrences := 0
+	for _, test := range tests {
+		requiredOccurrences += len(test.required)
+		for _, missing := range test.required {
+			t.Run(string(test.fact)+"/missing_"+missing, func(t *testing.T) {
+				candidate := make(map[string]any, len(test.value)-1)
+				for name, value := range test.value {
+					if name != missing {
+						candidate[name] = value
+					}
+				}
+				raw, err := json.Marshal(candidate)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = inferenceengine.ValidateCandidateValue(test.fact, string(raw))
+				if !errors.Is(err, inferenceengine.ErrObservationMalformed) ||
+					!strings.Contains(err.Error(), string(test.fact)) ||
+					!strings.Contains(err.Error(), `missing required field "`+missing+`"`) {
+					t.Fatalf("missing %s.%s was not named: %v", test.fact, missing, err)
+				}
+			})
+			t.Run(string(test.fact)+"/null_"+missing, func(t *testing.T) {
+				candidate := make(map[string]any, len(test.value))
+				for name, value := range test.value {
+					candidate[name] = value
+				}
+				candidate[missing] = nil
+				raw, err := json.Marshal(candidate)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = inferenceengine.ValidateCandidateValue(test.fact, string(raw))
+				if !errors.Is(err, inferenceengine.ErrObservationMalformed) ||
+					!strings.Contains(err.Error(), string(test.fact)) ||
+					!strings.Contains(err.Error(), `required field "`+missing+`" must not be null`) {
+					t.Fatalf("null %s.%s was not refused by name: %v", test.fact, missing, err)
+				}
+			})
+		}
+	}
+	if requiredOccurrences != 38 {
+		t.Fatalf("audited %d required fact-field occurrences, want 38", requiredOccurrences)
+	}
+}
+
+func TestZeroValuedRequiredFieldsDistinguishExplicitFromOmitted(t *testing.T) {
+	tests := []struct {
+		name     string
+		fact     inferenceengine.Fact
+		field    string
+		explicit string
+		omitted  string
+	}{
+		{
+			name:     "speculative active false",
+			fact:     inferenceengine.FactSpeculativeDecoding,
+			field:    "active",
+			explicit: `{"capability":"supported","active":false}`,
+			omitted:  `{"capability":"supported"}`,
+		},
+		{
+			name:     "restart max zero",
+			fact:     inferenceengine.FactRestartSupervisionPolicy,
+			field:    "max_restarts",
+			explicit: `{"mode":"bounded-backoff","max_restarts":0,"backoff_seconds":[1,2,4]}`,
+			omitted:  `{"mode":"bounded-backoff","backoff_seconds":[1,2,4]}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := inferenceengine.ValidateCandidateValue(test.fact, test.explicit); err != nil {
+				t.Fatalf("explicit zero refused: %v", err)
+			}
+			_, err := inferenceengine.ValidateCandidateValue(test.fact, test.omitted)
+			if !errors.Is(err, inferenceengine.ErrObservationMalformed) || !strings.Contains(err.Error(), `missing required field "`+test.field+`"`) {
+				t.Fatalf("omitted zero-valued field admitted: %v", err)
 			}
 		})
 	}

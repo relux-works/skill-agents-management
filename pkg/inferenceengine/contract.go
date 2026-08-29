@@ -379,7 +379,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return raw, nil
 	case FactHealth:
 		var value healthValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if !value.ProcessAlive || !value.EndpointAnswering {
@@ -388,7 +388,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return encode(value)
 	case FactReadiness:
 		var value readinessValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if !value.EndpointAnswering || !value.WeightsResident {
@@ -397,7 +397,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return encode(value)
 	case FactWeightArtifact:
 		var value weightArtifactValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if err := validateWeightArtifact(value); err != nil {
@@ -406,7 +406,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return encode(value)
 	case FactMemoryAccounting:
 		var value memoryAccountingValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if value.Bytes <= 0 {
@@ -427,7 +427,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return encode(value)
 	case FactSpeculativeDecoding:
 		var value speculativeDecodingValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if value.Capability != "supported" && value.Capability != "absent" {
@@ -443,7 +443,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return validateTransition(raw, "not-resident", "unloaded", "unload")
 	case FactInferenceBusy:
 		var value busyValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if (value.State != "busy" && value.State != "idle") || value.Sequence <= 0 {
@@ -452,7 +452,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return encode(value)
 	case FactMemoryPressureSequence:
 		var value pressureSequenceValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if err := validatePressureSequence(value); err != nil {
@@ -461,7 +461,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return encode(value)
 	case FactSSHForwarding:
 		var value sshForwardingValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if value.Mode != "ssh" || strings.TrimSpace(value.Profile) == "" || value.LocalHost != "127.0.0.1" || value.LocalPort <= 0 || value.RemoteHost != "127.0.0.1" || value.RemotePort <= 0 {
@@ -470,7 +470,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return encode(value)
 	case FactStressPolicy:
 		var value stressPolicyValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if value.Mode != "synthetic-prefill" || value.PromptTokens <= 0 || value.OutputTokens <= 0 || value.MemorySample != "process-and-mappings" {
@@ -479,7 +479,7 @@ func validateCandidateValue(fact Fact, raw string) (string, error) {
 		return encode(value)
 	case FactRestartSupervisionPolicy:
 		var value restartPolicyValue
-		if err := decodeStrict(raw, &value); err != nil {
+		if err := decodeStrictObject(raw, &value); err != nil {
 			return "", err
 		}
 		if value.Mode != "bounded-backoff" || value.MaxRestarts < 0 || len(value.BackoffSeconds) == 0 {
@@ -614,7 +614,7 @@ func decodeArgv(raw string) (string, []string, error) {
 
 func validateTransition(raw, state, transition, label string) (string, error) {
 	var value transitionValue
-	if err := decodeStrict(raw, &value); err != nil {
+	if err := decodeStrictObject(raw, &value); err != nil {
 		return "", err
 	}
 	if value.State != state || value.Transition != transition || value.Sequence <= 0 {
@@ -717,6 +717,42 @@ func decodeStrict(raw string, destination any) error {
 			return errors.New("trailing JSON value")
 		}
 		return err
+	}
+	return nil
+}
+
+// decodeStrictObject makes required-field presence part of every structured
+// fact schema. Non-omitempty JSON fields must be reported explicitly; Go zero
+// values and null must never stand in for evidence that was not supplied.
+func decodeStrictObject(raw string, destination any) error {
+	if err := decodeStrict(raw, destination); err != nil {
+		return err
+	}
+
+	destinationType := reflect.TypeOf(destination)
+	if destinationType == nil || destinationType.Kind() != reflect.Pointer || destinationType.Elem().Kind() != reflect.Struct {
+		return errors.New("structured fact destination must be a pointer to a struct")
+	}
+	var supplied map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &supplied); err != nil {
+		return err
+	}
+	for index := 0; index < destinationType.Elem().NumField(); index++ {
+		field := destinationType.Elem().Field(index)
+		name, options, _ := strings.Cut(field.Tag.Get("json"), ",")
+		if name == "" {
+			name = field.Name
+		}
+		if name == "-" || strings.Contains(","+options+",", ",omitempty,") {
+			continue
+		}
+		rawValue, found := supplied[name]
+		if !found {
+			return fmt.Errorf("missing required field %q", name)
+		}
+		if bytes.Equal(bytes.TrimSpace(rawValue), []byte("null")) {
+			return fmt.Errorf("required field %q must not be null", name)
+		}
 	}
 	return nil
 }
