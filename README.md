@@ -65,8 +65,10 @@ surfaces remain unchanged. See [docs/architecture.md](docs/architecture.md).
   argv spelling, reasoning stream field, health/readiness, weight shape, valid
   memory accounting, speculative decoding, load/unload, inference-busy,
   pressure sequencing, and model-harness local/SSH profile expansion. Every
-  absent, malformed, or unsupported fact is refused; caller defaults do not
-  exist on the resolution API.
+  engine kind returns one of three sealed outcomes: a canonical observed value,
+  an observed absence, or not observed. Read-failed, malformed, unsupported,
+  and unknown not-observed causes refuse; caller evidence/defaults do not exist
+  on the resolution API.
 - `agentic.BuildMultiNodePlan` adds typed engine and sidecar process nodes while
   preserving the legacy primary `Plan` fields.
 

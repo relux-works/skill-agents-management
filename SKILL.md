@@ -66,10 +66,12 @@ An inference-engine declaration is not capability evidence by itself. Resolve
 it through `inferenceengine.ResolveObserved`: all measured facts (argv spelling,
 stream field, health/readiness, artifact shape, memory accounting, speculative
 decoding, load/unload, inference-busy, pressure sequencing, and local/SSH
-profile expansion) must come from the process observer. Absent, malformed,
-unsupported, and failed reads refuse distinctly; no caller default can enter
-the API. The engine contract declares stress/restart policy, while agents-infra
-retains OS process, SSH, and supervision execution.
+profile expansion) must be derived by the selected `Engine` kind. The resolver
+accepts exactly a canonical observed value or a typed observed absence;
+read-failed, malformed, unsupported, and unknown derivations refuse distinctly.
+There is no caller-owned observer or value parameter. The engine contract
+declares stress/restart policy, while agents-infra retains OS process, SSH, and
+supervision execution.
 
 A plugin id and a runtime id are different facts and often different spellings:
 the agentic-system plugin is `claude-code`, `qwen-code`, `antigravity`; the frozen

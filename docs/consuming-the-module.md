@@ -165,23 +165,25 @@ An inference-engine consumer must additionally resolve the typed observed
 contract rather than treating graph registration as capability evidence:
 
 ```go
-resolved, err := inferenceengine.ResolveObserved(ctx, registry, "llama-cpp", observer)
+resolved, err := inferenceengine.ResolveObserved(ctx, registry, "llama-cpp")
 if err != nil {
-    // Includes distinct absent, malformed, unsupported, and read-failure
-    // refusals. There is deliberately no configured fallback argument.
+    // Includes distinct malformed, unsupported, and read-failure refusals.
+    // There is deliberately no observer, caller evidence, or fallback argument.
     return err
 }
-_ = resolved.Observations
+_ = resolved.Results // ObservedValue or ObservedAbsent for every fact.
 ```
 
-`observer` is the agents-infra implementation that reads the process, endpoint,
-argv, artifacts, and supervision state described by each rule. A concrete
-engine implements `inferenceengine.Engine` and returns all rules from
-`inferenceengine.MeasuredFacts()`, each with a process observation method, value
-grammar, and `refuse` for absent/malformed/unsupported. The contract also binds
-model-harness local executable/argv versus SSH forwarding and stress/restart
-policy to `ExecutionOwner == "agents-infra"`; this module validates those
-declarations but never runs process or SSH operations.
+A concrete engine implements `inferenceengine.Engine`, returns all rules from
+`inferenceengine.MeasuredFacts()`, and owns `DeriveObservation` for those rules.
+agents-infra composes that implementation with its process, endpoint, argv,
+artifact, and supervision readers; callers cannot inject a second observer.
+Each rule selects a closed value grammar and `refuse` for read-failed,
+malformed, and unsupported derivations. A positive measured absence is the
+distinct `ObservedAbsent` success result. The contract also binds model-harness
+local executable/argv versus SSH forwarding and stress/restart policy to
+`ExecutionOwner == "agents-infra"`; this module validates those declarations
+but never runs process or SSH operations.
 
 Existing system plugins can opt into a graph prerequisite without changing the
 `System` interface:
@@ -224,7 +226,7 @@ digests, and a rebind orphans that state with no error anywhere.
 | You want | Call | It does not |
 | --- | --- | --- |
 | The launch surface for one (system, mode) | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` | execute anything |
-| Resolve the facts an engine consumer may rely on | `inferenceengine.ResolveObserved(ctx, graph, engineID, observer)` → typed contract plus process-origin observations | substitute caller/config values, collapse read failure into absence, execute or supervise a process |
+| Resolve the facts an engine consumer may rely on | `inferenceengine.ResolveObserved(ctx, graph, engineID)` → typed contract plus sealed engine-derived value/absence results | inject caller evidence/defaults, collapse read failure into absence, execute or supervise a process |
 | Add engine/sidecar process nodes | `agentic.BuildMultiNodePlan(primary, primaryDependencies, nodes...)` → the same primary fields plus dependency-ordered `Plan.Nodes` | execute, supervise or attest a process |
 | The same, resolved through a runtime launch binding | `vendorplugin.BuildLaunch(ctx, registry, SpawnRequest{…}, mode)` — resolves either an established vendor binding or an explicit declaration-owned system-only binding, validates the effort word against the owning model row, preserves typed `RunContext`, asks a vendor for a `LaunchRequest` when one exists (refusing redirects, including changed/dropped tracked-run identity), otherwise projects the validated declaration losslessly, runs the resolved system's `Preflightable` check unless dry-run, then hands it to `BuildPlan` | execute anything, fabricate a vendor for a system-only runtime, inject a default effort, or ask callers to duplicate run identity in `Env` |
 | Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |

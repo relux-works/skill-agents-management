@@ -5,6 +5,14 @@
 
 ## 2026-08-30
 
+### 0744 — A provenance label is not process evidence
+- ROOT CAUSE: `ResolveObserved` accepted a caller-owned `Observer`; its public result fields let the same caller mint `origin=observed-process`, repeat the declared method, and inject any non-empty value. The gate checked the caller's labels instead of owning or independently verifying derivation.
+- FIX: `Engine.DeriveObservation` now owns derivation and `ResolveObserved(ctx, registry, id)` has no evidence/value parameter. Sealed result types carry private metadata; the production entry independently enforces closed canonical value grammars. `pkg/inferenceengine/contract.go`.
+- DECISION: Exactly three result types exist: `ObservedValue`, successful `ObservedAbsent`, and refusing `NotObserved`. Read failure/malformed/unsupported are causes of `NotObserved`; a failed read cannot become absence.
+- TEST: Production-entry negatives stamp the previously accepted origin label without finding an input channel, reject `caller-supplied --ctx-size 999999` under `argv-tokens/v1`, and distinguish speculative-decoding absence from endpoint read failure. `pkg/inferenceengine/contract_test.go`.
+- SCOPE: OS process, SSH, health polling, and supervision execution remain in agents-infra; the agents-infra-composed engine kind owns the derivation call.
+- STATUS: Supersedes the 0701 observer-label and absence-as-refusal design before release.
+
 ### 0701 — Inference-engine facts are observed or refused
 - DECISION: `pkg/inferenceengine.ResolveObserved` accepts the closed v1 measured-fact inventory only from a matching `observed-process` method; no caller/config fallback enters the API.
 - DECISION: Absent, malformed, unsupported, and read failure remain distinct refusals. Engine inability to express a fact is supported as `ErrObservationUnsupported`, never silent omission.

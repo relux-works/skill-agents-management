@@ -130,14 +130,21 @@ invariant is deliberately stronger than configuration validation:
 > Every fact a consumer relies on is derived from the observed process or the
 > resolution is refused.
 
-There is no caller-default parameter. Every `ObservationRule` names the process
-observation method, the canonical value contract, and the three independent
-failure outcomes. `absent`, `malformed`, and `unsupported` must each be
-`refuse`; an unrecognized outcome also refuses. An observer read error is
-`ErrObservationRead`, not absence. A plugin that cannot express a fact declares
-its observation `unsupported`, and resolution returns
-`ErrObservationUnsupported`. That is a supported engine answer, not a gap to
-fill with configuration.
+There is no caller observer, evidence, or default parameter. Every
+`ObservationRule` names the engine-owned derivation method, a closed typed value
+contract, and the independent read-failed/malformed/unsupported refusal policy.
+The result vocabulary has exactly three sealed outcomes:
+
+1. `ObservedValue` — a value parsed and normalized by the declared contract;
+2. `ObservedAbsent` — the kind positively established absence, which reaches
+   `Resolution` as a measured fact with no fallback value;
+3. `NotObserved` — read failure, malformed evidence, unsupported derivation, or
+   an unknown cause; resolution refuses it.
+
+A plugin that cannot express a fact returns `NotObservedUnsupported`, and
+resolution returns `ErrObservationUnsupported`. A failed or partial read returns
+`NotObservedReadFailure` and can never become `ObservedAbsent`. These are
+supported engine answers, not gaps to fill with configuration.
 
 The v1 fact inventory is closed and came from the measured engine comparison:
 
@@ -168,11 +175,20 @@ ownership decision moves them.
 
 `ResolveObserved` first resolves the real general registry entry, requires the
 `inference-engine` kind and typed `Engine` contract, reads the contract twice to
-refuse an unstable declaration, then drives every rule through a consumer-owned
-`Observer`. It accepts only `ObservationObserved` with the declared fact and
-method, `observed-process` provenance, and a non-empty canonical value. This is
-the production gate named by the contract tests; testing a helper alone would
-not establish the boundary.
+refuse an unstable declaration, then asks that same `Engine` kind to derive
+every rule. The entry point takes only context, registry, and engine ID: a
+caller-stamped structure — even one saying `origin=observed-process` — has no
+input channel. `ObservationResult` is sealed with private metadata, while
+`ResolveObserved` independently revalidates the fact/method/contract tuple and
+canonical value before exposing it. This is the production gate named by the
+contract tests; testing a constructor alone would not establish the boundary.
+
+The closed value grammars are `argv-tokens/v1` for argv facts,
+`json-field-path/v1` for the reasoning stream field, `absolute-path/v1` for the
+local executable, and `canonical-json-object/v1` for structured engine state,
+artifact, capability, forwarding, stress, and restart facts. Invalid raw input
+becomes `NotObservedMalformed`; a non-empty arbitrary string is never accepted
+merely because an engine labels it observed.
 
 Both `pi` and `local-models` can depend on the same engine node while retaining
 the existing vendor→system edge: engine → system → vendor in dependency-first

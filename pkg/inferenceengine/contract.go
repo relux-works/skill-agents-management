@@ -1,10 +1,15 @@
 package inferenceengine
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/relux-works/skill-agents-management/pkg/plugin"
@@ -93,18 +98,30 @@ const FailureActionRefuse FailureAction = "refuse"
 // FailurePolicy closes the three non-observed outcomes independently. There
 // is no caller-value or configured-default field in this contract.
 type FailurePolicy struct {
-	Absent      FailureAction
+	ReadFailure FailureAction
 	Malformed   FailureAction
 	Unsupported FailureAction
 }
 
-// ObservationRule tells an agents-infra observer exactly what to read and how
-// to parse a value. FailurePolicy is mandatory even when an engine cannot
-// express the fact: Unsupported=refuse is a supported declaration.
+// ValueContract is a closed grammar that the resolver can validate without
+// trusting an engine's description of its own value.
+type ValueContract string
+
+const (
+	ValueContractArgvTokens      ValueContract = "argv-tokens/v1"
+	ValueContractJSONFieldPath   ValueContract = "json-field-path/v1"
+	ValueContractAbsolutePath    ValueContract = "absolute-path/v1"
+	ValueContractCanonicalObject ValueContract = "canonical-json-object/v1"
+)
+
+// ObservationRule tells an agents-infra-composed engine kind exactly what to
+// derive and how to parse a value. FailurePolicy is mandatory even when an
+// engine cannot express the fact: Unsupported=refuse is a supported
+// declaration.
 type ObservationRule struct {
 	Fact          Fact
 	Method        string
-	ValueContract string
+	ValueContract ValueContract
 	OnFailure     FailurePolicy
 }
 
@@ -127,55 +144,123 @@ type Contract struct {
 	ProfileExpansion ModelHarnessExpansion
 }
 
-// Engine is a graph plugin that declares the complete observed-process
-// contract for its engine kind.
+// Engine is a graph plugin that declares and derives the complete
+// observed-process contract for its engine kind. The concrete implementation
+// is composed by agents-infra; ResolveObserved never accepts a caller-owned
+// observer or caller value.
 type Engine interface {
 	plugin.Plugin
 	EngineContract() Contract
+	DeriveObservation(context.Context, ObservationRule) ObservationResult
 }
 
-// ObservationState is the observer's result. Unknown values are malformed,
-// never future-compatible success.
-type ObservationState string
+// Outcome is the complete result vocabulary for one derivation. Absence is a
+// successful measured fact; it is not a failed read and not a string value.
+type Outcome string
 
 const (
-	ObservationObserved    ObservationState = "observed"
-	ObservationAbsent      ObservationState = "absent"
-	ObservationMalformed   ObservationState = "malformed"
-	ObservationUnsupported ObservationState = "unsupported"
+	OutcomeObservedValue  Outcome = "observed-value"
+	OutcomeObservedAbsent Outcome = "observed-absent"
+	OutcomeNotObserved    Outcome = "not-observed"
 )
 
-// ObservationOrigin distinguishes process evidence from caller-supplied or
-// inferred values.
-type ObservationOrigin string
+// NotObservedCause explains why an engine kind could not derive a fact. Every
+// cause is a refusal at ResolveObserved; it can never become an absence.
+type NotObservedCause string
 
-const ObservationOriginProcess ObservationOrigin = "observed-process"
+const (
+	NotObservedReadFailure NotObservedCause = "read-failure"
+	NotObservedMalformed   NotObservedCause = "malformed"
+	NotObservedUnsupported NotObservedCause = "unsupported"
+)
 
-// Observation is one result produced by the consumer-owned process observer.
-// Method must equal the engine's declared method. Value is engine-specific but
-// must satisfy the declared ValueContract before the observer returns it as
-// Observed.
-type Observation struct {
-	Fact   Fact
-	State  ObservationState
-	Origin ObservationOrigin
-	Method string
-	Value  string
-	Detail string
+type observationMetadata struct {
+	fact          Fact
+	method        string
+	valueContract ValueContract
 }
 
-// Observer is implemented by agents-infra. It may inspect processes,
-// endpoints, argv and artifacts, but this package never starts, stops, signals,
-// forwards to, or supervises an OS process.
-type Observer interface {
-	Observe(context.Context, plugin.Declaration, ObservationRule) (Observation, error)
+// ObservationResult is sealed to this package so a caller cannot implement a
+// look-alike result with self-stamped provenance fields. Engine kinds construct
+// results through the functions below; the resolver independently revalidates
+// metadata and canonical values before exposing them to consumers.
+type ObservationResult interface {
+	observationResult()
+	metadata() observationMetadata
+	Fact() Fact
+	Outcome() Outcome
+}
+
+// ObservedValue is a process-derived value in the rule's canonical grammar.
+// Its fields are private so a caller cannot overwrite the fact, method,
+// contract, or value after derivation.
+type ObservedValue struct {
+	observationMetadata
+	value string
+}
+
+func (ObservedValue) observationResult()                   {}
+func (result ObservedValue) metadata() observationMetadata { return result.observationMetadata }
+func (result ObservedValue) Fact() Fact                    { return result.fact }
+func (ObservedValue) Outcome() Outcome                     { return OutcomeObservedValue }
+func (result ObservedValue) Value() string                 { return result.value }
+func (result ObservedValue) ValueContract() ValueContract  { return result.valueContract }
+
+// ObservedAbsent means the engine kind positively established that the fact
+// is absent. It is a successful result and carries no fallback value.
+type ObservedAbsent struct{ observationMetadata }
+
+func (ObservedAbsent) observationResult()                   {}
+func (result ObservedAbsent) metadata() observationMetadata { return result.observationMetadata }
+func (result ObservedAbsent) Fact() Fact                    { return result.fact }
+func (ObservedAbsent) Outcome() Outcome                     { return OutcomeObservedAbsent }
+
+// NotObserved means derivation did not establish either a value or absence.
+// ResolveObserved refuses every cause.
+type NotObserved struct {
+	observationMetadata
+	cause  NotObservedCause
+	detail string
+}
+
+func (NotObserved) observationResult()                   {}
+func (result NotObserved) metadata() observationMetadata { return result.observationMetadata }
+func (result NotObserved) Fact() Fact                    { return result.fact }
+func (NotObserved) Outcome() Outcome                     { return OutcomeNotObserved }
+func (result NotObserved) Cause() NotObservedCause       { return result.cause }
+func (result NotObserved) Detail() string                { return result.detail }
+
+// ObserveValue parses and canonicalizes one value derived by an Engine kind.
+// Invalid raw bytes become a typed malformed NotObserved result; they never
+// reach a consumer as a plausible string.
+func ObserveValue(rule ObservationRule, raw string) ObservationResult {
+	metadata := metadataFromRule(rule)
+	canonical, err := canonicalizeValue(rule.ValueContract, raw)
+	if err != nil {
+		return NotObserved{observationMetadata: metadata, cause: NotObservedMalformed, detail: err.Error()}
+	}
+	return ObservedValue{observationMetadata: metadata, value: canonical}
+}
+
+// ObserveAbsent records a positive absence derived by an Engine kind.
+func ObserveAbsent(rule ObservationRule) ObservationResult {
+	return ObservedAbsent{observationMetadata: metadataFromRule(rule)}
+}
+
+// ObserveFailure records why an Engine kind could not derive a fact.
+func ObserveFailure(rule ObservationRule, cause NotObservedCause, detail string) ObservationResult {
+	return NotObserved{observationMetadata: metadataFromRule(rule), cause: cause, detail: detail}
+}
+
+func metadataFromRule(rule ObservationRule) observationMetadata {
+	return observationMetadata{fact: rule.Fact, method: rule.Method, valueContract: rule.ValueContract}
 }
 
 // Resolution is the fully observed engine contract returned to a consumer.
 type Resolution struct {
-	Declaration  plugin.Declaration
-	Contract     Contract
-	Observations []Observation
+	Declaration plugin.Declaration
+	Contract    Contract
+	Results     []ObservationResult
 }
 
 var (
@@ -183,16 +268,16 @@ var (
 	ErrContractInvalid        = errors.New("inferenceengine: contract is invalid")
 	ErrContractUnstable       = errors.New("inferenceengine: contract is not stable across reads")
 	ErrObservationRead        = errors.New("inferenceengine: observation read failed")
-	ErrObservationAbsent      = errors.New("inferenceengine: required observation is absent")
 	ErrObservationMalformed   = errors.New("inferenceengine: observation is malformed")
 	ErrObservationUnsupported = errors.New("inferenceengine: observation is unsupported")
 )
 
 // ResolveObserved is the production entry point for an engine consumer. It
 // resolves through the real plugin graph, validates the full engine contract,
-// and refuses unless every required fact is observed from the process. It has
-// no parameter through which a caller could supply a fallback value.
-func ResolveObserved(ctx context.Context, registry *plugin.Registry, id plugin.ID, observer Observer) (Resolution, error) {
+// and refuses unless the engine kind derives either a canonical value or a
+// positive absence for every fact. It has no parameter through which a caller
+// can supply evidence or a fallback value.
+func ResolveObserved(ctx context.Context, registry *plugin.Registry, id plugin.ID) (Resolution, error) {
 	resolved, err := registry.Resolve(id)
 	if err != nil {
 		return Resolution{}, err
@@ -204,10 +289,6 @@ func ResolveObserved(ctx context.Context, registry *plugin.Registry, id plugin.I
 	if !ok {
 		return Resolution{}, fmt.Errorf("%w: %q", ErrEngineContractMissing, resolved.Declaration.ID)
 	}
-	if nilObserver(observer) {
-		return Resolution{}, fmt.Errorf("%w: observer is nil", ErrObservationRead)
-	}
-
 	first := engine.EngineContract()
 	second := engine.EngineContract()
 	if !reflect.DeepEqual(first, second) {
@@ -218,50 +299,48 @@ func ResolveObserved(ctx context.Context, registry *plugin.Registry, id plugin.I
 		return Resolution{}, err
 	}
 
-	observations := make([]Observation, 0, len(contract.Rules))
+	results := make([]ObservationResult, 0, len(contract.Rules))
 	for _, rule := range contract.Rules {
-		observation, readErr := observer.Observe(ctx, resolved.Declaration, rule)
-		if readErr != nil {
-			return Resolution{}, fmt.Errorf("%w: %s: %v", ErrObservationRead, rule.Fact, readErr)
-		}
-		if observation.Fact != rule.Fact || observation.Method != rule.Method || observation.Origin != ObservationOriginProcess {
-			return Resolution{}, fmt.Errorf("%w: %s: fact, method, and process origin must match the declared rule", ErrObservationMalformed, rule.Fact)
-		}
-		switch observation.State {
-		case ObservationObserved:
-			if strings.TrimSpace(observation.Value) == "" {
-				return Resolution{}, fmt.Errorf("%w: %s: observed value is empty", ErrObservationMalformed, rule.Fact)
+		result := engine.DeriveObservation(ctx, rule)
+		switch typed := result.(type) {
+		case ObservedValue:
+			if typed.metadata() != metadataFromRule(rule) {
+				return Resolution{}, fmt.Errorf("%w: %s: engine result does not match the declared rule", ErrObservationMalformed, rule.Fact)
 			}
-		case ObservationAbsent:
-			return Resolution{}, fmt.Errorf("%w: %s", ErrObservationAbsent, rule.Fact)
-		case ObservationMalformed:
-			return Resolution{}, fmt.Errorf("%w: %s", ErrObservationMalformed, rule.Fact)
-		case ObservationUnsupported:
-			return Resolution{}, fmt.Errorf("%w: %s", ErrObservationUnsupported, rule.Fact)
+			canonical, canonicalErr := canonicalizeValue(rule.ValueContract, typed.value)
+			if canonicalErr != nil || canonical != typed.value {
+				return Resolution{}, fmt.Errorf("%w: %s: value violates %s", ErrObservationMalformed, rule.Fact, rule.ValueContract)
+			}
+		case ObservedAbsent:
+			if typed.metadata() != metadataFromRule(rule) {
+				return Resolution{}, fmt.Errorf("%w: %s: engine result does not match the declared rule", ErrObservationMalformed, rule.Fact)
+			}
+			// Positive absence is a measured fact and reaches Resolution.
+		case NotObserved:
+			if typed.metadata() != metadataFromRule(rule) {
+				return Resolution{}, fmt.Errorf("%w: %s: engine result does not match the declared rule", ErrObservationMalformed, rule.Fact)
+			}
+			switch typed.cause {
+			case NotObservedReadFailure:
+				return Resolution{}, fmt.Errorf("%w: %s: %s", ErrObservationRead, rule.Fact, typed.detail)
+			case NotObservedMalformed:
+				return Resolution{}, fmt.Errorf("%w: %s: %s", ErrObservationMalformed, rule.Fact, typed.detail)
+			case NotObservedUnsupported:
+				return Resolution{}, fmt.Errorf("%w: %s: %s", ErrObservationUnsupported, rule.Fact, typed.detail)
+			default:
+				return Resolution{}, fmt.Errorf("%w: %s: unknown not-observed cause %q", ErrObservationMalformed, rule.Fact, typed.cause)
+			}
 		default:
-			return Resolution{}, fmt.Errorf("%w: %s: unknown state %q", ErrObservationMalformed, rule.Fact, observation.State)
+			return Resolution{}, fmt.Errorf("%w: %s: unrecognized result type %T", ErrObservationMalformed, rule.Fact, result)
 		}
-		observations = append(observations, observation)
+		results = append(results, result)
 	}
 
 	return Resolution{
-		Declaration:  cloneDeclaration(resolved.Declaration),
-		Contract:     cloneContract(contract),
-		Observations: append([]Observation(nil), observations...),
+		Declaration: cloneDeclaration(resolved.Declaration),
+		Contract:    cloneContract(contract),
+		Results:     append([]ObservationResult(nil), results...),
 	}, nil
-}
-
-func nilObserver(observer Observer) bool {
-	if observer == nil {
-		return true
-	}
-	value := reflect.ValueOf(observer)
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
-	default:
-		return false
-	}
 }
 
 func validateContract(raw Contract) (Contract, error) {
@@ -284,13 +363,17 @@ func validateContract(raw Contract) (Contract, error) {
 		if _, duplicate := byFact[rule.Fact]; duplicate {
 			return Contract{}, fmt.Errorf("%w: duplicate fact %q", ErrContractInvalid, rule.Fact)
 		}
-		if strings.TrimSpace(rule.Method) == "" || strings.TrimSpace(rule.ValueContract) == "" {
+		if strings.TrimSpace(rule.Method) == "" || rule.ValueContract == "" {
 			return Contract{}, fmt.Errorf("%w: %s needs an observation method and value contract", ErrContractInvalid, rule.Fact)
 		}
-		if rule.OnFailure.Absent != FailureActionRefuse ||
+		wantValueContract := valueContractForFact(rule.Fact)
+		if rule.ValueContract != wantValueContract {
+			return Contract{}, fmt.Errorf("%w: %s value contract is %q, want %q", ErrContractInvalid, rule.Fact, rule.ValueContract, wantValueContract)
+		}
+		if rule.OnFailure.ReadFailure != FailureActionRefuse ||
 			rule.OnFailure.Malformed != FailureActionRefuse ||
 			rule.OnFailure.Unsupported != FailureActionRefuse {
-			return Contract{}, fmt.Errorf("%w: %s must refuse absent, malformed, and unsupported observations", ErrContractInvalid, rule.Fact)
+			return Contract{}, fmt.Errorf("%w: %s must refuse read-failed, malformed, and unsupported derivations", ErrContractInvalid, rule.Fact)
 		}
 		byFact[rule.Fact] = rule
 	}
@@ -317,6 +400,82 @@ func validateContract(raw Contract) (Contract, error) {
 		return Contract{}, fmt.Errorf("%w: profile expansion must bind local executable/argv, SSH forwarding, stress/restart policy, and execution owner %q", ErrContractInvalid, ExecutionOwner)
 	}
 	return normalized, nil
+}
+
+func valueContractForFact(fact Fact) ValueContract {
+	switch fact {
+	case FactContextArgv, FactPrefillArgv, FactLocalArgv:
+		return ValueContractArgvTokens
+	case FactReasoningStreamField:
+		return ValueContractJSONFieldPath
+	case FactLocalExecutable:
+		return ValueContractAbsolutePath
+	default:
+		return ValueContractCanonicalObject
+	}
+}
+
+var jsonFieldPath = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$`)
+
+func canonicalizeValue(contract ValueContract, raw string) (string, error) {
+	switch contract {
+	case ValueContractArgvTokens:
+		var tokens []string
+		if err := decodeSingleJSON(raw, &tokens); err != nil {
+			return "", fmt.Errorf("argv tokens: %w", err)
+		}
+		if len(tokens) == 0 {
+			return "", errors.New("argv tokens are empty")
+		}
+		for index, token := range tokens {
+			if token == "" {
+				return "", fmt.Errorf("argv token %d is empty", index)
+			}
+		}
+		encoded, _ := json.Marshal(tokens)
+		return string(encoded), nil
+	case ValueContractJSONFieldPath:
+		if !jsonFieldPath.MatchString(raw) {
+			return "", errors.New("field path must contain at least two identifier segments")
+		}
+		return raw, nil
+	case ValueContractAbsolutePath:
+		if !filepath.IsAbs(raw) || filepath.Clean(raw) != raw {
+			return "", errors.New("path must be absolute and clean")
+		}
+		return raw, nil
+	case ValueContractCanonicalObject:
+		var value map[string]json.RawMessage
+		if err := decodeSingleJSON(raw, &value); err != nil {
+			return "", fmt.Errorf("canonical object: %w", err)
+		}
+		if len(value) == 0 {
+			return "", errors.New("canonical object is empty")
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return "", fmt.Errorf("canonical object: %w", err)
+		}
+		return string(encoded), nil
+	default:
+		return "", fmt.Errorf("unknown value contract %q", contract)
+	}
+}
+
+func decodeSingleJSON(raw string, destination any) error {
+	decoder := json.NewDecoder(bytes.NewBufferString(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("trailing JSON value")
+		}
+		return err
+	}
+	return nil
 }
 
 func cloneContract(contract Contract) Contract {
