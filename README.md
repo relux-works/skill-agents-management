@@ -61,14 +61,14 @@ surfaces remain unchanged. See [docs/architecture.md](docs/architecture.md).
 - `RegisterAll` admits a transaction or none of it; `Resolve` and
   `TopologicalOrder` materialize declared edges dependency-first.
 - `pkg/inferenceengine` declares the first new kind without a registry edit.
-- Its observed-process v1 contract closes the measured engine differences:
+- Its declaration-only observed-process v1 specification closes the measured engine differences:
   argv spelling, reasoning stream field, health/readiness, weight shape, valid
   memory accounting, speculative decoding, load/unload, inference-busy,
-  pressure sequencing, and model-harness local/SSH profile expansion. Every
-  engine kind returns one of three sealed outcomes: a canonical observed value,
-  an observed absence, or not observed. Read-failed, malformed, unsupported,
-  and unknown not-observed causes refuse; caller evidence/defaults do not exist
-  on the resolution API.
+  pressure sequencing, and model-harness local/SSH profile expansion.
+  `ResolveContract` returns declaration data only and never calls plugin
+  derivation; `ValidateCandidateValue` checks fact-specific shape only. Neither
+  is a production observation gate. Read-failed, malformed, and unsupported
+  derivations refuse, while agents-infra owns process-derived values.
 - `agentic.BuildMultiNodePlan` adds typed engine and sidecar process nodes while
   preserving the legacy primary `Plan` fields.
 
@@ -746,7 +746,7 @@ concluding that a missing golden is permission.
 | Tool | Purpose | Entry point | Artifacts |
 | --- | --- | --- | --- |
 | `task-board` | board tracking for this repo's work | `task-board q/m/spawn ...` | `.task-board/` |
-| `make` | build, test, vet, regress and install the CLI | `make build` / `test` / `vet` / `regress` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
+| `make` | build, test, vet, regress, inference-contract mutants, and install the CLI | `make build` / `test` / `vet` / `regress` / `contract-mutants` / `install` / `clean` | binary at `tools/agents-management/agents-management`; mutant logs under `.temp/TASK-260830-ter72z/contract-mutants/` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
 | model registry capture | regenerate the vendor fixtures: the source's model rows and frozen v2 tiers (read from its Go sources) and the admitted-pair digests (read from its own binary) | `.scripts/capture-model-registry.sh` | `pkg/vendorplugin/testdata/source-model-registry.json`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`, scratch in `.temp/capture-model-registry/` |
@@ -760,3 +760,4 @@ concluding that a missing golden is permission.
 | board-facts mutation harness | narrow every gate the board-facts port added — lifecycle, score, supersession, recommendation, context window, pricing, the vendor-unresolved runtime's rows, the derived lineup and the digest serialization — and confirm the suite goes red naming the right test. Every mutant is a compile-clean NARROWING rather than a deletion, so a kill proves the class is covered rather than the line is present | `python3 .temp/TASK-260824-y7gyco/mutants.py` | `.temp/TASK-260824-y7gyco/mutants-01.log` |
 | regress mutation harness | narrow every gate `make regress` claims to hold, one at a time, and confirm the net goes red naming the right test | `python3 .temp/TASK-260823-4f5t1m/mutants.py` | `.temp/TASK-260823-4f5t1m/mutants-*.log` |
 | refusal-matrix harness | copy the current tree, narrow each raw plugin, typed plan and vendor-registration error class independently, and require its named production-entry negative to fail with exit `1` | `python3 .scripts/verify-refusal-matrix.py` | `.temp/TASK-260830-1jpse1/mutants/{summary.tsv,*.log}` |
+| inference-engine contract mutant harness | narrow the declaration-only trust boundary, readiness residency predicate, and unsupported-refusal check independently, requiring each named external-package test to fail compile-clean with exit `1` | `make contract-mutants` | `.temp/TASK-260830-ter72z/contract-mutants/{summary.tsv,*.log}` |

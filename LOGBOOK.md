@@ -5,6 +5,13 @@
 
 ## 2026-08-30
 
+### 0832 — Plugin registration repeated the observer trust regression
+- REGRESSION: Revision 2 renamed caller-owned `Observer` to caller-registered `Engine`; public `DeriveObservation` plus `ObserveValue` still let a consumer mint canonical argv and expose it through `ResolveObserved`.
+- ROOT CAUSE: Registration identity was mistaken for evidence authority. A public plugin callback cannot prove that agents-infra derived a value from its observed process.
+- FIX: `Engine` is declaration-only; `ResolveContract` returns no observations and never calls plugin derivation. Every fact has a closed schema; readiness requires resident weights and mmap memory requires mapped-page accounting. `pkg/inferenceengine/contract.go`.
+- DECISION: `ValidateCandidateValue` is shape validation only. No production observation gate exists until agents-infra wires its owned process path; docs state the gap explicitly.
+- TEST: External-package negatives reject caller derivation, false readiness, forged absence/read-failure policy, unsupported drop, and narrowed load/unload/busy/pressure semantics. Three compile-clean narrowing mutants are killed by `.scripts/verify-inference-engine-contract.py`.
+
 ### 0744 — A provenance label is not process evidence
 - ROOT CAUSE: `ResolveObserved` accepted a caller-owned `Observer`; its public result fields let the same caller mint `origin=observed-process`, repeat the declared method, and inject any non-empty value. The gate checked the caller's labels instead of owning or independently verifying derivation.
 - FIX: `Engine.DeriveObservation` now owns derivation and `ResolveObserved(ctx, registry, id)` has no evidence/value parameter. Sealed result types carry private metadata; the production entry independently enforces closed canonical value grammars. `pkg/inferenceengine/contract.go`.

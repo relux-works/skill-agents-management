@@ -123,48 +123,50 @@ plugin identity and plan contributor, not process-lifecycle authority.
 `agentic.ProcessPlan` into a typed launch node; the consumer still starts,
 supervises, stops and attests the process.
 
-The kind's behavioral contract is `inferenceengine.EngineContract` and its
-production resolution entry point is `inferenceengine.ResolveObserved`. The
-invariant is deliberately stronger than configuration validation:
+The kind's behavioral specification is `inferenceengine.EngineContract`.
+`inferenceengine.ResolveContract` validates that declaration through the real
+plugin graph, but it is deliberately not an observation entry point:
 
 > Every fact a consumer relies on is derived from the observed process or the
 > resolution is refused.
 
-There is no caller observer, evidence, or default parameter. Every
-`ObservationRule` names the engine-owned derivation method, a closed typed value
-contract, and the independent read-failed/malformed/unsupported refusal policy.
-The result vocabulary has exactly three sealed outcomes:
+Revision 2 violated that invariant by letting a caller-registered `Engine`
+implement `DeriveObservation` and call public `ObserveValue`. Registration
+changed the label, not the trust boundary. Revision 3 removes both channels:
+`Engine` contributes only `PluginDeclaration` and `EngineContract`, while
+`ResolvedContract` contains declaration data only. A plugin may have extra
+methods, but `ResolveContract` never calls them and has no results field.
 
-1. `ObservedValue` — a value parsed and normalized by the declared contract;
-2. `ObservedAbsent` — the kind positively established absence, which reaches
-   `Resolution` as a measured fact with no fallback value;
-3. `NotObserved` — read failure, malformed evidence, unsupported derivation, or
-   an unknown cause; resolution refuses it.
-
-A plugin that cannot express a fact returns `NotObservedUnsupported`, and
-resolution returns `ErrObservationUnsupported`. A failed or partial read returns
-`NotObservedReadFailure` and can never become `ObservedAbsent`. These are
-supported engine answers, not gaps to fill with configuration.
+Every `ObservationRule` fixes an agents-infra-owned derivation source, a closed
+fact-specific value contract, and independent `refuse` actions for read failure,
+malformed evidence, and unsupported derivation. An engine that cannot express a
+fact is therefore a refusal, never a silent drop, caller value, configured
+default, or inferred absence. `ValidateCandidateValue` validates and
+canonicalizes candidate shape only. Passing it says nothing about who obtained
+the bytes; only agents-infra's non-replaceable process composition may decide
+that a candidate is observed.
 
 The v1 fact inventory is closed and came from the measured engine comparison:
 
-| Fact | Required observation | Measurement provenance |
-| --- | --- | --- |
-| `context-argv` | Effective context/KV capacity and exact spelling: measured MLX Swift `--max-kv-size`; llama.cpp `--ctx-size`. | `TASK-260828-2jbufw`, `TASK-260828-3fgca3` |
-| `prefill-argv` | Prefill chunk and exact spelling: MLX `--prefill-step-size`; llama.cpp `-ub`/`--ubatch-size`. | `TASK-260828-2jbufw`, `TASK-260828-3fgca3` |
-| `reasoning-stream-field` | The actual first-token boundary: `delta.reasoning` or `delta.reasoning_content`. Selecting the wrong one silently corrupts TTFT/prefill/decode timing. | `TASK-260828-2wcrph`, `TASK-260829-3cwcb6` |
-| `health` | Engine-specific liveness endpoint and response semantics. | `TASK-260827-qyebv8`, `TASK-260828-2jbufw` |
-| `readiness` | Evidence that weights are resident, not merely that a runtime endpoint answers. | `TASK-260827-qyebv8`, `TASK-260828-2jbufw` |
-| `weight-artifact` | Complete shape: safetensors shards plus `config.json`, or one `.gguf` plus optional separate `mmproj`. | `TASK-260828-2jbufw`, `TASK-260828-2wcrph` |
-| `memory-accounting` | Accounting valid for the mapping. Mach physical footprint alone is refused for mmap-loaded GGUF weights because it cannot see the clean mapped weight pages. | `TASK-260828-2wcrph`, `TASK-260829-3cwcb6` |
-| `speculative-decoding` | Runtime-observed capability and active state. A GGUF MTP head is not evidence that an MLX build retained or enabled the capability. | `TASK-260828-2wcrph`, `TASK-260829-3cwcb6` |
-| `load-state` / `unload-state` | Observed weight-residency transitions in both directions. | `TASK-260827-qyebv8`, `TASK-260829-1qh0ud` |
-| `inference-busy` | Whether inference is actively using the resident engine. | `TASK-260829-1qh0ud` |
-| `memory-pressure-sequence` | Pressure state and the sequence that consults load, unload, and busy before relief. | `TASK-260829-1qh0ud` |
-| `profile-local-executable` / `profile-local-argv` | Locally observed executable plus the exact argv token vector produced by model-harness profile expansion. | `TASK-260828-2jbufw`, `TASK-260830-12n20p` |
-| `profile-ssh-forwarding` | Remote profile and forwarding declaration chosen instead of a local executable. | `TASK-260828-2jbufw`, `TASK-260830-12n20p` |
-| `profile-stress-policy` | Declarative stress policy selected by the profile. | `TASK-260830-12n20p` |
-| `profile-restart-supervision-policy` | Declarative restart/backoff policy selected by the profile. | `TASK-260829-2t5xmi`, `TASK-260830-12n20p` |
+| Fact | Closed value and required semantics | Cannot express | Measurement provenance |
+| --- | --- | --- | --- |
+| `context-argv` | `context-argv/v1`: exactly `--max-kv-size N` or `--ctx-size N`, positive `N`. | Refuse | `TASK-260828-2jbufw`, `TASK-260828-3fgca3` |
+| `prefill-argv` | `prefill-argv/v1`: exactly `--prefill-step-size N`, `-ub N`, or `--ubatch-size N`, positive `N`. | Refuse | `TASK-260828-2jbufw`, `TASK-260828-3fgca3` |
+| `reasoning-stream-field` | `reasoning-stream-field/v1`: exactly `delta.reasoning` or `delta.reasoning_content`. | Refuse | `TASK-260828-2wcrph`, `TASK-260829-3cwcb6` |
+| `health` | `health/v1`: live process and answering endpoint are both true. | Refuse | `TASK-260827-qyebv8`, `TASK-260828-2jbufw` |
+| `readiness` | `readiness/v1`: answering endpoint and resident weights are both true. `endpoint_answering=true, weights_resident=false` is malformed readiness. | Refuse | `TASK-260827-qyebv8`, `TASK-260828-2jbufw` |
+| `weight-artifact` | `weight-artifact/v1`: safetensors files plus `config.json`, or exactly one GGUF plus optional separate `.gguf` mmproj. | Refuse | `TASK-260828-2jbufw`, `TASK-260828-2wcrph` |
+| `memory-accounting` | `memory-accounting/v1`: mapping, method, and positive bytes. Anonymous weights use Mach physical footprint; memory-mapped weights require process footprint plus mapped resident pages. | Refuse | `TASK-260828-2wcrph`, `TASK-260829-3cwcb6` |
+| `speculative-decoding` | `speculative-decoding/v1`: capability is `supported` or `absent`; active requires supported. Artifact metadata alone is not capability evidence. | Refuse | `TASK-260828-2wcrph`, `TASK-260829-3cwcb6` |
+| `load-state` | `load-state/v1`: `resident/loaded` plus positive sequence. Presence without transition is invalid. | Refuse | `TASK-260827-qyebv8`, `TASK-260829-1qh0ud` |
+| `unload-state` | `unload-state/v1`: `not-resident/unloaded` plus positive sequence. | Refuse | `TASK-260829-1qh0ud` |
+| `inference-busy` | `inference-busy/v1`: explicit `busy` or `idle` plus positive sequence; leases are not a proxy. | Refuse | `TASK-260829-1qh0ud` |
+| `memory-pressure-sequence` | `memory-pressure-sequence/v1`: explicit pressure/load/unload/busy states; order is pressure → load → unload → busy → relief. Busy or unknown refuses new work; pressured+resident+idle drains idle. | Refuse | `TASK-260829-1qh0ud` |
+| `profile-local-executable` | `absolute-path/v1`: clean absolute executable path from model-harness expansion. | Refuse | `TASK-260830-12n20p` |
+| `profile-local-argv` | `local-argv/v1`: non-empty exact argv token vector from local profile expansion. | Refuse | `TASK-260828-2jbufw`, `TASK-260830-12n20p` |
+| `profile-ssh-forwarding` | `ssh-forwarding/v1`: named profile and explicit positive loopback local/remote ports, selected instead of local execution. | Refuse | `TASK-260828-2jbufw`, `TASK-260830-12n20p` |
+| `profile-stress-policy` | `stress-policy/v1`: bounded synthetic prefill/output plus process-and-mappings memory sampling. | Refuse | `TASK-260830-12n20p` |
+| `profile-restart-supervision-policy` | `restart-supervision/v1`: bounded restart count and strictly increasing positive backoff sequence. | Refuse | `TASK-260829-2t5xmi`, `TASK-260830-12n20p` |
 
 `ModelHarnessExpansion` binds the last five facts to the engine node and pins
 `ExecutionOwner` to `agents-infra`. This package stores and validates local
@@ -173,22 +175,20 @@ it never executes them. OS process creation, signals, SSH forwarding, health
 polling and restart supervision remain in agents-infra unless a later explicit
 ownership decision moves them.
 
-`ResolveObserved` first resolves the real general registry entry, requires the
-`inference-engine` kind and typed `Engine` contract, reads the contract twice to
-refuse an unstable declaration, then asks that same `Engine` kind to derive
-every rule. The entry point takes only context, registry, and engine ID: a
-caller-stamped structure — even one saying `origin=observed-process` — has no
-input channel. `ObservationResult` is sealed with private metadata, while
-`ResolveObserved` independently revalidates the fact/method/contract tuple and
-canonical value before exposing it. This is the production gate named by the
-contract tests; testing a constructor alone would not establish the boundary.
+`ResolveContract` resolves the real general registry entry, requires the
+`inference-engine` kind and declaration-only `Engine`, reads the declaration
+twice, and refuses any row whose source, fact-specific contract, or three
+failure actions differ from `RequiredContract`. It does not accept context,
+evidence, values, or an observer. It also does not claim more than it proves:
+the function has no production caller in either repository at this revision,
+and the module documents it as a specification validator, not a production
+gate. `ValidateCandidateValue` likewise validates shape only.
 
-The closed value grammars are `argv-tokens/v1` for argv facts,
-`json-field-path/v1` for the reasoning stream field, `absolute-path/v1` for the
-local executable, and `canonical-json-object/v1` for structured engine state,
-artifact, capability, forwarding, stress, and restart facts. Invalid raw input
-becomes `NotObservedMalformed`; a non-empty arbitrary string is never accepted
-merely because an engine labels it observed.
+Actual adoption must add a concrete agents-infra call site that obtains facts
+from the process it launched, then drive external-package negatives through
+that same production entry. Until that lands, caller-minted argv, positive or
+forged absence, failed reads, and unsupported derivations are not admissible
+observations because this module exposes no observation result at all.
 
 Both `pi` and `local-models` can depend on the same engine node while retaining
 the existing vendor→system edge: engine → system → vendor in dependency-first

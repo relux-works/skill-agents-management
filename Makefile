@@ -1,4 +1,4 @@
-.PHONY: all build test vet regress install clean
+.PHONY: all build test vet regress contract-mutants install clean
 
 ROOT_DIR := $(shell pwd)
 CLI_DIR  := $(ROOT_DIR)/tools/agents-management
@@ -48,6 +48,9 @@ vet:
 # and is not this module's to read (the extraction source's BUG-260823-1tkumz).
 regress:
 	@env -u TASK_BOARD_DIR go test $(GOFLAGS_MOD) ./internal/regress/... -count=1
+
+contract-mutants:
+	@python3 .scripts/verify-inference-engine-contract.py
 
 install: build
 	@mkdir -p $(BIN_DIR)

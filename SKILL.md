@@ -62,16 +62,16 @@ unregistered system is refused with BOTH ids. That is compatibility semantics,
 not a registry direction rule: a system may declare an engine dependency, and
 future kinds may point whichever way their declarations state.
 
-An inference-engine declaration is not capability evidence by itself. Resolve
-it through `inferenceengine.ResolveObserved`: all measured facts (argv spelling,
-stream field, health/readiness, artifact shape, memory accounting, speculative
-decoding, load/unload, inference-busy, pressure sequencing, and local/SSH
-profile expansion) must be derived by the selected `Engine` kind. The resolver
-accepts exactly a canonical observed value or a typed observed absence;
-read-failed, malformed, unsupported, and unknown derivations refuse distinctly.
-There is no caller-owned observer or value parameter. The engine contract
-declares stress/restart policy, while agents-infra retains OS process, SSH, and
-supervision execution.
+An inference-engine declaration is not capability evidence. Use
+`inferenceengine.ResolveContract` only to validate the closed specification;
+it returns no observations and never calls plugin derivation. The facts cover
+argv spelling, stream field, health/readiness, artifact shape, mapping-aware
+memory, speculative decoding, load/unload, inference-busy, pressure ordering,
+and local/SSH model-harness expansion. `ValidateCandidateValue` validates only
+fact-specific shape, never provenance or admission. Read-failed, malformed, and
+unsupported derivations must refuse. agents-infra retains OS process, SSH,
+polling, and supervision execution and must derive any effective value through
+its own non-replaceable composition path.
 
 A plugin id and a runtime id are different facts and often different spellings:
 the agentic-system plugin is `claude-code`, `qwen-code`, `antigravity`; the frozen

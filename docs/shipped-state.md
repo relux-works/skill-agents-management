@@ -40,15 +40,21 @@ compatibility repair ships as a later patch tag.
 
 `pkg/inferenceengine` now has an observed-process v1 contract candidate in
 addition to the v0.4.3 kind and plan-node helper. `MeasuredFacts` carries the
-task-cited engine difference inventory; `EngineContract` requires an
-engine-owned derivation method, closed value grammar, and explicit refusal for
-read-failed, malformed, and unsupported derivations on every fact.
-`ResolveObserved` has no caller-observer channel and accepts exactly sealed
-`ObservedValue` or `ObservedAbsent` results after independent contract
-validation; `NotObserved` always refuses. Model-harness local executable/argv
-versus SSH forwarding and stress/restart policy are declaration data with
-`agents-infra` pinned as the execution owner. No process, signal, SSH, readiness
-polling, or supervision execution moved into this repository.
+task-cited engine difference inventory. `Engine` is declaration-only;
+`ResolveContract` never invokes plugin derivation or returns observations.
+Every fact has its own closed value contract, and every rule fixes explicit
+refusal for read-failed, malformed, and unsupported derivations.
+`ValidateCandidateValue` validates shape only: it is not provenance or an
+admission gate. Model-harness local executable/argv versus SSH forwarding and
+stress/restart policy are declaration data with `agents-infra` pinned as the
+execution owner. No process, signal, SSH, readiness polling, or supervision
+execution moved into this repository.
+
+**Production status:** unconsumed. Neither this repository nor agents-infra has
+a production caller for the candidate contract. Revision 3 removes the earlier
+false production-gate claim instead of pretending a plugin callback is an
+agents-infra trust boundary. Actual adoption remains agents-infra-owned and
+requires real-entry tests over its process-derived evidence.
 
 ## The stories
 

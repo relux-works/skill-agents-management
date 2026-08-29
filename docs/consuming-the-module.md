@@ -161,29 +161,33 @@ err := registry.Register(enginePlugin) // declares Kind: inferenceengine.Kind
 
 Use `RegisterAll` when a set is intended to arrive together; cycles, missing
 dependencies and kind mismatches are refused atomically with named errors.
-An inference-engine consumer must additionally resolve the typed observed
-contract rather than treating graph registration as capability evidence:
+An inference-engine consumer may resolve the typed declaration but must not
+treat graph registration or contract validation as capability evidence:
 
 ```go
-resolved, err := inferenceengine.ResolveObserved(ctx, registry, "llama-cpp")
+resolved, err := inferenceengine.ResolveContract(registry, "llama-cpp")
 if err != nil {
-    // Includes distinct malformed, unsupported, and read-failure refusals.
-    // There is deliberately no observer, caller evidence, or fallback argument.
     return err
 }
-_ = resolved.Results // ObservedValue or ObservedAbsent for every fact.
+_ = resolved.Contract // Declaration data only; there are no observed results.
 ```
 
-A concrete engine implements `inferenceengine.Engine`, returns all rules from
-`inferenceengine.MeasuredFacts()`, and owns `DeriveObservation` for those rules.
-agents-infra composes that implementation with its process, endpoint, argv,
-artifact, and supervision readers; callers cannot inject a second observer.
-Each rule selects a closed value grammar and `refuse` for read-failed,
-malformed, and unsupported derivations. A positive measured absence is the
-distinct `ObservedAbsent` success result. The contract also binds model-harness
-local executable/argv versus SSH forwarding and stress/restart policy to
-`ExecutionOwner == "agents-infra"`; this module validates those declarations
-but never runs process or SSH operations.
+A concrete engine implements declaration-only `inferenceengine.Engine` and
+returns `inferenceengine.RequiredContract()`. It has no observation method.
+`ValidateCandidateValue(fact, raw)` can canonicalize a fact-specific candidate
+shape, but its return value remains caller data: it proves neither process
+origin nor admission. agents-infra must obtain effective argv, endpoint,
+residency, mapping, lifecycle, pressure, and model-harness facts through its
+own concrete path before applying the shape validator. Every rule fixes
+`refuse` for read-failed, malformed, and unsupported derivations. The contract
+binds local executable/argv versus SSH forwarding plus stress/restart policy to
+`ExecutionOwner == "agents-infra"`; this module runs no process, SSH, polling,
+or supervision operation.
+
+There is no production observation caller in this module or agents-infra at
+this revision. `ResolveContract` is therefore not a production gate. Adoption
+must add the agents-infra call site and real-entry negatives before any consumer
+may document these candidates as observed values.
 
 Existing system plugins can opt into a graph prerequisite without changing the
 `System` interface:
@@ -226,7 +230,7 @@ digests, and a rebind orphans that state with no error anywhere.
 | You want | Call | It does not |
 | --- | --- | --- |
 | The launch surface for one (system, mode) | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` | execute anything |
-| Resolve the facts an engine consumer may rely on | `inferenceengine.ResolveObserved(ctx, graph, engineID)` → typed contract plus sealed engine-derived value/absence results | inject caller evidence/defaults, collapse read failure into absence, execute or supervise a process |
+| Validate an engine specification | `inferenceengine.ResolveContract(graph, engineID)` → declaration only | treat the result as observed state, call plugin derivation, execute or supervise a process |
 | Add engine/sidecar process nodes | `agentic.BuildMultiNodePlan(primary, primaryDependencies, nodes...)` → the same primary fields plus dependency-ordered `Plan.Nodes` | execute, supervise or attest a process |
 | The same, resolved through a runtime launch binding | `vendorplugin.BuildLaunch(ctx, registry, SpawnRequest{…}, mode)` — resolves either an established vendor binding or an explicit declaration-owned system-only binding, validates the effort word against the owning model row, preserves typed `RunContext`, asks a vendor for a `LaunchRequest` when one exists (refusing redirects, including changed/dropped tracked-run identity), otherwise projects the validated declaration losslessly, runs the resolved system's `Preflightable` check unless dry-run, then hands it to `BuildPlan` | execute anything, fabricate a vendor for a system-only runtime, inject a default effort, or ask callers to duplicate run identity in `Env` |
 | Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |

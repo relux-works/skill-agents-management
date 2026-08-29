@@ -2,30 +2,28 @@ package inferenceengine
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
 	"reflect"
-	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
 
-// ContractVersion is the first observed-process inference-engine contract.
+// ContractVersion is the first declaration-only inference-engine contract.
 const ContractVersion = "observed-process/v1"
 
-// ExecutionOwner names the repository that owns OS process, SSH, and
-// supervision execution. Engine plugins declare observations and policy; they
-// do not execute those mechanisms.
+// ExecutionOwner pins OS process, SSH, polling, and supervision execution to
+// agents-infra. This module specifies facts and validates candidate shapes; it
+// does not obtain evidence from a running process.
 const ExecutionOwner = "agents-infra"
 
 // Fact identifies one consumer-visible engine fact. The set is closed for a
-// contract version so a newly required fact cannot be silently omitted by an
-// older engine plugin.
+// contract version so a newly required fact cannot be silently omitted.
 type Fact string
 
 const (
@@ -48,8 +46,7 @@ const (
 	FactRestartSupervisionPolicy Fact = "profile-restart-supervision-policy"
 )
 
-// FactDefinition records why a fact exists. Evidence contains the task IDs
-// whose measurements established the difference; it is specification
+// FactDefinition records why a fact exists. Evidence is specification
 // provenance, not runtime evidence.
 type FactDefinition struct {
 	Fact     Fact
@@ -58,28 +55,26 @@ type FactDefinition struct {
 }
 
 var measuredFacts = []FactDefinition{
-	{FactContextArgv, "effective context/KV capacity and the exact argv spelling that established it (--max-kv-size for the measured MLX Swift runtime; --ctx-size for llama.cpp)", []string{"TASK-260828-2jbufw", "TASK-260828-3fgca3"}},
-	{FactPrefillArgv, "prefill chunk size and the exact argv spelling that established it (--prefill-step-size for MLX; -ub/--ubatch-size for llama.cpp)", []string{"TASK-260828-2jbufw", "TASK-260828-3fgca3"}},
-	{FactReasoningStreamField, "the stream field whose first non-empty delta defines reasoning TTFT (delta.reasoning or delta.reasoning_content)", []string{"TASK-260828-2wcrph", "TASK-260829-3cwcb6"}},
-	{FactHealth, "the engine-specific liveness endpoint and response semantics", []string{"TASK-260827-qyebv8", "TASK-260828-2jbufw"}},
-	{FactReadiness, "the observation proving weights are resident, distinct from an endpoint merely answering", []string{"TASK-260827-qyebv8", "TASK-260828-2jbufw"}},
-	{FactWeightArtifact, "the complete weight shape: safetensors plus config.json, or one GGUF plus an optional separate mmproj", []string{"TASK-260828-2jbufw", "TASK-260828-2wcrph"}},
-	{FactMemoryAccounting, "the accounting method valid for the artifact mapping; Mach physical footprint alone is invalid for mmap-loaded GGUF weights", []string{"TASK-260828-2wcrph", "TASK-260829-3cwcb6"}},
-	{FactSpeculativeDecoding, "the capability and active state observed from the runtime; a GGUF MTP head does not prove an MLX build retained or enabled it", []string{"TASK-260828-2wcrph", "TASK-260829-3cwcb6"}},
-	{FactLoadState, "the observed transition that establishes weights became resident", []string{"TASK-260827-qyebv8", "TASK-260829-1qh0ud"}},
-	{FactUnloadState, "the observed transition that establishes weights are no longer resident", []string{"TASK-260829-1qh0ud"}},
-	{FactInferenceBusy, "whether inference is actively using the resident engine", []string{"TASK-260829-1qh0ud"}},
-	{FactMemoryPressureSequence, "the observed pressure state and sequencing rule that consults load, unload, and inference-busy before relief", []string{"TASK-260829-1qh0ud"}},
-	{FactLocalExecutable, "the locally observed model-harness executable selected by profile expansion", []string{"TASK-260830-12n20p"}},
-	{FactLocalArgv, "the exact local argv token vector selected by profile expansion", []string{"TASK-260828-2jbufw", "TASK-260830-12n20p"}},
-	{FactSSHForwarding, "the remote profile and forwarding declaration selected instead of a local executable", []string{"TASK-260828-2jbufw", "TASK-260830-12n20p"}},
-	{FactStressPolicy, "the profile's declared stress policy; execution remains outside this module", []string{"TASK-260830-12n20p"}},
-	{FactRestartSupervisionPolicy, "the profile's declared restart/backoff policy; supervision execution remains outside this module", []string{"TASK-260829-2t5xmi", "TASK-260830-12n20p"}},
+	{FactContextArgv, "effective context/KV capacity and exact argv spelling (--max-kv-size for measured MLX Swift; --ctx-size for llama.cpp)", []string{"TASK-260828-2jbufw", "TASK-260828-3fgca3"}},
+	{FactPrefillArgv, "prefill chunk and exact argv spelling (--prefill-step-size for MLX; -ub/--ubatch-size for llama.cpp)", []string{"TASK-260828-2jbufw", "TASK-260828-3fgca3"}},
+	{FactReasoningStreamField, "the stream field whose first non-empty delta defines reasoning TTFT", []string{"TASK-260828-2wcrph", "TASK-260829-3cwcb6"}},
+	{FactHealth, "process-alive and endpoint-answering liveness", []string{"TASK-260827-qyebv8", "TASK-260828-2jbufw"}},
+	{FactReadiness, "endpoint answering with weights resident; endpoint response alone is not readiness", []string{"TASK-260827-qyebv8", "TASK-260828-2jbufw"}},
+	{FactWeightArtifact, "safetensors shards plus config.json, or one GGUF plus optional separate mmproj", []string{"TASK-260828-2jbufw", "TASK-260828-2wcrph"}},
+	{FactMemoryAccounting, "mapping-aware accounting; Mach physical footprint alone is invalid for mmap-loaded GGUF", []string{"TASK-260828-2wcrph", "TASK-260829-3cwcb6"}},
+	{FactSpeculativeDecoding, "runtime-observed capability and active state", []string{"TASK-260828-2wcrph", "TASK-260829-3cwcb6"}},
+	{FactLoadState, "the sequenced transition establishing weights became resident", []string{"TASK-260827-qyebv8", "TASK-260829-1qh0ud"}},
+	{FactUnloadState, "the sequenced transition establishing weights are no longer resident", []string{"TASK-260829-1qh0ud"}},
+	{FactInferenceBusy, "the sequenced busy or idle state of the resident engine", []string{"TASK-260829-1qh0ud"}},
+	{FactMemoryPressureSequence, "pressure, load, unload, and busy observations ordered before the relief action", []string{"TASK-260829-1qh0ud"}},
+	{FactLocalExecutable, "model-harness local executable selected by profile expansion", []string{"TASK-260830-12n20p"}},
+	{FactLocalArgv, "exact local argv tokens selected by profile expansion", []string{"TASK-260828-2jbufw", "TASK-260830-12n20p"}},
+	{FactSSHForwarding, "remote profile and forwarding declaration selected instead of local execution", []string{"TASK-260828-2jbufw", "TASK-260830-12n20p"}},
+	{FactStressPolicy, "profile stress policy", []string{"TASK-260830-12n20p"}},
+	{FactRestartSupervisionPolicy, "profile restart/backoff policy", []string{"TASK-260829-2t5xmi", "TASK-260830-12n20p"}},
 }
 
-// MeasuredFacts returns the closed fact inventory with defensive evidence
-// copies. A consumer can render this as provenance without trusting a concrete
-// engine plugin to cite itself.
+// MeasuredFacts returns the closed inventory with defensive evidence copies.
 func MeasuredFacts() []FactDefinition {
 	result := make([]FactDefinition, len(measuredFacts))
 	for i, definition := range measuredFacts {
@@ -89,45 +84,70 @@ func MeasuredFacts() []FactDefinition {
 	return result
 }
 
-// FailureAction is the result required when an observation cannot establish a
-// fact. Version 1 intentionally recognizes only Refuse.
+// FailureAction is the only admissible behavior when derivation fails.
 type FailureAction string
 
 const FailureActionRefuse FailureAction = "refuse"
 
-// FailurePolicy closes the three non-observed outcomes independently. There
-// is no caller-value or configured-default field in this contract.
+// FailurePolicy independently closes read, shape, and capability failures.
+// An engine that cannot express a fact must declare Unsupported=refuse.
 type FailurePolicy struct {
 	ReadFailure FailureAction
 	Malformed   FailureAction
 	Unsupported FailureAction
 }
 
-// ValueContract is a closed grammar that the resolver can validate without
-// trusting an engine's description of its own value.
+// DerivationSource is the agents-infra-owned observation category required for
+// a fact. It is a specification label, never proof that a read happened.
+type DerivationSource string
+
+const (
+	SourceProcessArgv         DerivationSource = "agents-infra/process-argv"
+	SourceResponseStream      DerivationSource = "agents-infra/response-stream"
+	SourceHealthPoll          DerivationSource = "agents-infra/health-poll"
+	SourceResidencyProbe      DerivationSource = "agents-infra/residency-probe"
+	SourceArtifactInspection  DerivationSource = "agents-infra/artifact-inspection"
+	SourceProcessMappings     DerivationSource = "agents-infra/process-mappings"
+	SourceRuntimeCapability   DerivationSource = "agents-infra/runtime-capability"
+	SourceRuntimeLifecycle    DerivationSource = "agents-infra/runtime-lifecycle"
+	SourceResourceObservation DerivationSource = "agents-infra/resource-observation"
+	SourceHarnessExpansion    DerivationSource = "agents-infra/model-harness-expansion"
+)
+
+// ValueContract is closed and fact-specific. Generic non-empty JSON is not a
+// contract and is intentionally absent.
 type ValueContract string
 
 const (
-	ValueContractArgvTokens      ValueContract = "argv-tokens/v1"
-	ValueContractJSONFieldPath   ValueContract = "json-field-path/v1"
-	ValueContractAbsolutePath    ValueContract = "absolute-path/v1"
-	ValueContractCanonicalObject ValueContract = "canonical-json-object/v1"
+	ValueContractContextArgv          ValueContract = "context-argv/v1"
+	ValueContractPrefillArgv          ValueContract = "prefill-argv/v1"
+	ValueContractReasoningStreamField ValueContract = "reasoning-stream-field/v1"
+	ValueContractHealth               ValueContract = "health/v1"
+	ValueContractReadiness            ValueContract = "readiness/v1"
+	ValueContractWeightArtifact       ValueContract = "weight-artifact/v1"
+	ValueContractMemoryAccounting     ValueContract = "memory-accounting/v1"
+	ValueContractSpeculativeDecoding  ValueContract = "speculative-decoding/v1"
+	ValueContractLoadState            ValueContract = "load-state/v1"
+	ValueContractUnloadState          ValueContract = "unload-state/v1"
+	ValueContractInferenceBusy        ValueContract = "inference-busy/v1"
+	ValueContractMemoryPressure       ValueContract = "memory-pressure-sequence/v1"
+	ValueContractAbsolutePath         ValueContract = "absolute-path/v1"
+	ValueContractLocalArgv            ValueContract = "local-argv/v1"
+	ValueContractSSHForwarding        ValueContract = "ssh-forwarding/v1"
+	ValueContractStressPolicy         ValueContract = "stress-policy/v1"
+	ValueContractRestartSupervision   ValueContract = "restart-supervision/v1"
 )
 
-// ObservationRule tells an agents-infra-composed engine kind exactly what to
-// derive and how to parse a value. FailurePolicy is mandatory even when an
-// engine cannot express the fact: Unsupported=refuse is a supported
-// declaration.
+// ObservationRule is one immutable row of the versioned specification.
 type ObservationRule struct {
 	Fact          Fact
-	Method        string
+	Source        DerivationSource
 	ValueContract ValueContract
 	OnFailure     FailurePolicy
 }
 
-// ModelHarnessExpansion binds model-harness profile expansion to the same
-// observed fact rules. The strings are Fact keys rather than executable
-// commands, so this module cannot accidentally become a second process owner.
+// ModelHarnessExpansion binds local and SSH profile shapes while retaining
+// process and supervision ownership in agents-infra.
 type ModelHarnessExpansion struct {
 	LocalExecutable    Fact
 	LocalArgv          Fact
@@ -137,333 +157,556 @@ type ModelHarnessExpansion struct {
 	ExecutionOwner     string
 }
 
-// Contract is the declaration supplied by one inference-engine plugin.
+// Contract is declarative. It contains no observer, evidence, fallback, or
+// caller-supplied value channel.
 type Contract struct {
 	Version          string
 	Rules            []ObservationRule
 	ProfileExpansion ModelHarnessExpansion
 }
 
-// Engine is a graph plugin that declares and derives the complete
-// observed-process contract for its engine kind. The concrete implementation
-// is composed by agents-infra; ResolveObserved never accepts a caller-owned
-// observer or caller value.
+// Engine contributes only graph identity and the declarative contract. A
+// caller-registered Engine is deliberately unable to mint observations.
 type Engine interface {
 	plugin.Plugin
 	EngineContract() Contract
-	DeriveObservation(context.Context, ObservationRule) ObservationResult
 }
 
-// Outcome is the complete result vocabulary for one derivation. Absence is a
-// successful measured fact; it is not a failed read and not a string value.
-type Outcome string
-
-const (
-	OutcomeObservedValue  Outcome = "observed-value"
-	OutcomeObservedAbsent Outcome = "observed-absent"
-	OutcomeNotObserved    Outcome = "not-observed"
-)
-
-// NotObservedCause explains why an engine kind could not derive a fact. Every
-// cause is a refusal at ResolveObserved; it can never become an absence.
-type NotObservedCause string
-
-const (
-	NotObservedReadFailure NotObservedCause = "read-failure"
-	NotObservedMalformed   NotObservedCause = "malformed"
-	NotObservedUnsupported NotObservedCause = "unsupported"
-)
-
-type observationMetadata struct {
-	fact          Fact
-	method        string
-	valueContract ValueContract
-}
-
-// ObservationResult is sealed to this package so a caller cannot implement a
-// look-alike result with self-stamped provenance fields. Engine kinds construct
-// results through the functions below; the resolver independently revalidates
-// metadata and canonical values before exposing them to consumers.
-type ObservationResult interface {
-	observationResult()
-	metadata() observationMetadata
-	Fact() Fact
-	Outcome() Outcome
-}
-
-// ObservedValue is a process-derived value in the rule's canonical grammar.
-// Its fields are private so a caller cannot overwrite the fact, method,
-// contract, or value after derivation.
-type ObservedValue struct {
-	observationMetadata
-	value string
-}
-
-func (ObservedValue) observationResult()                   {}
-func (result ObservedValue) metadata() observationMetadata { return result.observationMetadata }
-func (result ObservedValue) Fact() Fact                    { return result.fact }
-func (ObservedValue) Outcome() Outcome                     { return OutcomeObservedValue }
-func (result ObservedValue) Value() string                 { return result.value }
-func (result ObservedValue) ValueContract() ValueContract  { return result.valueContract }
-
-// ObservedAbsent means the engine kind positively established that the fact
-// is absent. It is a successful result and carries no fallback value.
-type ObservedAbsent struct{ observationMetadata }
-
-func (ObservedAbsent) observationResult()                   {}
-func (result ObservedAbsent) metadata() observationMetadata { return result.observationMetadata }
-func (result ObservedAbsent) Fact() Fact                    { return result.fact }
-func (ObservedAbsent) Outcome() Outcome                     { return OutcomeObservedAbsent }
-
-// NotObserved means derivation did not establish either a value or absence.
-// ResolveObserved refuses every cause.
-type NotObserved struct {
-	observationMetadata
-	cause  NotObservedCause
-	detail string
-}
-
-func (NotObserved) observationResult()                   {}
-func (result NotObserved) metadata() observationMetadata { return result.observationMetadata }
-func (result NotObserved) Fact() Fact                    { return result.fact }
-func (NotObserved) Outcome() Outcome                     { return OutcomeNotObserved }
-func (result NotObserved) Cause() NotObservedCause       { return result.cause }
-func (result NotObserved) Detail() string                { return result.detail }
-
-// ObserveValue parses and canonicalizes one value derived by an Engine kind.
-// Invalid raw bytes become a typed malformed NotObserved result; they never
-// reach a consumer as a plausible string.
-func ObserveValue(rule ObservationRule, raw string) ObservationResult {
-	metadata := metadataFromRule(rule)
-	canonical, err := canonicalizeValue(rule.ValueContract, raw)
-	if err != nil {
-		return NotObserved{observationMetadata: metadata, cause: NotObservedMalformed, detail: err.Error()}
-	}
-	return ObservedValue{observationMetadata: metadata, value: canonical}
-}
-
-// ObserveAbsent records a positive absence derived by an Engine kind.
-func ObserveAbsent(rule ObservationRule) ObservationResult {
-	return ObservedAbsent{observationMetadata: metadataFromRule(rule)}
-}
-
-// ObserveFailure records why an Engine kind could not derive a fact.
-func ObserveFailure(rule ObservationRule, cause NotObservedCause, detail string) ObservationResult {
-	return NotObserved{observationMetadata: metadataFromRule(rule), cause: cause, detail: detail}
-}
-
-func metadataFromRule(rule ObservationRule) observationMetadata {
-	return observationMetadata{fact: rule.Fact, method: rule.Method, valueContract: rule.ValueContract}
-}
-
-// Resolution is the fully observed engine contract returned to a consumer.
-type Resolution struct {
+// ResolvedContract is declaration data, not observed process state.
+type ResolvedContract struct {
 	Declaration plugin.Declaration
 	Contract    Contract
-	Results     []ObservationResult
 }
 
 var (
-	ErrEngineContractMissing  = errors.New("inferenceengine: plugin does not implement Engine")
-	ErrContractInvalid        = errors.New("inferenceengine: contract is invalid")
-	ErrContractUnstable       = errors.New("inferenceengine: contract is not stable across reads")
-	ErrObservationRead        = errors.New("inferenceengine: observation read failed")
-	ErrObservationMalformed   = errors.New("inferenceengine: observation is malformed")
-	ErrObservationUnsupported = errors.New("inferenceengine: observation is unsupported")
+	ErrEngineContractMissing = errors.New("inferenceengine: plugin does not implement Engine")
+	ErrContractInvalid       = errors.New("inferenceengine: contract is invalid")
+	ErrContractUnstable      = errors.New("inferenceengine: contract is not stable across reads")
+	ErrObservationMalformed  = errors.New("inferenceengine: candidate value is malformed")
 )
 
-// ResolveObserved is the production entry point for an engine consumer. It
-// resolves through the real plugin graph, validates the full engine contract,
-// and refuses unless the engine kind derives either a canonical value or a
-// positive absence for every fact. It has no parameter through which a caller
-// can supply evidence or a fallback value.
-func ResolveObserved(ctx context.Context, registry *plugin.Registry, id plugin.ID) (Resolution, error) {
+// RequiredContract returns the one admissible v1 contract. Engine plugins may
+// return this declaration but may not alter derivation or failure policy.
+func RequiredContract() Contract {
+	rules := make([]ObservationRule, 0, len(measuredFacts))
+	for _, definition := range measuredFacts {
+		rules = append(rules, requiredRule(definition.Fact))
+	}
+	return Contract{
+		Version: ContractVersion,
+		Rules:   rules,
+		ProfileExpansion: ModelHarnessExpansion{
+			LocalExecutable:    FactLocalExecutable,
+			LocalArgv:          FactLocalArgv,
+			SSHForwarding:      FactSSHForwarding,
+			StressPolicy:       FactStressPolicy,
+			RestartSupervision: FactRestartSupervisionPolicy,
+			ExecutionOwner:     ExecutionOwner,
+		},
+	}
+}
+
+// ResolveContract validates declaration data through the real plugin graph.
+// It is not a production observation gate: agents-infra must derive facts from
+// its owned process path and may use ValidateCandidateValue only for shape.
+func ResolveContract(registry *plugin.Registry, id plugin.ID) (ResolvedContract, error) {
 	resolved, err := registry.Resolve(id)
 	if err != nil {
-		return Resolution{}, err
+		return ResolvedContract{}, err
 	}
 	if resolved.Declaration.Kind != Kind {
-		return Resolution{}, fmt.Errorf("%w: %q declares %q", ErrWrongKind, resolved.Declaration.ID, resolved.Declaration.Kind)
+		return ResolvedContract{}, fmt.Errorf("%w: %q declares %q", ErrWrongKind, resolved.Declaration.ID, resolved.Declaration.Kind)
 	}
 	engine, ok := resolved.Plugin.(Engine)
 	if !ok {
-		return Resolution{}, fmt.Errorf("%w: %q", ErrEngineContractMissing, resolved.Declaration.ID)
+		return ResolvedContract{}, fmt.Errorf("%w: %q", ErrEngineContractMissing, resolved.Declaration.ID)
 	}
 	first := engine.EngineContract()
 	second := engine.EngineContract()
 	if !reflect.DeepEqual(first, second) {
-		return Resolution{}, fmt.Errorf("%w: %q answered two different contracts", ErrContractUnstable, resolved.Declaration.ID)
+		return ResolvedContract{}, fmt.Errorf("%w: %q answered two different contracts", ErrContractUnstable, resolved.Declaration.ID)
 	}
 	contract, err := validateContract(first)
 	if err != nil {
-		return Resolution{}, err
+		return ResolvedContract{}, err
 	}
-
-	results := make([]ObservationResult, 0, len(contract.Rules))
-	for _, rule := range contract.Rules {
-		result := engine.DeriveObservation(ctx, rule)
-		switch typed := result.(type) {
-		case ObservedValue:
-			if typed.metadata() != metadataFromRule(rule) {
-				return Resolution{}, fmt.Errorf("%w: %s: engine result does not match the declared rule", ErrObservationMalformed, rule.Fact)
-			}
-			canonical, canonicalErr := canonicalizeValue(rule.ValueContract, typed.value)
-			if canonicalErr != nil || canonical != typed.value {
-				return Resolution{}, fmt.Errorf("%w: %s: value violates %s", ErrObservationMalformed, rule.Fact, rule.ValueContract)
-			}
-		case ObservedAbsent:
-			if typed.metadata() != metadataFromRule(rule) {
-				return Resolution{}, fmt.Errorf("%w: %s: engine result does not match the declared rule", ErrObservationMalformed, rule.Fact)
-			}
-			// Positive absence is a measured fact and reaches Resolution.
-		case NotObserved:
-			if typed.metadata() != metadataFromRule(rule) {
-				return Resolution{}, fmt.Errorf("%w: %s: engine result does not match the declared rule", ErrObservationMalformed, rule.Fact)
-			}
-			switch typed.cause {
-			case NotObservedReadFailure:
-				return Resolution{}, fmt.Errorf("%w: %s: %s", ErrObservationRead, rule.Fact, typed.detail)
-			case NotObservedMalformed:
-				return Resolution{}, fmt.Errorf("%w: %s: %s", ErrObservationMalformed, rule.Fact, typed.detail)
-			case NotObservedUnsupported:
-				return Resolution{}, fmt.Errorf("%w: %s: %s", ErrObservationUnsupported, rule.Fact, typed.detail)
-			default:
-				return Resolution{}, fmt.Errorf("%w: %s: unknown not-observed cause %q", ErrObservationMalformed, rule.Fact, typed.cause)
-			}
-		default:
-			return Resolution{}, fmt.Errorf("%w: %s: unrecognized result type %T", ErrObservationMalformed, rule.Fact, result)
-		}
-		results = append(results, result)
-	}
-
-	return Resolution{
-		Declaration: cloneDeclaration(resolved.Declaration),
-		Contract:    cloneContract(contract),
-		Results:     append([]ObservationResult(nil), results...),
-	}, nil
+	return ResolvedContract{Declaration: cloneDeclaration(resolved.Declaration), Contract: contract}, nil
 }
 
 func validateContract(raw Contract) (Contract, error) {
-	if raw.Version != ContractVersion {
-		return Contract{}, fmt.Errorf("%w: version %q, want %q", ErrContractInvalid, raw.Version, ContractVersion)
+	required := RequiredContract()
+	if raw.Version != required.Version {
+		return Contract{}, fmt.Errorf("%w: version %q, want %q", ErrContractInvalid, raw.Version, required.Version)
 	}
-	if len(raw.Rules) != len(measuredFacts) {
-		return Contract{}, fmt.Errorf("%w: got %d rules, want the complete %d-fact inventory", ErrContractInvalid, len(raw.Rules), len(measuredFacts))
+	if len(raw.Rules) != len(required.Rules) {
+		return Contract{}, fmt.Errorf("%w: got %d rules, want %d", ErrContractInvalid, len(raw.Rules), len(required.Rules))
 	}
-
 	byFact := make(map[Fact]ObservationRule, len(raw.Rules))
-	known := make(map[Fact]struct{}, len(measuredFacts))
-	for _, definition := range measuredFacts {
-		known[definition.Fact] = struct{}{}
-	}
 	for _, rule := range raw.Rules {
-		if _, ok := known[rule.Fact]; !ok {
-			return Contract{}, fmt.Errorf("%w: unknown fact %q", ErrContractInvalid, rule.Fact)
-		}
 		if _, duplicate := byFact[rule.Fact]; duplicate {
 			return Contract{}, fmt.Errorf("%w: duplicate fact %q", ErrContractInvalid, rule.Fact)
 		}
-		if strings.TrimSpace(rule.Method) == "" || rule.ValueContract == "" {
-			return Contract{}, fmt.Errorf("%w: %s needs an observation method and value contract", ErrContractInvalid, rule.Fact)
-		}
-		wantValueContract := valueContractForFact(rule.Fact)
-		if rule.ValueContract != wantValueContract {
-			return Contract{}, fmt.Errorf("%w: %s value contract is %q, want %q", ErrContractInvalid, rule.Fact, rule.ValueContract, wantValueContract)
-		}
-		if rule.OnFailure.ReadFailure != FailureActionRefuse ||
-			rule.OnFailure.Malformed != FailureActionRefuse ||
-			rule.OnFailure.Unsupported != FailureActionRefuse {
-			return Contract{}, fmt.Errorf("%w: %s must refuse read-failed, malformed, and unsupported derivations", ErrContractInvalid, rule.Fact)
-		}
 		byFact[rule.Fact] = rule
 	}
-
 	normalized := cloneContract(raw)
 	normalized.Rules = normalized.Rules[:0]
-	for _, definition := range measuredFacts {
-		rule, found := byFact[definition.Fact]
+	for _, want := range required.Rules {
+		got, found := byFact[want.Fact]
 		if !found {
-			return Contract{}, fmt.Errorf("%w: missing fact %q", ErrContractInvalid, definition.Fact)
+			return Contract{}, fmt.Errorf("%w: missing fact %q", ErrContractInvalid, want.Fact)
 		}
-		normalized.Rules = append(normalized.Rules, rule)
+		if got != want {
+			return Contract{}, fmt.Errorf("%w: %s must use source %q, value contract %q, and refuse read-failed, malformed, and unsupported derivations", ErrContractInvalid, want.Fact, want.Source, want.ValueContract)
+		}
+		normalized.Rules = append(normalized.Rules, got)
 	}
-
-	wantProfile := ModelHarnessExpansion{
-		LocalExecutable:    FactLocalExecutable,
-		LocalArgv:          FactLocalArgv,
-		SSHForwarding:      FactSSHForwarding,
-		StressPolicy:       FactStressPolicy,
-		RestartSupervision: FactRestartSupervisionPolicy,
-		ExecutionOwner:     ExecutionOwner,
-	}
-	if normalized.ProfileExpansion != wantProfile {
-		return Contract{}, fmt.Errorf("%w: profile expansion must bind local executable/argv, SSH forwarding, stress/restart policy, and execution owner %q", ErrContractInvalid, ExecutionOwner)
+	if normalized.ProfileExpansion != required.ProfileExpansion {
+		return Contract{}, fmt.Errorf("%w: model-harness expansion must bind local executable/argv, SSH forwarding, stress/restart policy, and execution owner %q", ErrContractInvalid, ExecutionOwner)
 	}
 	return normalized, nil
 }
 
-func valueContractForFact(fact Fact) ValueContract {
-	switch fact {
-	case FactContextArgv, FactPrefillArgv, FactLocalArgv:
-		return ValueContractArgvTokens
-	case FactReasoningStreamField:
-		return ValueContractJSONFieldPath
-	case FactLocalExecutable:
-		return ValueContractAbsolutePath
-	default:
-		return ValueContractCanonicalObject
+func requiredRule(fact Fact) ObservationRule {
+	return ObservationRule{
+		Fact:          fact,
+		Source:        sourceForFact(fact),
+		ValueContract: ValueContractForFact(fact),
+		OnFailure: FailurePolicy{
+			ReadFailure: FailureActionRefuse,
+			Malformed:   FailureActionRefuse,
+			Unsupported: FailureActionRefuse,
+		},
 	}
 }
 
-var jsonFieldPath = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$`)
+func sourceForFact(fact Fact) DerivationSource {
+	switch fact {
+	case FactContextArgv, FactPrefillArgv:
+		return SourceProcessArgv
+	case FactReasoningStreamField:
+		return SourceResponseStream
+	case FactHealth:
+		return SourceHealthPoll
+	case FactReadiness:
+		return SourceResidencyProbe
+	case FactWeightArtifact:
+		return SourceArtifactInspection
+	case FactMemoryAccounting:
+		return SourceProcessMappings
+	case FactSpeculativeDecoding:
+		return SourceRuntimeCapability
+	case FactLoadState, FactUnloadState, FactInferenceBusy:
+		return SourceRuntimeLifecycle
+	case FactMemoryPressureSequence:
+		return SourceResourceObservation
+	case FactLocalExecutable, FactLocalArgv, FactSSHForwarding, FactStressPolicy, FactRestartSupervisionPolicy:
+		return SourceHarnessExpansion
+	default:
+		return ""
+	}
+}
 
-func canonicalizeValue(contract ValueContract, raw string) (string, error) {
-	switch contract {
-	case ValueContractArgvTokens:
-		var tokens []string
-		if err := decodeSingleJSON(raw, &tokens); err != nil {
-			return "", fmt.Errorf("argv tokens: %w", err)
-		}
-		if len(tokens) == 0 {
-			return "", errors.New("argv tokens are empty")
-		}
-		for index, token := range tokens {
-			if token == "" {
-				return "", fmt.Errorf("argv token %d is empty", index)
-			}
-		}
-		encoded, _ := json.Marshal(tokens)
-		return string(encoded), nil
-	case ValueContractJSONFieldPath:
-		if !jsonFieldPath.MatchString(raw) {
-			return "", errors.New("field path must contain at least two identifier segments")
+// ValueContractForFact returns the closed schema selected by one fact.
+func ValueContractForFact(fact Fact) ValueContract {
+	switch fact {
+	case FactContextArgv:
+		return ValueContractContextArgv
+	case FactPrefillArgv:
+		return ValueContractPrefillArgv
+	case FactReasoningStreamField:
+		return ValueContractReasoningStreamField
+	case FactHealth:
+		return ValueContractHealth
+	case FactReadiness:
+		return ValueContractReadiness
+	case FactWeightArtifact:
+		return ValueContractWeightArtifact
+	case FactMemoryAccounting:
+		return ValueContractMemoryAccounting
+	case FactSpeculativeDecoding:
+		return ValueContractSpeculativeDecoding
+	case FactLoadState:
+		return ValueContractLoadState
+	case FactUnloadState:
+		return ValueContractUnloadState
+	case FactInferenceBusy:
+		return ValueContractInferenceBusy
+	case FactMemoryPressureSequence:
+		return ValueContractMemoryPressure
+	case FactLocalExecutable:
+		return ValueContractAbsolutePath
+	case FactLocalArgv:
+		return ValueContractLocalArgv
+	case FactSSHForwarding:
+		return ValueContractSSHForwarding
+	case FactStressPolicy:
+		return ValueContractStressPolicy
+	case FactRestartSupervisionPolicy:
+		return ValueContractRestartSupervision
+	default:
+		return ""
+	}
+}
+
+// ValidateCandidateValue validates and canonicalizes shape only. It does not
+// establish provenance, perform a process read, or turn caller input into an
+// observed fact. Only agents-infra's owned composition may decide admission.
+func ValidateCandidateValue(fact Fact, raw string) (string, error) {
+	canonical, err := validateCandidateValue(fact, raw)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s: %v", ErrObservationMalformed, fact, err)
+	}
+	return canonical, nil
+}
+
+func validateCandidateValue(fact Fact, raw string) (string, error) {
+	switch fact {
+	case FactContextArgv:
+		return validateKnobArgv(raw, "--max-kv-size", "--ctx-size")
+	case FactPrefillArgv:
+		return validateKnobArgv(raw, "--prefill-step-size", "-ub", "--ubatch-size")
+	case FactLocalArgv:
+		return validateArgv(raw)
+	case FactReasoningStreamField:
+		if raw != "delta.reasoning" && raw != "delta.reasoning_content" {
+			return "", errors.New("field must be delta.reasoning or delta.reasoning_content")
 		}
 		return raw, nil
-	case ValueContractAbsolutePath:
+	case FactLocalExecutable:
 		if !filepath.IsAbs(raw) || filepath.Clean(raw) != raw {
 			return "", errors.New("path must be absolute and clean")
 		}
 		return raw, nil
-	case ValueContractCanonicalObject:
-		var value map[string]json.RawMessage
-		if err := decodeSingleJSON(raw, &value); err != nil {
-			return "", fmt.Errorf("canonical object: %w", err)
+	case FactHealth:
+		var value healthValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
 		}
-		if len(value) == 0 {
-			return "", errors.New("canonical object is empty")
+		if !value.ProcessAlive || !value.EndpointAnswering {
+			return "", errors.New("healthy requires a live process and answering endpoint")
 		}
-		encoded, err := json.Marshal(value)
-		if err != nil {
-			return "", fmt.Errorf("canonical object: %w", err)
+		return encode(value)
+	case FactReadiness:
+		var value readinessValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
 		}
-		return string(encoded), nil
+		if !value.EndpointAnswering || !value.WeightsResident {
+			return "", errors.New("readiness requires both endpoint answering and weights resident")
+		}
+		return encode(value)
+	case FactWeightArtifact:
+		var value weightArtifactValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
+		}
+		if err := validateWeightArtifact(value); err != nil {
+			return "", err
+		}
+		return encode(value)
+	case FactMemoryAccounting:
+		var value memoryAccountingValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
+		}
+		if value.Bytes <= 0 {
+			return "", errors.New("bytes must be positive")
+		}
+		switch value.ArtifactMapping {
+		case "anonymous":
+			if value.Method != "mach-physical-footprint" {
+				return "", errors.New("anonymous mapping requires mach-physical-footprint")
+			}
+		case "memory-mapped":
+			if value.Method != "process-footprint-plus-mapped-resident-pages" {
+				return "", errors.New("memory-mapped weights require mapped-resident-page accounting")
+			}
+		default:
+			return "", errors.New("artifact_mapping must be anonymous or memory-mapped")
+		}
+		return encode(value)
+	case FactSpeculativeDecoding:
+		var value speculativeDecodingValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
+		}
+		if value.Capability != "supported" && value.Capability != "absent" {
+			return "", errors.New("capability must be supported or absent")
+		}
+		if value.Active && value.Capability != "supported" {
+			return "", errors.New("active speculative decoding requires supported capability")
+		}
+		return encode(value)
+	case FactLoadState:
+		return validateTransition(raw, "resident", "loaded", "load")
+	case FactUnloadState:
+		return validateTransition(raw, "not-resident", "unloaded", "unload")
+	case FactInferenceBusy:
+		var value busyValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
+		}
+		if (value.State != "busy" && value.State != "idle") || value.Sequence <= 0 {
+			return "", errors.New("inference state must be busy or idle with a positive sequence")
+		}
+		return encode(value)
+	case FactMemoryPressureSequence:
+		var value pressureSequenceValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
+		}
+		if err := validatePressureSequence(value); err != nil {
+			return "", err
+		}
+		return encode(value)
+	case FactSSHForwarding:
+		var value sshForwardingValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
+		}
+		if value.Mode != "ssh" || strings.TrimSpace(value.Profile) == "" || value.LocalHost != "127.0.0.1" || value.LocalPort <= 0 || value.RemoteHost != "127.0.0.1" || value.RemotePort <= 0 {
+			return "", errors.New("ssh forwarding requires a named profile and positive loopback ports")
+		}
+		return encode(value)
+	case FactStressPolicy:
+		var value stressPolicyValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
+		}
+		if value.Mode != "synthetic-prefill" || value.PromptTokens <= 0 || value.OutputTokens <= 0 || value.MemorySample != "process-and-mappings" {
+			return "", errors.New("stress policy requires bounded synthetic-prefill and process-and-mappings sampling")
+		}
+		return encode(value)
+	case FactRestartSupervisionPolicy:
+		var value restartPolicyValue
+		if err := decodeStrict(raw, &value); err != nil {
+			return "", err
+		}
+		if value.Mode != "bounded-backoff" || value.MaxRestarts < 0 || len(value.BackoffSeconds) == 0 {
+			return "", errors.New("restart policy requires bounded-backoff, max_restarts, and backoff_seconds")
+		}
+		previous := 0
+		for _, seconds := range value.BackoffSeconds {
+			if seconds <= previous {
+				return "", errors.New("backoff_seconds must be positive and strictly increasing")
+			}
+			previous = seconds
+		}
+		return encode(value)
 	default:
-		return "", fmt.Errorf("unknown value contract %q", contract)
+		return "", errors.New("unknown fact")
 	}
 }
 
-func decodeSingleJSON(raw string, destination any) error {
+type healthValue struct {
+	ProcessAlive      bool `json:"process_alive"`
+	EndpointAnswering bool `json:"endpoint_answering"`
+}
+
+type readinessValue struct {
+	EndpointAnswering bool `json:"endpoint_answering"`
+	WeightsResident   bool `json:"weights_resident"`
+}
+
+type weightArtifactValue struct {
+	Shape       string   `json:"shape"`
+	WeightFiles []string `json:"weight_files"`
+	ConfigPath  string   `json:"config_path,omitempty"`
+	MMProjPath  string   `json:"mmproj_path,omitempty"`
+}
+
+type memoryAccountingValue struct {
+	ArtifactMapping string `json:"artifact_mapping"`
+	Method          string `json:"method"`
+	Bytes           int64  `json:"bytes"`
+}
+
+type speculativeDecodingValue struct {
+	Capability string `json:"capability"`
+	Active     bool   `json:"active"`
+}
+
+type transitionValue struct {
+	State      string `json:"state"`
+	Transition string `json:"transition"`
+	Sequence   int64  `json:"sequence"`
+}
+
+type busyValue struct {
+	State    string `json:"state"`
+	Sequence int64  `json:"sequence"`
+}
+
+type pressureSequenceValue struct {
+	PressureState string   `json:"pressure_state"`
+	LoadState     string   `json:"load_state"`
+	UnloadState   string   `json:"unload_state"`
+	InferenceBusy string   `json:"inference_busy"`
+	Order         []string `json:"order"`
+	Action        string   `json:"action"`
+}
+
+type sshForwardingValue struct {
+	Mode       string `json:"mode"`
+	Profile    string `json:"profile"`
+	LocalHost  string `json:"local_host"`
+	LocalPort  int    `json:"local_port"`
+	RemoteHost string `json:"remote_host"`
+	RemotePort int    `json:"remote_port"`
+}
+
+type stressPolicyValue struct {
+	Mode         string `json:"mode"`
+	PromptTokens int    `json:"prompt_tokens"`
+	OutputTokens int    `json:"output_tokens"`
+	MemorySample string `json:"memory_sample"`
+}
+
+type restartPolicyValue struct {
+	Mode           string `json:"mode"`
+	MaxRestarts    int    `json:"max_restarts"`
+	BackoffSeconds []int  `json:"backoff_seconds"`
+}
+
+func validateKnobArgv(raw string, flags ...string) (string, error) {
+	canonical, tokens, err := decodeArgv(raw)
+	if err != nil {
+		return "", err
+	}
+	if len(tokens) != 2 {
+		return "", errors.New("knob argv must contain exactly flag and value")
+	}
+	allowed := false
+	for _, flag := range flags {
+		allowed = allowed || tokens[0] == flag
+	}
+	if !allowed {
+		return "", fmt.Errorf("unexpected knob spelling %q", tokens[0])
+	}
+	value, err := strconv.Atoi(tokens[1])
+	if err != nil || value <= 0 {
+		return "", errors.New("knob value must be a positive integer")
+	}
+	return canonical, nil
+}
+
+func validateArgv(raw string) (string, error) {
+	canonical, _, err := decodeArgv(raw)
+	return canonical, err
+}
+
+func decodeArgv(raw string) (string, []string, error) {
+	var tokens []string
+	if err := decodeStrict(raw, &tokens); err != nil {
+		return "", nil, err
+	}
+	if len(tokens) == 0 {
+		return "", nil, errors.New("argv tokens are empty")
+	}
+	for index, token := range tokens {
+		if token == "" {
+			return "", nil, fmt.Errorf("argv token %d is empty", index)
+		}
+	}
+	canonical, _ := encode(tokens)
+	return canonical, tokens, nil
+}
+
+func validateTransition(raw, state, transition, label string) (string, error) {
+	var value transitionValue
+	if err := decodeStrict(raw, &value); err != nil {
+		return "", err
+	}
+	if value.State != state || value.Transition != transition || value.Sequence <= 0 {
+		return "", fmt.Errorf("%s state requires %s/%s with a positive sequence", label, state, transition)
+	}
+	return encode(value)
+}
+
+func validateWeightArtifact(value weightArtifactValue) error {
+	if len(value.WeightFiles) == 0 {
+		return errors.New("weight_files must not be empty")
+	}
+	for _, path := range value.WeightFiles {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+			return errors.New("weight paths must be absolute and clean")
+		}
+	}
+	switch value.Shape {
+	case "safetensors":
+		if !cleanAbsolute(value.ConfigPath) || filepath.Ext(value.ConfigPath) != ".json" || value.MMProjPath != "" {
+			return errors.New("safetensors requires config_path and forbids mmproj_path")
+		}
+		for _, path := range value.WeightFiles {
+			if filepath.Ext(path) != ".safetensors" {
+				return errors.New("safetensors shape requires .safetensors weight files")
+			}
+		}
+	case "gguf":
+		if len(value.WeightFiles) != 1 || filepath.Ext(value.WeightFiles[0]) != ".gguf" || value.ConfigPath != "" {
+			return errors.New("gguf requires exactly one .gguf weight file and no config_path")
+		}
+		if value.MMProjPath != "" && (!cleanAbsolute(value.MMProjPath) || filepath.Ext(value.MMProjPath) != ".gguf") {
+			return errors.New("mmproj_path must name a .gguf artifact")
+		}
+	default:
+		return errors.New("shape must be safetensors or gguf")
+	}
+	return nil
+}
+
+func validatePressureSequence(value pressureSequenceValue) error {
+	wantOrder := []string{"pressure", "load-state", "unload-state", "inference-busy", "relief-action"}
+	if !reflect.DeepEqual(value.Order, wantOrder) {
+		return errors.New("order must consult pressure, load, unload, and inference-busy before relief-action")
+	}
+	if value.LoadState == "resident" && value.UnloadState != "loaded" || value.LoadState == "not-resident" && value.UnloadState != "unloaded" {
+		return errors.New("load_state and unload_state conflict")
+	}
+	if value.LoadState != "resident" && value.LoadState != "not-resident" && value.LoadState != "unknown" {
+		return errors.New("invalid load_state")
+	}
+	if value.UnloadState != "loaded" && value.UnloadState != "unloaded" && value.UnloadState != "unknown" {
+		return errors.New("invalid unload_state")
+	}
+	if value.InferenceBusy != "busy" && value.InferenceBusy != "idle" && value.InferenceBusy != "unknown" {
+		return errors.New("invalid inference_busy")
+	}
+	switch value.PressureState {
+	case "healthy":
+		if value.Action != "observe" {
+			return errors.New("healthy pressure state requires observe")
+		}
+	case "pressured":
+		if value.InferenceBusy == "busy" && value.Action != "refuse-new" {
+			return errors.New("pressured busy engine must refuse-new without unload")
+		}
+		if value.InferenceBusy == "idle" && value.LoadState == "resident" && value.Action != "drain-idle" {
+			return errors.New("pressured idle resident engine must drain-idle")
+		}
+		if value.InferenceBusy == "idle" && value.LoadState == "not-resident" && value.Action != "observe" {
+			return errors.New("pressured idle unloaded engine requires observe")
+		}
+		if (value.InferenceBusy == "unknown" || value.LoadState == "unknown" || value.UnloadState == "unknown") && value.Action != "refuse-new" {
+			return errors.New("unknown sequencing input must refuse-new")
+		}
+	case "unknown":
+		if value.Action != "refuse-new" {
+			return errors.New("unknown pressure state must refuse-new")
+		}
+	default:
+		return errors.New("invalid pressure_state")
+	}
+	return nil
+}
+
+func cleanAbsolute(path string) bool {
+	return filepath.IsAbs(path) && filepath.Clean(path) == path
+}
+
+func decodeStrict(raw string, destination any) error {
 	decoder := json.NewDecoder(bytes.NewBufferString(raw))
+	decoder.DisallowUnknownFields()
 	decoder.UseNumber()
 	if err := decoder.Decode(destination); err != nil {
 		return err
@@ -476,6 +719,14 @@ func decodeSingleJSON(raw string, destination any) error {
 		return err
 	}
 	return nil
+}
+
+func encode(value any) (string, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
 }
 
 func cloneContract(contract Contract) Contract {
