@@ -2,6 +2,7 @@ package vendorplugin
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -191,10 +192,16 @@ func TestRegisterRefusesAnUnusablePricingContract(t *testing.T) {
 		"an unnamed plan":                   func(p *Pricing) { p.Plans[0].Name = " " },
 		"the same plan name twice":          func(p *Pricing) { p.Plans[1].Name = p.Plans[0].Name },
 		"a negative monthly price":          func(p *Pricing) { p.Plans[0].MonthlyUSD = -10 },
+		"a NaN monthly price":               func(p *Pricing) { p.Plans[0].MonthlyUSD = math.NaN() },
+		"a positive infinite monthly price": func(p *Pricing) { p.Plans[0].MonthlyUSD = math.Inf(1) },
+		"a negative infinite monthly price": func(p *Pricing) { p.Plans[0].MonthlyUSD = math.Inf(-1) },
 		"a negative credit allowance":       func(p *Pricing) { p.Plans[0].MonthlyCredits = -1 },
 		"a promotion above the list price":  func(p *Pricing) { p.Plans[0].PromotionalMonthlyUSD = float64Ptr(40) },
 		"a promotion equal to the list one": func(p *Pricing) { p.Plans[0].PromotionalMonthlyUSD = float64Ptr(30) },
 		"a negative promotion":              func(p *Pricing) { p.Plans[0].PromotionalMonthlyUSD = float64Ptr(-5) },
+		"a NaN promotional price":           func(p *Pricing) { p.Plans[0].PromotionalMonthlyUSD = float64Ptr(math.NaN()) },
+		"a positive infinite promotion":     func(p *Pricing) { p.Plans[0].PromotionalMonthlyUSD = float64Ptr(math.Inf(1)) },
+		"a negative infinite promotion":     func(p *Pricing) { p.Plans[0].PromotionalMonthlyUSD = float64Ptr(math.Inf(-1)) },
 		"a plan that prices nothing":        func(p *Pricing) { p.Plans[0].ApplicableModelIDs = nil },
 		"a plan pricing an unusable id":     func(p *Pricing) { p.Plans[0].ApplicableModelIDs = []ModelID{"narwhal deep"} },
 		"a contract for a different model": func(p *Pricing) {
@@ -223,10 +230,16 @@ func TestRegisterRefusesAnUnusablePricingContract(t *testing.T) {
 		"an unnamed plan":                   "unnamed plan",
 		"the same plan name twice":          "twice",
 		"a negative monthly price":          "monthly price of -10",
+		"a NaN monthly price":               "non-finite monthly price",
+		"a positive infinite monthly price": "non-finite monthly price",
+		"a negative infinite monthly price": "non-finite monthly price",
 		"a negative credit allowance":       "-1 monthly credits",
 		"a promotion above the list price":  "not a promotion",
 		"a promotion equal to the list one": "not a promotion",
 		"a negative promotion":              "promotional price of -5",
+		"a NaN promotional price":           "non-finite promotional price",
+		"a positive infinite promotion":     "non-finite promotional price",
+		"a negative infinite promotion":     "non-finite promotional price",
 		"a plan that prices nothing":        "prices no model",
 		"a plan pricing an unusable id":     "it carries whitespace",
 		"a contract for a different model":  "a price for something else",

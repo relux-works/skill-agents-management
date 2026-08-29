@@ -1,7 +1,11 @@
 package vendorplugin
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"math"
+	"sync"
 	"testing"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
@@ -99,7 +103,7 @@ func TestResolvingAnUnresolvedVendorRuntimeIsRefusedOnItsOwnTerms(t *testing.T) 
 	requireErrorIs(t, err, ErrRuntimeVendorUnresolved, "ResolveRuntime(runtime with an unresolved broker)")
 	requireMentions(t, err, "unbrokered", "the source's frozen table")
 
-	if _, err := BuildLaunch(registry, SpawnRequest{Runtime: "unbrokered", Model: "anything"}, agentic.LaunchModeExec); err == nil {
+	if _, err := BuildLaunch(context.Background(), registry, SpawnRequest{Runtime: "unbrokered", Model: "anything"}, agentic.LaunchModeExec); err == nil {
 		t.Fatal("a launch through an unresolved-vendor runtime was built; there is no vendor to pick a model from")
 	}
 }
@@ -327,6 +331,239 @@ func TestRuntimeDeclarationCollisionPolicy(t *testing.T) {
 			t.Fatalf("seeding twice produced %d declarations, want %d", len(declarations), len(frozenRuntimes))
 		}
 	})
+}
+
+func TestSystemOnlyRuntimeRedeclarationRequiresEquivalentModelAuthority(t *testing.T) {
+	t.Run("reordered rows are semantically equivalent", func(t *testing.T) {
+		registry := NewRegistry(systemsWithPangolin(t))
+		declaration := systemOnlyAuthorityDeclaration()
+		if err := registry.DeclareRuntime(declaration); err != nil {
+			t.Fatalf("first DeclareRuntime: %v", err)
+		}
+
+		reordered := declaration.clone()
+		reordered.Models[0], reordered.Models[1] = reordered.Models[1], reordered.Models[0]
+		if err := registry.DeclareRuntime(reordered); err != nil {
+			t.Fatalf("reordered equivalent redeclaration was refused: %v", err)
+		}
+	})
+
+	t.Run("exact validated pricing authority repeats idempotently", func(t *testing.T) {
+		registry := NewRegistry(systemsWithPangolin(t))
+		declaration := systemOnlyAuthorityDeclaration()
+		declaration.Models[0].Pricing = systemOnlyAuthorityPricing(declaration.Models[0].ID)
+		if err := registry.DeclareRuntime(declaration); err != nil {
+			t.Fatalf("first DeclareRuntime with finite pricing: %v", err)
+		}
+		if err := registry.DeclareRuntime(declaration.clone()); err != nil {
+			t.Fatalf("exact validated redeclaration with finite pricing: %v", err)
+		}
+	})
+
+	t.Run("non-finite pricing is refused before declaration storage", func(t *testing.T) {
+		for _, tc := range []struct {
+			name  string
+			value float64
+		}{
+			{"NaN", math.NaN()},
+			{"positive infinity", math.Inf(1)},
+			{"negative infinity", math.Inf(-1)},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				registry := NewRegistry(systemsWithPangolin(t))
+				declaration := systemOnlyAuthorityDeclaration()
+				declaration.Models[0].Pricing = systemOnlyAuthorityPricing(declaration.Models[0].ID)
+				declaration.Models[0].Pricing.Plans[0].MonthlyUSD = tc.value
+
+				err := registry.DeclareRuntime(declaration)
+				requireErrorIs(t, err, ErrPricingInvalid, "DeclareRuntime(system-only non-finite pricing)")
+				requireMentions(t, err, "non-finite monthly price")
+				if _, stored := registry.RuntimeDeclarationOf(declaration.ID); stored {
+					t.Fatal("DeclareRuntime persisted a declaration after refusing its non-finite pricing")
+				}
+			})
+		}
+	})
+
+	mutations := []struct {
+		name   string
+		mutate func(*RuntimeDeclaration)
+	}{
+		{"model id", func(d *RuntimeDeclaration) { d.Models[0].ID = "authority-one-renamed" }},
+		{"usage description", func(d *RuntimeDeclaration) { d.Models[0].Description = "changed authority description" }},
+		{"effort support", func(d *RuntimeDeclaration) {
+			d.Models[0].Effort = EffortDeclaration{Support: agentic.EffortSupportNone}
+		}},
+		{"effort vocabulary", func(d *RuntimeDeclaration) {
+			d.Models[0].Effort.Vocabulary = []string{"low", "medium", "high"}
+		}},
+		{"effort recommendation", func(d *RuntimeDeclaration) {
+			d.Models[0].Effort.Recommended = "low"
+		}},
+		{"model system membership", func(d *RuntimeDeclaration) {
+			d.Models[0].Systems = append(d.Models[0].Systems, "another-system")
+		}},
+		{"capability rank", func(d *RuntimeDeclaration) { d.Models[0].Rank.Score++ }},
+		{"rank evidence", func(d *RuntimeDeclaration) { d.Models[0].Rank.Basis[0].Observation = "changed evidence" }},
+		{"lifecycle", func(d *RuntimeDeclaration) { d.Models[0].Lifecycle = LifecyclePreview }},
+		{"supersession", func(d *RuntimeDeclaration) {
+			d.Models[0].Lifecycle = LifecycleLegacy
+			d.Models[0].SupersededBy = d.Models[1].ID
+		}},
+		{"display recommendation", func(d *RuntimeDeclaration) { d.Models[0].Recommended = true }},
+		{"context window", func(d *RuntimeDeclaration) { d.Models[0].ContextWindowTokens++ }},
+		{"pricing", func(d *RuntimeDeclaration) {
+			d.Models[0].Pricing = &Pricing{
+				BillingModel: "subscription",
+				Edition:      "fixture",
+				Currency:     "USD",
+				QuotaPeriod:  "month",
+				Plans: []PricingPlan{{
+					Name:               "fixture",
+					MonthlyUSD:         1,
+					MonthlyCredits:     1,
+					ApplicableModelIDs: []ModelID{d.Models[0].ID},
+				}},
+				SourceURL: "https://example.invalid/pricing",
+				AsOf:      "2026-08-29",
+			}
+		}},
+		{"publisher", func(d *RuntimeDeclaration) { d.Models[0].Publisher = "another-publisher" }},
+		{"family", func(d *RuntimeDeclaration) { d.Models[0].Family = "another-family" }},
+	}
+
+	for _, tc := range mutations {
+		t.Run("changed "+tc.name+" conflicts", func(t *testing.T) {
+			registry := NewRegistry(systemsWithPangolin(t))
+			declaration := systemOnlyAuthorityDeclaration()
+			if err := registry.DeclareRuntime(declaration); err != nil {
+				t.Fatalf("first DeclareRuntime: %v", err)
+			}
+
+			conflicting := declaration.clone()
+			tc.mutate(&conflicting)
+			err := registry.DeclareRuntime(conflicting)
+			requireErrorIs(t, err, ErrRuntimeConflict, "DeclareRuntime(system-only authority conflict)")
+
+			stored, ok := registry.RuntimeDeclarationOf(declaration.ID)
+			if !ok {
+				t.Fatal("the winning declaration disappeared")
+			}
+			if !systemOnlyModelAuthorityEqual(stored.Models, declaration.Models) {
+				t.Fatalf("the losing declaration mutated stored authority: %#v", stored.Models)
+			}
+		})
+	}
+}
+
+func TestConcurrentSystemOnlyRuntimeConflictsKeepExactlyOneCompleteAuthority(t *testing.T) {
+	const contenders = 24
+	registry := NewRegistry(systemsWithPangolin(t))
+	start := make(chan struct{})
+	type result struct {
+		index int
+		err   error
+	}
+	results := make(chan result, contenders)
+	var wg sync.WaitGroup
+
+	for i := 0; i < contenders; i++ {
+		wg.Add(1)
+		go func(index int) {
+			declaration := systemOnlyAuthorityDeclaration()
+			word := fmt.Sprintf("effort-%02d", index)
+			declaration.Models[0].Effort.Vocabulary = []string{word}
+			declaration.Models[0].Effort.Recommended = word
+			<-start
+			results <- result{index: index, err: registry.DeclareRuntime(declaration)}
+			wg.Done()
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	winner := -1
+	for result := range results {
+		if result.err == nil {
+			if winner >= 0 {
+				t.Fatalf("more than one conflicting contender reported success: %d and %d", winner, result.index)
+			}
+			winner = result.index
+			continue
+		}
+		requireErrorIs(t, result.err, ErrRuntimeConflict, "concurrent losing DeclareRuntime")
+	}
+	if winner < 0 {
+		t.Fatal("no concurrent contender established authority")
+	}
+
+	winnerWord := fmt.Sprintf("effort-%02d", winner)
+	stored, ok := registry.RuntimeDeclarationOf("system-authority")
+	if !ok {
+		t.Fatal("the winning declaration was not stored")
+	}
+	if got := stored.Models[0].Effort; len(got.Vocabulary) != 1 || got.Vocabulary[0] != winnerWord || got.Recommended != winnerWord {
+		t.Fatalf("stored effort authority = %#v, want only winner %q", got, winnerWord)
+	}
+
+	request := narwhalRequest()
+	request.Runtime = "system-authority"
+	request.Model = "authority-one"
+	for i := 0; i < contenders; i++ {
+		word := fmt.Sprintf("effort-%02d", i)
+		request.Effort = word
+		_, err := BuildLaunch(context.Background(), registry, request, agentic.LaunchModeDryRun)
+		if i == winner {
+			if err != nil {
+				t.Fatalf("BuildLaunch(winner effort %q): %v", word, err)
+			}
+			continue
+		}
+		requireErrorIs(t, err, ErrEffortNotInVocabulary, "BuildLaunch(losing effort authority)")
+	}
+}
+
+func systemOnlyAuthorityDeclaration() RuntimeDeclaration {
+	model := func(id ModelID, score int) Model {
+		return Model{
+			ID:                  id,
+			Description:         UsageDescription("system-only authority row " + id),
+			Rank:                CapabilityRank{Score: score, Basis: []RankEvidence{{Source: "test", Observation: "authority fixture"}}},
+			Lifecycle:           LifecycleCurrent,
+			Effort:              EffortDeclaration{Support: agentic.EffortSupportRequired, Vocabulary: []string{"low", "high"}, Recommended: "high"},
+			ContextWindowTokens: 32_768,
+			Publisher:           "fixture-publisher",
+			Family:              "fixture-family",
+			Systems:             []agentic.SystemID{pangolinID},
+		}
+	}
+	return RuntimeDeclaration{
+		ID:     "system-authority",
+		System: pangolinID,
+		Vendor: VendorUnresolved,
+		Broker: BrokerProvenance{Checked: []string{"test fixture"}},
+		Models: []Model{model("authority-one", 20), model("authority-two", 10)},
+	}
+}
+
+func systemOnlyAuthorityPricing(model ModelID) *Pricing {
+	promotional := 1.0
+	return &Pricing{
+		BillingModel: "subscription",
+		Edition:      "fixture",
+		Currency:     "USD",
+		QuotaPeriod:  "month",
+		Plans: []PricingPlan{{
+			Name:                  "fixture",
+			MonthlyUSD:            2,
+			PromotionalMonthlyUSD: &promotional,
+			MonthlyCredits:        1,
+			ApplicableModelIDs:    []ModelID{model},
+		}},
+		SourceURL: "https://example.invalid/pricing",
+		AsOf:      "2026-08-29",
+	}
 }
 
 // A binding nobody looked for is not a declaration. Requiring the provenance

@@ -33,6 +33,7 @@ package vendorplugin
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 
@@ -247,11 +248,13 @@ func (l Lifecycle) Validate() error {
 type PricingPlan struct {
 	// Name is the vendor's own name for the tier, unique within a contract.
 	Name string
-	// MonthlyUSD is the regular monthly list price.
+	// MonthlyUSD is the regular monthly list price. It must be finite and
+	// non-negative.
 	MonthlyUSD float64
 	// PromotionalMonthlyUSD is the current limited-time price, nil when the
 	// vendor publishes none. A pointer rather than a zero float because a
 	// promotion AT zero and no promotion at all are different offers.
+	// A present value must be finite, non-negative, and below MonthlyUSD.
 	PromotionalMonthlyUSD *float64
 	// MonthlyCredits is the tier's published monthly credit allowance.
 	MonthlyCredits int
@@ -346,6 +349,13 @@ func (p *Pricing) Validate(model ModelID) error {
 			}
 		}
 		seen = append(seen, plan.Name)
+		// Ordinary ordering comparisons admit NaN, while infinities can
+		// masquerade as non-negative prices. Refuse every non-finite value at
+		// this canonical validation boundary so neither vendor registration nor
+		// declaration-owned system-only authority can persist it.
+		if math.IsNaN(plan.MonthlyUSD) || math.IsInf(plan.MonthlyUSD, 0) {
+			return fmt.Errorf("%w: model %q's plan %q lists a non-finite monthly price of %v", ErrPricingInvalid, model, plan.Name, plan.MonthlyUSD)
+		}
 		if plan.MonthlyUSD < 0 {
 			return fmt.Errorf("%w: model %q's plan %q lists a monthly price of %v", ErrPricingInvalid, model, plan.Name, plan.MonthlyUSD)
 		}
@@ -354,6 +364,9 @@ func (p *Pricing) Validate(model ModelID) error {
 		}
 		if plan.PromotionalMonthlyUSD != nil {
 			promotional := *plan.PromotionalMonthlyUSD
+			if math.IsNaN(promotional) || math.IsInf(promotional, 0) {
+				return fmt.Errorf("%w: model %q's plan %q lists a non-finite promotional price of %v", ErrPricingInvalid, model, plan.Name, promotional)
+			}
 			if promotional < 0 {
 				return fmt.Errorf("%w: model %q's plan %q lists a promotional price of %v", ErrPricingInvalid, model, plan.Name, promotional)
 			}
@@ -557,6 +570,15 @@ type Model struct {
 	// Pricing is the vendor billing contract, or nil when none was registered.
 	Pricing *Pricing
 
+	// Publisher and Family are provenance, display and audit fields only —
+	// never an admission input. Neither is read by Registry.Register, by
+	// BuildLaunch's resolution, or by Vendor.Spawn/Availability: naming stays
+	// orthogonal by construction, so a model's publisher or family can never
+	// gate a launch. Empty is legal for both and means the fact was not
+	// recorded, not that the model has none.
+	Publisher string
+	Family    string
+
 	// Systems are the agentic systems that can drive this model. It must be
 	// non-empty — a model no harness can run is not a launchable declaration —
 	// and every id must be registered in the agentic registry the vendor
@@ -733,6 +755,15 @@ func (m Model) Launchable() agentic.Model {
 type AvailabilityQuery struct {
 	Model ModelID
 	Home  string
+
+	// Runtime says which declared RuntimeID is asking, for a vendor serving
+	// more than one RuntimeID under one VendorID — google already serves both
+	// gemini and agy this way. A vendor with only one runtime may ignore it;
+	// a vendor with more than one uses it to disambiguate which of its own
+	// declared runtimes' facts a caller wants, the same way Spawn's own
+	// per-runtime lookup does. Empty is legal and means the caller did not
+	// disambiguate.
+	Runtime RuntimeID
 }
 
 // SpawnContext is everything a vendor gets for one launch: the resolved

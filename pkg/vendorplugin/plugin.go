@@ -56,18 +56,29 @@ func CloneModels(models []Model) []Model {
 // check already draws the line for it: a vendor may ADD to a launch and may
 // not REDIRECT one.
 func PassthroughLaunch(sc SpawnContext) agentic.LaunchRequest {
+	return passthroughLaunchRequest(sc.Runtime.SystemID, sc.Model, sc.Effort, sc.Request)
+}
+
+// passthroughLaunchRequest is the lossless projection shared by ordinary
+// no-addition vendors and explicit system-only runtime bindings. The latter
+// have no Vendor value from which to construct a SpawnContext; forcing one
+// into existence would fabricate the very broker identity their declaration
+// records as unresolved.
+func passthroughLaunchRequest(system agentic.SystemID, model Model, effort string, req SpawnRequest) agentic.LaunchRequest {
 	return agentic.LaunchRequest{
-		System:      sc.Runtime.SystemID,
-		Model:       sc.Model.Launchable(),
-		Effort:      sc.Effort,
-		PromptPath:  sc.Request.PromptPath,
-		Prompt:      sc.Request.Prompt,
-		WorkDir:     sc.Request.WorkDir,
-		Home:        sc.Request.Home,
-		Env:         sc.Request.Env,
-		Goal:        sc.Request.Goal,
-		Budget:      sc.Request.Budget,
-		ServiceTier: sc.Request.ServiceTier,
-		Composition: sc.Request.Composition,
+		System:      system,
+		Model:       model.Launchable(),
+		Effort:      effort,
+		PromptPath:  req.PromptPath,
+		Prompt:      req.Prompt,
+		WorkDir:     req.WorkDir,
+		Home:        req.Home,
+		Env:         req.Env,
+		Run:         req.Run,
+		Profile:     req.Profile,
+		Goal:        req.Goal,
+		Budget:      req.Budget,
+		ServiceTier: req.ServiceTier,
+		Composition: req.Composition,
 	}
 }
