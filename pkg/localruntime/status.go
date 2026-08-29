@@ -110,6 +110,23 @@ type Status struct {
 	ActiveLeases int
 	MaxLeases    int
 
+	// Restart/quarantine facts mirror the additive shared-runtime status
+	// extension. The Present flags preserve the difference between a legacy
+	// producer that did not publish a field and a current producer that
+	// published its legitimate zero/null value.
+	RestartCount              int
+	RestartCountPresent       bool
+	RestartNotBefore          *time.Time
+	RestartNotBeforePresent   bool
+	QuarantinedUntil          *time.Time
+	QuarantinedUntilPresent   bool
+	LastReadinessMatch        *time.Time
+	LastReadinessMatchPresent bool
+	ManualQuarantine          bool
+	ManualQuarantinePresent   bool
+	HalfOpen                  bool
+	HalfOpenPresent           bool
+
 	// Observed is this reader's own bounded trail of recent reads (see
 	// §4.6), never the broker's.
 	Observed []Observation

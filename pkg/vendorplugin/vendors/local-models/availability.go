@@ -12,6 +12,11 @@ import (
 // verdict this vendor produces.
 const statusSourceLabel = "local-runtime status"
 
+const (
+	restartNotBeforeSourceLabel = "agents-infra runtime status --json.restart_not_before"
+	quarantinedUntilSourceLabel = "agents-infra runtime status --json.quarantined_until"
+)
+
 // Availability reads query.Runtime to disambiguate which of this vendor's
 // declared runtimes' pointers to check — the SAME per-(runtime, model)
 // lookup Spawn performs — then composes a live status read into a verdict
@@ -64,6 +69,28 @@ func (v *Vendor) Availability(query vendorplugin.AvailabilityQuery) (vendorplugi
 // questions about the same underlying fact, and a caller must not read one
 // off the other.
 func mapAvailability(status localruntime.Status) vendorplugin.Availability {
+	if status.QuarantinedUntil != nil && status.QuarantinedUntil.After(status.AsOf) {
+		return vendorplugin.LimitedUntil(*status.QuarantinedUntil, vendorplugin.Observation{
+			Source: quarantinedUntilSourceLabel,
+			Detail: "shared runtime quarantine deadline",
+			At:     status.AsOf,
+		})
+	}
+
+	// A producer predating restart_not_before cannot prove that backoff is
+	// inactive. Report checked-but-unknown for that source instead of
+	// laundering a missing field into the current producer's explicit null.
+	if !status.RestartNotBeforePresent {
+		return vendorplugin.UnknownAfterCheck(restartNotBeforeSourceLabel)
+	}
+	if status.RestartNotBefore != nil && status.RestartNotBefore.After(status.AsOf) {
+		return vendorplugin.LimitedUntil(*status.RestartNotBefore, vendorplugin.Observation{
+			Source: restartNotBeforeSourceLabel,
+			Detail: "shared runtime restart backoff deadline",
+			At:     status.AsOf,
+		})
+	}
+
 	checked := []string{statusSourceLabel}
 	observed := []vendorplugin.Observation{{
 		Source: statusSourceLabel,

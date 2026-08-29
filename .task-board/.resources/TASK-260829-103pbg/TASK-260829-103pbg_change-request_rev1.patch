@@ -1,0 +1,741 @@
+diff --git a/LOGBOOK.md b/LOGBOOK.md
+index 454a1ad..fa4f4fe 100644
+--- a/LOGBOOK.md
++++ b/LOGBOOK.md
+@@ -5,6 +5,21 @@
+ 
+ ## 2026-08-29
+ 
++### 1907 — Partial restart-status cohorts fail closed
++- ROOT CAUSE: The decoder validated lifecycle fields independently, so omission from a recognizable current response could be laundered into legacy absence and reach `Healthy`. `pkg/localruntime/decode.go`.
++- FIX: One cohort gate now accepts only zero lifecycle fields, the complete four-field pre-deadline fixture, or the complete six-field current fixture; `manual_quarantine` is type-checked and mirrored for wire integrity.
++- TEST: Removing each lifecycle field independently now yields `Unknown` with read-failure evidence through `CLIStatusReader` and production `vendorplugin.CheckAvailability`. `pkg/vendorplugin/vendors/local-models/availability_test.go`.
++
++### 1834 — Restart status absence remains distinct from explicit null
++- DECISION: A legacy status response missing `restart_not_before` maps to checked `Unknown`; only a present future deadline maps to `Limited`, while present `null` or an elapsed deadline continues through attested broker facts. `pkg/vendorplugin/vendors/local-models/availability.go`.
++- TEST: Case 27b drives pre/post fixtures through `localruntime.CLIStatusReader` and production `vendorplugin.CheckAvailability`; disabling the presence gate makes the named legacy-fixture test fail by returning false `Healthy`.
++- FINDING: `restart_count` and `half_open` remain historical lifecycle evidence and never mint an active backoff verdict.
++
++### 1834 — JSON null bypasses scalar type checks unless rejected explicitly
++- ROOT CAUSE: Go `encoding/json` accepts JSON `null` into non-pointer `int` and `bool` destinations without error, leaving zero values; `Unmarshal` alone therefore does not enforce the restart-extension presence/type matrix.
++- FIX: Present `null` now refuses for `restart_count` and `half_open`; nullable timestamp fields retain `null` as their defined no-deadline/no-observation value. `pkg/localruntime/decode.go`.
++- TEST: Extension wrong-type cases pin null, malformed timestamps, negative counts, and string-encoded scalars as `ErrDecodeFailure`. `pkg/localruntime/decode_test.go`.
++
+ ### 1744 — Pricing authority refuses IEEE-754 non-finite values
+ - ROOT CAUSE: `Pricing.Validate` used ordinary `<`/`>=` comparisons; those admit `NaN`, while infinities could pass the non-negative list-price gate and make exact system-only redeclaration unstable.
+ - FIX: The canonical validator now refuses `NaN`, `+Inf`, and `-Inf` for list and promotional prices before ordering checks. `pkg/vendorplugin/vendor.go`.
+diff --git a/docs/architecture.md b/docs/architecture.md
+index cd73af0..b845529 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -222,14 +222,17 @@ resolved against `agents-infra` on PATH) and attaches the assignment on stdin
+ using this module's existing precedented fallback, rather than inventing an
+ unpinned grammar.
+ 
+-**M2 (separately scheduled, not in this task's scope):** the persisted
+-restart/quarantine ledger and its status-JSON surfacing, log rotation, and this
+-module's later status-consumer widening are tracked outside this task. The
+-`skill-project-management` migration named above is part of end-to-end M1,
+-not M2. Until the M2 pieces land,
+-`local-models.Availability()` can report `Healthy`/`Unreachable`/`Unknown`
+-from a LIVE broker read, but never `Backoff`/`Quarantined` — those wire fields
+-do not exist yet, so no `(BrokerState, BrokerSource)` pair can produce them.
++**Module-side M2 status-consumer candidate:** relux-agents-infra PR #10
++publishes the persisted `restart_not_before`, `quarantined_until`, restart and
++readiness facts. `pkg/localruntime` consumes that additive shape with explicit
++presence/type checks and refuses partial lifecycle cohorts, while preserving
++the complete legacy and pre-deadline fixtures. `local-models` maps a
++future quarantine or restart-backoff deadline to validator-safe `Limited` via
++the real `CheckAvailability` entry point. It never derives a limit from
++`restart_count` or `half_open`; a legacy response missing
++`restart_not_before` is `Unknown`, while an explicit `null` or elapsed deadline
++continues through the live broker mapping above. Log rotation and the
++coordinated `skill-project-management` consumer remain separately owned work.
+ 
+ ## Boundaries with task-board
+ 
+diff --git a/docs/shipped-state.md b/docs/shipped-state.md
+index 541041f..a63a6b0 100644
+--- a/docs/shipped-state.md
++++ b/docs/shipped-state.md
+@@ -260,14 +260,16 @@ What is still open, and owned elsewhere:
+   `TASK-260828-3hultd`, in development. Acceptance requires an immutable
+   coordinated consumer candidate and tests through the real production call
+   chain; helper-only component tests do not satisfy that gate.
+-- **The persisted restart/quarantine ledger, its status-JSON surfacing, and
+-  log rotation** — `relux-agents-infra`, two new tasks named in the
+-  architecture decision (`TASK-260829-3jlxed`, §7.1.3) but not yet created on
+-  that repository's own board.
+-- **Consuming the widened ledger fields once they exist** — this repository's
+-  own `TASK-260829-1kpj01`, deliberately NOT part of this story, so
+-  `local-models.Availability()` reports `Healthy`/`Unreachable`/`Unknown` from
+-  a live broker read today but never `Backoff`/`Quarantined`.
++- **Shared-runtime log rotation** — separately owned by relux-agents-infra.
++  Its restart/quarantine ledger and the additive public deadline/status facts
++  have landed, but bounded logs remain outside this module.
++- **The coordinated task-board M2 consumer** — separately owned by
++  `skill-project-management`. This module-side candidate now decodes the
++  landed restart/quarantine fields and maps a future quarantine or backoff
++  deadline to validator-safe `Limited` through `CheckAvailability`; it reports
++  `Unknown` for a legacy response missing `restart_not_before` and never
++  infers a current limit from `restart_count` or `half_open`. Partial
++  restart-status cohorts are read failures, never legacy absence.
+ - **Pi's own turn-argument/stdin wire protocol for a real turn** — blocked on
+   a pinned `earendil-works/pi` binary/docs fixture nothing supplies yet
+   (adversarial plan case 17); `pkg/agentic/systems/pi` builds only the pinned
+diff --git a/pkg/localruntime/decode.go b/pkg/localruntime/decode.go
+index 37e6841..4e22e02 100644
+--- a/pkg/localruntime/decode.go
++++ b/pkg/localruntime/decode.go
+@@ -15,6 +15,19 @@ import (
+ // actually produce.
+ var ErrDecodeFailure = errors.New("localruntime: status response failed to decode")
+ 
++var (
++	restartStatusPreExtensionFields = []string{
++		"restart_count",
++		"quarantined_until",
++		"last_readiness_match",
++		"manual_quarantine",
++	}
++	restartStatusCurrentOnlyFields = []string{
++		"restart_not_before",
++		"half_open",
++	}
++)
++
+ // brokerPair is one (state, source) combination.
+ type brokerPair struct {
+ 	state  string
+@@ -141,22 +154,93 @@ func decodeStatus(raw []byte, runtime RuntimeID, model ModelID, now time.Time) (
+ 	if err != nil {
+ 		return Status{}, err
+ 	}
++	if err := validateRestartStatusCohort(fields); err != nil {
++		return Status{}, err
++	}
++
++	restartCount, restartCountPresent, err := optionalNonNegativeInt(fields, "restart_count")
++	if err != nil {
++		return Status{}, err
++	}
++	restartNotBefore, restartNotBeforePresent, err := optionalNullableTimestamp(fields, "restart_not_before")
++	if err != nil {
++		return Status{}, err
++	}
++	quarantinedUntil, quarantinedUntilPresent, err := optionalNullableTimestamp(fields, "quarantined_until")
++	if err != nil {
++		return Status{}, err
++	}
++	lastReadinessMatch, lastReadinessMatchPresent, err := optionalNullableTimestamp(fields, "last_readiness_match")
++	if err != nil {
++		return Status{}, err
++	}
++	manualQuarantine, manualQuarantinePresent, err := optionalBool(fields, "manual_quarantine")
++	if err != nil {
++		return Status{}, err
++	}
++	halfOpen, halfOpenPresent, err := optionalBool(fields, "half_open")
++	if err != nil {
++		return Status{}, err
++	}
+ 
+ 	return Status{
+-		Contract:      StatusContract,
+-		SchemaVersion: StatusSchemaVersion,
+-		Runtime:       runtime,
+-		Model:         model,
+-		BrokerState:   broker.State,
+-		BrokerSource:  BrokerObservationSource(broker.Source),
+-		PID:           pid,
+-		StartedAt:     startedAt,
+-		ActiveLeases:  leaseCount,
+-		MaxLeases:     sharing.Configured.MaxLeases,
+-		AsOf:          now,
++		Contract:                  StatusContract,
++		SchemaVersion:             StatusSchemaVersion,
++		Runtime:                   runtime,
++		Model:                     model,
++		BrokerState:               broker.State,
++		BrokerSource:              BrokerObservationSource(broker.Source),
++		PID:                       pid,
++		StartedAt:                 startedAt,
++		ActiveLeases:              leaseCount,
++		MaxLeases:                 sharing.Configured.MaxLeases,
++		RestartCount:              restartCount,
++		RestartCountPresent:       restartCountPresent,
++		RestartNotBefore:          restartNotBefore,
++		RestartNotBeforePresent:   restartNotBeforePresent,
++		QuarantinedUntil:          quarantinedUntil,
++		QuarantinedUntilPresent:   quarantinedUntilPresent,
++		LastReadinessMatch:        lastReadinessMatch,
++		LastReadinessMatchPresent: lastReadinessMatchPresent,
++		ManualQuarantine:          manualQuarantine,
++		ManualQuarantinePresent:   manualQuarantinePresent,
++		HalfOpen:                  halfOpen,
++		HalfOpenPresent:           halfOpenPresent,
++		AsOf:                      now,
+ 	}, nil
+ }
+ 
++// validateRestartStatusCohort accepts only the three producer generations
++// frozen by the shared-runtime wire fixtures: no lifecycle fields (legacy),
++// the complete pre-deadline cohort, or the complete current cohort. Every
++// lifecycle field is serialized without omitempty by its producer, so any
++// mixed presence is a partial failed read rather than forward compatibility.
++func validateRestartStatusCohort(fields map[string]json.RawMessage) error {
++	present := func(keys []string) int {
++		count := 0
++		for _, key := range keys {
++			if _, ok := fields[key]; ok {
++				count++
++			}
++		}
++		return count
++	}
++
++	preCount := present(restartStatusPreExtensionFields)
++	currentOnlyCount := present(restartStatusCurrentOnlyFields)
++	switch {
++	case preCount == 0 && currentOnlyCount == 0:
++		return nil
++	case preCount == len(restartStatusPreExtensionFields) && currentOnlyCount == 0:
++		return nil
++	case preCount == len(restartStatusPreExtensionFields) && currentOnlyCount == len(restartStatusCurrentOnlyFields):
++		return nil
++	default:
++		return fmt.Errorf("%w: restart status fields form a partial cohort (pre-extension %d/%d, current-only %d/%d)",
++			ErrDecodeFailure, preCount, len(restartStatusPreExtensionFields), currentOnlyCount, len(restartStatusCurrentOnlyFields))
++	}
++}
++
+ // decodeOptionalRuntime decodes the nullable `runtime` object. Absent or
+ // JSON null means no process was observed — a real, common answer, never a
+ // decode failure. Present-but-malformed IS a decode failure: this field is
+@@ -220,3 +304,60 @@ func requiredNonEmptyString(fields map[string]json.RawMessage, key string) (stri
+ 	}
+ 	return value, nil
+ }
++
++// optionalNonNegativeInt decodes an additive integer field. Absence is
++// accepted for compatibility with an older status producer; a present field
++// must have the extension's exact type and range.
++func optionalNonNegativeInt(fields map[string]json.RawMessage, key string) (value int, present bool, err error) {
++	raw, present := fields[key]
++	if !present {
++		return 0, false, nil
++	}
++	if strings.TrimSpace(string(raw)) == "null" {
++		return 0, true, fmt.Errorf("%w: field %q is null, not an integer", ErrDecodeFailure, key)
++	}
++	if err := json.Unmarshal(raw, &value); err != nil {
++		return 0, true, fmt.Errorf("%w: field %q is not an integer: %v", ErrDecodeFailure, key, err)
++	}
++	if value < 0 {
++		return 0, true, fmt.Errorf("%w: field %q is negative", ErrDecodeFailure, key)
++	}
++	return value, true, nil
++}
++
++// optionalNullableTimestamp preserves all three wire states: absent (legacy
++// producer), null (current producer with no deadline/observation), and a
++// strict RFC3339 timestamp. Present malformed input is a failed read, never
++// laundered into absence.
++func optionalNullableTimestamp(fields map[string]json.RawMessage, key string) (value *time.Time, present bool, err error) {
++	raw, present := fields[key]
++	if !present {
++		return nil, false, nil
++	}
++	if strings.TrimSpace(string(raw)) == "null" {
++		return nil, true, nil
++	}
++	var encoded string
++	if err := json.Unmarshal(raw, &encoded); err != nil {
++		return nil, true, fmt.Errorf("%w: field %q is not null or an RFC3339 string: %v", ErrDecodeFailure, key, err)
++	}
++	parsed, err := time.Parse(time.RFC3339, encoded)
++	if err != nil {
++		return nil, true, fmt.Errorf("%w: field %q is not an RFC3339 timestamp: %v", ErrDecodeFailure, key, err)
++	}
++	return &parsed, true, nil
++}
++
++func optionalBool(fields map[string]json.RawMessage, key string) (value bool, present bool, err error) {
++	raw, present := fields[key]
++	if !present {
++		return false, false, nil
++	}
++	if strings.TrimSpace(string(raw)) == "null" {
++		return false, true, fmt.Errorf("%w: field %q is null, not a boolean", ErrDecodeFailure, key)
++	}
++	if err := json.Unmarshal(raw, &value); err != nil {
++		return false, true, fmt.Errorf("%w: field %q is not a boolean: %v", ErrDecodeFailure, key, err)
++	}
++	return value, true, nil
++}
+diff --git a/pkg/localruntime/decode_test.go b/pkg/localruntime/decode_test.go
+index 880407d..9f77351 100644
+--- a/pkg/localruntime/decode_test.go
++++ b/pkg/localruntime/decode_test.go
+@@ -59,7 +59,7 @@ func TestDecodeStatusHappyPath(t *testing.T) {
+ // every currently-read field must still populate identically.
+ func TestDecodeStatusExtraTopLevelFieldIsIgnored(t *testing.T) {
+ 	fixture := validFixture()
+-	fixture["restart_count"] = 7 // an extension #1 field, unknown to this decoder
++	fixture["future_extension_field"] = map[string]any{"value": 7}
+ 	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", time.Now())
+ 	if err != nil {
+ 		t.Fatalf("decodeStatus with an unknown extra field: %v", err)
+@@ -69,6 +69,142 @@ func TestDecodeStatusExtraTopLevelFieldIsIgnored(t *testing.T) {
+ 	}
+ }
+ 
++// TestDecodeStatusPreRestartDeadlineFixture is adversarial case 27a. The
++// first restart-status extension remains valid compatibility input: its facts
++// are consumed, while the later restart_not_before/half_open facts remain
++// explicitly absent rather than being fabricated from restart_count.
++func TestDecodeStatusPreRestartDeadlineFixture(t *testing.T) {
++	fixture := validFixture()
++	fixture["restart_count"] = 2
++	fixture["quarantined_until"] = nil
++	fixture["last_readiness_match"] = "2026-08-29T12:00:00Z"
++	fixture["manual_quarantine"] = false
++	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", time.Now())
++	if err != nil {
++		t.Fatalf("decodeStatus(pre-extension fixture): %v", err)
++	}
++	if !status.RestartCountPresent || status.RestartCount != 2 {
++		t.Fatalf("restart_count = %d present=%t, want 2/true", status.RestartCount, status.RestartCountPresent)
++	}
++	if !status.QuarantinedUntilPresent || status.QuarantinedUntil != nil {
++		t.Fatalf("quarantined_until = %v present=%t, want nil/true", status.QuarantinedUntil, status.QuarantinedUntilPresent)
++	}
++	wantReady := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
++	if !status.LastReadinessMatchPresent || status.LastReadinessMatch == nil || !status.LastReadinessMatch.Equal(wantReady) {
++		t.Fatalf("last_readiness_match = %v present=%t, want %v/true", status.LastReadinessMatch, status.LastReadinessMatchPresent, wantReady)
++	}
++	if !status.ManualQuarantinePresent || status.ManualQuarantine {
++		t.Fatalf("manual_quarantine = %t present=%t, want false/true", status.ManualQuarantine, status.ManualQuarantinePresent)
++	}
++	if status.RestartNotBeforePresent || status.RestartNotBefore != nil || status.HalfOpenPresent || status.HalfOpen {
++		t.Fatalf("pre-extension fixture fabricated later facts: %+v", status)
++	}
++}
++
++// TestDecodeStatusPostRestartDeadlineFixture is adversarial case 27b's wire
++// half. It pins the exact landed Handoff-A follow-up shape, including a
++// present deadline and half-open lifecycle evidence.
++func TestDecodeStatusPostRestartDeadlineFixture(t *testing.T) {
++	fixture := validFixture()
++	fixture["restart_count"] = 2
++	fixture["restart_not_before"] = "2026-08-29T12:00:04Z"
++	fixture["quarantined_until"] = nil
++	fixture["last_readiness_match"] = "2026-08-29T12:00:00Z"
++	fixture["manual_quarantine"] = false
++	fixture["half_open"] = true
++	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", time.Now())
++	if err != nil {
++		t.Fatalf("decodeStatus(post-extension fixture): %v", err)
++	}
++	wantDeadline := time.Date(2026, 8, 29, 12, 0, 4, 0, time.UTC)
++	if !status.RestartNotBeforePresent || status.RestartNotBefore == nil || !status.RestartNotBefore.Equal(wantDeadline) {
++		t.Fatalf("restart_not_before = %v present=%t, want %v/true", status.RestartNotBefore, status.RestartNotBeforePresent, wantDeadline)
++	}
++	if !status.HalfOpenPresent || !status.HalfOpen {
++		t.Fatalf("half_open = %t present=%t, want true/true", status.HalfOpen, status.HalfOpenPresent)
++	}
++	if !status.ManualQuarantinePresent || status.ManualQuarantine {
++		t.Fatalf("manual_quarantine = %t present=%t, want false/true", status.ManualQuarantine, status.ManualQuarantinePresent)
++	}
++}
++
++// TestDecodeStatusRestartExtensionWrongTypesAreRefused pins the extension's
++// presence/type matrix. Present malformed facts are read failures, not legacy
++// absence and not zero values.
++func TestDecodeStatusRestartExtensionWrongTypesAreRefused(t *testing.T) {
++	for _, tc := range []struct {
++		field string
++		value any
++	}{
++		{"restart_count", "two"},
++		{"restart_count", nil},
++		{"restart_count", -1},
++		{"restart_not_before", "not-a-timestamp"},
++		{"restart_not_before", 42},
++		{"quarantined_until", "not-a-timestamp"},
++		{"last_readiness_match", "not-a-timestamp"},
++		{"manual_quarantine", "false"},
++		{"manual_quarantine", nil},
++		{"half_open", "true"},
++		{"half_open", nil},
++	} {
++		t.Run(tc.field, func(t *testing.T) {
++			fixture := validFixture()
++			for key, value := range map[string]any{
++				"restart_count":        2,
++				"restart_not_before":   "2026-08-29T12:00:04Z",
++				"quarantined_until":    nil,
++				"last_readiness_match": "2026-08-29T12:00:00Z",
++				"manual_quarantine":    false,
++				"half_open":            false,
++			} {
++				fixture[key] = value
++			}
++			fixture[tc.field] = tc.value
++			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
++			if !errors.Is(err, ErrDecodeFailure) {
++				t.Fatalf("%s=%v: err = %v, want ErrDecodeFailure", tc.field, tc.value, err)
++			}
++		})
++	}
++}
++
++// TestDecodeStatusRestartExtensionPartialCohortsAreRefused proves the cohort
++// boundary by narrowing it one member at a time. The producer serializes all
++// members of each cohort without omitempty, so a mixed response is a failed
++// read rather than an older producer shape.
++func TestDecodeStatusRestartExtensionPartialCohortsAreRefused(t *testing.T) {
++	current := map[string]any{
++		"restart_count":        2,
++		"restart_not_before":   "2026-08-29T12:00:04Z",
++		"quarantined_until":    nil,
++		"last_readiness_match": "2026-08-29T12:00:00Z",
++		"manual_quarantine":    false,
++		"half_open":            false,
++	}
++	for field := range current {
++		t.Run("current missing "+field, func(t *testing.T) {
++			fixture := validFixture()
++			for key, value := range current {
++				if key != field {
++					fixture[key] = value
++				}
++			}
++			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
++			if !errors.Is(err, ErrDecodeFailure) {
++				t.Fatalf("current cohort missing %s: err = %v, want ErrDecodeFailure", field, err)
++			}
++		})
++	}
++
++	fixture := validFixture()
++	fixture["restart_count"] = 2
++	_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
++	if !errors.Is(err, ErrDecodeFailure) {
++		t.Fatalf("partial pre-extension cohort: err = %v, want ErrDecodeFailure", err)
++	}
++}
++
+ // TestDecodeStatusMissingRequiredFieldIsRefused is case 19(a): a
+ // structurally-necessary field's absence is a decode failure naming the
+ // missing field.
+diff --git a/pkg/localruntime/status.go b/pkg/localruntime/status.go
+index 676d689..15ef590 100644
+--- a/pkg/localruntime/status.go
++++ b/pkg/localruntime/status.go
+@@ -110,6 +110,23 @@ type Status struct {
+ 	ActiveLeases int
+ 	MaxLeases    int
+ 
++	// Restart/quarantine facts mirror the additive shared-runtime status
++	// extension. The Present flags preserve the difference between a legacy
++	// producer that did not publish a field and a current producer that
++	// published its legitimate zero/null value.
++	RestartCount              int
++	RestartCountPresent       bool
++	RestartNotBefore          *time.Time
++	RestartNotBeforePresent   bool
++	QuarantinedUntil          *time.Time
++	QuarantinedUntilPresent   bool
++	LastReadinessMatch        *time.Time
++	LastReadinessMatchPresent bool
++	ManualQuarantine          bool
++	ManualQuarantinePresent   bool
++	HalfOpen                  bool
++	HalfOpenPresent           bool
++
+ 	// Observed is this reader's own bounded trail of recent reads (see
+ 	// §4.6), never the broker's.
+ 	Observed []Observation
+diff --git a/pkg/vendorplugin/vendors/local-models/availability.go b/pkg/vendorplugin/vendors/local-models/availability.go
+index 2fdc588..aa0e22f 100644
+--- a/pkg/vendorplugin/vendors/local-models/availability.go
++++ b/pkg/vendorplugin/vendors/local-models/availability.go
+@@ -12,6 +12,11 @@ import (
+ // verdict this vendor produces.
+ const statusSourceLabel = "local-runtime status"
+ 
++const (
++	restartNotBeforeSourceLabel = "agents-infra runtime status --json.restart_not_before"
++	quarantinedUntilSourceLabel = "agents-infra runtime status --json.quarantined_until"
++)
++
+ // Availability reads query.Runtime to disambiguate which of this vendor's
+ // declared runtimes' pointers to check — the SAME per-(runtime, model)
+ // lookup Spawn performs — then composes a live status read into a verdict
+@@ -64,6 +69,28 @@ func (v *Vendor) Availability(query vendorplugin.AvailabilityQuery) (vendorplugi
+ // questions about the same underlying fact, and a caller must not read one
+ // off the other.
+ func mapAvailability(status localruntime.Status) vendorplugin.Availability {
++	if status.QuarantinedUntil != nil && status.QuarantinedUntil.After(status.AsOf) {
++		return vendorplugin.LimitedUntil(*status.QuarantinedUntil, vendorplugin.Observation{
++			Source: quarantinedUntilSourceLabel,
++			Detail: "shared runtime quarantine deadline",
++			At:     status.AsOf,
++		})
++	}
++
++	// A producer predating restart_not_before cannot prove that backoff is
++	// inactive. Report checked-but-unknown for that source instead of
++	// laundering a missing field into the current producer's explicit null.
++	if !status.RestartNotBeforePresent {
++		return vendorplugin.UnknownAfterCheck(restartNotBeforeSourceLabel)
++	}
++	if status.RestartNotBefore != nil && status.RestartNotBefore.After(status.AsOf) {
++		return vendorplugin.LimitedUntil(*status.RestartNotBefore, vendorplugin.Observation{
++			Source: restartNotBeforeSourceLabel,
++			Detail: "shared runtime restart backoff deadline",
++			At:     status.AsOf,
++		})
++	}
++
+ 	checked := []string{statusSourceLabel}
+ 	observed := []vendorplugin.Observation{{
+ 		Source: statusSourceLabel,
+diff --git a/pkg/vendorplugin/vendors/local-models/availability_test.go b/pkg/vendorplugin/vendors/local-models/availability_test.go
+index b6a9642..4bbc71b 100644
+--- a/pkg/vendorplugin/vendors/local-models/availability_test.go
++++ b/pkg/vendorplugin/vendors/local-models/availability_test.go
+@@ -2,8 +2,10 @@ package localmodels
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"errors"
+ 	"testing"
++	"time"
+ 
+ 	"github.com/relux-works/skill-agents-management/pkg/localruntime"
+ 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
+@@ -58,6 +60,7 @@ func TestAvailabilityMappingTable(t *testing.T) {
+ 		t.Run(tc.name, func(t *testing.T) {
+ 			reader := &scriptedStatusReader{status: localruntime.Status{
+ 				BrokerState: tc.state, BrokerSource: tc.src, ActiveLeases: tc.active, MaxLeases: tc.max,
++				RestartNotBeforePresent: true,
+ 			}}
+ 			vendor := availabilityFixtureVendor(reader)
+ 			registry := registryWithPi(t)
+@@ -85,7 +88,7 @@ func TestAvailabilityMappingTable(t *testing.T) {
+ // a mutant that maps "at capacity" to Limited with a fabricated Until must
+ // fail this specific assertion, not just the generic state check above.
+ func TestAvailabilityServingAtCapacityNeverFabricatesALimitedUntil(t *testing.T) {
+-	verdict := mapAvailability(localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested, ActiveLeases: 3, MaxLeases: 3})
++	verdict := mapAvailability(localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested, ActiveLeases: 3, MaxLeases: 3, RestartNotBeforePresent: true})
+ 	if verdict.State == vendorplugin.AvailabilityLimited {
+ 		t.Fatal("at-capacity serving mapped to Limited; no evidence-derived clear time exists in v1")
+ 	}
+@@ -124,7 +127,7 @@ func TestAvailabilityReadFailureIsUnknownWithFailures(t *testing.T) {
+ // conflated, and a runtime with no pointer for the model gets its own
+ // refusal rather than silently falling back to the other's answer.
+ func TestAvailabilityDisambiguatesByRuntime(t *testing.T) {
+-	reader := &scriptedStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested, ActiveLeases: 0, MaxLeases: 1}}
++	reader := &scriptedStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested, ActiveLeases: 0, MaxLeases: 1, RestartNotBeforePresent: true}}
+ 	vendor := New(twoRuntimeConfig(), WithStatusReader(reader))
+ 	registry := registryWithPi(t)
+ 	if err := registry.Register(vendor); err != nil {
+@@ -152,6 +155,195 @@ func TestAvailabilityDisambiguatesByRuntime(t *testing.T) {
+ 	}
+ }
+ 
++// TestCheckAvailabilityConsumesRestartExtensionFixtures is adversarial case
++// 27b through the production vendorplugin.CheckAvailability call site and the
++// real CLI status decoder. No helper-minted Status can satisfy this proof.
++func TestCheckAvailabilityConsumesRestartExtensionFixtures(t *testing.T) {
++	checkedAt := time.Date(2026, 8, 29, 12, 0, 1, 0, time.UTC)
++	backoffUntil := checkedAt.Add(3 * time.Second)
++	quarantinedUntil := checkedAt.Add(30 * time.Second)
++	readyAt := checkedAt.Add(-time.Second)
++
++	cases := []struct {
++		name   string
++		mutate func(map[string]any)
++		want   vendorplugin.AvailabilityState
++		until  time.Time
++	}{
++		{
++			name: "active backoff",
++			mutate: func(f map[string]any) {
++				f["restart_count"] = 2
++				f["restart_not_before"] = backoffUntil.Format(time.RFC3339)
++				f["quarantined_until"] = nil
++				f["last_readiness_match"] = readyAt.Format(time.RFC3339)
++				f["manual_quarantine"] = false
++				f["half_open"] = false
++			},
++			want: vendorplugin.AvailabilityLimited, until: backoffUntil,
++		},
++		{
++			name: "active quarantine takes precedence",
++			mutate: func(f map[string]any) {
++				f["restart_count"] = 4
++				f["restart_not_before"] = backoffUntil.Format(time.RFC3339)
++				f["quarantined_until"] = quarantinedUntil.Format(time.RFC3339)
++				f["last_readiness_match"] = readyAt.Format(time.RFC3339)
++				f["manual_quarantine"] = false
++				f["half_open"] = false
++			},
++			want: vendorplugin.AvailabilityLimited, until: quarantinedUntil,
++		},
++		{
++			name: "historical restart count and half-open do not imply backoff",
++			mutate: func(f map[string]any) {
++				f["restart_count"] = 2
++				f["restart_not_before"] = nil
++				f["quarantined_until"] = nil
++				f["last_readiness_match"] = readyAt.Format(time.RFC3339)
++				f["manual_quarantine"] = false
++				f["half_open"] = true
++			},
++			want: vendorplugin.AvailabilityHealthy,
++		},
++		{
++			name: "elapsed deadlines do not imply a current limit",
++			mutate: func(f map[string]any) {
++				f["restart_count"] = 2
++				f["restart_not_before"] = checkedAt.Add(-time.Second).Format(time.RFC3339)
++				f["quarantined_until"] = checkedAt.Format(time.RFC3339)
++				f["last_readiness_match"] = readyAt.Format(time.RFC3339)
++				f["manual_quarantine"] = false
++				f["half_open"] = false
++			},
++			want: vendorplugin.AvailabilityHealthy,
++		},
++		{
++			name: "pre-deadline fixture cannot prove backoff inactive",
++			mutate: func(f map[string]any) {
++				f["restart_count"] = 2
++				f["quarantined_until"] = nil
++				f["last_readiness_match"] = readyAt.Format(time.RFC3339)
++				f["manual_quarantine"] = false
++			},
++			want: vendorplugin.AvailabilityUnknown,
++		},
++	}
++
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			fixture := restartExtensionAvailabilityFixture(t, tc.mutate)
++			reader := localruntime.NewCLIStatusReader(
++				localruntime.WithCommandRunner(func(context.Context, string, []string) ([]byte, error) { return fixture, nil }),
++				localruntime.WithClock(func() time.Time { return checkedAt }),
++			)
++			registry := registryWithPi(t)
++			if err := registry.Register(availabilityFixtureVendor(reader)); err != nil {
++				t.Fatalf("Register: %v", err)
++			}
++			verdict, err := vendorplugin.CheckAvailability(registry, VendorID, vendorplugin.AvailabilityQuery{
++				Model: "qwen-3.8-27b-mlx-8bit", Runtime: "local-qwen",
++			})
++			if err != nil {
++				t.Fatalf("CheckAvailability: %v", err)
++			}
++			if verdict.State != tc.want || !verdict.Until.Equal(tc.until) {
++				t.Fatalf("verdict state/until = %s/%v, want %s/%v; verdict=%+v", verdict.State, verdict.Until, tc.want, tc.until, verdict)
++			}
++		})
++	}
++}
++
++// TestCheckAvailabilityRefusesMalformedRestartDeadlineAsAReadFailure is the
++// negative production-call-site proof: malformed evidence must not be
++// treated as an absent or elapsed deadline and admitted as Healthy.
++func TestCheckAvailabilityRefusesMalformedRestartDeadlineAsAReadFailure(t *testing.T) {
++	fixture := restartExtensionAvailabilityFixture(t, func(f map[string]any) {
++		f["restart_count"] = 2
++		f["restart_not_before"] = "not-a-timestamp"
++		f["quarantined_until"] = nil
++		f["last_readiness_match"] = nil
++		f["manual_quarantine"] = false
++		f["half_open"] = false
++	})
++	reader := localruntime.NewCLIStatusReader(
++		localruntime.WithCommandRunner(func(context.Context, string, []string) ([]byte, error) { return fixture, nil }),
++	)
++	registry := registryWithPi(t)
++	if err := registry.Register(availabilityFixtureVendor(reader)); err != nil {
++		t.Fatalf("Register: %v", err)
++	}
++	verdict, err := vendorplugin.CheckAvailability(registry, VendorID, vendorplugin.AvailabilityQuery{
++		Model: "qwen-3.8-27b-mlx-8bit", Runtime: "local-qwen",
++	})
++	if err != nil {
++		t.Fatalf("CheckAvailability: %v", err)
++	}
++	if verdict.State != vendorplugin.AvailabilityUnknown || len(verdict.Failures) == 0 {
++		t.Fatalf("malformed restart_not_before was not surfaced as Unknown with failure evidence: %+v", verdict)
++	}
++}
++
++// TestCheckAvailabilityRefusesPartialRestartStatusCohorts drives each
++// narrowed current cohort through CLIStatusReader and the production
++// vendorplugin.CheckAvailability entry point. No omitted lifecycle fact may
++// be laundered into Healthy or a legacy fallback.
++func TestCheckAvailabilityRefusesPartialRestartStatusCohorts(t *testing.T) {
++	current := map[string]any{
++		"restart_count":        2,
++		"restart_not_before":   nil,
++		"quarantined_until":    nil,
++		"last_readiness_match": "2026-08-29T12:00:00Z",
++		"manual_quarantine":    false,
++		"half_open":            false,
++	}
++	for field := range current {
++		t.Run("missing "+field, func(t *testing.T) {
++			fixture := restartExtensionAvailabilityFixture(t, func(f map[string]any) {
++				for key, value := range current {
++					if key != field {
++						f[key] = value
++					}
++				}
++			})
++			reader := localruntime.NewCLIStatusReader(
++				localruntime.WithCommandRunner(func(context.Context, string, []string) ([]byte, error) { return fixture, nil }),
++			)
++			registry := registryWithPi(t)
++			if err := registry.Register(availabilityFixtureVendor(reader)); err != nil {
++				t.Fatalf("Register: %v", err)
++			}
++			verdict, err := vendorplugin.CheckAvailability(registry, VendorID, vendorplugin.AvailabilityQuery{
++				Model: "qwen-3.8-27b-mlx-8bit", Runtime: "local-qwen",
++			})
++			if err != nil {
++				t.Fatalf("CheckAvailability: %v", err)
++			}
++			if verdict.State != vendorplugin.AvailabilityUnknown || len(verdict.Failures) == 0 {
++				t.Fatalf("partial current cohort missing %s was not Unknown with read-failure evidence: %+v", field, verdict)
++			}
++		})
++	}
++}
++
++func restartExtensionAvailabilityFixture(t *testing.T, mutate func(map[string]any)) []byte {
++	t.Helper()
++	fixture := map[string]any{
++		"runtime_key":    "local-qwen@/home/op/project",
++		"profile_digest": "deadbeef",
++		"broker":         map[string]any{"state": "serving", "source": "attested"},
++		"sharing":        map[string]any{"configured": map[string]any{"max_leases": 3}},
++		"runtime":        map[string]any{"pid": 4242, "start_time": "2026-08-29T10:00:00Z"},
++		"leases":         []any{},
++	}
++	mutate(fixture)
++	data, err := json.Marshal(fixture)
++	if err != nil {
++		t.Fatalf("marshal fixture: %v", err)
++	}
++	return data
++}
++
+ // TestAvailabilityEmptyModelIsUnchecked matches Spawn's own "ask about the
+ // vendor as a whole" gap: this vendor answers per model, so an empty query
+ // asks nothing rather than guessing which model was meant.
