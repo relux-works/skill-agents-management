@@ -27,9 +27,17 @@ MUTATIONS = [
         "plugin-nil-registry",
         "pkg/plugin/registry.go",
         'if r == nil {\n\t\treturn errors.New("plugin: cannot register into a nil registry")\n\t}',
-        'if false {\n\t\treturn errors.New("plugin: cannot register into a nil registry")\n\t}',
+        'if r == nil && len(plugins) == 0 {\n\t\treturn errors.New("plugin: cannot register into a nil registry")\n\t}',
         "./pkg/plugin",
         "TestNilRegistryRefusesRegistration",
+    ),
+    Mutation(
+        "plugin-nil-resolution-registry",
+        "pkg/plugin/registry.go",
+        'if r == nil {\n\t\treturn Resolution{}, errors.New("plugin: cannot resolve from a nil registry")\n\t}',
+        'if r == nil && id == "" {\n\t\treturn Resolution{}, errors.New("plugin: cannot resolve from a nil registry")\n\t}',
+        "./pkg/plugin",
+        "TestNilRegistryRefusesResolution",
     ),
     Mutation(
         "plugin-nil-plugin",
@@ -46,6 +54,14 @@ MUTATIONS = [
         "if string(dependency.Kind) != depKind {",
         "./pkg/plugin",
         "TestRegisterAllRefusesUnnormalizedDependencyDeclaration",
+    ),
+    Mutation(
+        "plugin-invalid-resolution-id",
+        "pkg/plugin/registry.go",
+        'normalized, err := normalize("plugin id", string(id))\n\tif err != nil {\n\t\treturn Resolution{}, err\n\t}\n\tr.mu.RLock()',
+        'normalized, err := normalize("plugin id", string(id))\n\tif err != nil && id == "" {\n\t\treturn Resolution{}, err\n\t}\n\tr.mu.RLock()',
+        "./pkg/plugin",
+        "TestResolveRefusesInvalidPluginID",
     ),
     Mutation(
         "plugin-unstable-declaration",

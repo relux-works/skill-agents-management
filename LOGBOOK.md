@@ -5,6 +5,12 @@
 
 ## 2026-08-30
 
+### 0611 — Registration-only enumeration omitted two Resolve refusals
+- ROOT CAUSE: The v0.4.2 raw-plugin matrix enumerated registration branches, then added only `ErrPluginNotRegistered` from `Registry.Resolve`; it did not independently enumerate Resolve's three error-producing paths.
+- FINDING: Resolve has exactly three refusal paths: nil receiver, invalid ID from `normalize`, and missing registered ID. Nil receiver and invalid ID had no matrix rows or production-entry negatives.
+- FIX: Added `TestNilRegistryRefusesResolution`, `TestResolveRefusesInvalidPluginID`, and strictly narrower mutants for both; the re-derived matrix is 9 registration + 3 resolution paths, 37 total rows. `pkg/plugin/registry_test.go`, `.scripts/verify-refusal-matrix.py`, `docs/refusal-proof-matrix.md`.
+- STATUS: 37/37 mutants killed by their named tests; no further raw registration or resolution error path exists in `pkg/plugin/registry.go`.
+
 ### 0525 — Plugin-graph refusal inventory is mechanical
 - FINDING: The v0.4.1 outcome correctly listed nine killed mutants; its 0439 logbook entry incorrectly said eight. `docs/refusal-proof-matrix.md` supersedes both partial counts with 35 enumerated error/call-site rows.
 - FIX: `.scripts/verify-refusal-matrix.py` narrows every row in an isolated copy and requires the named production-entry test to exit `1`; build failures and wrong-test failures do not count.

@@ -1,4 +1,4 @@
-# Registration and Planning Refusal Proof Matrix
+# Registration, Resolution and Planning Refusal Proof Matrix
 
 This matrix is the exhaustive refusal inventory for the general plugin graph,
 typed multi-node plans, and the vendor registration path. Every test drives the
@@ -6,17 +6,17 @@ public production entry point. `.scripts/verify-refusal-matrix.py` copies the
 current tree, narrows exactly one refusal in each copy, and runs only the named
 owner test with `-count=1`.
 
-The authoritative v0.4.2 run contains 35 compile-clean mutants. Every named
+The authoritative v0.4.3 run contains 37 compile-clean mutants. Every named
 test exits `1`; a zero exit, build failure, or failure in a different test makes
 the harness fail. The nine-mutant v0.4.1 report was accurate; its older logbook
-count of eight was not. The 35-row run supersedes that partial inventory rather
+count of eight was not. The 37-row run supersedes that partial inventory rather
 than adding to it.
 
 ## Raw plugin graph
 
 | Error value | Production call site | Owning negative | Strictly narrower mutant |
 | --- | --- | --- | --- |
-| unnamed nil-registry error | `Registry.Register` -> `RegisterAll` | `TestNilRegistryRefusesRegistration` | Nil receiver is a singleton input class, so no non-empty strict subset exists; removing the one guard reaches a panic and kills the test. |
+| unnamed nil-registry error | `Registry.Register` -> `RegisterAll` | `TestNilRegistryRefusesRegistration` | Refuse a nil receiver only for an empty registration batch. |
 | `plugin.ErrNilPlugin` | `Registry.Register` -> `RegisterAll` -> `nilPlugin` | `TestRegisterRefusesTypedNilPlugin` | Refuse only a nil interface, admitting typed nil plugins. |
 | `plugin.ErrInvalidDeclaration` | `RegisterAll` -> `validateDeclaration` | `TestRegisterAllRefusesUnnormalizedDependencyDeclaration` | Validate dependency kind spelling but silently normalize dependency IDs. |
 | `plugin.ErrUnstableDeclaration` | `RegisterAll` declaration double-read | `TestRegisterAllRefusesDependencyChangesAcrossDeclarationReads` | Compare only ID and kind, admitting plugins whose dependency list changes. |
@@ -25,11 +25,29 @@ than adding to it.
 | `plugin.ErrMissingDependency` | `RegisterAll` -> `validateEdges` | `TestRegisterRefusesALaterMissingDependencyInANonEmptyGraph` | Check only dependency index zero. |
 | `plugin.ErrUnsatisfiableDeclaration` | `RegisterAll` -> `validateEdges` | `TestRegisterAllRefusesALaterKindMismatchAgainstABatchNode` | Refuse kind mismatch only when the target is the historical `model-vendor` kind. |
 | `plugin.ErrDependencyCycle` | `RegisterAll` -> `detectCycle` | `TestRegisterAllRefusesSelfAndMultiHopCycles` | Admit direct self edges while retaining longer-cycle refusal. |
+| unnamed nil-registry error | `Registry.Resolve` | `TestNilRegistryRefusesResolution` | Refuse a nil receiver only when the requested ID is empty. |
+| `plugin.ErrInvalidDeclaration` | `Registry.Resolve` -> `normalize` | `TestResolveRefusesInvalidPluginID` | Propagate normalization failure only for the empty ID, admitting other invalid spellings to lookup. |
 | `plugin.ErrPluginNotRegistered` | `Registry.Resolve` | `TestResolveRefusesMissingPluginInNonEmptyRegistry` | Refuse a missing ID only when the entire registry is empty. |
 
-`ErrPluginNotRegistered` belongs here because v0.4.1's review found it in the
-same raw-plugin exported error inventory. `Resolve` is the production resolver
-for a registered graph; omitting it would repeat the case-by-case audit failure.
+### Exhaustive derivation
+
+The registration side has nine error-producing paths: the `RegisterAll` nil
+receiver guard; `nilPlugin`; the unstable declaration double-read;
+`validateDeclaration` returning `ErrInvalidDeclaration` or
+`ErrDuplicateDependency`; candidate insertion returning `ErrDuplicatePlugin`;
+`validateEdges` returning `ErrMissingDependency` or
+`ErrUnsatisfiableDeclaration`; and `detectCycle` returning
+`ErrDependencyCycle`. Those nine paths are exactly the nine registration rows
+above.
+
+The resolution side has three error-producing paths: the `Resolve` nil receiver
+guard; `normalize` returning `ErrInvalidDeclaration`; and the map lookup
+returning `ErrPluginNotRegistered`. Those three paths are exactly the three
+resolution rows above. Dependency materialization has no error branch because
+registration already established every edge before it could enter the stored
+graph. There are no other error-producing paths in raw registration or
+resolution; the two enumerated sets are therefore equal to the 12 raw-plugin
+rows in this matrix.
 
 ## Typed multi-node plan
 

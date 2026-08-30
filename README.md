@@ -558,11 +558,12 @@ cheaper than discovering it.
 
 ## Status
 
-`v0.4.2` is the exhaustive refusal-proof patch for the general-plugin-graph
-release. Its checked-in matrix enumerates every raw graph, typed multi-node
-plan and vendor-registration error class, and a reproducible harness proves all
-35 rows with compile-clean narrowing mutants. It also refuses typed-nil vendor
-plugins instead of panicking. The release retains the seven shipped
+`v0.4.3` is the exhaustive refusal-proof patch for the general-plugin-graph
+release. Its checked-in matrix independently enumerates all nine raw
+registration and three raw resolution error-producing paths, plus every typed
+multi-node plan and vendor-registration error class. A reproducible harness
+proves all 37 rows with compile-clean narrowing mutants. It also refuses
+typed-nil vendor plugins instead of panicking. The release retains the seven shipped
 agentic systems, five model vendors (including conditional `local-models`),
 frozen runtime ids, launch-surface goldens, admitted-pair digests and on-disk
 limit-state identity. The new graph and multi-node plan are additive; task-board

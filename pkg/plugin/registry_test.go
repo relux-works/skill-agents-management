@@ -57,6 +57,15 @@ func TestNilRegistryRefusesRegistration(t *testing.T) {
 	}
 }
 
+func TestNilRegistryRefusesResolution(t *testing.T) {
+	var registry *plugin.Registry
+
+	_, err := registry.Resolve("engine")
+	if err == nil {
+		t.Fatal("Resolve from a nil registry returned nil")
+	}
+}
+
 func TestRegisterAllRefusesUnnormalizedDependencyDeclaration(t *testing.T) {
 	registry := plugin.NewRegistry()
 	engine := node("inference-engine", "engine")
@@ -120,6 +129,18 @@ func TestResolveRefusesMissingPluginInNonEmptyRegistry(t *testing.T) {
 	_, err := registry.Resolve("missing-engine")
 	if !errors.Is(err, plugin.ErrPluginNotRegistered) {
 		t.Fatalf("Resolve(missing plugin in non-empty registry) error = %v, want ErrPluginNotRegistered", err)
+	}
+}
+
+func TestResolveRefusesInvalidPluginID(t *testing.T) {
+	registry := plugin.NewRegistry()
+	if err := registry.Register(node("inference-engine", "engine")); err != nil {
+		t.Fatalf("Register(engine): %v", err)
+	}
+
+	_, err := registry.Resolve("bad/id")
+	if !errors.Is(err, plugin.ErrInvalidDeclaration) {
+		t.Fatalf("Resolve(invalid plugin id) error = %v, want ErrInvalidDeclaration", err)
 	}
 }
 
