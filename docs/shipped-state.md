@@ -36,6 +36,19 @@ the candidate before publishing v0.4.3; consumers can pin v0.3.0 because no
 board, runtime or limit-state data migrates. Published tags are immutable and a
 compatibility repair ships as a later patch tag.
 
+### Unreleased inference-engine contract candidate
+
+`pkg/inferenceengine` now has an observed-process v1 contract candidate in
+addition to the v0.4.3 kind and plan-node helper. `MeasuredFacts` carries the
+task-cited engine difference inventory; `EngineContract` requires an
+observation method, value grammar, and explicit refusal for absent, malformed,
+and unsupported on every fact. `ResolveObserved` is the production gate and
+accepts only process-origin observations. Read failure is distinct from honest
+absence. Model-harness local executable/argv versus SSH forwarding and
+stress/restart policy are declaration data with `agents-infra` pinned as the
+execution owner. No process, signal, SSH, readiness polling, or supervision
+execution moved into this repository.
+
 ## The stories
 
 `EPIC-260821-1qvnz2` decomposes into six stories. **Five are landed** — four on

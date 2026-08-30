@@ -5,6 +5,11 @@
 
 ## 2026-08-30
 
+### 0701 — Inference-engine facts are observed or refused
+- DECISION: `pkg/inferenceengine.ResolveObserved` accepts the closed v1 measured-fact inventory only from a matching `observed-process` method; no caller/config fallback enters the API.
+- DECISION: Absent, malformed, unsupported, and read failure remain distinct refusals. Engine inability to express a fact is supported as `ErrObservationUnsupported`, never silent omission.
+- SCOPE: Model-harness local executable/argv versus SSH forwarding and stress/restart policy are declarations; OS process, SSH, and supervision execution remains owned by agents-infra. `pkg/inferenceengine/contract.go`, `docs/architecture.md`.
+
 ### 0623 — v0.4.3 closes the re-derived resolution inventory
 - MILESTONE: Signed commit `82db6b1774fa90b4fb2943ec5375a71d4ca9b964` fast-forwarded through PR #6 and signed tag `v0.4.3`; public Go proxy resolves the tag to the same hash.
 - TEST: Owning-repo vet/build/full/regress/race/format gates and 37/37 narrowed mutants pass. Task-board `e4022da4` internal spawn suite, CLI build, and authoritative read-only query pass against public `v0.4.3` with no agents-management module replace.

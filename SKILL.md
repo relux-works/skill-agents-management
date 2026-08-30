@@ -54,13 +54,22 @@ A legacy **runtime** remains a declared system/vendor pair under a stable id.
 | --- | --- | --- |
 | agentic systems | `pkg/agentic` | `claude-code`, `codex`, `qwen-code`, `gemini-cli`, `antigravity`, `muse`, `pi` |
 | model vendors | `pkg/vendorplugin` | `anthropic`, `openai`, `alibaba`, `google`, conditional `local-models` |
-| inference engines | `pkg/inferenceengine` | first extensible kind; concrete engines are consumer-selected |
+| inference engines | `pkg/inferenceengine` | extensible kind plus the closed observed-process contract; concrete engines are consumer-selected |
 | runtimes (declarations) | `pkg/vendorplugin` | `claude`, `codex`, `qwen`, `gemini`, `agy`, `muse` — frozen |
 
 Existing vendors retain their vendor→system edges, and a vendor naming an
 unregistered system is refused with BOTH ids. That is compatibility semantics,
 not a registry direction rule: a system may declare an engine dependency, and
 future kinds may point whichever way their declarations state.
+
+An inference-engine declaration is not capability evidence by itself. Resolve
+it through `inferenceengine.ResolveObserved`: all measured facts (argv spelling,
+stream field, health/readiness, artifact shape, memory accounting, speculative
+decoding, load/unload, inference-busy, pressure sequencing, and local/SSH
+profile expansion) must come from the process observer. Absent, malformed,
+unsupported, and failed reads refuse distinctly; no caller default can enter
+the API. The engine contract declares stress/restart policy, while agents-infra
+retains OS process, SSH, and supervision execution.
 
 A plugin id and a runtime id are different facts and often different spellings:
 the agentic-system plugin is `claude-code`, `qwen-code`, `antigravity`; the frozen

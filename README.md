@@ -61,6 +61,12 @@ surfaces remain unchanged. See [docs/architecture.md](docs/architecture.md).
 - `RegisterAll` admits a transaction or none of it; `Resolve` and
   `TopologicalOrder` materialize declared edges dependency-first.
 - `pkg/inferenceengine` declares the first new kind without a registry edit.
+- Its observed-process v1 contract closes the measured engine differences:
+  argv spelling, reasoning stream field, health/readiness, weight shape, valid
+  memory accounting, speculative decoding, load/unload, inference-busy,
+  pressure sequencing, and model-harness local/SSH profile expansion. Every
+  absent, malformed, or unsupported fact is refused; caller defaults do not
+  exist on the resolution API.
 - `agentic.BuildMultiNodePlan` adds typed engine and sidecar process nodes while
   preserving the legacy primary `Plan` fields.
 

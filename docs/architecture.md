@@ -123,6 +123,57 @@ plugin identity and plan contributor, not process-lifecycle authority.
 `agentic.ProcessPlan` into a typed launch node; the consumer still starts,
 supervises, stops and attests the process.
 
+The kind's behavioral contract is `inferenceengine.EngineContract` and its
+production resolution entry point is `inferenceengine.ResolveObserved`. The
+invariant is deliberately stronger than configuration validation:
+
+> Every fact a consumer relies on is derived from the observed process or the
+> resolution is refused.
+
+There is no caller-default parameter. Every `ObservationRule` names the process
+observation method, the canonical value contract, and the three independent
+failure outcomes. `absent`, `malformed`, and `unsupported` must each be
+`refuse`; an unrecognized outcome also refuses. An observer read error is
+`ErrObservationRead`, not absence. A plugin that cannot express a fact declares
+its observation `unsupported`, and resolution returns
+`ErrObservationUnsupported`. That is a supported engine answer, not a gap to
+fill with configuration.
+
+The v1 fact inventory is closed and came from the measured engine comparison:
+
+| Fact | Required observation | Measurement provenance |
+| --- | --- | --- |
+| `context-argv` | Effective context/KV capacity and exact spelling: measured MLX Swift `--max-kv-size`; llama.cpp `--ctx-size`. | `TASK-260828-2jbufw`, `TASK-260828-3fgca3` |
+| `prefill-argv` | Prefill chunk and exact spelling: MLX `--prefill-step-size`; llama.cpp `-ub`/`--ubatch-size`. | `TASK-260828-2jbufw`, `TASK-260828-3fgca3` |
+| `reasoning-stream-field` | The actual first-token boundary: `delta.reasoning` or `delta.reasoning_content`. Selecting the wrong one silently corrupts TTFT/prefill/decode timing. | `TASK-260828-2wcrph`, `TASK-260829-3cwcb6` |
+| `health` | Engine-specific liveness endpoint and response semantics. | `TASK-260827-qyebv8`, `TASK-260828-2jbufw` |
+| `readiness` | Evidence that weights are resident, not merely that a runtime endpoint answers. | `TASK-260827-qyebv8`, `TASK-260828-2jbufw` |
+| `weight-artifact` | Complete shape: safetensors shards plus `config.json`, or one `.gguf` plus optional separate `mmproj`. | `TASK-260828-2jbufw`, `TASK-260828-2wcrph` |
+| `memory-accounting` | Accounting valid for the mapping. Mach physical footprint alone is refused for mmap-loaded GGUF weights because it cannot see the clean mapped weight pages. | `TASK-260828-2wcrph`, `TASK-260829-3cwcb6` |
+| `speculative-decoding` | Runtime-observed capability and active state. A GGUF MTP head is not evidence that an MLX build retained or enabled the capability. | `TASK-260828-2wcrph`, `TASK-260829-3cwcb6` |
+| `load-state` / `unload-state` | Observed weight-residency transitions in both directions. | `TASK-260827-qyebv8`, `TASK-260829-1qh0ud` |
+| `inference-busy` | Whether inference is actively using the resident engine. | `TASK-260829-1qh0ud` |
+| `memory-pressure-sequence` | Pressure state and the sequence that consults load, unload, and busy before relief. | `TASK-260829-1qh0ud` |
+| `profile-local-executable` / `profile-local-argv` | Locally observed executable plus the exact argv token vector produced by model-harness profile expansion. | `TASK-260828-2jbufw`, `TASK-260830-12n20p` |
+| `profile-ssh-forwarding` | Remote profile and forwarding declaration chosen instead of a local executable. | `TASK-260828-2jbufw`, `TASK-260830-12n20p` |
+| `profile-stress-policy` | Declarative stress policy selected by the profile. | `TASK-260830-12n20p` |
+| `profile-restart-supervision-policy` | Declarative restart/backoff policy selected by the profile. | `TASK-260829-2t5xmi`, `TASK-260830-12n20p` |
+
+`ModelHarnessExpansion` binds the last five facts to the engine node and pins
+`ExecutionOwner` to `agents-infra`. This package stores and validates local
+executable/argv versus SSH-forwarding expansion and the stress/restart policy;
+it never executes them. OS process creation, signals, SSH forwarding, health
+polling and restart supervision remain in agents-infra unless a later explicit
+ownership decision moves them.
+
+`ResolveObserved` first resolves the real general registry entry, requires the
+`inference-engine` kind and typed `Engine` contract, reads the contract twice to
+refuse an unstable declaration, then drives every rule through a consumer-owned
+`Observer`. It accepts only `ObservationObserved` with the declared fact and
+method, `observed-process` provenance, and a non-empty canonical value. This is
+the production gate named by the contract tests; testing a helper alone would
+not establish the boundary.
+
 Both `pi` and `local-models` can depend on the same engine node while retaining
 the existing vendor→system edge: engine → system → vendor in dependency-first
 order, with an optional direct vendor→engine edge. No cycle or third registry
