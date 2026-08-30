@@ -5,6 +5,11 @@
 
 ## 2026-08-30
 
+### 0623 — v0.4.3 closes the re-derived resolution inventory
+- MILESTONE: Signed commit `82db6b1774fa90b4fb2943ec5375a71d4ca9b964` fast-forwarded through PR #6 and signed tag `v0.4.3`; public Go proxy resolves the tag to the same hash.
+- TEST: Owning-repo vet/build/full/regress/race/format gates and 37/37 narrowed mutants pass. Task-board `e4022da4` internal spawn suite, CLI build, and authoritative read-only query pass against public `v0.4.3` with no agents-management module replace.
+- DECISION: Rollback remains a consumer pin to `v0.3.0`; no persisted board, runtime, or limit-state data migrates.
+
 ### 0611 — Registration-only enumeration omitted two Resolve refusals
 - ROOT CAUSE: The v0.4.2 raw-plugin matrix enumerated registration branches, then added only `ErrPluginNotRegistered` from `Registry.Resolve`; it did not independently enumerate Resolve's three error-producing paths.
 - FINDING: Resolve has exactly three refusal paths: nil receiver, invalid ID from `normalize`, and missing registered ID. Nil receiver and invalid ID had no matrix rows or production-entry negatives.
