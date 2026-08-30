@@ -5,6 +5,24 @@
 
 ## 2026-08-30
 
+### 0918 — Engine observation provenance moved into the launch boundary
+- ROOT CAUSE: `NewProductionComposition(Readers)` still let an ordinary resolver caller retain and substitute the producer, used implementation kinds as graph IDs, and was never called by a launch consumer.
+- DECISION: `vendorplugin.Registry` now owns a package-private engine fact source with no public injection route; non-dry-run `BuildLaunch` validates its facts before `Vendor.Spawn`, `Preflight`, or plan materialization. The shipped graph ID `mlx` maps separately to `native-transformer`.
+- SAFETY: `inferenceengine.ValidateReadings` is explicitly schema-only. The production MLX source returns unsupported until agents-infra supplies the concrete adapter; it does not synthesize positive facts.
+- TEST: Real `BuildLaunch` negatives cover wrong identity/kind, missing adapter, read failure versus absence, arbitrary readiness/busy/pressure JSON, and simultaneous local/SSH facts with zero launch effects.
+
+### 0844 — Previous observation-composition attempt (superseded at 0918)
+- ROOT CAUSE: `ResolveObserved(ctx, registry, id)` let an ordinary caller register an `Engine` and mint canonical evidence; generic JSON-object validation then accepted semantically false readiness, busy, and pressure values.
+- DECISION: `observed-process/v2` binds closed concrete engine kinds to agents-infra readers once; invocation receives no registry, observer, origin label, or caller-stamped metadata. `pkg/inferenceengine/contract.go`.
+- FIX: Fact-specific closed schemas and a cross-fact local-versus-SSH invariant reject arbitrary JSON, partial profiles, and simultaneous local/remote execution before any downstream launch, signal, pressure, or supervision action.
+- TEST: That revision drove `vendorplugin.ResolveEngineObservations` across every measured fact and the five independent reviewer mutants.
+- STATUS: Superseded after independent review showed the public `Readers` constructor remained caller-controlled and the resolver was uncalled from launch production.
+
+### 0823 — Story landing waits for review of the current observer-contract head
+- FINDING: PR #8 is open at `8f4a848`; its only recorded review is a developer comment on superseded head `4fa4e25`, so no independent acceptance covers the current candidate.
+- MILESTONE: The cumulative MLX story candidate at `9e2a72d` passes focused production-entry negatives, uncached full tests, vet, build, regress, gofmt, and diff checks without contacting a live model/runtime/service/socket.
+- BLOCKED: Story integration, merge, and immutable `v0.5.0` tagging remain orchestrator-owned and must wait for `TASK-260830-q4vvvn` review acceptance at the exact current head.
+
 ### 0804 — No-engine provenance is corroborated by its identity shape
 - ROOT CAUSE: A persistence caller could downgrade `engine_binding` to `none` and delete both refs while retaining every local-Qwen axis; `LaunchProvenanceV1.Validate` trusted the self-minted discriminator and accepted the forged record. `pkg/agentic/provenance.go`.
 - FIX: `none` now requires a system identity and refuses broker, publisher, family, runtime, profile, or model axes; discriminator plus record shape distinguish genuine legacy absence from engine-bound evidence removal.

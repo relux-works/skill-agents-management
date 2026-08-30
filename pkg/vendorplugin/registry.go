@@ -39,6 +39,7 @@ type Registry struct {
 	runtimes    map[RuntimeID]RuntimeDeclaration
 	diagnostics map[RuntimeID]RegistrationDiagnostic
 	graph       *plugin.Registry
+	engineFacts engineFactSource
 }
 
 // NewRegistry returns an empty registry bound to the agentic registry its
@@ -54,7 +55,14 @@ func NewRegistry(systems *agentic.Registry) *Registry {
 		runtimes:    map[RuntimeID]RuntimeDeclaration{},
 		diagnostics: map[RuntimeID]RegistrationDiagnostic{},
 		graph:       plugin.NewRegistry(),
+		engineFacts: productionEngineFactSource{},
 	}
+}
+
+func newRegistryWithEngineFactSource(systems *agentic.Registry, source engineFactSource) *Registry {
+	registry := NewRegistry(systems)
+	registry.engineFacts = source
+	return registry
 }
 
 // Default is the registry vendor plugin packages register into from their init

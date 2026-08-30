@@ -99,13 +99,24 @@ func localQwenSpawnRequest(t *testing.T) vendorplugin.SpawnRequest {
 	}
 }
 
+func configWithoutEngine() Config {
+	cfg := validConfig()
+	cfg.InferenceEngines = nil
+	cfg.Runtimes[0].Engine = plugin.Ref{}
+	for id, model := range cfg.Runtimes[0].Models {
+		model.Engine = plugin.Ref{}
+		cfg.Runtimes[0].Models[id] = model
+	}
+	return cfg
+}
+
 // TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight is the end-to-end
 // seam proof: a positively-absent broker admits, and the resulting Plan's
 // argv/env carry what this vendor's real Spawn and pi's real Argv/ChildEnv
 // build together.
 func TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight(t *testing.T) {
 	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
-	registry := isolatedLocalQwenRegistry(t, reader, validConfig(), mlx.New())
+	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
 
 	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
 	if err != nil {
@@ -135,19 +146,8 @@ func TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight(t *testing.T) {
 	if !foundEnv {
 		t.Fatalf("plan.Env = %v; missing AGENTS_INFRA_CALLER_CWD contributed by this vendor's Spawn", plan.Env)
 	}
-	wantEngine := cfgEngineRef(validConfig())
-	if plan.Provenance.Runtime != "local-qwen" || plan.Provenance.Profile != "local-qwen" || plan.Provenance.Model != "qwen-3.8-27b-mlx-8bit" {
-		t.Fatalf("resolved runtime/profile/model provenance = %#v", plan.Provenance)
-	}
-	if plan.Provenance.Publisher != "alibaba" || plan.Provenance.Family != "qwen" || plan.Provenance.RequestedEngine != wantEngine || plan.Provenance.ResolvedEngine != wantEngine {
-		t.Fatalf("resolved publisher/family/engine provenance = %#v", plan.Provenance)
-	}
-	projection, err := plan.ConsumerProvenance()
-	if err != nil {
-		t.Fatalf("ConsumerProvenance(BuildLaunch(local-qwen)): %v", err)
-	}
-	if projection.SchemaVersion != agentic.LaunchProvenanceSchemaVersion || projection.System != "pi" || projection.Broker != "local-models" {
-		t.Fatalf("consumer provenance contract/system/broker = %#v", projection)
+	if plan.Provenance != (agentic.LaunchProvenance{}) {
+		t.Fatalf("preflight-only fixture invented engine provenance: %#v", plan.Provenance)
 	}
 }
 
@@ -214,7 +214,7 @@ func buildLocalQwenConsumerProvenance(t *testing.T) agentic.LaunchProvenanceV1 {
 	t.Helper()
 	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
 	registry := isolatedLocalQwenRegistry(t, reader, validConfig(), mlx.New())
-	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeDryRun)
 	if err != nil {
 		t.Fatalf("BuildLaunch(local-qwen): %v", err)
 	}

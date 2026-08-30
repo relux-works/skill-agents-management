@@ -316,6 +316,26 @@ What is still open, and owned elsewhere:
 **Owner: this repository** for the three packages above; the four bullets
 just above are each owned by the repository named next to them.
 
+### 5.1 Observed inference-engine contract candidate
+
+The module now carries `observed-process/v2`: 17 measured facts, closed
+fact-specific schemas, three typed outcomes, and distinct refusing causes for
+read failure, malformed data, and unsupported observations. The production
+entry is the non-dry-run `vendorplugin.BuildLaunch` path. Its Registry-owned,
+package-private source maps the configured `mlx` ID to the concrete
+`native-transformer` kind and validates readings before `Spawn`, `Preflight`,
+or plan materialization. No public constructor or launch parameter accepts a
+caller observation implementation. `inferenceengine.ValidateReadings` remains
+an untrusted schema helper, not an authorization surface. Until agents-infra
+ships the concrete MLX adapter, the built-in source refuses as unsupported
+instead of inventing runtime evidence.
+
+Model-harness expansion is a validated sum type in behavior: local executable
+and argv require positive SSH absence, while SSH forwarding requires both local
+facts positively absent. Partial or simultaneous variants refuse. This is a
+static contract candidate only; agents-infra still owns and executes every
+process, SSH, polling, pressure, and supervision operation.
+
 ### 6. What the CLI answers today, and what that answer means
 
 `agents-management plugins` and `agents-management vendors` print an empty list

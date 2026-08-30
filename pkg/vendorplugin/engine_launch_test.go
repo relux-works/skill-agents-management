@@ -16,10 +16,84 @@ import (
 
 var testEngineRef = plugin.Ref{ID: "test-engine", Kind: inferenceengine.Kind}
 
+type scriptedEngineFactSource struct {
+	kind      inferenceengine.EngineKind
+	overrides map[inferenceengine.Fact]inferenceengine.ReadOutcome
+	calls     int
+	before    func()
+}
+
+func (source *scriptedEngineFactSource) ReadEngineFacts(_ context.Context, _ plugin.Ref, _ engineObservationQuery) (inferenceengine.EngineKind, []inferenceengine.Reading, error) {
+	source.calls++
+	if source.before != nil {
+		source.before()
+	}
+	kind := source.kind
+	if kind == "" {
+		kind = inferenceengine.EngineKindNativeTransformer
+	}
+	values := map[inferenceengine.Fact]inferenceengine.ReadOutcome{
+		inferenceengine.FactSSHForwarding: inferenceengine.ReadAbsent(),
+	}
+	for fact, outcome := range source.overrides {
+		values[fact] = outcome
+	}
+	readings := make([]inferenceengine.Reading, 0, len(inferenceengine.MeasuredFacts()))
+	for _, definition := range inferenceengine.MeasuredFacts() {
+		outcome, ok := values[definition.Fact]
+		if !ok {
+			outcome = inferenceengine.ReadValue(goodEngineFactValue(definition.Fact))
+		}
+		readings = append(readings, inferenceengine.NewReading(definition.Fact, outcome))
+	}
+	return kind, readings, nil
+}
+
+func goodEngineFactValue(fact inferenceengine.Fact) string {
+	switch fact {
+	case inferenceengine.FactContextArgv:
+		return `["--ctx-size","4096"]`
+	case inferenceengine.FactPrefillArgv:
+		return `["--ubatch-size","512"]`
+	case inferenceengine.FactReasoningStreamField:
+		return "delta.reasoning_content"
+	case inferenceengine.FactHealth:
+		return `{"endpoint":"/health","healthy":true}`
+	case inferenceengine.FactReadiness:
+		return `{"weights_resident":true}`
+	case inferenceengine.FactWeightArtifact:
+		return `{"format":"safetensors","model_path":"/models/weights.safetensors","config_path":"/models/config.json"}`
+	case inferenceengine.FactMemoryAccounting:
+		return `{"method":"resident-bytes","bytes":4096,"includes_mapped_weights":true}`
+	case inferenceengine.FactSpeculativeDecoding:
+		return `{"capable":true,"active":false}`
+	case inferenceengine.FactLoadState:
+		return `{"state":"loaded","weights_resident":true}`
+	case inferenceengine.FactUnloadState:
+		return `{"state":"unloaded","weights_resident":false}`
+	case inferenceengine.FactInferenceBusy:
+		return `{"busy":false}`
+	case inferenceengine.FactMemoryPressureSequence:
+		return `{"pressure":"normal","consulted":["load-state","unload-state","inference-busy"],"action":"none"}`
+	case inferenceengine.FactLocalExecutable:
+		return "/opt/agents-infra/bin/mlx-server"
+	case inferenceengine.FactLocalArgv:
+		return `["--port","8080"]`
+	case inferenceengine.FactSSHForwarding:
+		return `{"host":"model-host","local_port":8080,"remote_port":8080}`
+	case inferenceengine.FactStressPolicy:
+		return `{"enabled":true,"max_concurrency":2}`
+	case inferenceengine.FactRestartSupervisionPolicy:
+		return `{"max_attempts":3,"initial_backoff_ms":100,"max_backoff_ms":1000}`
+	default:
+		panic("unknown inference-engine fact: " + fact)
+	}
+}
+
 func engineRegistry(t *testing.T, runtimeEngine, modelEngine plugin.Ref) *Registry {
 	t.Helper()
 	systems := systemsWithPangolin(t)
-	registry := NewRegistry(systems)
+	registry := newRegistryWithEngineFactSource(systems, &scriptedEngineFactSource{})
 	if err := registry.RegisterPlugin(inferenceengine.NewConfigured("test-engine")); err != nil {
 		t.Fatalf("RegisterPlugin(engine): %v", err)
 	}
@@ -62,6 +136,153 @@ func TestBuildLaunchCarriesRequestedAndResolvedEngineProvenance(t *testing.T) {
 	}
 	if plan.Provenance.RequestedEngine != testEngineRef || plan.Provenance.ResolvedEngine != testEngineRef {
 		t.Fatalf("engine provenance = %#v/%#v, want %#v", plan.Provenance.RequestedEngine, plan.Provenance.ResolvedEngine, testEngineRef)
+	}
+}
+
+func TestBuildLaunchRunsTrustedMLXObservationGateBeforeLaunchEffects(t *testing.T) {
+	ids := launchIdentityCorpus()[0]
+	engine := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
+	fixture := newIdentityLaunchFixture(t, ids, engine, engine)
+	source := &scriptedEngineFactSource{
+		kind: inferenceengine.EngineKindNativeTransformer,
+		overrides: map[inferenceengine.Fact]inferenceengine.ReadOutcome{
+			inferenceengine.FactSpeculativeDecoding: inferenceengine.ReadAbsent(),
+		},
+	}
+	source.before = func() {
+		if fixture.vendor.calls["Spawn"] != 0 || fixture.system.preflightCalls != 0 {
+			t.Fatalf("engine gate ran after launch effects: Spawn=%d Preflight=%d", fixture.vendor.calls["Spawn"], fixture.system.preflightCalls)
+		}
+	}
+	fixture.registry.engineFacts = source
+
+	plan, err := BuildLaunch(context.Background(), fixture.registry, fixture.request, agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch(mlx): %v", err)
+	}
+	if source.calls != 1 || fixture.vendor.calls["Spawn"] != 1 || fixture.system.preflightCalls != 1 {
+		t.Fatalf("calls source/Spawn/Preflight = %d/%d/%d, want 1/1/1", source.calls, fixture.vendor.calls["Spawn"], fixture.system.preflightCalls)
+	}
+	if plan.Provenance.ResolvedEngine != engine {
+		t.Fatalf("resolved engine = %#v, want shipped identity %#v", plan.Provenance.ResolvedEngine, engine)
+	}
+}
+
+func TestBuildLaunchProductionSourceRefusesUnknownConfiguredEngineIDBeforeEffects(t *testing.T) {
+	ids := launchIdentityCorpus()[1]
+	engine := plugin.Ref{ID: plugin.ID(ids.engine), Kind: inferenceengine.Kind}
+	fixture := newIdentityLaunchFixture(t, ids, engine, engine)
+	fixture.registry.engineFacts = productionEngineFactSource{}
+
+	_, err := BuildLaunch(context.Background(), fixture.registry, fixture.request, agentic.LaunchModeExec)
+	if !errors.Is(err, inferenceengine.ErrEngineContractMissing) {
+		t.Fatalf("BuildLaunch unknown production engine = %v, want ErrEngineContractMissing", err)
+	}
+	if fixture.vendor.calls["Spawn"] != 0 || fixture.system.preflightCalls != 0 {
+		t.Fatalf("unknown engine reached launch effects: Spawn=%d Preflight=%d", fixture.vendor.calls["Spawn"], fixture.system.preflightCalls)
+	}
+}
+
+func TestBuildLaunchProductionMLXPathRefusesWithoutAgentsInfraObservationAdapter(t *testing.T) {
+	ids := launchIdentityCorpus()[0]
+	engine := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
+	fixture := newIdentityLaunchFixture(t, ids, engine, engine)
+	fixture.registry.engineFacts = productionEngineFactSource{}
+
+	_, err := BuildLaunch(context.Background(), fixture.registry, fixture.request, agentic.LaunchModeExec)
+	if !errors.Is(err, inferenceengine.ErrObservationUnsupported) {
+		t.Fatalf("BuildLaunch production mlx path = %v, want ErrObservationUnsupported", err)
+	}
+	if errors.Is(err, inferenceengine.ErrEngineContractMissing) {
+		t.Fatalf("shipped mlx identity did not reach its concrete implementation: %v", err)
+	}
+	if fixture.vendor.calls["Spawn"] != 0 || fixture.system.preflightCalls != 0 {
+		t.Fatalf("unsupported observation reached launch effects: Spawn=%d Preflight=%d", fixture.vendor.calls["Spawn"], fixture.system.preflightCalls)
+	}
+}
+
+func TestBuildLaunchObservationRefusalsPrecedeEveryLaunchEffect(t *testing.T) {
+	tests := []struct {
+		name      string
+		overrides map[inferenceengine.Fact]inferenceengine.ReadOutcome
+		want      error
+	}{
+		{
+			name: "read failure is not absence",
+			overrides: map[inferenceengine.Fact]inferenceengine.ReadOutcome{
+				inferenceengine.FactReadiness: inferenceengine.ReadFailure(inferenceengine.NotObservedReadFailure, "status read failed"),
+			},
+			want: inferenceengine.ErrObservationRead,
+		},
+		{
+			name: "arbitrary readiness json",
+			overrides: map[inferenceengine.Fact]inferenceengine.ReadOutcome{
+				inferenceengine.FactReadiness: inferenceengine.ReadValue(`{"endpoint_answering":true,"weights_resident":false}`),
+			},
+			want: inferenceengine.ErrObservationMalformed,
+		},
+		{
+			name: "readiness without resident weights",
+			overrides: map[inferenceengine.Fact]inferenceengine.ReadOutcome{
+				inferenceengine.FactReadiness: inferenceengine.ReadValue(`{"weights_resident":false}`),
+			},
+			want: inferenceengine.ErrObservationMalformed,
+		},
+		{
+			name: "arbitrary busy json",
+			overrides: map[inferenceengine.Fact]inferenceengine.ReadOutcome{
+				inferenceengine.FactInferenceBusy: inferenceengine.ReadValue(`{"busy":"sometimes"}`),
+			},
+			want: inferenceengine.ErrObservationMalformed,
+		},
+		{
+			name: "arbitrary pressure json",
+			overrides: map[inferenceengine.Fact]inferenceengine.ReadOutcome{
+				inferenceengine.FactMemoryPressureSequence: inferenceengine.ReadValue(`{"pressure":"critical","action":"evict"}`),
+			},
+			want: inferenceengine.ErrObservationMalformed,
+		},
+		{
+			name: "simultaneous local and ssh",
+			overrides: map[inferenceengine.Fact]inferenceengine.ReadOutcome{
+				inferenceengine.FactSSHForwarding: inferenceengine.ReadValue(goodEngineFactValue(inferenceengine.FactSSHForwarding)),
+			},
+			want: inferenceengine.ErrProfileExpansionInvalid,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ids := launchIdentityCorpus()[0]
+			engine := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
+			fixture := newIdentityLaunchFixture(t, ids, engine, engine)
+			fixture.registry.engineFacts = &scriptedEngineFactSource{overrides: test.overrides}
+
+			_, err := BuildLaunch(context.Background(), fixture.registry, fixture.request, agentic.LaunchModeExec)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("BuildLaunch error = %v, want %v", err, test.want)
+			}
+			if fixture.vendor.calls["Spawn"] != 0 || fixture.system.preflightCalls != 0 {
+				t.Fatalf("refusal reached launch effects: Spawn=%d Preflight=%d", fixture.vendor.calls["Spawn"], fixture.system.preflightCalls)
+			}
+		})
+	}
+}
+
+func TestPublicProductionEntryHasNoCallerSuppliedObservationChannel(t *testing.T) {
+	constructor := reflect.TypeOf(NewRegistry)
+	if constructor.NumIn() != 1 || constructor.In(0) != reflect.TypeOf((*agentic.Registry)(nil)) {
+		t.Fatalf("NewRegistry inputs = %v, want only *agentic.Registry", constructor)
+	}
+	entry := reflect.TypeOf(BuildLaunch)
+	for index := 0; index < entry.NumIn(); index++ {
+		input := entry.In(index)
+		if input == reflect.TypeOf(inferenceengine.Reading{}) || input == reflect.TypeOf(inferenceengine.ReadValue("forged")) {
+			t.Fatalf("BuildLaunch exposes caller observation input %v", input)
+		}
+	}
+	field, ok := reflect.TypeOf(Registry{}).FieldByName("engineFacts")
+	if !ok || field.PkgPath == "" {
+		t.Fatalf("Registry.engineFacts is caller-settable: %#v", field)
 	}
 }
 
@@ -205,7 +426,7 @@ func newIdentityLaunchFixture(t *testing.T, ids launchIdentityTuple, runtimeEngi
 		t.Fatalf("Register(%s system): %v", ids.system, err)
 	}
 
-	registry := NewRegistry(systems)
+	registry := newRegistryWithEngineFactSource(systems, &scriptedEngineFactSource{})
 	registered := make(map[plugin.Ref]bool)
 	for _, ref := range append([]plugin.Ref{{ID: plugin.ID(ids.engine), Kind: inferenceengine.Kind}}, extraEngines...) {
 		if ref == (plugin.Ref{}) || registered[ref] {

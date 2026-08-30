@@ -345,6 +345,31 @@ coordinated `skill-project-management` consumer remain separately owned work.
 
 ## Boundaries with task-board
 
+### Inference-engine observation boundary
+
+The observation plane has one production owner. `vendorplugin.NewRegistry`
+installs a package-private `engineFactSource`; no public constructor, option,
+registry method, or `BuildLaunch` parameter can replace it. For a non-dry-run
+engine launch, `BuildLaunch` resolves the configured graph ID, maps the shipped
+`mlx` ID to its trusted `native-transformer` implementation kind, validates the
+source's reads, and refuses before `Vendor.Spawn`, system `Preflight`, or plan
+materialization. Configured plugin ID and implementation kind are separate.
+
+`inferenceengine.ValidateReadings` is a schema boundary, not an authorization
+entry. Its inputs are explicitly untrusted; constructing them cannot alter the
+Registry's production source or reach launch effects. Package-internal tests
+replace the private source to exercise every result class without contacting a
+live runtime. The shipped MLX source reports unsupported until agents-infra
+provides the concrete adapter rather than manufacturing positive evidence.
+
+`pkg/inferenceengine` owns validation, not execution. Its v2 contract closes
+the 17 measured facts independently and preserves observed value, observed
+absence, and not-observed as different types. Read failure, malformed data,
+and unsupported data always refuse. Cross-fact validation admits exactly two
+model-harness expansions: local executable+argv with SSH absent, or SSH
+forwarding with both local fields absent. No process, socket, SSH session,
+signal, pressure action, or supervisor is started by this module.
+
 | Stays in task-board | Moves here |
 | --- | --- |
 | roles, role archetypes | runtime registry, adapter table |

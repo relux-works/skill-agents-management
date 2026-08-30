@@ -129,6 +129,7 @@ became `.Score`; the total order is derived by `vendorplugin.Lineup`):
 | Add engine/sidecar nodes | `agentic.BuildMultiNodePlan(primary, dependencies, nodes...)` |
 | The same, through a runtime and its vendor | `vendorplugin.BuildLaunch(registry, req, mode)` |
 | Publish validated launch identity metadata | `plan.ConsumerProvenance()` → versioned `engine_binding` plus configured/resolved engine projection; `none` is valid only for a system-only legacy shape |
+| Validate observed engine facts before launch | `vendorplugin.BuildLaunch(ctx, registry, request, mode)` invokes the package-owned engine source before `Spawn`/`Preflight`; `inferenceengine.ValidateReadings` is schema-only and cannot install evidence |
 | May it launch right now? | `providerlimits.Store.AvailabilityFor(VerdictQuery{…})` → `vendorplugin.Availability` |
 
 `BuildPlan` is the system dispatch site and `BuildLaunch` the legacy runtime
@@ -168,6 +169,10 @@ OBSERVED healthy verdict is serviceable, and "checked and found nothing",
 5. **One source per fact.** One general graph, one compatibility runtime registry, one identifier
    normalization, one argv construction site per plugin. Guards make a second
    one fail a test rather than fail a review.
+6. **Observed facts come from a bound concrete engine kind.** Resolver calls do
+   not accept a registry or observation implementation. Fact-specific closed
+   schemas reject plausible arbitrary JSON, and local execution and SSH
+   forwarding are mutually exclusive observed profile variants.
 
 ## Landing gate
 

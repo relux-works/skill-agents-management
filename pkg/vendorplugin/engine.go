@@ -1,13 +1,58 @@
 package vendorplugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	"github.com/relux-works/skill-agents-management/internal/ident"
 	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine/engines/mlx"
 	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
+
+type engineObservationQuery struct {
+	Runtime RuntimeID
+	Profile string
+	Model   ModelID
+}
+
+// engineFactSource is deliberately package-private. NewRegistry installs the
+// concrete production implementation and no public constructor accepts a
+// replacement, so an ordinary BuildLaunch caller cannot register or retain an
+// evidence producer. Tests in this package use newRegistryWithEngineFactSource
+// to fake the agents-infra boundary without live process, SSH, or network I/O.
+type engineFactSource interface {
+	ReadEngineFacts(context.Context, plugin.Ref, engineObservationQuery) (inferenceengine.EngineKind, []inferenceengine.Reading, error)
+}
+
+type productionEngineFactSource struct{}
+
+func (productionEngineFactSource) ReadEngineFacts(_ context.Context, ref plugin.Ref, _ engineObservationQuery) (inferenceengine.EngineKind, []inferenceengine.Reading, error) {
+	if ref.Kind != inferenceengine.Kind {
+		return "", nil, fmt.Errorf("%w: observation reference names kind %q, want %q", ErrInferenceEngineInvalid, ref.Kind, inferenceengine.Kind)
+	}
+	if ref.ID != mlx.ID {
+		return "", nil, fmt.Errorf("%w: configured engine %q has no trusted concrete implementation", inferenceengine.ErrEngineContractMissing, ref.ID)
+	}
+	readings := make([]inferenceengine.Reading, 0, len(inferenceengine.MeasuredFacts()))
+	for _, definition := range inferenceengine.MeasuredFacts() {
+		readings = append(readings, inferenceengine.NewReading(definition.Fact,
+			inferenceengine.ReadFailure(inferenceengine.NotObservedUnsupported, "agents-infra has not supplied the concrete MLX observation adapter")))
+	}
+	return inferenceengine.EngineKindNativeTransformer, readings, nil
+}
+
+func resolveEngineObservations(ctx context.Context, source engineFactSource, ref plugin.Ref, query engineObservationQuery) (inferenceengine.Resolution, error) {
+	if source == nil {
+		return inferenceengine.Resolution{}, fmt.Errorf("%w: engine fact source is absent", inferenceengine.ErrEngineContractMissing)
+	}
+	kind, readings, err := source.ReadEngineFacts(ctx, ref, query)
+	if err != nil {
+		return inferenceengine.Resolution{}, err
+	}
+	return inferenceengine.ValidateReadings(ref.ID, kind, readings)
+}
 
 var (
 	ErrInferenceEngineInvalid  = errors.New("vendorplugin: inference-engine reference is malformed")

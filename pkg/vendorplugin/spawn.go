@@ -155,6 +155,15 @@ func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	if err != nil {
 		return agentic.Plan{}, err
 	}
+	if requestedEngine != (plugin.Ref{}) && mode != agentic.LaunchModeDryRun {
+		if _, err := resolveEngineObservations(ctx, r.engineFacts, requestedEngine, engineObservationQuery{
+			Runtime: binding.ID,
+			Profile: req.Profile,
+			Model:   model.ID,
+		}); err != nil {
+			return agentic.Plan{}, fmt.Errorf("vendorplugin: inference-engine observations refused before launch: %w", err)
+		}
+	}
 
 	var launch agentic.LaunchRequest
 	if binding.SystemOnly() {
