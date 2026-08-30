@@ -362,6 +362,17 @@ The vendor plugin contract, its registry, and the runtime declarations.
   agentic system that is not registered is refused, with both ids in the error.
   A registry built without an agentic registry refuses every vendor rather than
   admitting one whose declared systems nobody checked.
+- **Inference engines are graph identities, not provenance strings.**
+  `inferenceengine.NewConfigured(id)` creates an identity-only plugin;
+  `RuntimeDeclaration.Engine` and `Model.Engine` carry the same typed ref,
+  vendor registration publishes the model-to-engine edge, and `BuildLaunch`
+  resolves it before returning a plan. `Plan.Provenance` records requested and
+  resolved engine refs together with runtime/profile/model/publisher/family.
+  No concrete engine, runtime, profile, publisher, family or model name is a
+  core dispatch case, and declarations with no engine retain legacy behavior.
+  Genericity is bounded by production-entry identity-renaming tests plus an
+  exact shipped-literal placement boundary; it does not claim whole-program Go
+  semantic detection.
 - `Availability` is a structured verdict, not a boolean: healthy,
   limited-until(time, evidence), unreachable(evidence), or unknown — with
   "checked and found nothing" distinguishable from "nobody looked" and from "the
@@ -409,7 +420,7 @@ The vendor plugin contract, its registry, and the runtime declarations.
   that REDIRECTS the launch (a vendor may add authentication environment; it
   may not change the harness, the model, the effort, the tracked `RunContext`,
   the goal, the budget, the tier or the composition), and hands it to
-  `agentic.BuildPlan`. Spawn
+  `agentic.BuildPlan`, then attaches the resolved provenance snapshot. Spawn
   EXECUTION is not here — that is a consumer responsibility. This branch does
   not claim production reachability until the coordinated consumer candidate
   calls this API from its real `buildLaunchPlan` path.

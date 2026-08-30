@@ -11,6 +11,7 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pi"
 	"github.com/relux-works/skill-agents-management/pkg/localruntime"
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
 
@@ -55,6 +56,11 @@ func isolatedLocalQwenRegistry(t *testing.T, reader localruntime.StatusReader, c
 		t.Fatalf("registering pi: %v", err)
 	}
 	registry := vendorplugin.NewRegistry(systems)
+	for _, engine := range cfg.EnginePlugins() {
+		if err := registry.RegisterPlugin(engine); err != nil {
+			t.Fatalf("registering configured engine: %v", err)
+		}
+	}
 	if err := registry.Register(New(cfg)); err != nil {
 		t.Fatalf("registering local-models: %v", err)
 	}
@@ -63,6 +69,7 @@ func isolatedLocalQwenRegistry(t *testing.T, reader localruntime.StatusReader, c
 		System: "pi",
 		Vendor: VendorID,
 		Broker: vendorplugin.BrokerProvenance{Checked: []string{"test"}, Found: "test"},
+		Engine: cfg.Runtimes[0].Engine,
 	}
 	if err := registry.DeclareRuntime(decl); err != nil {
 		t.Fatalf("declaring local-qwen: %v", err)
@@ -123,7 +130,59 @@ func TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight(t *testing.T) {
 	if !foundEnv {
 		t.Fatalf("plan.Env = %v; missing AGENTS_INFRA_CALLER_CWD contributed by this vendor's Spawn", plan.Env)
 	}
+	wantEngine := cfgEngineRef(validConfig())
+	if plan.Provenance.Runtime != "local-qwen" || plan.Provenance.Profile != "local-qwen" || plan.Provenance.Model != "qwen-3.8-27b-mlx-8bit" {
+		t.Fatalf("resolved runtime/profile/model provenance = %#v", plan.Provenance)
+	}
+	if plan.Provenance.Publisher != "alibaba" || plan.Provenance.Family != "qwen" || plan.Provenance.RequestedEngine != wantEngine || plan.Provenance.ResolvedEngine != wantEngine {
+		t.Fatalf("resolved publisher/family/engine provenance = %#v", plan.Provenance)
+	}
 }
+
+// TestBuildLaunchLegacyConfigWithoutEngineRequirementPreservesParity drives
+// the exact v0.4.0 TOML shape through the production parser and BuildLaunch.
+// Absence is a legitimate no-engine declaration: all pre-extension runtime,
+// model and observable launch fields must survive without invented provenance.
+func TestBuildLaunchLegacyConfigWithoutEngineRequirementPreservesParity(t *testing.T) {
+	result := newConfigLoader(func() ([]byte, bool, error) {
+		return []byte(legacyTOML), false, nil
+	}).load()
+	if result.Err != nil || result.Absent {
+		t.Fatalf("v0.4.0 config without an engine requirement became malformed: %+v", result)
+	}
+	if len(result.Config.InferenceEngines) != 0 || len(result.Config.Runtimes) != 1 {
+		t.Fatalf("legacy declarations changed: %+v", result.Config)
+	}
+	runtime := result.Config.Runtimes[0]
+	model := runtime.Models["qwen-3.8-27b-mlx-8bit"]
+	if runtime.Engine != (plugin.Ref{}) || model.Engine != (plugin.Ref{}) {
+		t.Fatalf("legacy config invented engine refs: runtime=%#v model=%#v", runtime.Engine, model.Engine)
+	}
+
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+	registry := isolatedLocalQwenRegistry(t, reader, result.Config)
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch(v0.4.0 config): %v", err)
+	}
+	if plan.System != "pi" || filepath.Base(plan.Binary) != "agents-infra" {
+		t.Fatalf("legacy launch identity changed: system=%q binary=%q", plan.System, plan.Binary)
+	}
+	wantArgv := []string{"pi", "--profile", "local-qwen", "--"}
+	if len(plan.Argv) != len(wantArgv) {
+		t.Fatalf("legacy argv = %v, want %v", plan.Argv, wantArgv)
+	}
+	for index := range wantArgv {
+		if plan.Argv[index] != wantArgv[index] {
+			t.Fatalf("legacy argv = %v, want %v", plan.Argv, wantArgv)
+		}
+	}
+	if plan.Provenance != (agentic.LaunchProvenance{}) {
+		t.Fatalf("legacy launch invented engine provenance: %#v", plan.Provenance)
+	}
+}
+
+func cfgEngineRef(cfg Config) plugin.Ref { return cfg.Runtimes[0].Engine }
 
 // TestBuildLaunchRefusesLocalQwenWhenPreflightRefuses: a refusing Preflight
 // stops BuildLaunch before agentic.BuildPlan.

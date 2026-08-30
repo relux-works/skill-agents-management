@@ -123,6 +123,15 @@ plugin identity and plan contributor, not process-lifecycle authority.
 `agentic.ProcessPlan` into a typed launch node; the consumer still starts,
 supervises, stops and attests the process.
 
+Operator-defined engines use `inferenceengine.NewConfigured(id)`. The value is
+identity-only and enters `vendorplugin.Registry.RegisterPlugin`, which writes
+it into the same `pkg/plugin.Registry` as systems and vendors. Model and
+runtime declarations carry the same normalized `plugin.Ref`; vendor
+registration publishes the model-to-engine dependency, and `BuildLaunch`
+refuses missing, wrong-kind, malformed, mismatched or caller-substituted
+references before producing a plan. A zero reference means no engine
+requirement and preserves the pre-extension launch surface.
+
 Both `pi` and `local-models` can depend on the same engine node while retaining
 the existing vendor→system edge: engine → system → vendor in dependency-first
 order, with an optional direct vendor→engine edge. No cycle or third registry
@@ -195,6 +204,20 @@ environment strings. `PassthroughLaunch` and contributing vendors preserve it,
 and the fidelity check refuses a vendor that changes or drops any of `RunID`,
 `TaskID`, `BoardDir`, or `ContextID`; the resolved system remains the one owner
 that exports those values through `agentic.WithRunContext`.
+
+After model selection and before vendor dispatch, `BuildLaunch` resolves the
+runtime/model engine reference through the shared graph and checks an optional
+`SpawnRequest.Engine` expectation exactly. The returned `Plan.Provenance`
+records runtime, resolved profile, model, publisher, family, and both requested
+and resolved engine refs. Those provenance values never select dispatch.
+Production-entry metamorphic tests injectively rename system, vendor, runtime,
+profile, publisher, family, model, and engine identities while requiring the
+same graph shape, non-identity plan output, side-effect counts, and
+success/refusal classes. A separate declaration-scoped source check forbids the
+exact shipped local-stack identity literals in generic core except for the
+frozen compatibility declarations that own them. This is deliberately bounded:
+runtime assembly, imported or decoded values, reflection, and obfuscation are
+review concerns, not something a partial Go semantic interpreter can prove.
 
 ## Typed multi-node launch plans
 

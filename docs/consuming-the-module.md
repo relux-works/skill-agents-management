@@ -135,9 +135,13 @@ case result.Err != nil:
         Reason: "malformed", Err: result.Err,
     })
 default:
+	for _, engine := range result.Config.EnginePlugins() {
+	    _ = registry.RegisterPlugin(engine)
+	}
     _ = registry.Register(localmodels.New(result.Config))
     _ = registry.DeclareRuntime(vendorplugin.RuntimeDeclaration{
         ID: "local-qwen", System: "pi", Vendor: localmodels.VendorID,
+		Engine: result.Config.Runtimes[0].Engine,
         Broker: vendorplugin.BrokerProvenance{Checked: []string{"local-models.toml"}, Found: "declared once local-models registers"},
     })
 }
@@ -155,6 +159,15 @@ need an edit for the kind:
 registry := plugin.NewRegistry()
 err := registry.Register(enginePlugin) // declares Kind: inferenceengine.Kind
 ```
+
+For identity-only configured engines, use
+`inferenceengine.NewConfigured("mlx")`; the name is ordinary configuration,
+not a dispatch case. A runtime and each model row that requires it carry the
+same `plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}`. Callers may also set
+`SpawnRequest.Engine` as an exact expectation; disagreement refuses instead of
+substituting one engine for another. Omitting all three engine declarations
+retains the pre-extension launch contract; an explicitly blank or unknown
+engine value is malformed rather than treated as omission.
 
 Use `RegisterAll` when a set is intended to arrive together; cycles, missing
 dependencies and kind mismatches are refused atomically with named errors.

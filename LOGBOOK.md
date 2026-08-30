@@ -5,6 +5,47 @@
 
 ## 2026-08-30
 
+### 0631 — Genericity proof moved from semantic interpretation to observable behavior
+- ROOT CAUSE: Revision 4's 529-line AST dataflow scanner remained bypassable by an ordinary family-to-engine `map[string]string`; each repair only moved the representation boundary.
+- DECISION: Removed `pkg/vendorplugin/engine_dispatch_guard_{test,mutants_test}.go`. Genericity is now bounded by production-entry `BuildLaunch` identity-renaming invariance plus exact shipped-literal placement in generic core.
+- TEST: Success and eleven refusal/registration classes run across the shipped-shaped tuple, two opaque tuples, and a fixed-seed corpus; literal mutants cover every shipped identity and map values. `pkg/vendorplugin/{engine_launch,identity_literal_boundary}_test.go`.
+- NOTE: Runtime assembly, imported/decoded values, reflection, and obfuscation remain code-review concerns; no scanner claims arbitrary Go semantic coverage.
+
+### 0615 — Function literals and function values bypassed the identity-dispatch guard
+- REGRESSION: Revision 3 summarized only package-level `FuncDecl` helpers. A concrete Family predicate carried by a local closure, or a named helper assigned to a local function value, reached an engine-selecting branch with zero reported violations.
+- FIX: The scanner now resolves typed identity aliases and concrete predicates inside function literals, inherits captured aliases, and propagates both closure and named-helper function values through local assignments.
+- TEST: Permanent closure and named-function-value narrowing mutants each failed with `violations=[]` before the fix; both now fail closed while generic blank validation and declaration-to-expectation equality remain admitted.
+- STATUS: Resolved in TASK-260830-1b0kmt revision 4 rework; full landing gates pending rerun.
+
+### 0543 — Omitted engine is compatibility; explicit blank is malformed
+- REGRESSION: Revision 2 made every non-empty local-model runtime require engine fields, rejecting the exact v0.4.0 TOML shape before `BuildLaunch`. `pkg/vendorplugin/vendors/local-models/config.go`.
+- FIX: Wire engine fields are pointers: omitted preserves a zero `plugin.Ref`; present blank and unknown refs remain typed malformed config; one-sided and mismatched refs remain `BuildLaunch` refusals.
+- TEST: Exact pre-extension TOML now reaches production `BuildLaunch` with unchanged Pi argv and zero engine provenance; narrowing omission back to required makes the named regression exit 1.
+- STATUS: Resolved in TASK-260830-1b0kmt revision 3 rework.
+
+### 0543 — Function-local source guards admit helper-indirected dispatch
+- ROOT CAUSE: Revision 2 tracked identity aliases and predicates only within one function; a concrete family comparison returned by a package-local helper reached a caller branch unseen.
+- FIX: `pkg/vendorplugin/engine_dispatch_guard_test.go` computes a package-wide fixpoint of concrete-predicate helper returns and applies it to caller branches and helper chains.
+- TEST: Permanent cross-function family mutant is rejected; narrowing only call-summary consumption makes that test exit 1 while restored focused suites exit 0.
+- STATUS: Resolved in TASK-260830-1b0kmt revision 3 rework.
+
+### 0512 — Inference-engine static-guard rework passed landing gates
+- MILESTONE: Final revision-2 tree passes `make vet`, `make build`, uncached full `go test`, `make regress`, repository-wide `gofmt -l`, and `git diff --check`; every command exited 0.
+- TEST: Scope-narrowing and Family-axis-narrowing mutants each exited 1 before exact source restoration; restored focused guard suite exited 0.
+- STATUS: TASK-260830-1b0kmt ready for independent revision-2 review; no live runtime contacted.
+
+### 0507 — Concrete-identity guards must compose scope and vocabulary
+- ROOT CAUSE: Revision 1 scanned only `spawn.go`, `engine.go`, and `registry.go` for five known literals; a new core file branching on an emergent `Model.Family` bypassed the guard.
+- FIX: `pkg/vendorplugin/engine_dispatch_guard_test.go` composes every production Go file in the core package and detects non-empty runtime/profile/publisher/family/model/engine branches through typed fields, scalar IDs, local aliases, conversions, and switches.
+- TEST: New-file family and indirect model mutants are permanent; narrowing the file scope or removing only the Family axis makes the named focused tests fail with exit 1. Generic equality, blank validation, and multi-return error checks remain accepted.
+- STATUS: Resolved in TASK-260830-1b0kmt revision 2 rework; full landing gates pending rerun.
+
+### 0445 — Engine provenance must not perturb zero-engine launch parity
+- FINDING: `v0.4.0` had the generic `inference-engine` kind but no runtime/model ref, configured engine plugin, or `BuildLaunch` resolution/provenance path. `pkg/{inferenceengine,vendorplugin}`.
+- DECISION: Runtime and model declarations carry one exact `plugin.Ref`; optional caller expectation must match; publisher, family, profile, runtime, and model never infer or select the engine.
+- FIX: `BuildLaunch` resolves requested/resolved engine identity through the shared graph and attaches `Plan.Provenance` only for engine-bound launches. Zero-engine launches retain a zero provenance field and pre-extension observable parity.
+- TEST: Production-entry negatives cover missing, wrong-kind, duplicate, cycle, malformed, dropped, mismatched, and substituted engine shapes; static guard rejects concrete identity literals in core dispatch.
+
 ### 0340 — Same kind is not the same dependency declaration
 - ROOT CAUSE: Vendor graph sync initially accepted an existing agentic node when only `ID` and `Kind` matched; a caller could pre-seed a shadow node that dropped the real system's engine dependency.
 - FIX: `vendorplugin.Registry.Register` now requires the exact source declaration before reusing a synced node and refuses mismatch as `plugin.ErrUnsatisfiableDeclaration`. `pkg/vendorplugin/registry.go`.
