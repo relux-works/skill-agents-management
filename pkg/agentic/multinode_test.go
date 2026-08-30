@@ -70,6 +70,19 @@ func TestBuildMultiNodePlanRefusesAMissingDependency(t *testing.T) {
 	}
 }
 
+func TestBuildMultiNodePlanRefusesExplicitNodeWithEmptyBinary(t *testing.T) {
+	node := PlanNode{
+		ID:      "engine",
+		Plugin:  plugin.Ref{ID: "llama-cpp", Kind: "inference-engine"},
+		Process: testProcess(""),
+	}
+
+	_, err := BuildMultiNodePlan(testPrimaryPlan(), []PlanNodeID{"engine"}, node)
+	if !errors.Is(err, ErrPlanInvalid) {
+		t.Fatalf("BuildMultiNodePlan(explicit node with empty binary) error = %v, want ErrPlanInvalid", err)
+	}
+}
+
 func TestBuildMultiNodePlanRefusesMissingDependenciesFromPrimaryAndLaterEdges(t *testing.T) {
 	t.Run("implicit primary node", func(t *testing.T) {
 		_, err := BuildMultiNodePlan(testPrimaryPlan(), []PlanNodeID{"missing-engine"})

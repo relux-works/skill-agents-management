@@ -22,6 +22,107 @@ func node(kind plugin.Kind, id plugin.ID, dependencies ...plugin.Ref) declaredPl
 	}}
 }
 
+type unstableDeclaredPlugin struct {
+	declarations []plugin.Declaration
+	reads        int
+}
+
+func (p *unstableDeclaredPlugin) PluginDeclaration() plugin.Declaration {
+	declaration := p.declarations[p.reads]
+	if p.reads < len(p.declarations)-1 {
+		p.reads++
+	}
+	return declaration
+}
+
+func TestRegisterRefusesTypedNilPlugin(t *testing.T) {
+	registry := plugin.NewRegistry()
+	var typedNil *declaredPlugin
+
+	err := registry.Register(typedNil)
+	if !errors.Is(err, plugin.ErrNilPlugin) {
+		t.Fatalf("Register(typed nil plugin) error = %v, want ErrNilPlugin", err)
+	}
+	if registry.Len() != 0 {
+		t.Fatalf("Len() = %d after typed nil refusal, want zero", registry.Len())
+	}
+}
+
+func TestNilRegistryRefusesRegistration(t *testing.T) {
+	var registry *plugin.Registry
+
+	err := registry.Register(node("inference-engine", "engine"))
+	if err == nil {
+		t.Fatal("Register into a nil registry returned nil")
+	}
+}
+
+func TestRegisterAllRefusesUnnormalizedDependencyDeclaration(t *testing.T) {
+	registry := plugin.NewRegistry()
+	engine := node("inference-engine", "engine")
+	environment := node("agent-environment", "worktree",
+		plugin.Ref{ID: "Engine", Kind: "inference-engine"},
+	)
+
+	err := registry.RegisterAll(engine, environment)
+	if !errors.Is(err, plugin.ErrInvalidDeclaration) {
+		t.Fatalf("RegisterAll(unnormalized dependency id) error = %v, want ErrInvalidDeclaration", err)
+	}
+	if registry.Len() != 0 {
+		t.Fatalf("Len() = %d after invalid declaration refusal, want zero", registry.Len())
+	}
+}
+
+func TestRegisterAllRefusesDependencyChangesAcrossDeclarationReads(t *testing.T) {
+	registry := plugin.NewRegistry()
+	unstable := &unstableDeclaredPlugin{declarations: []plugin.Declaration{
+		{
+			ID:   "worktree",
+			Kind: "agent-environment",
+			Dependencies: []plugin.Ref{
+				{ID: "engine", Kind: "inference-engine"},
+			},
+		},
+		{ID: "worktree", Kind: "agent-environment"},
+	}}
+
+	err := registry.RegisterAll(node("inference-engine", "engine"), unstable)
+	if !errors.Is(err, plugin.ErrUnstableDeclaration) {
+		t.Fatalf("RegisterAll(plugin changing dependencies) error = %v, want ErrUnstableDeclaration", err)
+	}
+	if registry.Len() != 0 {
+		t.Fatalf("Len() = %d after unstable declaration refusal, want zero", registry.Len())
+	}
+}
+
+func TestRegisterAllRefusesRepeatedNonSelfDependency(t *testing.T) {
+	registry := plugin.NewRegistry()
+	environment := node("agent-environment", "worktree",
+		plugin.Ref{ID: "engine", Kind: "inference-engine"},
+		plugin.Ref{ID: "engine", Kind: "inference-engine"},
+	)
+
+	err := registry.RegisterAll(node("inference-engine", "engine"), environment)
+	if !errors.Is(err, plugin.ErrDuplicateDependency) {
+		t.Fatalf("RegisterAll(repeated non-self dependency) error = %v, want ErrDuplicateDependency", err)
+	}
+	if registry.Len() != 0 {
+		t.Fatalf("Len() = %d after repeated dependency refusal, want zero", registry.Len())
+	}
+}
+
+func TestResolveRefusesMissingPluginInNonEmptyRegistry(t *testing.T) {
+	registry := plugin.NewRegistry()
+	if err := registry.Register(node("inference-engine", "engine")); err != nil {
+		t.Fatalf("Register(engine): %v", err)
+	}
+
+	_, err := registry.Resolve("missing-engine")
+	if !errors.Is(err, plugin.ErrPluginNotRegistered) {
+		t.Fatalf("Resolve(missing plugin in non-empty registry) error = %v, want ErrPluginNotRegistered", err)
+	}
+}
+
 func TestRegisterAllResolvesDeclaredEdgesWithoutKnowingKindDirection(t *testing.T) {
 	const (
 		vendorKind plugin.Kind = "model-vendor"

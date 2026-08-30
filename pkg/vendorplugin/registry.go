@@ -221,7 +221,7 @@ func (r *Registry) Register(vendor Vendor) error {
 	if r == nil {
 		return errors.New("vendorplugin: cannot register into a nil registry")
 	}
-	if vendor == nil {
+	if nilVendor(vendor) {
 		return ErrNilVendor
 	}
 	if r.systems == nil {
@@ -317,6 +317,19 @@ func (r *Registry) Register(vendor Vendor) error {
 	}
 	r.vendors[id] = vendor
 	return nil
+}
+
+func nilVendor(vendor Vendor) bool {
+	if vendor == nil {
+		return true
+	}
+	value := reflect.ValueOf(vendor)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 type vendorGraphPlugin struct {

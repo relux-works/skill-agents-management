@@ -200,6 +200,29 @@ func TestVendorRegistrationRefusesShadowDeclarationsWithEqualWidthButDifferentDa
 	}
 }
 
+func TestVendorRegistrationRefusesVendorIDCollidingWithSyncedPluginKind(t *testing.T) {
+	systems := agentic.NewRegistry()
+	collision := staticGraphPlugin{declaration: plugin.Declaration{
+		ID:   plugin.ID(narwhalID),
+		Kind: "agent-environment",
+	}}
+	if err := systems.RegisterPlugin(collision); err != nil {
+		t.Fatalf("RegisterPlugin(colliding arbitrary-kind plugin): %v", err)
+	}
+	if err := systems.Register(newPangolinSystem()); err != nil {
+		t.Fatalf("Register(pangolin): %v", err)
+	}
+
+	registry := NewRegistry(systems)
+	err := registry.Register(newNarwhal())
+	if !errors.Is(err, plugin.ErrDuplicatePlugin) {
+		t.Fatalf("Register(vendor colliding with synced arbitrary-kind plugin) error = %v, want ErrDuplicatePlugin", err)
+	}
+	if _, ok := registry.Lookup(narwhalID); ok {
+		t.Fatal("vendor registered over an existing arbitrary-kind plugin id")
+	}
+}
+
 func TestRegisterRefusesNilAndDuplicates(t *testing.T) {
 	registry := NewRegistry(systemsWithPangolin(t))
 
@@ -209,6 +232,25 @@ func TestRegisterRefusesNilAndDuplicates(t *testing.T) {
 		t.Fatalf("Register(narwhal): %v", err)
 	}
 	requireErrorIs(t, registry.Register(newNarwhal()), ErrDuplicateVendor, "Register(narwhal) twice")
+}
+
+func TestRegisterRefusesTypedNilVendor(t *testing.T) {
+	registry := NewRegistry(systemsWithPangolin(t))
+	var typedNil *narwhalVendor
+
+	err := registry.Register(typedNil)
+	requireErrorIs(t, err, ErrNilVendor, "Register(typed nil vendor)")
+	if len(registry.VendorIDs()) != 0 {
+		t.Fatal("typed nil vendor was registered")
+	}
+}
+
+func TestNilRegistryRefusesVendorRegistration(t *testing.T) {
+	var registry *Registry
+
+	if err := registry.Register(newNarwhal()); err == nil {
+		t.Fatal("Register into a nil vendor registry returned nil")
+	}
 }
 
 // A plugin that answers ID() differently across two reads would be registered
@@ -237,8 +279,9 @@ func TestRegisterRefusesAnUnusableVendorID(t *testing.T) {
 	vendor.id = "narwhal cloud"
 
 	_, err := mustRegister(t, vendor, systemsWithPangolin(t))
-	if err == nil {
-		t.Fatal("a vendor id with a space was admitted")
+	var invalid *InvalidIDError
+	if !errors.As(err, &invalid) {
+		t.Fatalf("Register(vendor id with a space) error = %v, want *InvalidIDError", err)
 	}
 	requireMentions(t, err, "narwhal cloud", "lowercase")
 }
@@ -389,13 +432,22 @@ func TestRegisterRefusesUnusableModelRows(t *testing.T) {
 		requireErrorIs(t, err, ErrNoModels, "Register(vendor with no models)")
 	})
 
+	t.Run("an allocated but empty model list", func(t *testing.T) {
+		vendor := newNarwhal()
+		vendor.models = []Model{}
+
+		_, err := mustRegister(t, vendor, systemsWithPangolin(t))
+		requireErrorIs(t, err, ErrNoModels, "Register(vendor with allocated empty model list)")
+	})
+
 	t.Run("a blank model id", func(t *testing.T) {
 		vendor := newNarwhal()
 		vendor.models[0].ID = "   "
 
 		_, err := mustRegister(t, vendor, systemsWithPangolin(t))
-		if err == nil {
-			t.Fatal("a blank model id was admitted")
+		var invalid *InvalidIDError
+		if !errors.As(err, &invalid) {
+			t.Fatalf("Register(blank model id) error = %v, want *InvalidIDError", err)
 		}
 	})
 
@@ -404,8 +456,9 @@ func TestRegisterRefusesUnusableModelRows(t *testing.T) {
 		vendor.models[0].ID = "narwhal deep"
 
 		_, err := mustRegister(t, vendor, systemsWithPangolin(t))
-		if err == nil {
-			t.Fatal("a model id with a space was admitted; it is sent to the vendor verbatim")
+		var invalid *InvalidIDError
+		if !errors.As(err, &invalid) {
+			t.Fatalf("Register(model id with a space) error = %v, want *InvalidIDError", err)
 		}
 	})
 
@@ -415,6 +468,18 @@ func TestRegisterRefusesUnusableModelRows(t *testing.T) {
 
 		_, err := mustRegister(t, vendor, systemsWithPangolin(t))
 		requireErrorIs(t, err, ErrDuplicateModel, "Register(vendor declaring one model id twice)")
+	})
+
+	t.Run("the same model id in non-adjacent rows", func(t *testing.T) {
+		vendor := newNarwhal()
+		middle := vendor.models[1]
+		middle.ID = "narwhal-middle"
+		last := vendor.models[1]
+		last.ID = vendor.models[0].ID
+		vendor.models = []Model{vendor.models[0], middle, last}
+
+		_, err := mustRegister(t, vendor, systemsWithPangolin(t))
+		requireErrorIs(t, err, ErrDuplicateModel, "Register(vendor declaring a non-adjacent duplicate model id)")
 	})
 
 	t.Run("a model no harness can drive", func(t *testing.T) {

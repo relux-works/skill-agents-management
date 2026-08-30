@@ -11,13 +11,14 @@ An outcome with no owner is a rumour.
 Written at the close of `EPIC-260821-1qvnz2`. Every claim below was read off
 the two boards and the two checkouts rather than remembered.
 
-## Current release: v0.4.1
+## Current release: v0.4.2
 
-The historical extraction ledger below remains intact. v0.4.1 strengthens the
-registration and multi-node refusal evidence added in v0.4.0: compile-clean
-narrowed mutants for same-kind duplicates, self/multi-hop cycles, later-edge
-dependencies, non-empty atomic batches and equal-width compatibility shadows
-now fail named production-entry tests. The release otherwise
+The historical extraction ledger below remains intact. v0.4.2 replaces the
+partial v0.4.1 audit with an exhaustive 35-row refusal matrix covering raw
+plugin registration/resolution, typed multi-node planning and the complete
+vendor registration path. Every row has a named production-entry negative and
+a compile-clean narrowing mutant that makes that test exit `1`; typed-nil
+vendors are now refused instead of panicking. The release otherwise
 adds the general `pkg/plugin` graph, the first new kind in
 `pkg/inferenceengine`, compatibility adapters for the existing System/Vendor
 registries, and `agentic.BuildMultiNodePlan` for engine/sidecar process nodes.
@@ -26,11 +27,11 @@ All previously shipped registrations remain unchanged: six original agentic
 systems and four original vendors still self-register through their existing
 APIs; `pi` and conditional `local-models` retain the v0.3.0 paths. The existing
 vendor→system dependency is now graph data rather than the only registry
-direction. Task-board can consume v0.4.1 through its unchanged v0.3.0-facing
+direction. Task-board can consume v0.4.2 through its unchanged v0.3.0-facing
 surface; native graph adoption is separately owned.
 
 Release order and rollback are explicit: validate task-board unchanged against
-the candidate before publishing v0.4.1; consumers can pin v0.3.0 because no
+the candidate before publishing v0.4.2; consumers can pin v0.3.0 because no
 board, runtime or limit-state data migrates. Published tags are immutable and a
 compatibility repair ships as a later patch tag.
 

@@ -558,9 +558,11 @@ cheaper than discovering it.
 
 ## Status
 
-`v0.4.1` is the refusal-proof patch for the general-plugin-graph release. It
-adds mutation-proven negative coverage for duplicate, dependency, cycle,
-atomicity, compatibility-sync and multi-node-plan refusals while retaining the seven shipped
+`v0.4.2` is the exhaustive refusal-proof patch for the general-plugin-graph
+release. Its checked-in matrix enumerates every raw graph, typed multi-node
+plan and vendor-registration error class, and a reproducible harness proves all
+35 rows with compile-clean narrowing mutants. It also refuses typed-nil vendor
+plugins instead of panicking. The release retains the seven shipped
 agentic systems, five model vendors (including conditional `local-models`),
 frozen runtime ids, launch-surface goldens, admitted-pair digests and on-disk
 limit-state identity. The new graph and multi-node plan are additive; task-board
@@ -748,3 +750,4 @@ concluding that a missing golden is permission.
 | vendor-layer mutation harness | narrow every gate the vendor port wrote — the admission expansion, the digest serialization, the ported rows and the per-vendor guard homes — and confirm the suite goes red | `python3 .temp/TASK-260822-3cknas/mutants.py` | `.temp/TASK-260822-3cknas/mutants-*.log` |
 | board-facts mutation harness | narrow every gate the board-facts port added — lifecycle, score, supersession, recommendation, context window, pricing, the vendor-unresolved runtime's rows, the derived lineup and the digest serialization — and confirm the suite goes red naming the right test. Every mutant is a compile-clean NARROWING rather than a deletion, so a kill proves the class is covered rather than the line is present | `python3 .temp/TASK-260824-y7gyco/mutants.py` | `.temp/TASK-260824-y7gyco/mutants-01.log` |
 | regress mutation harness | narrow every gate `make regress` claims to hold, one at a time, and confirm the net goes red naming the right test | `python3 .temp/TASK-260823-4f5t1m/mutants.py` | `.temp/TASK-260823-4f5t1m/mutants-*.log` |
+| refusal-matrix harness | copy the current tree, narrow each raw plugin, typed plan and vendor-registration error class independently, and require its named production-entry negative to fail with exit `1` | `python3 .scripts/verify-refusal-matrix.py` | `.temp/TASK-260830-1jpse1/mutants/{summary.tsv,*.log}` |

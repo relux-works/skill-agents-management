@@ -5,6 +5,16 @@
 
 ## 2026-08-30
 
+### 0525 — Plugin-graph refusal inventory is mechanical
+- FINDING: The v0.4.1 outcome correctly listed nine killed mutants; its 0439 logbook entry incorrectly said eight. `docs/refusal-proof-matrix.md` supersedes both partial counts with 35 enumerated error/call-site rows.
+- FIX: `.scripts/verify-refusal-matrix.py` narrows every row in an isolated copy and requires the named production-entry test to exit `1`; build failures and wrong-test failures do not count.
+- STATUS: Repeated dependency and explicit-node empty-binary survivors now have direct owner tests. `pkg/plugin/registry_test.go`, `pkg/agentic/multinode_test.go`.
+
+### 0525 — Typed-nil vendor bypassed ErrNilVendor
+- ROOT CAUSE: `vendorplugin.Registry.Register` checked only `vendor == nil`; a typed-nil pointer inside the `Vendor` interface reached `ID()` and panicked.
+- FIX: `nilVendor` now refuses every nil-capable reflected kind before plugin methods run. `pkg/vendorplugin/registry.go`.
+- TEST: Narrowing the gate back to interface-nil only makes `TestRegisterRefusesTypedNilVendor` fail through `Registry.Register`.
+
 ### 0439 — A refusal exemplar did not prove the refusal class
 - ROOT CAUSE: The v0.4.0 graph tests named one two-node cycle, one first-edge missing dependency, one kind pair and one narrower shadow; compile-clean gates restricted to those subsets stayed green, including same-kind duplicate overwrite and multi-node self-cycle admission.
 - FIX: Production-entry negatives now cover same-kind duplicates across sequential/batch registration, self and multi-hop cycles, later-edge missing/kind mismatch, non-empty atomic batches, equal-width shadow divergence, implicit-primary/later-edge plan dependencies, and compatibility adapter atomicity. `pkg/{plugin,agentic,vendorplugin}/*_test.go`.
