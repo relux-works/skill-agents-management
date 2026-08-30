@@ -12,6 +12,7 @@ import (
 // runtime boundary. Publisher and family remain observation-only; engine refs
 // are graph identities and therefore carry both id and kind.
 type LaunchProvenance struct {
+	Broker          string
 	Runtime         string
 	Profile         string
 	Model           string

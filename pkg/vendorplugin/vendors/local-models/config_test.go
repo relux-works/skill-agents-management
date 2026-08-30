@@ -2,6 +2,7 @@ package localmodels
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -52,6 +53,25 @@ effort_support        = "none"
 agents_infra_project  = "/Users/op/skill-agents-management"
 agents_infra_profile  = "local-qwen"
 `
+
+func TestShippedLocalQwenFixtureMatchesTheConfiguredAxes(t *testing.T) {
+	body, err := os.ReadFile("testdata/local-qwen.toml")
+	if err != nil {
+		t.Fatalf("ReadFile local-qwen fixture: %v", err)
+	}
+	result := newConfigLoader(func() ([]byte, bool, error) { return body, false, nil }).load()
+	if result.Err != nil || result.Absent {
+		t.Fatalf("local-qwen fixture result = %+v", result)
+	}
+	runtime, ok := runtimeEntry(result.Config, "local-qwen")
+	if !ok || runtime.System != "pi" || runtime.Engine.ID != "mlx" {
+		t.Fatalf("runtime axes = %#v", runtime)
+	}
+	model, ok := runtime.Models["qwen-3.8-27b-mlx-8bit"]
+	if !ok || model.Publisher != "alibaba" || model.Family != "qwen" || model.Engine != runtime.Engine || model.Pointer.AgentsInfraProfile != "local-qwen" {
+		t.Fatalf("model axes = %#v", model)
+	}
+}
 
 // fakeFileReader is the "fake filesystem for local-models.toml's single-tier,
 // memoize-forever load" the adversarial plan's §1 fakes section describes: a

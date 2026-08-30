@@ -9,15 +9,18 @@ whose `tools/board-cli` swapped its whole spawn plane onto this module.
 One Go module, one path, one tag:
 
 ```
-github.com/relux-works/skill-agents-management v0.4.0
+github.com/relux-works/skill-agents-management v0.5.0
 ```
+
+Use that requirement only after the immutable `v0.5.0` tag is published; the
+Story branch is not a dependency version.
 
 There is no `replace` on trunk and there must not be one: a committed
 sibling-path `replace` is a path that exists on exactly one machine, and CI is
 not that machine.
 
 ```bash
-go get github.com/relux-works/skill-agents-management@v0.4.0
+go get github.com/relux-works/skill-agents-management@v0.5.0
 ```
 
 **Nothing else.** This repository went PUBLIC on 2026-08-23, so the fetch goes
@@ -30,14 +33,16 @@ so a helpful re-addition fails its build rather than helping.
 
 ## The version to require
 
-`v0.4.0` is the general-plugin-graph release. It is additive over the v0.3.0
+`v0.5.0` adds the concrete configured MLX plugin and versioned consumer
+provenance projection to the general-plugin-graph surface introduced in
+`v0.4.0`. It is additive over the v0.3.0
 System/Vendor/runtime surface: task-board can upgrade without changing its
 registration or launch calls, then migrate deliberately to `pkg/plugin` later.
 
 The release adds `plugin.Declaration{ID, Kind, Dependencies}`, atomic graph
 registration/resolution, the `inference-engine` kind, and typed multi-node
-launch plans. The rollback is a dependency pin to `v0.3.0`; no persisted board,
-runtime or limit-state data is migrated by v0.4.0. Never rewrite a published
+launch plans. The rollback is a dependency pin to `v0.4.3`; no persisted board,
+runtime or limit-state data is migrated by v0.5.0. Never rewrite a published
 tag—publish a patch release if the compatibility surface needs repair.
 
 Historical version note: `v0.1.0` was the first tag.
@@ -125,6 +130,7 @@ the same binary. Register it conditionally instead, reading
 `localmodels.Peek()`'s three-way `{Absent, Err, Config}` result first:
 
 ```go
+// import "github.com/relux-works/skill-agents-management/pkg/inferenceengine/engines/mlx"
 switch result := localmodels.Peek(); {
 case result.Absent:
     // no local-models.toml on this machine — register nothing
@@ -135,9 +141,9 @@ case result.Err != nil:
         Reason: "malformed", Err: result.Err,
     })
 default:
-	for _, engine := range result.Config.EnginePlugins() {
-	    _ = registry.RegisterPlugin(engine)
-	}
+	// The concrete plugin registers through the generic graph. This does not
+	// probe or start an MLX process.
+	_ = registry.RegisterPlugin(mlx.New())
     _ = registry.Register(localmodels.New(result.Config))
     _ = registry.DeclareRuntime(vendorplugin.RuntimeDeclaration{
         ID: "local-qwen", System: "pi", Vendor: localmodels.VendorID,
@@ -160,9 +166,11 @@ registry := plugin.NewRegistry()
 err := registry.Register(enginePlugin) // declares Kind: inferenceengine.Kind
 ```
 
-For identity-only configured engines, use
-`inferenceengine.NewConfigured("mlx")`; the name is ordinary configuration,
-not a dispatch case. A runtime and each model row that requires it carry the
+For the shipped MLX engine, import
+`pkg/inferenceengine/engines/mlx` and register `mlx.New()` through
+`Registry.RegisterPlugin`; the generic registry still has no MLX dispatch
+case. For other identity-only configured engines, use
+`inferenceengine.NewConfigured(id)`. A runtime and each model row that requires it carry the
 same `plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}`. Callers may also set
 `SpawnRequest.Engine` as an exact expectation; disagreement refuses instead of
 substituting one engine for another. Omitting all three engine declarations
@@ -214,6 +222,7 @@ digests, and a rebind orphans that state with no error anywhere.
 | The launch surface for one (system, mode) | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` | execute anything |
 | Add engine/sidecar process nodes | `agentic.BuildMultiNodePlan(primary, primaryDependencies, nodes...)` → the same primary fields plus dependency-ordered `Plan.Nodes` | execute, supervise or attest a process |
 | The same, resolved through a runtime launch binding | `vendorplugin.BuildLaunch(ctx, registry, SpawnRequest{…}, mode)` — resolves either an established vendor binding or an explicit declaration-owned system-only binding, validates the effort word against the owning model row, preserves typed `RunContext`, asks a vendor for a `LaunchRequest` when one exists (refusing redirects, including changed/dropped tracked-run identity), otherwise projects the validated declaration losslessly, runs the resolved system's `Preflightable` check unless dry-run, then hands it to `BuildPlan` | execute anything, fabricate a vendor for a system-only runtime, inject a default effort, or ask callers to duplicate run identity in `Env` |
+| Versioned configured/resolved engine metadata | `plan.ConsumerProvenance()` → `LaunchProvenanceV1`; call `Validate()` after unmarshalling; inspect mandatory `engine_binding` (`none|required`); `none` requires a system-only legacy shape | execute or attest a model runtime; accept a downgraded engine-bound shape or absent/partial/malformed/wrong-kind/mismatched required engine refs |
 | Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |
 
 ## What stays yours

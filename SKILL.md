@@ -54,7 +54,7 @@ A legacy **runtime** remains a declared system/vendor pair under a stable id.
 | --- | --- | --- |
 | agentic systems | `pkg/agentic` | `claude-code`, `codex`, `qwen-code`, `gemini-cli`, `antigravity`, `muse`, `pi` |
 | model vendors | `pkg/vendorplugin` | `anthropic`, `openai`, `alibaba`, `google`, conditional `local-models` |
-| inference engines | `pkg/inferenceengine` | first extensible kind; concrete engines are consumer-selected |
+| inference engines | `pkg/inferenceengine` | first extensible kind; configured `mlx` is in `pkg/inferenceengine/engines/mlx` |
 | runtimes (declarations) | `pkg/vendorplugin` | `claude`, `codex`, `qwen`, `gemini`, `agy`, `muse` — frozen |
 
 Existing vendors retain their vendor→system edges, and a vendor naming an
@@ -108,7 +108,7 @@ links the packages; the binary is a listing surface.
 ## Wiring it into a consumer
 
 ```
-github.com/relux-works/skill-agents-management v0.4.0   # public module, no replace, no credential
+github.com/relux-works/skill-agents-management v0.5.0   # immutable MLX/provenance release; no replace or credential
 ```
 
 A binary gets the plugins it blank-imports; each registers itself from its own
@@ -128,6 +128,7 @@ became `.Score`; the total order is derived by `vendorplugin.Lineup`):
 | What exactly would this launch run? | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` |
 | Add engine/sidecar nodes | `agentic.BuildMultiNodePlan(primary, dependencies, nodes...)` |
 | The same, through a runtime and its vendor | `vendorplugin.BuildLaunch(registry, req, mode)` |
+| Publish validated launch identity metadata | `plan.ConsumerProvenance()` → versioned `engine_binding` plus configured/resolved engine projection; `none` is valid only for a system-only legacy shape |
 | May it launch right now? | `providerlimits.Store.AvailabilityFor(VerdictQuery{…})` → `vendorplugin.Availability` |
 
 `BuildPlan` is the system dispatch site and `BuildLaunch` the legacy runtime
@@ -199,9 +200,10 @@ the test process and is not this module's to read.
 | What the goldens prove and what the capture could NOT reach | [pkg/agentic/parity/testdata/goldens/README.md](pkg/agentic/parity/testdata/goldens/README.md) |
 
 The local-model plane has a real `pi` System, conditional `local-models`
-Vendor, read-only status consumer, and the generic inference-engine kind plus
-typed multi-node plan. Process lifecycle, load/unload, supervision and
-attestation remain consumer-owned; the plan is a value, never an executor.
+Vendor, read-only status consumer, the concrete configured `mlx` graph plugin,
+and a versioned launch-provenance projection. Process lifecycle, load/unload,
+supervision, model execution and attestation remain consumer-owned; the plan
+and projection are values, never executors or live-runtime evidence.
 
 Work in this repository is tracked on its own `.task-board/` through the
 `task-board` CLI; follow the `project-management` skill, and `go-testing-tools`

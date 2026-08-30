@@ -2,6 +2,7 @@ package localmodels
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pi"
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine/engines/mlx"
 	"github.com/relux-works/skill-agents-management/pkg/localruntime"
 	"github.com/relux-works/skill-agents-management/pkg/plugin"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
@@ -49,14 +51,17 @@ func (r *countingStatusReader) Status(ctx context.Context, _ localruntime.Status
 // isolatedLocalQwenRegistry builds a registry carrying ONLY the real pi
 // system (with the given fake StatusReader) and this vendor (with the given
 // config), declaring local-qwen.
-func isolatedLocalQwenRegistry(t *testing.T, reader localruntime.StatusReader, cfg Config) *vendorplugin.Registry {
+func isolatedLocalQwenRegistry(t *testing.T, reader localruntime.StatusReader, cfg Config, configuredPlugins ...plugin.Plugin) *vendorplugin.Registry {
 	t.Helper()
 	systems := agentic.NewRegistry()
 	if err := systems.Register(pi.New(reader)); err != nil {
 		t.Fatalf("registering pi: %v", err)
 	}
 	registry := vendorplugin.NewRegistry(systems)
-	for _, engine := range cfg.EnginePlugins() {
+	if len(configuredPlugins) == 0 {
+		configuredPlugins = cfg.EnginePlugins()
+	}
+	for _, engine := range configuredPlugins {
 		if err := registry.RegisterPlugin(engine); err != nil {
 			t.Fatalf("registering configured engine: %v", err)
 		}
@@ -100,7 +105,7 @@ func localQwenSpawnRequest(t *testing.T) vendorplugin.SpawnRequest {
 // build together.
 func TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight(t *testing.T) {
 	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
-	registry := isolatedLocalQwenRegistry(t, reader, validConfig())
+	registry := isolatedLocalQwenRegistry(t, reader, validConfig(), mlx.New())
 
 	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
 	if err != nil {
@@ -137,6 +142,109 @@ func TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight(t *testing.T) {
 	if plan.Provenance.Publisher != "alibaba" || plan.Provenance.Family != "qwen" || plan.Provenance.RequestedEngine != wantEngine || plan.Provenance.ResolvedEngine != wantEngine {
 		t.Fatalf("resolved publisher/family/engine provenance = %#v", plan.Provenance)
 	}
+	projection, err := plan.ConsumerProvenance()
+	if err != nil {
+		t.Fatalf("ConsumerProvenance(BuildLaunch(local-qwen)): %v", err)
+	}
+	if projection.SchemaVersion != agentic.LaunchProvenanceSchemaVersion || projection.System != "pi" || projection.Broker != "local-models" {
+		t.Fatalf("consumer provenance contract/system/broker = %#v", projection)
+	}
+}
+
+// ConsumerProvenance and LaunchProvenanceV1.Validate are the production
+// publication/read gates. This probe starts with the real BuildLaunch
+// projection, crosses JSON persistence, removes both refs, and requires the
+// independent engine_binding fact to prevent absent evidence from passing.
+func TestBuildLaunchLocalQwenPersistedProvenanceRefusesBothEngineRefsRemoved(t *testing.T) {
+	projection := buildLocalQwenConsumerProvenance(t)
+	persisted := mutatePersistedProvenance(t, projection, func(record map[string]any) {
+		delete(record, "configured_engine")
+		delete(record, "resolved_engine")
+	})
+	if err := persisted.Validate(); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
+		t.Fatalf("Validate(both engine refs removed) = %v, want ErrLaunchProvenanceMismatch", err)
+	}
+}
+
+// The persistence caller controls engine_binding and both refs, so the
+// discriminator alone is not evidence. Preserve the real local-qwen identity
+// axes while downgrading the binding and deleting the pair; Validate must
+// recognize that this cannot be a genuine legacy/no-engine record.
+func TestBuildLaunchLocalQwenPersistedProvenanceRefusesBindingDowngradeWithBothRefsRemoved(t *testing.T) {
+	projection := buildLocalQwenConsumerProvenance(t)
+	persisted := mutatePersistedProvenance(t, projection, func(record map[string]any) {
+		record["engine_binding"] = string(agentic.EngineBindingNoneV1)
+		delete(record, "configured_engine")
+		delete(record, "resolved_engine")
+	})
+	if err := persisted.Validate(); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
+		t.Fatalf("Validate(binding downgrade plus refs removed) = %v, want ErrLaunchProvenanceMismatch", err)
+	}
+}
+
+// Equal refs are not corroborating evidence when both were forged. Drive the
+// same persisted consumer surface and narrow each graph identity rule in turn.
+func TestBuildLaunchLocalQwenPersistedProvenanceRefusesEqualForgedEngineRefs(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		id   string
+		kind string
+	}{
+		{name: "wrong kind", id: "mlx", kind: "vendor"},
+		{name: "unnormalized id", id: "MLX", kind: "inference-engine"},
+		{name: "unnormalized kind", id: "mlx", kind: "Inference-Engine"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			projection := buildLocalQwenConsumerProvenance(t)
+			persisted := mutatePersistedProvenance(t, projection, func(record map[string]any) {
+				for _, field := range []string{"configured_engine", "resolved_engine"} {
+					ref := record[field].(map[string]any)
+					ref["id"] = test.id
+					ref["kind"] = test.kind
+				}
+			})
+			if err := persisted.Validate(); !errors.Is(err, agentic.ErrLaunchProvenanceInvalid) {
+				t.Fatalf("Validate(equal forged refs) = %v, want ErrLaunchProvenanceInvalid", err)
+			}
+		})
+	}
+}
+
+func buildLocalQwenConsumerProvenance(t *testing.T) agentic.LaunchProvenanceV1 {
+	t.Helper()
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+	registry := isolatedLocalQwenRegistry(t, reader, validConfig(), mlx.New())
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch(local-qwen): %v", err)
+	}
+	projection, err := plan.ConsumerProvenance()
+	if err != nil {
+		t.Fatalf("ConsumerProvenance(BuildLaunch(local-qwen)): %v", err)
+	}
+	return projection
+}
+
+func mutatePersistedProvenance(t *testing.T, projection agentic.LaunchProvenanceV1, mutate func(map[string]any)) agentic.LaunchProvenanceV1 {
+	t.Helper()
+	body, err := json.Marshal(projection)
+	if err != nil {
+		t.Fatalf("Marshal provenance: %v", err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(body, &record); err != nil {
+		t.Fatalf("Unmarshal persisted provenance: %v", err)
+	}
+	mutate(record)
+	body, err = json.Marshal(record)
+	if err != nil {
+		t.Fatalf("Marshal mutated provenance: %v", err)
+	}
+	var persisted agentic.LaunchProvenanceV1
+	if err := json.Unmarshal(body, &persisted); err != nil {
+		t.Fatalf("Unmarshal consumer provenance: %v", err)
+	}
+	return persisted
 }
 
 // TestBuildLaunchLegacyConfigWithoutEngineRequirementPreservesParity drives
@@ -179,6 +287,18 @@ func TestBuildLaunchLegacyConfigWithoutEngineRequirementPreservesParity(t *testi
 	}
 	if plan.Provenance != (agentic.LaunchProvenance{}) {
 		t.Fatalf("legacy launch invented engine provenance: %#v", plan.Provenance)
+	}
+	projection, err := plan.ConsumerProvenance()
+	if err != nil {
+		t.Fatalf("ConsumerProvenance(v0.4.0 launch): %v", err)
+	}
+	body, err := json.Marshal(projection)
+	if err != nil {
+		t.Fatalf("Marshal v0.4.0 consumer provenance: %v", err)
+	}
+	wantProjection := `{"contract":"agents-management.launch-provenance","schema_version":1,"system":"pi","engine_binding":"none"}`
+	if string(body) != wantProjection {
+		t.Fatalf("v0.4.0 consumer provenance = %s, want %s", body, wantProjection)
 	}
 }
 

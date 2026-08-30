@@ -65,6 +65,23 @@ func TestBuildLaunchCarriesRequestedAndResolvedEngineProvenance(t *testing.T) {
 	}
 }
 
+// ConsumerProvenance is the production publication gate. Start from the real
+// BuildLaunch output, corrupt only the resolved evidence as a persisted or
+// transported consumer record could be corrupted, and require refusal.
+func TestBuildLaunchConsumerProjectionRefusesResolvedEngineMismatch(t *testing.T) {
+	registry := engineRegistry(t, testEngineRef, testEngineRef)
+	req := narwhalRequest()
+	req.Engine = testEngineRef
+	plan, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch: %v", err)
+	}
+	plan.Provenance.ResolvedEngine = plugin.Ref{ID: "other-engine", Kind: inferenceengine.Kind}
+	if _, err := plan.ConsumerProvenance(); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
+		t.Fatalf("ConsumerProvenance(corrupted BuildLaunch output) = %v, want ErrLaunchProvenanceMismatch", err)
+	}
+}
+
 func TestBuildLaunchRefusesEngineDeclarationAndExpectationMismatches(t *testing.T) {
 	other := plugin.Ref{ID: "other-engine", Kind: inferenceengine.Kind}
 
@@ -249,7 +266,7 @@ func TestBuildLaunchIsEquivariantUnderIdentityRenaming(t *testing.T) {
 				t.Fatalf("BuildLaunch identity case %d (%+v): %v", index, ids, err)
 			}
 			wantProvenance := agentic.LaunchProvenance{
-				Runtime: ids.runtime, Profile: ids.profile, Model: ids.model,
+				Broker: ids.vendor, Runtime: ids.runtime, Profile: ids.profile, Model: ids.model,
 				Publisher: ids.publisher, Family: ids.family,
 				RequestedEngine: engine, ResolvedEngine: engine,
 			}

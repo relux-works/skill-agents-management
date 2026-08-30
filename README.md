@@ -363,11 +363,21 @@ The vendor plugin contract, its registry, and the runtime declarations.
   A registry built without an agentic registry refuses every vendor rather than
   admitting one whose declared systems nobody checked.
 - **Inference engines are graph identities, not provenance strings.**
-  `inferenceengine.NewConfigured(id)` creates an identity-only plugin;
+  `inferenceengine.NewConfigured(id)` creates a generic identity-only plugin;
+  `inferenceengine/engines/mlx.New()` supplies the concrete configured `mlx`
+  plugin without adding an id switch to the registry;
   `RuntimeDeclaration.Engine` and `Model.Engine` carry the same typed ref,
   vendor registration publishes the model-to-engine edge, and `BuildLaunch`
   resolves it before returning a plan. `Plan.Provenance` records requested and
-  resolved engine refs together with runtime/profile/model/publisher/family.
+  resolved engine refs together with system/broker/runtime/profile/model/
+  publisher/family. `Plan.ConsumerProvenance()` publishes those axes as the
+  validated `agents-management.launch-provenance` schema v1, spelling the
+  engine pair `configured_engine` and `resolved_engine`. Its mandatory
+  `engine_binding` discriminator separates genuine `none` legacy launches from
+  `required` engine-bound records. A `none` record must carry only its system
+  identity; broker, publisher, family, runtime, profile, model, or either
+  engine ref makes it inconsistent. Missing, downgraded, malformed,
+  wrong-kind, or mismatched graph evidence therefore refuses after persistence.
   No concrete engine, runtime, profile, publisher, family or model name is a
   core dispatch case, and declarations with no engine retain legacy behavior.
   Genericity is bounded by production-entry identity-renaming tests plus an
@@ -569,14 +579,16 @@ cheaper than discovering it.
 
 ## Status
 
-`v0.4.0` is the general-plugin-graph release. It retains the seven shipped
+`v0.4.3` is the current published patch release. The next minor release target
+is `v0.5.0`: it retains the seven shipped
 agentic systems, five model vendors (including conditional `local-models`),
 frozen runtime ids, launch-surface goldens, admitted-pair digests and on-disk
-limit-state identity. The new graph and multi-node plan are additive; task-board
-keeps its existing v0.3.0-facing registration and launch calls until its
-separate migration task adopts the native graph.
+limit-state identity, and adds the concrete configured MLX graph plugin plus
+the versioned consumer provenance projection. Until the immutable tag is cut,
+this is candidate state, not a published dependency. Neither release starts,
+discovers, connects to, or executes a model runtime.
 
-Rollback is a consumer pin to `v0.3.0`; this release performs no persisted data
+Rollback from the candidate is a consumer pin to `v0.4.3`; this release performs no persisted data
 migration. Published tags are immutable, so any compatibility repair ships as a
 new signed patch tag.
 

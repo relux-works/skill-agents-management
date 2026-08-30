@@ -201,7 +201,7 @@ func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	}
 	if requestedEngine != (plugin.Ref{}) {
 		plan.Provenance = agentic.LaunchProvenance{
-			Runtime: string(binding.ID), Profile: launch.Profile, Model: string(model.ID),
+			Broker: string(binding.VendorID), Runtime: string(binding.ID), Profile: launch.Profile, Model: string(model.ID),
 			Publisher: model.Publisher, Family: model.Family,
 			RequestedEngine: requestedEngine, ResolvedEngine: resolvedEngine,
 		}

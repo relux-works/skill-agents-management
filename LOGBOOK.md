@@ -5,6 +5,30 @@
 
 ## 2026-08-30
 
+### 0804 — No-engine provenance is corroborated by its identity shape
+- ROOT CAUSE: A persistence caller could downgrade `engine_binding` to `none` and delete both refs while retaining every local-Qwen axis; `LaunchProvenanceV1.Validate` trusted the self-minted discriminator and accepted the forged record. `pkg/agentic/provenance.go`.
+- FIX: `none` now requires a system identity and refuses broker, publisher, family, runtime, profile, or model axes; discriminator plus record shape distinguish genuine legacy absence from engine-bound evidence removal.
+- TEST: Real `BuildLaunch(local-qwen)` provenance crosses JSON persistence, receives the binding downgrade plus pair removal, and must return `ErrLaunchProvenanceMismatch`; the exact pre-extension launch still serializes byte-identically as `system=pi, engine_binding=none`. `pkg/vendorplugin/vendors/local-models/buildlaunch_test.go`.
+- STATUS: F4 resolved for TASK-260830-2i3jbw revision-4 rework; full static-only landing gate exited 0 and immutable CR revision publication is pending.
+
+### 0744 — Provenance rework passed full gates and killed narrowed bypasses
+- MILESTONE: Focused production/persistence suites, `make vet`, scoped `make build`, `make test`, `make regress`, uncached full `go test`, repository `gofmt -l`, and `git diff --check` all exited 0; no live runtime contacted.
+- TEST: A both-refs-absent admission mutant and a wrong-kind acceptance mutant each made its named real-`BuildLaunch` JSON-persistence test exit 1, then the restored tests exited 0.
+- DELIVERY: Producer outcome `TASK-260830-2i3jbw_results.md` updated; circular post-handoff CR checklist copy removed while task AC and completion-hook CR enforcement remain authoritative.
+- STATUS: TASK-260830-2i3jbw ready for immutable CR publication and independent review.
+
+### 0738 — Engine provenance needs an independent binding fact
+- ROOT CAUSE: `LaunchProvenanceV1.Validate` inferred engine requirement only from the two refs, so removing both laundered an engine-bound local-Qwen record into legitimate legacy absence; equal forged refs also bypassed kind and canonical-identity checks. `pkg/agentic/provenance.go`.
+- FIX: Schema v1 now requires `engine_binding=none|required`; `required` refuses either or both missing refs, and each ref must be a normalized graph identity of kind `inference-engine` before equality is considered.
+- TEST: Real `BuildLaunch(local-qwen)` projections cross JSON persistence and refuse both-ref removal, equal wrong-kind refs, and equal non-normalized ids/kinds; exact pre-extension TOML still produces unchanged Pi launch fields and an explicit no-engine projection. `pkg/vendorplugin/vendors/local-models/buildlaunch_test.go`.
+- STATUS: F1/F2 resolved for TASK-260830-2i3jbw revision-3 rework; landing gates and immutable CR publication pending.
+
+### 0715 — MLX registration and consumer provenance stay separate from execution
+- DECISION: `pkg/inferenceengine/engines/mlx` owns the concrete stable `mlx` declaration, but registers through the existing opaque graph. Generic registry/runtime code contains no MLX selection branch.
+- DECISION: task-board-facing metadata is a separate `agents-management.launch-provenance` schema v1. It spells configured and resolved refs independently and validates them after unmarshalling; partial or unequal evidence refuses.
+- COMPATIBILITY: the internal `Plan` launch surface and zero-engine behavior remain unchanged. The local-Qwen axes are configuration/fixture data, and no test or production path contacts a model process, service, endpoint, or socket.
+- DELIVERY: `v0.5.0` is only a release target until independent review, Story integration, and immutable signed tagging occur.
+
 ### 0631 — Genericity proof moved from semantic interpretation to observable behavior
 - ROOT CAUSE: Revision 4's 529-line AST dataflow scanner remained bypassable by an ordinary family-to-engine `map[string]string`; each repair only moved the representation boundary.
 - DECISION: Removed `pkg/vendorplugin/engine_dispatch_guard_{test,mutants_test}.go`. Genericity is now bounded by production-entry `BuildLaunch` identity-renaming invariance plus exact shipped-literal placement in generic core.
