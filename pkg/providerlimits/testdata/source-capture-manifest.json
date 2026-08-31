@@ -1,0 +1,5 @@
+{
+  "source_repo_commit": "ed4878123061b39fdae67160f6b5632117b48a2f",
+  "captured_by": ".scripts/capture-limit-state.sh",
+  "note": "real-state is the operator's live machine state; source-written was produced by the source module's own entry points; source-read is the source's Report over bytes this repository wrote"
+}

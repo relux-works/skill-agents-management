@@ -1,0 +1,1213 @@
+{
+  "model_count": 43,
+  "models": [
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.6-sol",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "max",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 120,
+      "pricing": null,
+      "recommended": true,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.6-terra",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "max",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 110,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.6-luna",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "max",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 100,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.5",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 90,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.4",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 80,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.4-mini",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 70,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.3-codex-spark",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 60,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.3-codex",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 50,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.2-codex",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 40,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.1-codex-max",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 30,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.2",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 20,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "gpt-5.1-codex-mini",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "openai",
+        "reasoning": "required",
+        "recommended_effort": "high",
+        "supported_efforts": [
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 10,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "claude-fable-5",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "claude-code"
+        ],
+        "broker": "anthropic",
+        "reasoning": "required",
+        "recommended_effort": "high",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 80,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "claude",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "claude-opus-5",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "claude-code"
+        ],
+        "broker": "anthropic",
+        "reasoning": "required",
+        "recommended_effort": "high",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 75,
+      "pricing": null,
+      "recommended": true,
+      "runtime": "claude",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "claude-sonnet-5",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "claude-code"
+        ],
+        "broker": "anthropic",
+        "reasoning": "required",
+        "recommended_effort": "high",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 60,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "claude",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "claude-haiku-4-5",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "claude-code"
+        ],
+        "broker": "anthropic",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 10,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "claude",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "claude-opus-4-8",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "claude-code"
+        ],
+        "broker": "anthropic",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 70,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "claude",
+      "superseded_by": "claude-opus-5"
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "claude-opus-4-6",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "claude-code"
+        ],
+        "broker": "anthropic",
+        "reasoning": "required",
+        "recommended_effort": "high",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "max"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 30,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "claude",
+      "superseded_by": "claude-opus-5"
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "claude-sonnet-4-6",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "claude-code"
+        ],
+        "broker": "anthropic",
+        "reasoning": "required",
+        "recommended_effort": "medium",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "max"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 20,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "claude",
+      "superseded_by": "claude-sonnet-5"
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "claude-haiku-4-5-20251001",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "claude-code"
+        ],
+        "broker": "anthropic",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 10,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "claude",
+      "superseded_by": "claude-haiku-4-5"
+    },
+    {
+      "context_window_tokens": 1000000,
+      "id": "qwen3.7-plus",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "qwen-code"
+        ],
+        "broker": "alibaba",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 30,
+      "pricing": {
+        "asOf": "2026-07-21",
+        "billingModel": "token-plan-team-seat-credits",
+        "currency": "USD",
+        "edition": "team",
+        "hasFrequencyLimits": false,
+        "plans": [
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 25000,
+            "monthlyUsd": 30,
+            "name": "standard",
+            "promotionalMonthlyUsd": 20
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 100000,
+            "monthlyUsd": 100,
+            "name": "pro",
+            "promotionalMonthlyUsd": 75
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 250000,
+            "monthlyUsd": 200,
+            "name": "max"
+          }
+        ],
+        "quotaPeriod": "monthly",
+        "sourceUrl": "https://docs.qwencloud.com/token-plan/overview"
+      },
+      "recommended": true,
+      "runtime": "qwen",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1000000,
+      "id": "qwen3.8-max-preview",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "qwen-code"
+        ],
+        "broker": "alibaba",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "preview",
+      "policy_rank": 50,
+      "pricing": {
+        "asOf": "2026-07-21",
+        "billingModel": "token-plan-team-seat-credits",
+        "currency": "USD",
+        "edition": "team",
+        "hasFrequencyLimits": false,
+        "plans": [
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 25000,
+            "monthlyUsd": 30,
+            "name": "standard",
+            "promotionalMonthlyUsd": 20
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 100000,
+            "monthlyUsd": 100,
+            "name": "pro",
+            "promotionalMonthlyUsd": 75
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 250000,
+            "monthlyUsd": 200,
+            "name": "max"
+          }
+        ],
+        "quotaPeriod": "monthly",
+        "sourceUrl": "https://docs.qwencloud.com/token-plan/overview"
+      },
+      "recommended": false,
+      "runtime": "qwen",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1000000,
+      "id": "qwen3.7-max",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "qwen-code"
+        ],
+        "broker": "alibaba",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "current",
+      "policy_rank": 40,
+      "pricing": {
+        "asOf": "2026-07-21",
+        "billingModel": "token-plan-team-seat-credits",
+        "currency": "USD",
+        "edition": "team",
+        "hasFrequencyLimits": false,
+        "plans": [
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 25000,
+            "monthlyUsd": 30,
+            "name": "standard",
+            "promotionalMonthlyUsd": 20
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 100000,
+            "monthlyUsd": 100,
+            "name": "pro",
+            "promotionalMonthlyUsd": 75
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 250000,
+            "monthlyUsd": 200,
+            "name": "max"
+          }
+        ],
+        "quotaPeriod": "monthly",
+        "sourceUrl": "https://docs.qwencloud.com/token-plan/overview"
+      },
+      "recommended": false,
+      "runtime": "qwen",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1000000,
+      "id": "qwen3.6-plus",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "qwen-code"
+        ],
+        "broker": "alibaba",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 20,
+      "pricing": {
+        "asOf": "2026-07-21",
+        "billingModel": "token-plan-team-seat-credits",
+        "currency": "USD",
+        "edition": "team",
+        "hasFrequencyLimits": false,
+        "plans": [
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 25000,
+            "monthlyUsd": 30,
+            "name": "standard",
+            "promotionalMonthlyUsd": 20
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 100000,
+            "monthlyUsd": 100,
+            "name": "pro",
+            "promotionalMonthlyUsd": 75
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 250000,
+            "monthlyUsd": 200,
+            "name": "max"
+          }
+        ],
+        "quotaPeriod": "monthly",
+        "sourceUrl": "https://docs.qwencloud.com/token-plan/overview"
+      },
+      "recommended": false,
+      "runtime": "qwen",
+      "superseded_by": "qwen3.7-plus"
+    },
+    {
+      "context_window_tokens": 1000000,
+      "id": "qwen3.6-flash",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "qwen-code"
+        ],
+        "broker": "alibaba",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 10,
+      "pricing": {
+        "asOf": "2026-07-21",
+        "billingModel": "token-plan-team-seat-credits",
+        "currency": "USD",
+        "edition": "team",
+        "hasFrequencyLimits": false,
+        "plans": [
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 25000,
+            "monthlyUsd": 30,
+            "name": "standard",
+            "promotionalMonthlyUsd": 20
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 100000,
+            "monthlyUsd": 100,
+            "name": "pro",
+            "promotionalMonthlyUsd": 75
+          },
+          {
+            "applicableModelIds": [
+              "qwen3.8-max-preview",
+              "qwen3.7-max",
+              "qwen3.7-plus",
+              "qwen3.6-plus",
+              "qwen3.6-flash"
+            ],
+            "monthlyCredits": 250000,
+            "monthlyUsd": 200,
+            "name": "max"
+          }
+        ],
+        "quotaPeriod": "monthly",
+        "sourceUrl": "https://docs.qwencloud.com/token-plan/overview"
+      },
+      "recommended": false,
+      "runtime": "qwen",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1000000,
+      "id": "qwen3.7-plus-via-codex",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "codex"
+        ],
+        "broker": "alibaba",
+        "reasoning": "required",
+        "recommended_effort": "xhigh",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      "lifecycle": "preview",
+      "policy_rank": 30,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "qwen-codex",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "muse-spark-1.2-contributor",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "muse"
+        ],
+        "broker": "",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 10,
+      "pricing": null,
+      "recommended": true,
+      "runtime": "muse",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "muse-spark",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "muse"
+        ],
+        "broker": "",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 10,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "muse",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.1-pro-preview",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "gemini-cli"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "preview",
+      "policy_rank": 50,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "gemini",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.5-flash",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "gemini-cli"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 45,
+      "pricing": null,
+      "recommended": true,
+      "runtime": "gemini",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3-flash-preview",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "gemini-cli"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "preview",
+      "policy_rank": 40,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "gemini",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.1-flash-lite",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "gemini-cli"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 35,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "gemini",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-2.5-pro",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "gemini-cli"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 30,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "gemini",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 262144,
+      "id": "gemma-4-31b-it",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "gemini-cli"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 20,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "gemini",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 262144,
+      "id": "gemma-4-26b-a4b-it",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "gemini-cli"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 10,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "gemini",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.6-flash-high",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "antigravity"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 50,
+      "pricing": null,
+      "recommended": true,
+      "runtime": "agy",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.1-pro-high",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "antigravity"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 60,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "agy",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.1-pro-low",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "antigravity"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 55,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "agy",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.6-flash-medium",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "antigravity"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 45,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "agy",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.6-flash-low",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "antigravity"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 40,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "agy",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.5-flash-high",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "antigravity"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 35,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "agy",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.5-flash-medium",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "antigravity"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 30,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "agy",
+      "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "gemini-3.5-flash-low",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "antigravity"
+        ],
+        "broker": "google",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "current",
+      "policy_rank": 25,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "agy",
+      "superseded_by": ""
+    }
+  ],
+  "provenance": {
+    "captured_from": "the board binary's q 'models()' projection",
+    "circularity": "joined_from_vendor_module carries the columns the projection reads BACK from this module for every row whose broker is established. They are recorded so the join is visible and are NOT pinned against this module, because a port pinned against its own output proves only that it agrees with itself. The two muse rows are the exception the board itself names: no vendor owns them, so their effort axis is the board's own declaration and is pinned.",
+    "generated_by": ".scripts/capture-board-model-facts.sh",
+    "lifetime": "TRANSITIONAL. This fixture exists to make ONE transcription safe - the port of the board's model facts into this module's vendor rows - and it dies with the board's half of the swap. When the board reads these facts from this module instead of declaring them, delete this fixture and pkg/vendorplugin/boardfacts_test.go rather than regenerating them.",
+    "registry_sha256": "sha256:c3dd57e51f5318a11c7412a10c587b7a7745dff65dd96b110d156c84aa8cd4c5",
+    "registry_source": "tools/board-cli/internal/spawn/models.go",
+    "source_commit": "dbd905b9259fba229f623a560140a049c47a2a5c",
+    "source_repo": "/Users/alexis/src/relux-works/skill-project-management"
+  }
+}

@@ -1,0 +1,13 @@
+## Design note, quoted from .research/260802_rate-limit-aware-spawn-selection.md
+
+Both failing runs' captured logs end with this line, twice each:
+
+    ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 5th, 2026 10:30 AM.
+
+The stable classifier key is the prefix "You've hit your usage limit". An agent
+reading this document must not be able to poison limit state by narrating it:
+> ERROR: You've hit your usage limit.
+and neither may a line that merely mentions You've hit your usage limit without
+the ERROR: prefix at line start.
+
+codex exec finished with a genuine tool failure instead.

@@ -1,0 +1,20 @@
+{
+  "contract": "agents-management.launch-provenance",
+  "schema_version": 1,
+  "system": "pi",
+  "broker": "local-models",
+  "publisher": "alibaba",
+  "family": "qwen",
+  "engine_binding": "required",
+  "configured_engine": {
+    "id": "mlx",
+    "kind": "inference-engine"
+  },
+  "resolved_engine": {
+    "id": "other",
+    "kind": "inference-engine"
+  },
+  "runtime": "local-qwen",
+  "profile": "local-qwen",
+  "model": "qwen-data-row"
+}

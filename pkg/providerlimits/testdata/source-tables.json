@@ -1,0 +1,108 @@
+{
+  "backoff_key_accepted": {
+    "agy": false,
+    "alibaba": true,
+    "anthropic": true,
+    "claude": true,
+    "codex": true,
+    "definitely-not-a-broker": false,
+    "gemini": false,
+    "google": true,
+    "muse": false,
+    "openai": true,
+    "qwen": true
+  },
+  "default_groups": [
+    {
+      "group": "claude-plan",
+      "provider": "claude",
+      "broker": "anthropic",
+      "members": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5",
+        "claude-opus-4-8",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001"
+      ],
+      "provenance": "vendor_string_evidence"
+    },
+    {
+      "group": "claude-usage-credits",
+      "provider": "claude",
+      "broker": "anthropic",
+      "members": [
+        "claude-fable-5"
+      ],
+      "provenance": "vendor_string_evidence"
+    },
+    {
+      "group": "codex-plan",
+      "provider": "codex",
+      "broker": "openai",
+      "members": [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.3-codex",
+        "gpt-5.2-codex",
+        "gpt-5.2",
+        "gpt-5.1-codex-max",
+        "gpt-5.1-codex-mini"
+      ],
+      "provenance": "owner_assertion"
+    },
+    {
+      "group": "codex-spark",
+      "provider": "codex",
+      "broker": "openai",
+      "members": [
+        "gpt-5.3-codex-spark"
+      ],
+      "provenance": "owner_assertion"
+    }
+  ],
+  "has_classifier_by_broker": {
+    "": false,
+    "alibaba": false,
+    "anthropic": true,
+    "claude": false,
+    "codex": false,
+    "google": false,
+    "openai": true
+  },
+  "has_classifier_by_runtime": {
+    "agy": false,
+    "claude": true,
+    "codex": true,
+    "gemini": false,
+    "muse": false,
+    "not-a-runtime": false,
+    "qwen": false,
+    "qwen-codex": false
+  },
+  "providerlimits_default_ladder": [
+    "2m0s",
+    "5m0s",
+    "15m0s",
+    "30m0s",
+    "1h0m0s",
+    "2h0m0s"
+  ],
+  "providerlimits_default_probe_claim_max_minutes": 30,
+  "providerlimits_default_probe_lease_minutes": 10,
+  "providerlimits_max_ladder_step": "6h0m0s",
+  "remoteconfig_default_backoff_ladder": [
+    "2m0s",
+    "5m0s",
+    "15m0s",
+    "30m0s",
+    "1h0m0s",
+    "2h0m0s"
+  ],
+  "remoteconfig_max_backoff_step": "6h0m0s"
+}

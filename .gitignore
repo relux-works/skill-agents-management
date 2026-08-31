@@ -1,0 +1,31 @@
+# Build outputs. Anchored on purpose: an unanchored `agents-management`
+# pattern matches directories too, and would silently ignore the entire
+# tools/agents-management source tree.
+/agents-management
+/tools/agents-management/agents-management
+dist/
+
+# Temporary utilities, logs, worktrees, smoke artifacts
+.temp/
+
+# Local agent and task-management runtime state
+/.agents/
+/.claude/
+/.codex/
+/.task-board/
+/task-board.config.json
+/AGENTS.md
+/CLAUDE.md
+/LOGBOOK.md
+/agents-attachments-manifest.json
+/.mcp.json
+/.local/
+
+# Editor / OS noise
+.DS_Store
+*.swp
+
+# Go
+*.test
+*.out
+vendor/

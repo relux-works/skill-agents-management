@@ -1,0 +1,3 @@
+Shared packages land here as the extraction moves plugin contracts out of
+skill-project-management. Deliberately empty until the contract tasks define
+what a plugin is.
