@@ -1,0 +1,20 @@
+[
+  {
+    "provider": "claude",
+    "home_given": "/tmp/providerlimits-xrt/claude-home",
+    "home_normalized": "/tmp/providerlimits-xrt/claude-home",
+    "identity_key": "b078b81958cdd46d",
+    "group": "claude-plan",
+    "model": "claude-opus-5",
+    "state_file": "b078b81958cdd46d.state.json"
+  },
+  {
+    "provider": "codex",
+    "home_given": "/tmp/providerlimits-xrt/codex-home",
+    "home_normalized": "/tmp/providerlimits-xrt/codex-home",
+    "identity_key": "a60c75e2da6f9bf4",
+    "group": "codex-plan",
+    "model": "gpt-5.5",
+    "state_file": "a60c75e2da6f9bf4.state.json"
+  }
+]

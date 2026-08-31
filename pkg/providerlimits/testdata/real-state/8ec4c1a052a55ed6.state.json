@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "identity": "8ec4c1a052a55ed6",
+  "provider": "codex",
+  "home_display": "~/.codex",
+  "groups": {
+    "codex-unmapped:": {
+      "provider": "codex",
+      "state": "available",
+      "backoff_step": 0,
+      "consecutive_limit_observations": 0,
+      "last_success_at": "2026-08-21T14:51:32.656451+03:00",
+      "last_observation_at": "2026-08-21T14:51:32.656451+03:00",
+      "aged_out_at": "2026-08-17T16:29:36.267854+03:00",
+      "probe_lease": null
+    }
+  }
+}
