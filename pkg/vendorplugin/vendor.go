@@ -515,8 +515,8 @@ func (e EffortDeclaration) Accepts(word string) bool {
 //
 // # The emptiness rules, in one place
 //
-// Four of these fields have a legal empty value and each empty means something
-// different, so each says what:
+// The following fields have a legal empty value, and each empty means
+// something different, so each says what:
 //
 //   - SupersededBy empty: the registry records NO unambiguous same-family
 //     replacement. That is not "there is none" — the Codex lineup renamed its
