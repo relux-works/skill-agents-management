@@ -480,7 +480,7 @@ run from meaning "the rule never matched anything".
 
 ### The vendor plugins: `pkg/vendorplugin/vendors/{anthropic,openai,alibaba,google}`
 
-All 43 rows of the extraction source's model registry, carried across. 41 land
+All 44 rows of the extraction source's model registry, carried across. 42 land
 in the four vendors; the two `muse` rows belong to no vendor, because the source
 records that runtime's broker as checked-and-never-established, and the port
 accounts for them explicitly rather than dropping them.

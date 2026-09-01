@@ -716,7 +716,7 @@ func TestRuntimeModelsScopeToTheHarnessThatDrivesThem(t *testing.T) {
 		{runtime: "gemini", system: "gemini-cli", count: 7, holds: "gemini-2.5-pro", excedes: "gemini-3.6-flash-high"},
 		{runtime: "agy", system: "antigravity", count: 8, holds: "gemini-3.6-flash-high", excedes: "gemini-2.5-pro"},
 		{runtime: "codex", system: "codex", count: 12, holds: "gpt-5.6-sol", excedes: "qwen3.7-plus-via-codex"},
-		{runtime: "claude", system: "claude-code", count: 8, holds: "claude-opus-5", excedes: "gpt-5.6-sol"},
+		{runtime: "claude", system: "claude-code", count: 9, holds: "claude-opus-5", excedes: "gpt-5.6-sol"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.runtime), func(t *testing.T) {

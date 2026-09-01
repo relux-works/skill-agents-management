@@ -75,7 +75,7 @@ const sourceRegistry = "skill-project-management tools/board-cli/internal/spawn/
 // convention.
 var lineup = vendorplugin.RankEvidence{
 	Source:      "Anthropic's published Claude lineup, as the source registry's own row descriptions record it",
-	Observation: "the lineup places fable-5 as the most capable model, opus-5 as the everyday complex-task model, sonnet-5 as the efficient one and haiku-4-5 as the fastest; the ordering below is that lineup, with each legacy id sitting where the source's score puts it",
+	Observation: "the lineup places fable-5-1 as the most capable model, opus-5 as the everyday complex-task model, sonnet-5 as the efficient one and haiku-4-5 as the fastest; the ordering below is that lineup, with each legacy id sitting where the source's score puts it",
 }
 
 // rank builds a capability rank that carries the source's own evidence.
@@ -120,12 +120,21 @@ func effortNone() vendorplugin.EffortDeclaration {
 // models is the declaration itself, most capable first.
 var models = []vendorplugin.Model{
 	{
-		ID:          "claude-fable-5",
+		ID:          "claude-fable-5-1",
 		Description: "The hardest and longest-running work: deep refactors and multi-hour agent runs where a cheaper model stalls",
-		Rank:        rank(80, "the highest of the eight anthropic rows", lineup),
+		Rank:        rank(85, "the highest of the nine anthropic rows, above the fable-5 it supersedes", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("high", []string{"low", "medium", "high", "xhigh", "max"}),
 		Systems:     []agentic.SystemID{"claude-code"},
+	},
+	{
+		ID:           "claude-fable-5",
+		Description:  "Previous-generation Fable, for runs pinned to it; prefer claude-fable-5-1 for new work",
+		Rank:         rank(80, "below fable-5-1 and above opus-5", lineup),
+		Lifecycle:    vendorplugin.LifecycleLegacy,
+		SupersededBy: "claude-fable-5-1",
+		Effort:       effortRequired("high", []string{"low", "medium", "high", "xhigh", "max"}),
+		Systems:      []agentic.SystemID{"claude-code"},
 	},
 	{
 		ID:          "claude-opus-5",
@@ -174,7 +183,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "claude-haiku-4-5",
 		Description: "Fast, cheap turns with no reasoning-effort axis: classification, extraction and short answers",
-		Rank:        rank(10, "the lowest of the eight anthropic rows, tied with its dated snapshot", lineup),
+		Rank:        rank(10, "the lowest of the nine anthropic rows, tied with its dated snapshot", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortNone(),
 		Systems:     []agentic.SystemID{"claude-code"},
@@ -182,7 +191,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:           "claude-haiku-4-5-20251001",
 		Description:  "Dated snapshot of claude-haiku-4-5, for a run that must pin one exact build",
-		Rank:         rank(10, "the lowest of the eight anthropic rows, tied with claude-haiku-4-5, which it is a dated snapshot of", lineup),
+		Rank:         rank(10, "the lowest of the nine anthropic rows, tied with claude-haiku-4-5, which it is a dated snapshot of", lineup),
 		Lifecycle:    vendorplugin.LifecycleLegacy,
 		SupersededBy: "claude-haiku-4-5",
 		Effort:       effortNone(),

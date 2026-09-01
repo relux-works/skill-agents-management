@@ -1,5 +1,5 @@
 {
-  "model_count": 43,
+  "model_count": 44,
   "models": [
     {
       "agentic_systems": [
@@ -269,14 +269,36 @@
       ],
       "broker": "anthropic",
       "description": "Most capable, for the hardest and longest-running tasks",
-      "id": "claude-fable-5",
+      "id": "claude-fable-5-1",
       "lifecycle": "ModelLifecycleCurrent",
-      "policy_rank": 80,
+      "policy_rank": 85,
       "reasoning": "ReasoningRequired",
       "recommended": false,
       "recommended_effort": "high",
       "runtime": "claude",
       "superseded_by": "",
+      "supported_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "claude-code"
+      ],
+      "broker": "anthropic",
+      "description": "Previous-generation most capable model, superseded by claude-fable-5-1",
+      "id": "claude-fable-5",
+      "lifecycle": "ModelLifecycleLegacy",
+      "policy_rank": 80,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "high",
+      "runtime": "claude",
+      "superseded_by": "claude-fable-5-1",
       "supported_efforts": [
         "low",
         "medium",

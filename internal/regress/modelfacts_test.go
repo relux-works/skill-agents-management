@@ -18,7 +18,7 @@ import (
 //   - ROWS GOING MISSING. The rows now live in TWO homes — four vendor plugins
 //     and one vendor-unresolved runtime declaration — and the second home is
 //     the one with no plugin behind it. A check that walked only the registered
-//     vendors would report green on 41 of 43 rows forever.
+//     vendors would report green on 42 of 44 rows forever.
 //   - PRESENTATION DECIDING ADMISSION. Every one of the new fields is display
 //     and migration evidence. The day one of them reaches an admitted-pair
 //     digest, a truthful correction to a price or a lifecycle silently changes
@@ -36,7 +36,7 @@ import (
 // on purpose. A row added to a vendor without its counterpart leaving the board
 // is a divergence between two repositories, and it must not be absorbable by a
 // test that counts whatever it finds.
-const boardModelCount = 43
+const boardModelCount = 44
 
 // carriedRows collects every model row this binary carries, from both homes,
 // and reports which home each came from.

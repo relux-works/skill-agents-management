@@ -1,5 +1,5 @@
 {
-  "model_count": 43,
+  "model_count": 44,
   "models": [
     {
       "context_window_tokens": 0,
@@ -301,7 +301,7 @@
     },
     {
       "context_window_tokens": 0,
-      "id": "claude-fable-5",
+      "id": "claude-fable-5-1",
       "joined_from_vendor_module": {
         "agentic_systems": [
           "claude-code"
@@ -318,11 +318,36 @@
         ]
       },
       "lifecycle": "current",
-      "policy_rank": 80,
+      "policy_rank": 85,
       "pricing": null,
       "recommended": false,
       "runtime": "claude",
       "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 0,
+      "id": "claude-fable-5",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "claude-code"
+        ],
+        "broker": "anthropic",
+        "reasoning": "required",
+        "recommended_effort": "high",
+        "supported_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 80,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "claude",
+      "superseded_by": "claude-fable-5-1"
     },
     {
       "context_window_tokens": 0,
