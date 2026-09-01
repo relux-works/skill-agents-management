@@ -54,6 +54,11 @@ var digestMutants = map[string]func(vendorplugin.Model) vendorplugin.Model{
 		m.ContextWindowTokens = 12_345
 		return m
 	},
+	"every row given a cache budget": func(m vendorplugin.Model) vendorplugin.Model {
+		value := int64(6_442_450_944)
+		m.CacheBudgetBytes = &value
+		return m
+	},
 	"every price doubled": func(m vendorplugin.Model) vendorplugin.Model {
 		if m.Pricing == nil {
 			return m

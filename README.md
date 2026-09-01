@@ -350,8 +350,9 @@ The vendor plugin contract, its registry, and the runtime declarations.
   it (a score with no observation is refused at registration — ranking is never
   policy), a usage description that cannot be silently empty, its lineup state,
   its supersession, the vendor's display recommendation, its context window, its
-  billing contract, its reasoning-effort vocabulary and the vendor's recommended
-  word, and the agentic systems that can drive it. Every field with a legal
+  optional positive cache budget, its billing contract, its reasoning-effort
+  vocabulary and the vendor's recommended word, and the agentic systems that
+  can drive it. Every field with a legal
   empty value states what that empty MEANS, and each is refused where it cannot
   hold together: a successor no model answers to, a non-legacy row that has
   already been replaced, two display picks for one harness, a negative context
@@ -416,6 +417,12 @@ The vendor plugin contract, its registry, and the runtime declarations.
   so a caller building the shared registry decides whether to register it at
   all via `localmodels.Peek()`'s three-way absent/malformed/valid result (see
   `docs/architecture.md`). End-to-end M1 is not shipped by this module alone.
+  A model row may declare `cache_budget_bytes` as a positive integer. The
+  generic catalog exposes it as `Model.CacheBudgetBytes *int64`: `nil` means
+  unrecorded, while an explicit zero or negative value is malformed. The fact
+  is copied from configuration only; model/publisher/family names, context
+  size, argv, availability and live runtime status never infer it, and it does
+  not alter launch plans or admitted-pair digests.
   The `local-qwen` `RuntimeDeclaration` and `skill-project-management`'s
   production migration onto `vendorplugin.BuildLaunch(ctx, ...)` belong to the
   coordinated consumer task (`TASK-260828-3hultd`) and remain pending review;

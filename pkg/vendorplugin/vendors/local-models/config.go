@@ -56,6 +56,7 @@ type ModelEntry struct {
 	Family              string
 	Lifecycle           vendorplugin.Lifecycle
 	ContextWindowTokens int
+	CacheBudgetBytes    *int64
 	EffortSupport       agentic.EffortSupport
 	Pointer             Pointer
 	Engine              plugin.Ref
@@ -210,6 +211,7 @@ type wireModel struct {
 	Family              string      `toml:"family"`
 	Lifecycle           string      `toml:"lifecycle"`
 	ContextWindowTokens int         `toml:"context_window_tokens"`
+	CacheBudgetBytes    *int64      `toml:"cache_budget_bytes"`
 	EffortSupport       string      `toml:"effort_support"`
 	Engine              *string     `toml:"engine"`
 	Pointer             wirePointer `toml:"pointer"`
@@ -295,11 +297,14 @@ func parseModel(cfg Config, runtimeID, modelID string, wireM wireModel) (ModelEn
 	if wireM.ContextWindowTokens < 0 {
 		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: context_window_tokens is negative", ErrConfigMalformed, runtimeID, modelID)
 	}
+	if wireM.CacheBudgetBytes != nil && *wireM.CacheBudgetBytes <= 0 {
+		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: cache_budget_bytes is present but not positive", ErrConfigMalformed, runtimeID, modelID)
+	}
 	engine, err := configuredEngineRef(cfg, wireM.Engine)
 	if err != nil {
 		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: %v", ErrConfigMalformed, runtimeID, modelID, err)
 	}
-	return ModelEntry{
+	model := ModelEntry{
 		Description:         wireM.Description,
 		Publisher:           wireM.Publisher,
 		Family:              wireM.Family,
@@ -311,7 +316,12 @@ func parseModel(cfg Config, runtimeID, modelID string, wireM wireModel) (ModelEn
 			AgentsInfraProject: wireM.Pointer.AgentsInfraProject,
 			AgentsInfraProfile: wireM.Pointer.AgentsInfraProfile,
 		},
-	}, nil
+	}
+	if wireM.CacheBudgetBytes != nil {
+		value := *wireM.CacheBudgetBytes
+		model.CacheBudgetBytes = &value
+	}
+	return model, nil
 }
 
 func configuredEngineRef(cfg Config, raw *string) (plugin.Ref, error) {

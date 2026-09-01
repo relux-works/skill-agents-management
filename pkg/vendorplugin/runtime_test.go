@@ -412,6 +412,10 @@ func TestSystemOnlyRuntimeRedeclarationRequiresEquivalentModelAuthority(t *testi
 		}},
 		{"display recommendation", func(d *RuntimeDeclaration) { d.Models[0].Recommended = true }},
 		{"context window", func(d *RuntimeDeclaration) { d.Models[0].ContextWindowTokens++ }},
+		{"cache budget", func(d *RuntimeDeclaration) {
+			value := int64(6_442_450_944)
+			d.Models[0].CacheBudgetBytes = &value
+		}},
 		{"pricing", func(d *RuntimeDeclaration) {
 			d.Models[0].Pricing = &Pricing{
 				BillingModel: "subscription",

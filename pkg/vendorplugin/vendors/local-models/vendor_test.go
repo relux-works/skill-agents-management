@@ -48,6 +48,7 @@ func registryWithPi(t *testing.T) *vendorplugin.Registry {
 
 func validConfig() Config {
 	engine := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
+	cacheBudget := int64(6_442_450_944)
 	return Config{InferenceEngines: []plugin.ID{"mlx"}, Runtimes: []RuntimeEntry{
 		{
 			ID:     "local-qwen",
@@ -60,6 +61,7 @@ func validConfig() Config {
 					Family:              "qwen",
 					Lifecycle:           vendorplugin.LifecycleCurrent,
 					ContextWindowTokens: 131072,
+					CacheBudgetBytes:    &cacheBudget,
 					EffortSupport:       agentic.EffortSupportNone,
 					Engine:              engine,
 					Pointer: Pointer{
@@ -112,6 +114,9 @@ func TestRegisterAValidCatalogSucceeds(t *testing.T) {
 	if models[0].Publisher != "alibaba" || models[0].Family != "qwen" {
 		t.Fatalf("Publisher/Family = %q/%q, want alibaba/qwen (provenance only, never gates anything)", models[0].Publisher, models[0].Family)
 	}
+	if models[0].CacheBudgetBytes == nil || *models[0].CacheBudgetBytes != 6_442_450_944 {
+		t.Fatalf("CacheBudgetBytes = %v, want exact catalog fact 6442450944", models[0].CacheBudgetBytes)
+	}
 }
 
 // TestModelsIsAStableSnapshot pins Models()'s call-stability contract: two
@@ -120,9 +125,30 @@ func TestModelsIsAStableSnapshot(t *testing.T) {
 	vendor := New(validConfig())
 	first := vendor.Models()
 	first[0].Systems[0] = "mutated"
+	*first[0].CacheBudgetBytes = 1
 	second := vendor.Models()
 	if second[0].Systems[0] == "mutated" {
 		t.Fatal("mutating one Models() call's slice affected a later call; Models() is not returning independent copies")
+	}
+	if second[0].CacheBudgetBytes == nil || *second[0].CacheBudgetBytes != 6_442_450_944 {
+		t.Fatalf("mutating one Models() call's cache pointer changed a later snapshot: %v", second[0].CacheBudgetBytes)
+	}
+}
+
+func TestModelsNeverInfersCacheBudgetFromIdentityOrContext(t *testing.T) {
+	cfg := validConfig()
+	entry := cfg.Runtimes[0].Models["qwen-3.8-27b-mlx-8bit"]
+	entry.CacheBudgetBytes = nil
+	entry.ContextWindowTokens = 6_442_450_944
+	delete(cfg.Runtimes[0].Models, "qwen-3.8-27b-mlx-8bit")
+	cfg.Runtimes[0].Models["qwen-cache-6gb"] = entry
+
+	models := New(cfg).Models()
+	if len(models) != 1 || models[0].ID != "qwen-cache-6gb" {
+		t.Fatalf("Models() = %+v, want renamed test row", models)
+	}
+	if models[0].CacheBudgetBytes != nil {
+		t.Fatalf("CacheBudgetBytes = %d, want absence; names and context values are not cache evidence", *models[0].CacheBudgetBytes)
 	}
 }
 

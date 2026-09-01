@@ -510,7 +510,8 @@ func (e EffortDeclaration) Accepts(word string) bool {
 // Model is one row of a vendor's model list: what it is called, what it is for,
 // where it sits in the vendor's lineup and on what evidence, its lineup state,
 // its effort axis, its context window, its billing contract, and the agentic
-// systems that can drive it.
+// systems that can drive it. Cache capacity is an optional declared fact: it
+// is never inferred from any of those identities or from launch/runtime state.
 //
 // # The emptiness rules, in one place
 //
@@ -525,6 +526,8 @@ func (e EffortDeclaration) Accepts(word string) bool {
 //     harness. It is a real value, not an unset one, and most rows carry it.
 //   - ContextWindowTokens zero: no context window was recorded for the row. It
 //     is NOT a window of zero tokens, and nothing may compute against it.
+//   - CacheBudgetBytes nil: no cache budget was recorded for the row. It is
+//     NOT an explicit zero-byte budget; a present value must be positive.
 //   - Pricing nil: no billing contract was registered. It is NOT free use.
 //
 // The two fields with NO legal empty value are Lifecycle and Rank, and both
@@ -564,6 +567,14 @@ type Model struct {
 	// ContextWindowTokens is the provider's maximum context window. Zero means
 	// none was recorded; a negative is refused.
 	ContextWindowTokens int
+
+	// CacheBudgetBytes is the configured model-cache capacity in bytes, or nil
+	// when the catalog records no such fact. A pointer preserves the distinction
+	// between an omitted declaration and an explicit zero; zero and negative
+	// values are refused. This is catalog metadata only. It does not shape a
+	// launch and must never be inferred from model/publisher/family names,
+	// context size, argv, availability or runtime status.
+	CacheBudgetBytes *int64
 
 	// Pricing is the vendor billing contract, or nil when none was registered.
 	Pricing *Pricing
@@ -628,6 +639,10 @@ func (m Model) Validate() error {
 	if m.ContextWindowTokens < 0 {
 		return fmt.Errorf("%w: model %q declares a context window of %d tokens; zero means none was recorded and a negative means nothing at all",
 			ErrModelInvalid, m.ID, m.ContextWindowTokens)
+	}
+	if m.CacheBudgetBytes != nil && *m.CacheBudgetBytes <= 0 {
+		return fmt.Errorf("%w: model %q declares a cache budget of %d bytes; nil means none was recorded and a present value must be positive",
+			ErrModelInvalid, m.ID, *m.CacheBudgetBytes)
 	}
 	if err := m.Pricing.Validate(m.ID); err != nil {
 		return err

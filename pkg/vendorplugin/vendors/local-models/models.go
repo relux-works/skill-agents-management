@@ -16,7 +16,7 @@ func buildModels(cfg Config) []vendorplugin.Model {
 	var out []vendorplugin.Model
 	for _, runtime := range cfg.Runtimes {
 		for modelID, entry := range runtime.Models {
-			out = append(out, vendorplugin.Model{
+			model := vendorplugin.Model{
 				ID:                  modelID,
 				Description:         vendorplugin.UsageDescription(entry.Description),
 				Rank:                localCapabilityRank(),
@@ -27,7 +27,12 @@ func buildModels(cfg Config) []vendorplugin.Model {
 				Family:              entry.Family,
 				Engine:              entry.Engine,
 				Systems:             []agentic.SystemID{runtime.System},
-			})
+			}
+			if entry.CacheBudgetBytes != nil {
+				value := *entry.CacheBudgetBytes
+				model.CacheBudgetBytes = &value
+			}
+			out = append(out, model)
 		}
 	}
 	return out

@@ -10,6 +10,7 @@ publisher             = "alibaba"
 family                = "qwen"
 lifecycle             = "current"
 context_window_tokens = 131072
+cache_budget_bytes    = 6442450944
 effort_support        = "none"
 engine                = "mlx"
 

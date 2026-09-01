@@ -209,4 +209,10 @@ Vendor, read-only status consumer, and the generic inference-engine kind plus
 typed multi-node plan. Process lifecycle, load/unload, supervision and
 attestation remain consumer-owned; the plan is a value, never an executor.
 
+`local-models.toml` may declare a model's `cache_budget_bytes` as a positive
+integer. Read the resulting optional fact from
+`vendorplugin.Model.CacheBudgetBytes`; `nil` is absence, not zero. Never derive
+it from a model/runtime name, context size, launch argv, availability or live
+status, and never use it to reshape the launch plan.
+
 Follow `go-testing-tools` for test authoring.

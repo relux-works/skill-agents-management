@@ -26,6 +26,7 @@ publisher             = "alibaba"
 family                = "qwen"
 lifecycle             = "current"
 context_window_tokens = 131072
+cache_budget_bytes    = 6442450944
 effort_support        = "none"
 engine                = "mlx"
 
@@ -70,6 +71,9 @@ func TestShippedLocalQwenFixtureMatchesTheConfiguredAxes(t *testing.T) {
 	model, ok := runtime.Models["qwen-3.8-27b-mlx-8bit"]
 	if !ok || model.Publisher != "alibaba" || model.Family != "qwen" || model.Engine != runtime.Engine || model.Pointer.AgentsInfraProfile != "local-qwen" {
 		t.Fatalf("model axes = %#v", model)
+	}
+	if model.CacheBudgetBytes == nil || *model.CacheBudgetBytes != 6_442_450_944 {
+		t.Fatalf("cache budget = %v, want an exact 6442450944-byte declaration", model.CacheBudgetBytes)
 	}
 }
 
@@ -204,7 +208,61 @@ func TestLoadConfigValidResolvesExactly(t *testing.T) {
 	if model.Engine != wantEngine {
 		t.Fatalf("model engine = %#v, want %#v", model.Engine, wantEngine)
 	}
+	if model.CacheBudgetBytes == nil || *model.CacheBudgetBytes != 6_442_450_944 {
+		t.Fatalf("cache budget = %v, want exact positive value 6442450944", model.CacheBudgetBytes)
+	}
 }
+
+func TestLoadConfigPreservesOptionalPositiveCacheBudgetExactly(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want *int64
+	}{
+		{name: "absent", body: legacyTOML},
+		{name: "lower positive", body: strings.Replace(validTOML, "6442450944", "1", 1), want: cacheBudgetPtr(1)},
+		{name: "configured value", body: validTOML, want: cacheBudgetPtr(6_442_450_944)},
+		{name: "higher positive", body: strings.Replace(validTOML, "6442450944", "12884901888", 1), want: cacheBudgetPtr(12_884_901_888)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := newConfigLoader(func() ([]byte, bool, error) { return []byte(test.body), false, nil }).load()
+			if result.Err != nil || result.Absent {
+				t.Fatalf("load = %+v, want a valid present config", result)
+			}
+			entry, _ := runtimeEntry(result.Config, "local-qwen")
+			got := entry.Models["qwen-3.8-27b-mlx-8bit"].CacheBudgetBytes
+			switch {
+			case test.want == nil && got != nil:
+				t.Fatalf("cache budget = %d, want absence preserved", *got)
+			case test.want != nil && (got == nil || *got != *test.want):
+				t.Fatalf("cache budget = %v, want %d", got, *test.want)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRefusesNonPositiveOrMalformedCacheBudget(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "explicit zero", value: "0"},
+		{name: "negative", value: "-1"},
+		{name: "wrong scalar type", value: `"six gibibytes"`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := strings.Replace(validTOML, "6442450944", test.value, 1)
+			result := newConfigLoader(func() ([]byte, bool, error) { return []byte(body), false, nil }).load()
+			if result.Absent || !errors.Is(result.Err, ErrConfigMalformed) {
+				t.Fatalf("load = %+v, want typed malformed refusal", result)
+			}
+		})
+	}
+}
+
+func cacheBudgetPtr(value int64) *int64 { return &value }
 
 func TestLoadConfigRefusesUnknownAndPreservesMismatchedEngineReferences(t *testing.T) {
 	t.Run("present blank runtime engine", func(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -177,6 +178,34 @@ func TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight(t *testing.T) {
 	}
 	if plan.Provenance != (agentic.LaunchProvenance{}) {
 		t.Fatalf("preflight-only fixture invented engine provenance: %#v", plan.Provenance)
+	}
+}
+
+func TestBuildLaunchIsInvariantAcrossAbsentAndPositiveCacheBudgets(t *testing.T) {
+	request := localQwenSpawnRequest(t)
+	var baseline agentic.Plan
+	for i, cacheBudget := range []*int64{nil, cacheBudgetPtr(1), cacheBudgetPtr(12_884_901_888)} {
+		cfg := configWithoutEngine()
+		entry := cfg.Runtimes[0].Models["qwen-3.8-27b-mlx-8bit"]
+		entry.CacheBudgetBytes = cacheBudget
+		cfg.Runtimes[0].Models["qwen-3.8-27b-mlx-8bit"] = entry
+
+		reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+		registry := isolatedLocalQwenRegistry(t, reader, cfg)
+		plan, err := vendorplugin.BuildLaunch(context.Background(), registry, request, agentic.LaunchModeExec)
+		if err != nil {
+			t.Fatalf("BuildLaunch(cache budget %v): %v", cacheBudget, err)
+		}
+		if reader.calls != 1 {
+			t.Fatalf("StatusReader calls = %d, want exactly 1 regardless of cache metadata", reader.calls)
+		}
+		if i == 0 {
+			baseline = plan
+			continue
+		}
+		if !reflect.DeepEqual(plan, baseline) {
+			t.Fatalf("cache metadata changed runtime plan\nbaseline: %#v\nmutated:  %#v", baseline, plan)
+		}
 	}
 }
 

@@ -319,6 +319,15 @@ read refuses. Neither this vendor nor `pi` nor `pkg/localruntime` ever starts,
 stops or signals the local model server itself (Process B); that authority
 belongs entirely to `relux-agents-infra`'s own shared-runtime broker.
 
+The same static configuration may carry `cache_budget_bytes` on a model row.
+It is an optional-positive catalog fact: omission remains `nil`, while an
+explicit zero or negative value is refused. The parser projects the exact byte
+count into the generic `vendorplugin.Model` catalog and stops there. Neither
+the local-model vendor nor generic launch code infers it from identity strings,
+context size, argv, availability or runtime status, and the field does not
+change plan construction or admitted-pair digests. Process-B cache allocation
+and enforcement remain outside this module.
+
 **End-to-end M1 is not yet claimed here.** It additionally requires the
 coordinated consumer migration in `TASK-260828-3hultd`: the real
 `launchRegistry -> buildLaunchPlan -> vendorplugin.BuildLaunch ->

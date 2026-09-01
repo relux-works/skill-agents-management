@@ -172,6 +172,38 @@ func TestRegisterRefusesANegativeContextWindow(t *testing.T) {
 	})
 }
 
+func TestRegisterRequiresAPresentCacheBudgetToBePositive(t *testing.T) {
+	for name, value := range map[string]int64{"explicit zero": 0, "negative": -1} {
+		t.Run(name, func(t *testing.T) {
+			vendor := newNarwhal()
+			vendor.models[0].CacheBudgetBytes = &value
+
+			if err := vendor.models[0].Validate(); !errors.Is(err, ErrModelInvalid) {
+				t.Fatalf("Model.Validate(cache budget %d) = %v, want ErrModelInvalid", value, err)
+			}
+			_, err := mustRegister(t, vendor, systemsWithPangolin(t))
+			requireErrorIs(t, err, ErrModelInvalid, "Register(model with "+name+" cache budget)")
+		})
+	}
+
+	t.Run("absence is distinct from zero", func(t *testing.T) {
+		vendor := newNarwhal()
+		vendor.models[0].CacheBudgetBytes = nil
+		if _, err := mustRegister(t, vendor, systemsWithPangolin(t)); err != nil {
+			t.Fatalf("Register(model with no recorded cache budget): %v", err)
+		}
+	})
+
+	t.Run("positive is preserved", func(t *testing.T) {
+		vendor := newNarwhal()
+		value := int64(1)
+		vendor.models[0].CacheBudgetBytes = &value
+		if _, err := mustRegister(t, vendor, systemsWithPangolin(t)); err != nil {
+			t.Fatalf("Register(model with positive cache budget): %v", err)
+		}
+	})
+}
+
 // TestRegisterRefusesAnUnusablePricingContract covers every way a billing
 // contract can fail to be quotable.
 //
@@ -283,20 +315,24 @@ func TestRegisterAdmitsAWellFormedPricingContract(t *testing.T) {
 	})
 }
 
-// TestPricingIsDeepCopiedOutOfAVendor is the aliasing half of the contract.
+// TestModelPointersAreDeepCopiedOutOfAVendor is the aliasing half of the
+// contract.
 //
-// Pricing is the only pointer on a model row, so it is the only field where a
-// caller writing through Models() reaches the plugin's own declaration. A
-// shallow copy here would let one caller change a published price for the whole
-// process, which is the same class of bug CloneModels' slice copies close.
-func TestPricingIsDeepCopiedOutOfAVendor(t *testing.T) {
+// Pricing and CacheBudgetBytes are pointer-backed facts where a caller writing
+// through Models() could reach the plugin's own declaration. A shallow copy
+// here would let one caller change the published catalog for the whole process,
+// which is the same class of bug CloneModels' slice copies close.
+func TestModelPointersAreDeepCopiedOutOfAVendor(t *testing.T) {
 	vendor := newNarwhal()
 	vendor.models[0].Pricing = narwhalPricing()
+	cacheBudget := int64(6_442_450_944)
+	vendor.models[0].CacheBudgetBytes = &cacheBudget
 
 	first := CloneModels(vendor.Models())
 	first[0].Pricing.Plans[0].MonthlyUSD = 9999
 	first[0].Pricing.Plans[0].ApplicableModelIDs[0] = "scribbled"
 	*first[0].Pricing.Plans[0].PromotionalMonthlyUSD = 1
+	*first[0].CacheBudgetBytes = 1
 
 	second := CloneModels(vendor.Models())
 	if got := second[0].Pricing.Plans[0].MonthlyUSD; got != 30 {
@@ -307,6 +343,9 @@ func TestPricingIsDeepCopiedOutOfAVendor(t *testing.T) {
 	}
 	if got := *second[0].Pricing.Plans[0].PromotionalMonthlyUSD; got != 20 {
 		t.Errorf("writing through one answer changed the plugin's promotional price to %v", got)
+	}
+	if got := *second[0].CacheBudgetBytes; got != 6_442_450_944 {
+		t.Errorf("writing through one answer changed the plugin's cache budget to %d", got)
 	}
 }
 

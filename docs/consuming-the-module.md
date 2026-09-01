@@ -65,6 +65,13 @@ vendor-unresolved runtime (`RuntimeDeclaration.Models`, which is how the two
 that is the point of the release. What does NOT move is POLICY: which models a
 repository may spawn stays your configuration's decision.
 
+`Model.CacheBudgetBytes` is an additive optional-positive catalog fact for
+configured local models. A consumer must distinguish `nil` (unrecorded) from a
+present byte count; zero is never a valid declaration. Use the declared value
+directly and do not infer a fallback from model/runtime names, context size,
+argv, availability or live status. The module deliberately does not project
+this metadata into `agentic.Plan` or process lifecycle behavior.
+
 ## Local development against a sibling checkout
 
 When you are changing both repositories at once, use a **Go workspace**, never
@@ -128,7 +135,10 @@ that may not exist, and `Registry.Register` refuses ANY vendor whose
 `Models()` returns zero rows — a blank import would make an absent file on
 one operator's machine fail registration for every OTHER vendor and system in
 the same binary. Register it conditionally instead, reading
-`localmodels.Peek()`'s three-way `{Absent, Err, Config}` result first:
+`localmodels.Peek()`'s three-way `{Absent, Err, Config}` result first.
+Each model table may include `cache_budget_bytes = 6442450944`; the key is
+optional, but when present it must be a positive integer and is exposed through
+the registered model catalog without changing the launch contract:
 
 ```go
 // import "github.com/relux-works/skill-agents-management/pkg/inferenceengine/engines/mlx"
