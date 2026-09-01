@@ -8,14 +8,14 @@ dist/
 # Temporary utilities, logs, worktrees, smoke artifacts
 .temp/
 
-# Local agent and task-management runtime state
+# Local agent and task-management runtime state. AGENTS.md and CLAUDE.md are
+# versioned instead: they are the repository's own contract, matching
+# skill-project-management and agent-session-manager.
 /.agents/
 /.claude/
 /.codex/
 /.task-board/
 /task-board.config.json
-/AGENTS.md
-/CLAUDE.md
 /LOGBOOK.md
 /agents-attachments-manifest.json
 /.mcp.json
