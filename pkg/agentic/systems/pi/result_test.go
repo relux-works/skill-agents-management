@@ -43,6 +43,7 @@ func TestValidateTurnResultAcceptsOnlyClosedExitDocumentTable(t *testing.T) {
 		{TurnCodeAuthorizationDenied, TurnResultProcessARefused, ErrTurnProcessARefused, 1},
 		{TurnCodeIdentityInvalid, TurnResultProcessARefused, ErrTurnProcessARefused, 1},
 		{TurnCodeRuntimeRefused, TurnResultProcessARefused, ErrTurnProcessARefused, 1},
+		{TurnCodeLifecycleIntegrityUnknown, TurnResultProcessARefused, ErrTurnProcessARefused, 1},
 		{TurnCodeChildFailed, TurnResultChildFailed, ErrTurnChildFailed, 1},
 		{TurnCodeToolFailed, TurnResultToolFailed, ErrTurnToolFailed, 1},
 		{TurnCodeCancelled, TurnResultCancelled, context.Canceled, 2},
@@ -112,6 +113,23 @@ func TestValidateTurnResultRefusesProtocolAndInputAttacks(t *testing.T) {
 		{"ok with error", uninterruptedInput([]byte(strings.Replace(validOK, `}`, `,"error":{"code":"pi_turn_child_failed"}}`, 1)), 0)},
 		{"error with final text", uninterruptedInput([]byte(strings.Replace(validError, `,"error"`, `,"final_text":"forged","error"`, 1)), 1)},
 		{"unknown code", uninterruptedInput(errorTurnDocument("pi_turn_future"), 1)},
+		{"unknown lifecycle code", uninterruptedInput(errorTurnDocument("pi_turn_lifecycle_unknown"), 1)},
+		{"unknown integrity code", uninterruptedInput(errorTurnDocument("pi_turn_integrity_unknown"), 1)},
+		{"lifecycle code wrong case", uninterruptedInput(errorTurnDocument("PI_TURN_LIFECYCLE_INTEGRITY_UNKNOWN"), 1)},
+		{"lifecycle code padded", uninterruptedInput(errorTurnDocument(" pi_turn_lifecycle_integrity_unknown"), 1)},
+		{"lifecycle code with detail suffix", uninterruptedInput(errorTurnDocument("pi_turn_lifecycle_integrity_unknown:/var/cache"), 1)},
+		{"lifecycle code exit zero", uninterruptedInput(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown), 0)},
+		{"lifecycle code cancel exit", uninterruptedInput(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown), 2)},
+		{"lifecycle code invalid exit", uninterruptedInput(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown), 3)},
+		{"lifecycle code on ok status", uninterruptedInput([]byte(strings.Replace(string(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown)), `"status":"error"`, `"status":"ok"`, 1)), 0)},
+		{"lifecycle code with final text", uninterruptedInput([]byte(strings.Replace(string(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown)), `,"error"`, `,"final_text":"leaked","error"`, 1)), 1)},
+		{"lifecycle code with detail member", uninterruptedInput([]byte(strings.Replace(string(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown)), `"}}`, `","detail":"/Users/x/.cache"}}`, 1)), 1)},
+		{"lifecycle code with path member", uninterruptedInput([]byte(strings.Replace(string(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown)), `"}}`, `","path":"/tmp/lease"}}`, 1)), 1)},
+		{"lifecycle code with cause member", uninterruptedInput([]byte(strings.Replace(string(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown)), `"}}`, `","cause":"child: permission denied"}}`, 1)), 1)},
+		{"lifecycle code duplicated", uninterruptedInput([]byte(strings.Replace(string(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown)), `"code":`, `"code":"pi_turn_lifecycle_integrity_unknown","code":`, 1)), 1)},
+		{"lifecycle code duplicated error object", uninterruptedInput([]byte(strings.Replace(string(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown)), `"error":`, `"error":{"code":"pi_turn_lifecycle_integrity_unknown"},"error":`, 1)), 1)},
+		{"lifecycle code non-string", uninterruptedInput([]byte(strings.Replace(string(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown)), `"pi_turn_lifecycle_integrity_unknown"`, `["pi_turn_lifecycle_integrity_unknown"]`, 1)), 1)},
+		{"lifecycle code contradicting child exit pairing", uninterruptedInput(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown), 4)},
 		{"zero with error", uninterruptedInput(errorTurnDocument(TurnCodeChildFailed), 0)},
 		{"one with ok", uninterruptedInput(okTurnDocument("answer"), 1)},
 		{"wrong error exit", uninterruptedInput(errorTurnDocument(TurnCodeCancelled), 1)},
@@ -153,5 +171,49 @@ func TestTurnResultErrorDoesNotExposeDocumentContents(t *testing.T) {
 	_, err := ValidateTurnResult(uninterruptedInput(okTurnDocument(secret), 1))
 	if err == nil || strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "hunter2") {
 		t.Fatalf("sanitized error = %q", err)
+	}
+}
+
+// TestLifecycleIntegrityUnknownIsARefusalNotAFailure pins the class boundary
+// that a consumer acts on: lifecycle-integrity-unknown means Process A
+// declined to run the turn, so it must be distinguishable from an invalid
+// document, a child failure and a tool failure, and must never surface as
+// success.
+func TestLifecycleIntegrityUnknownIsARefusalNotAFailure(t *testing.T) {
+	result, err := ValidateTurnResult(uninterruptedInput(errorTurnDocument(TurnCodeLifecycleIntegrityUnknown), 1))
+	if result.Class != TurnResultProcessARefused || result.Code != TurnCodeLifecycleIntegrityUnknown || result.FinalText != "" {
+		t.Fatalf("result=%+v", result)
+	}
+	for _, wrong := range []error{ErrTurnResultInvalid, ErrTurnChildFailed, ErrTurnToolFailed, ErrTurnCleanupFailed, context.Canceled, context.DeadlineExceeded} {
+		if errors.Is(err, wrong) {
+			t.Fatalf("lifecycle-integrity-unknown classified as %v", wrong)
+		}
+	}
+	if !errors.Is(err, ErrTurnProcessARefused) {
+		t.Fatalf("err=%v, want ErrTurnProcessARefused", err)
+	}
+	if got := err.Error(); strings.Contains(got, "/") || strings.Contains(got, "cache") {
+		t.Fatalf("refusal error leaks detail: %q", got)
+	}
+}
+
+// TestLifecycleIntegrityCodeIsDistinctFromEveryOtherCode fails if the new
+// code is spelled as an alias of an existing one, which would collapse two
+// distinct Process-A facts into one wire value.
+func TestLifecycleIntegrityCodeIsDistinctFromEveryOtherCode(t *testing.T) {
+	others := []TurnResultCode{
+		TurnCodeCleanupFailed, TurnCodeRequestInvalid, TurnCodeProfileMissing, TurnCodeProfileUnknown,
+		TurnCodeProfileMismatch, TurnCodeEnvironmentMalformed, TurnCodeEnvironmentDenied,
+		TurnCodeConfigurationInvalid, TurnCodeAuthorizationDenied, TurnCodeIdentityInvalid,
+		TurnCodeRuntimeRefused, TurnCodeChildFailed, TurnCodeToolFailed, TurnCodeCancelled,
+		TurnCodeDeadlineExceeded, TurnCodeResultInvalid,
+	}
+	for _, other := range others {
+		if other == TurnCodeLifecycleIntegrityUnknown {
+			t.Fatalf("lifecycle-integrity code aliases %s", other)
+		}
+	}
+	if !strings.HasPrefix(string(TurnCodeLifecycleIntegrityUnknown), "pi_turn_") {
+		t.Fatalf("code %q leaves the pi_turn_ namespace", TurnCodeLifecycleIntegrityUnknown)
 	}
 }

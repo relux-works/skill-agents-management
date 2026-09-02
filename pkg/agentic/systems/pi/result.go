@@ -41,11 +41,18 @@ const (
 	TurnCodeAuthorizationDenied  TurnResultCode = "pi_turn_authorization_denied"
 	TurnCodeIdentityInvalid      TurnResultCode = "pi_turn_identity_invalid"
 	TurnCodeRuntimeRefused       TurnResultCode = "pi_turn_runtime_refused"
-	TurnCodeChildFailed          TurnResultCode = "pi_turn_child_failed"
-	TurnCodeToolFailed           TurnResultCode = "pi_turn_tool_failed"
-	TurnCodeCancelled            TurnResultCode = "pi_turn_cancelled"
-	TurnCodeDeadlineExceeded     TurnResultCode = "pi_turn_deadline_exceeded"
-	TurnCodeResultInvalid        TurnResultCode = "pi_turn_result_invalid"
+	// TurnCodeLifecycleIntegrityUnknown is Process A refusing a turn because
+	// it could not establish the integrity of its own lifecycle evidence
+	// (lease, restart or quarantine ledger, cache state). The wire document
+	// carries only this code: no paths, identity, raw child errors or cache
+	// contents. It is a refusal, not a child or tool failure, and pairs with
+	// exit 1 exactly like every other Process-A refusal.
+	TurnCodeLifecycleIntegrityUnknown TurnResultCode = "pi_turn_lifecycle_integrity_unknown"
+	TurnCodeChildFailed               TurnResultCode = "pi_turn_child_failed"
+	TurnCodeToolFailed                TurnResultCode = "pi_turn_tool_failed"
+	TurnCodeCancelled                 TurnResultCode = "pi_turn_cancelled"
+	TurnCodeDeadlineExceeded          TurnResultCode = "pi_turn_deadline_exceeded"
+	TurnCodeResultInvalid             TurnResultCode = "pi_turn_result_invalid"
 )
 
 type TurnIntervention string
@@ -185,7 +192,8 @@ func turnCodeClass(code TurnResultCode) (TurnResultClass, int, bool) {
 		return TurnResultCleanupFailed, 1, true
 	case TurnCodeRequestInvalid, TurnCodeProfileMissing, TurnCodeProfileUnknown, TurnCodeProfileMismatch,
 		TurnCodeEnvironmentMalformed, TurnCodeEnvironmentDenied, TurnCodeConfigurationInvalid,
-		TurnCodeAuthorizationDenied, TurnCodeIdentityInvalid, TurnCodeRuntimeRefused:
+		TurnCodeAuthorizationDenied, TurnCodeIdentityInvalid, TurnCodeRuntimeRefused,
+		TurnCodeLifecycleIntegrityUnknown:
 		return TurnResultProcessARefused, 1, true
 	case TurnCodeChildFailed:
 		return TurnResultChildFailed, 1, true

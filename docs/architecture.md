@@ -351,7 +351,11 @@ the sole parser for the closed, 1 MiB-bounded
 actual Process-A exit, recorded consumer intervention and cleanup outcome.
 Cancellation/deadline survives an induced signal or missing post-kill document
 after successful cleanup; cleanup failure has higher precedence. Process B is
-never signalled or supervised by this module.
+never signalled or supervised by this module. The error-code table is closed:
+`pi_turn_lifecycle_integrity_unknown` (Process A could not establish the
+integrity of its lifecycle evidence) classifies as Process-A-refused with exit
+1, carries no detail members, and any other spelling, exit pairing or extra
+member is result-invalid.
 
 **Module-side M2 status-consumer candidate:** relux-agents-infra PR #10
 publishes the persisted `restart_not_before`, `quarantined_until`, restart and

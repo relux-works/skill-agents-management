@@ -465,7 +465,11 @@ The vendor plugin contract, its registry, and the runtime declarations.
   intervention and cleanup only through `pi.ValidateTurnResult`. The closed
   classifier rejects duplicate/unknown fields, unknown versions/codes,
   exit/document disagreement and documents over 1 MiB, while preserving
-  cancellation and cleanup precedence.
+  cancellation and cleanup precedence. `pi_turn_lifecycle_integrity_unknown`
+  is a sanitized Process-A refusal (exit 1) for the case where Process A cannot
+  establish the integrity of its own lifecycle evidence; the wire document
+  carries the code alone, never a path, identity, raw child error or cache
+  contents, and every other spelling of that fact stays result-invalid.
 
 The single-source guard covers both layers from ONE list, keyed by the FACT
 being bound. Three entries are dispatch key types (`SystemID`, `VendorID`,
