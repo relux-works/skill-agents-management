@@ -429,19 +429,7 @@ func TestBuildLaunchUsesADeclarationOwnedSystemOnlyBinding(t *testing.T) {
 		t.Fatalf("SeedFrozenRuntimes: %v", err)
 	}
 
-	request := SpawnRequest{
-		Runtime:    "muse",
-		Model:      "muse-spark",
-		PromptPath: "/tmp/assignment.md",
-		WorkDir:    "/work/story",
-		Env:        []string{"PATH=/usr/bin"},
-		Run: agentic.RunContext{
-			RunID:     "RUN-MUSE",
-			TaskID:    "TASK-MUSE",
-			BoardDir:  "/work/.task-board",
-			ContextID: "CTX-MUSE",
-		},
-	}
+	request := museSpawnRequest()
 	plan, err := BuildLaunch(context.Background(), registry, request, agentic.LaunchModeDryRun)
 	if err != nil {
 		t.Fatalf("BuildLaunch(system-only runtime): %v", err)
@@ -452,6 +440,17 @@ func TestBuildLaunchUsesADeclarationOwnedSystemOnlyBinding(t *testing.T) {
 	if !strings.Contains(strings.Join(plan.Argv, " "), "muse-spark") {
 		t.Fatalf("plan.Argv = %v, want the declaration-owned model", plan.Argv)
 	}
+	// The effort the caller configured reaches the HARNESS rather than being
+	// dropped on the way. The pair asserted is the DOUBLE's `--effort`, not
+	// muse's `--reasoning-effort`, and that is deliberate: this registry holds
+	// a renamed pangolin, so asserting muse's flag here would be asserting a
+	// grammar this test never runs. What this file measures is the vendor
+	// layer's half — the declaration-owned word reaching the system plugin.
+	// The real muse plugin's transport is proven end to end in
+	// muse_effort_test.go and against the goldens in the muse package.
+	if !museEffortReachedTheHarness(plan.Argv, "xhigh") {
+		t.Fatalf("plan.Argv = %v, want the configured effort handed to the system plugin", plan.Argv)
+	}
 	for _, want := range []string{
 		"TASK_BOARD_RUN_ID=RUN-MUSE",
 		"TASK_BOARD_TASK_ID=TASK-MUSE",
@@ -460,6 +459,141 @@ func TestBuildLaunchUsesADeclarationOwnedSystemOnlyBinding(t *testing.T) {
 	} {
 		if !containsEnv(plan.Env, want) {
 			t.Errorf("plan.Env = %v, want %q", plan.Env, want)
+		}
+	}
+}
+
+// museEffortReachedTheHarness reports whether the double's own effort pair
+// carries word. It reads the DOUBLE's flag on purpose; see the call site.
+func museEffortReachedTheHarness(argv []string, word string) bool {
+	for i := 1; i < len(argv); i++ {
+		if argv[i-1] == "--effort" && argv[i] == word {
+			return true
+		}
+	}
+	return false
+}
+
+// museSpawnRequest is the declaration-owned muse launch used by the tests
+// below: the 1.3 alias, at a word from its own vocabulary.
+func museSpawnRequest() SpawnRequest {
+	return SpawnRequest{
+		Runtime:    "muse",
+		Model:      "muse-spark",
+		Effort:     "xhigh",
+		PromptPath: "/tmp/assignment.md",
+		WorkDir:    "/work/story",
+		Env:        []string{"PATH=/usr/bin"},
+		Run: agentic.RunContext{
+			RunID:     "RUN-MUSE",
+			TaskID:    "TASK-MUSE",
+			BoardDir:  "/work/.task-board",
+			ContextID: "CTX-MUSE",
+		},
+	}
+}
+
+// TestTheMuseEffortAxisIsEnforcedByItsOwnDeclaration is the negative half of
+// the launch above, and it is the gate this runtime most needs.
+//
+// muse has NO vendor plugin. Every other runtime's effort word is checked
+// against a vocabulary a registered vendor declares; muse's is checked against
+// the vendor-unresolved runtime declaration itself, and if that check were
+// skipped for want of a plugin, the one runtime with nothing behind it would be
+// the one runtime that admits anything.
+//
+// Each case names the production refusal it must produce. The `max` case is the
+// deliberate one: the model's vocabulary holds it, installed muse 1.0.2 does
+// not, and this layer must ADMIT it — the refusal is the harness's to make, and
+// a vendor-layer narrowing here would keep refusing after muse ships the word.
+func TestTheMuseEffortAxisIsEnforcedByItsOwnDeclaration(t *testing.T) {
+	registry := NewRegistry(systemsNamed(t, "muse"))
+	if err := SeedFrozenRuntimes(registry); err != nil {
+		t.Fatalf("SeedFrozenRuntimes: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		model   ModelID
+		effort  string
+		wantErr error
+	}{
+		{
+			name:    "a required-effort row with no word supplied",
+			model:   "muse-spark-1.3-contributor",
+			effort:  "",
+			wantErr: ErrEffortMissing,
+		},
+		{
+			name:    "the alias with no word supplied",
+			model:   "muse-spark",
+			effort:  "",
+			wantErr: ErrEffortMissing,
+		},
+		{
+			name: "a word this model's vocabulary does not hold",
+			// `low` is in claude's and codex's vocabularies and in installed
+			// muse 1.0.2's flag help, and it is NOT in the 1.3 contributor
+			// row's. A check that read any of those other sets would admit it.
+			model:   "muse-spark-1.3-contributor",
+			effort:  "low",
+			wantErr: ErrEffortNotInVocabulary,
+		},
+		{
+			name:    "a word supplied to the legacy row, which declares no axis",
+			model:   "muse-spark-1.2-contributor",
+			effort:  "high",
+			wantErr: ErrEffortNotInVocabulary,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := museSpawnRequest()
+			request.Model = tt.model
+			request.Effort = tt.effort
+			_, err := BuildLaunch(context.Background(), registry, request, agentic.LaunchModeDryRun)
+			requireErrorIs(t, err, tt.wantErr, "BuildLaunch(muse)")
+		})
+	}
+
+	// Reachability, and the `max` pass-through in one: every word the model
+	// declares must be ADMITTED, including the one the installed CLI cannot
+	// yet accept. Without this, all four refusals above would also be
+	// satisfied by a check that refused everything.
+	for _, word := range []string{"high", "xhigh", "max"} {
+		t.Run("admits "+word, func(t *testing.T) {
+			request := museSpawnRequest()
+			request.Model = "muse-spark-1.3-contributor"
+			request.Effort = word
+			plan, err := BuildLaunch(context.Background(), registry, request, agentic.LaunchModeDryRun)
+			if err != nil {
+				t.Fatalf("BuildLaunch refused %q, which muse-spark-1.3-contributor declares: %v", word, err)
+			}
+			if !museEffortReachedTheHarness(plan.Argv, word) {
+				t.Errorf("%q was admitted and then dropped before the harness: %v", word, plan.Argv)
+			}
+		})
+	}
+}
+
+// TestALegacyMuseRowLaunchesWithNoEffort is the other side of the legacy row's
+// refusal above: 1.2 declares no axis, so a launch that supplies none must work
+// and must emit no effort flag.
+func TestALegacyMuseRowLaunchesWithNoEffort(t *testing.T) {
+	registry := NewRegistry(systemsNamed(t, "muse"))
+	if err := SeedFrozenRuntimes(registry); err != nil {
+		t.Fatalf("SeedFrozenRuntimes: %v", err)
+	}
+	request := museSpawnRequest()
+	request.Model = "muse-spark-1.2-contributor"
+	request.Effort = ""
+	plan, err := BuildLaunch(context.Background(), registry, request, agentic.LaunchModeDryRun)
+	if err != nil {
+		t.Fatalf("the legacy muse row could not launch: %v", err)
+	}
+	for i := range plan.Argv {
+		if plan.Argv[i] == "--effort" {
+			t.Errorf("an effort-none model handed the harness an effort: %v", plan.Argv)
 		}
 	}
 }

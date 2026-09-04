@@ -16,9 +16,14 @@
 //   - Because the path is in argv, the dry run has something to substitute: the
 //     source's `<prompt-file>` placeholder. That is the only difference between
 //     the two modes' argv (args.go).
-//   - NO environment filter, NO effort transport, NO composition grammar, NO
-//     goal, budget or service tier. Every one of those is the source's adapter
-//     row rather than an omission; env.go says what the empty filter leaks.
+//   - NO environment filter, NO composition grammar, NO goal, budget or service
+//     tier. Every one of those is the source's adapter row rather than an
+//     omission; env.go says what the empty filter leaks.
+//   - The effort transport is the ONE row that is no longer the source's. The
+//     extraction source registered muse with no effort transport because every
+//     muse model row was effort-none; muse-spark-1.3-contributor is not, so
+//     this plugin now carries `--reasoning-effort` in argv. Capabilities() and
+//     args.go each say why where they say it.
 //
 // # What this plugin deliberately does NOT know
 //
@@ -90,19 +95,29 @@ func (*System) ID() agentic.SystemID { return systemID }
 // Capabilities is the static declaration, and like gemini's it is almost all
 // NO. Each false is the source's adapter row.
 //
-// EffortTransportNone is the load-bearing one: it is what makes BuildPlan
-// refuse a required-effort model under muse rather than launching it and
-// dropping the configured value. Every muse model the source registers is
-// effort-none today, so the refusal is a bound on the FUTURE — a model row
-// added with a required effort must fail to launch here rather than run at
-// whatever the harness picks.
+// GrammarNone is now the load-bearing one, and the note that used to sit on
+// EffortTransportNone moved with the behaviour rather than being deleted:
+// declaring no composition grammar is what makes BuildPlan refuse a composed
+// launch outright instead of splicing a prefix this system cannot honour.
+//
+// The effort transport is ARGV as of muse-spark-1.3-contributor, and the bound
+// it used to state has inverted rather than disappeared. EffortTransportNone
+// was a bound on the FUTURE — "a model row added with a required effort must
+// fail to launch here" — written when every muse row was effort-none. That row
+// now exists, so declaring None would refuse the runtime's own current model.
+// What the argv declaration must not become is a claim that is not carried
+// through: `EffortTransport.CanCarry` admits a required-effort model on this
+// value alone, so a plugin that declared argv and never emitted the flag would
+// launch at the harness default with the operator's configured word reaching
+// nothing — the precise wrong-cost launch EffortTransport exists to close.
+// TestTheArgvTransportIsActuallyCarried holds the two halves together.
 func (*System) Capabilities() agentic.Capabilities {
 	return agentic.Capabilities{
 		LaunchModes: []agentic.LaunchMode{
 			agentic.LaunchModeExec,
 			agentic.LaunchModeDryRun,
 		},
-		EffortTransport:     agentic.EffortTransportNone,
+		EffortTransport:     agentic.EffortTransportArgv,
 		SupportsGoal:        false,
 		SupportsBudget:      false,
 		SupportsServiceTier: false,

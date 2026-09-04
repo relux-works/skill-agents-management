@@ -1,5 +1,5 @@
 {
-  "model_count": 44,
+  "model_count": 45,
   "models": [
     {
       "agentic_systems": [
@@ -585,31 +585,55 @@
         "muse"
       ],
       "broker": "",
-      "description": "Muse Spark contributor model",
-      "id": "muse-spark-1.2-contributor",
+      "description": "Muse Spark 1.3 contributor model",
+      "id": "muse-spark-1.3-contributor",
       "lifecycle": "ModelLifecycleCurrent",
       "policy_rank": 10,
-      "reasoning": "ReasoningNone",
+      "reasoning": "ReasoningRequired",
       "recommended": true,
-      "recommended_effort": "",
+      "recommended_effort": "high",
       "runtime": "muse",
       "superseded_by": "",
-      "supported_efforts": []
+      "supported_efforts": [
+        "high",
+        "xhigh",
+        "max"
+      ]
     },
     {
       "agentic_systems": [
         "muse"
       ],
       "broker": "",
-      "description": "Muse Spark contributor model (alias)",
+      "description": "Muse Spark contributor model (alias of muse-spark-1.3-contributor)",
       "id": "muse-spark",
       "lifecycle": "ModelLifecycleCurrent",
+      "policy_rank": 10,
+      "reasoning": "ReasoningRequired",
+      "recommended": false,
+      "recommended_effort": "high",
+      "runtime": "muse",
+      "superseded_by": "",
+      "supported_efforts": [
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "agentic_systems": [
+        "muse"
+      ],
+      "broker": "",
+      "description": "Previous-generation Muse Spark contributor model, superseded by muse-spark-1.3-contributor",
+      "id": "muse-spark-1.2-contributor",
+      "lifecycle": "ModelLifecycleLegacy",
       "policy_rank": 10,
       "reasoning": "ReasoningNone",
       "recommended": false,
       "recommended_effort": "",
       "runtime": "muse",
-      "superseded_by": "",
+      "superseded_by": "muse-spark-1.3-contributor",
       "supported_efforts": []
     },
     {

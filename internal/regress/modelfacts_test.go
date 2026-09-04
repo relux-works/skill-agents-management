@@ -18,7 +18,7 @@ import (
 //   - ROWS GOING MISSING. The rows now live in TWO homes — four vendor plugins
 //     and one vendor-unresolved runtime declaration — and the second home is
 //     the one with no plugin behind it. A check that walked only the registered
-//     vendors would report green on 42 of 44 rows forever.
+//     vendors would report green on 42 of 45 rows forever.
 //   - PRESENTATION DECIDING ADMISSION. Every one of the new fields is display
 //     and migration evidence. The day one of them reaches an admitted-pair
 //     digest, a truthful correction to a price or a lifecycle silently changes
@@ -36,7 +36,7 @@ import (
 // on purpose. A row added to a vendor without its counterpart leaving the board
 // is a divergence between two repositories, and it must not be absorbable by a
 // test that counts whatever it finds.
-const boardModelCount = 44
+const boardModelCount = 45
 
 // carriedRows collects every model row this binary carries, from both homes,
 // and reports which home each came from.
@@ -111,7 +111,7 @@ func TestTheSourceTiesAreStillVisibleInTheCarriedRows(t *testing.T) {
 	// owns, and the alias pair nobody owns.
 	for _, tie := range [][2]vendorplugin.ModelID{
 		{"claude-haiku-4-5", "claude-haiku-4-5-20251001"},
-		{"muse-spark-1.2-contributor", "muse-spark"},
+		{"muse-spark-1.3-contributor", "muse-spark"},
 	} {
 		left, known := scoreOf(tie[0])
 		if !known {

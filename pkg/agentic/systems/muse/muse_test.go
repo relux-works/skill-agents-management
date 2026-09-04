@@ -30,8 +30,8 @@ func TestTheDeclarationIsWhatTheSourceRegistered(t *testing.T) {
 	if caps.SupportsMode(agentic.LaunchModeManagedSession) {
 		t.Error("muse declares a managed-session surface the source has no builder for and the goldens do not cover")
 	}
-	if caps.EffortTransport != agentic.EffortTransportNone {
-		t.Errorf("effort transport is %s, want none; buildMuseArgs never references the effort", caps.EffortTransport)
+	if caps.EffortTransport != agentic.EffortTransportArgv {
+		t.Errorf("effort transport is %s, want argv; muse-spark-1.3-contributor declares a required effort axis and Args spells `--reasoning-effort`", caps.EffortTransport)
 	}
 	if caps.SupportsGoal || caps.SupportsBudget || caps.SupportsServiceTier {
 		t.Errorf("muse's adapter row declares goal/budget/service-tier all false; got %v/%v/%v", caps.SupportsGoal, caps.SupportsBudget, caps.SupportsServiceTier)
@@ -92,43 +92,136 @@ func TestNothingAboutTheVendorReachesThisPlugin(t *testing.T) {
 	}
 }
 
-// TestARequiredEffortModelIsRefused is the gate EffortTransportNone exists for.
+// TestARequiredEffortModelLaunchesAndCarriesItsWord is the positive half of the
+// argv declaration, driven through the real BuildPlan.
 //
-// Every muse model the source registers is effort-none today, so this is a
-// bound on the FUTURE: a model row added with a required effort must fail to
-// launch here rather than run at whatever the harness picks while the
-// operator's configured value reaches nothing.
-func TestARequiredEffortModelIsRefused(t *testing.T) {
+// It replaces the refusal this file used to assert. That refusal was correct
+// while every muse row was effort-none and is now wrong: the current
+// contributor row requires an effort, so refusing one here would refuse the
+// runtime's own current model.
+func TestARequiredEffortModelLaunchesAndCarriesItsWord(t *testing.T) {
+	t.Parallel()
+	req := launchRequest(t, "assignment")
+	req.Model.Effort = agentic.EffortSupportRequired
+	req.Effort = "xhigh"
+	plan, err := paritycase.TryBuildPlan(New(), req, agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("a required-effort muse model was refused: %v", err)
+	}
+	if !argvCarriesPair(plan.Argv, "--reasoning-effort", "xhigh") {
+		t.Errorf("the configured effort did not reach argv: %v", plan.Argv)
+	}
+}
+
+// TestTheArgvTransportIsActuallyCarried is the gate that makes the declaration
+// mean something, and it is the one this change most needed.
+//
+// `EffortTransport: Argv` is the WHOLE of what admits a required-effort model
+// through BuildPlan: CanCarry reads the declaration and nothing else. So a
+// plugin that declared argv and never emitted the flag would be admitted,
+// launched, and run at the harness default — the operator's configured word
+// reaching nothing, which is the exact wrong-cost launch EffortTransport was
+// introduced to close and which no golden covers.
+//
+// The mutant is the plausible one: the declaration flipped to argv without
+// args.go being touched. It must fail, and it must fail for the effort, which
+// is why the assertion names the flag rather than counting arguments.
+func TestTheArgvTransportIsActuallyCarried(t *testing.T) {
 	t.Parallel()
 	req := launchRequest(t, "assignment")
 	req.Model.Effort = agentic.EffortSupportRequired
 	req.Effort = "high"
-	_, err := paritycase.TryBuildPlan(New(), req, agentic.LaunchModeExec)
-	if !errors.Is(err, agentic.ErrEffortNotTransportable) {
-		t.Errorf("a required-effort model under muse was admitted (err=%v)", err)
+
+	clean, err := paritycase.TryBuildPlan(New(), req, agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("the unmutated launch was refused, so this mutant proves nothing: %v", err)
 	}
+	if !argvCarriesPair(clean.Argv, "--reasoning-effort", "high") {
+		t.Fatalf("the shipped plugin does not emit the effort pair at all: %v", clean.Argv)
+	}
+
+	mutant, err := paritycase.TryBuildPlan(declaredButUncarriedEffortSystem{System: New()}, req, agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildPlan refused the mutant for some other reason (%v); this test needs it ADMITTED to show the drop", err)
+	}
+	if argvCarriesPair(mutant.Argv, "--reasoning-effort", "high") {
+		t.Fatal("the mutant still emits the effort pair; it is not the defect this test describes")
+	}
+	// This is the finding, stated positively: BuildPlan admits the mutant.
+	// Nothing in the contract layer can catch a transport that is declared and
+	// not carried, so the bound has to live here.
+	t.Logf("BuildPlan admitted a plugin declaring argv transport and emitting no effort flag; argv was %v", mutant.Argv)
 }
 
-// TestAnEffortValueAloneIsRefused is the narrower half: even a model that
-// requires nothing must not carry an effort under a transport that cannot
-// deliver it.
-func TestAnEffortValueAloneIsRefused(t *testing.T) {
+// declaredButUncarriedEffortSystem is the muse plugin with the declaration it
+// ships and an Args that forgot the flag.
+type declaredButUncarriedEffortSystem struct{ agentic.System }
+
+func (m declaredButUncarriedEffortSystem) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	stripped := req
+	stripped.Effort = ""
+	return m.System.Argv(stripped, mode)
+}
+
+// TestAnEffortValueIsRefusedForAModelThatDeclaresNoAxis is the narrowing that
+// keeps the argv transport from becoming a licence to carry anything.
+//
+// muse-spark-1.2-contributor is still effort-none, and BuildPlan's second
+// effort check — an explicit word under a model with no axis — is the one that
+// has to hold now that the transport is no longer none. It is a vendor-layer
+// refusal (vendorplugin.resolveEffort) rather than a contract-layer one, so it
+// is asserted where it actually fires: see
+// TestTheMuseEffortGateRefusesWhatItMustReject in pkg/vendorplugin.
+func TestAnEffortValueIsRefusedForAModelThatDeclaresNoAxis(t *testing.T) {
 	t.Parallel()
 	req := launchRequest(t, "assignment")
 	req.Effort = "high"
-	_, err := paritycase.TryBuildPlan(New(), req, agentic.LaunchModeExec)
-	if !errors.Is(err, agentic.ErrEffortNotTransportable) {
-		t.Errorf("an effort value under muse was admitted (err=%v); it would have been dropped silently", err)
+	plan, err := paritycase.TryBuildPlan(New(), req, agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildPlan refused an argv-transport launch carrying an effort: %v", err)
+	}
+	// The contract layer admits it, and that is the honest report: BuildPlan
+	// asks "is this launch expressible", and under an argv transport it is.
+	// Whether THIS model may carry a word is the vendor layer's question.
+	if !argvCarriesPair(plan.Argv, "--reasoning-effort", "high") {
+		t.Errorf("the effort was admitted and then dropped, which is the one outcome neither layer may produce: %v", plan.Argv)
 	}
 }
 
-// TestAnEffortlessModelLaunches is the reachability half of the two refusals
-// above.
+// TestAnEffortlessLaunchEmitsNoEffortFlag is the conditional's other side: a
+// request carrying no effort must produce no flag naming nothing.
+func TestAnEffortlessLaunchEmitsNoEffortFlag(t *testing.T) {
+	t.Parallel()
+	plan, err := paritycase.TryBuildPlan(New(), launchRequest(t, "assignment"), agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("an ordinary muse launch was refused: %v", err)
+	}
+	for _, arg := range plan.Argv {
+		if arg == "--reasoning-effort" {
+			t.Errorf("a launch carrying no effort emitted the flag: %v", plan.Argv)
+		}
+	}
+}
+
+// TestAnEffortlessModelLaunches is the reachability half of the refusals in
+// this file.
 func TestAnEffortlessModelLaunches(t *testing.T) {
 	t.Parallel()
 	if _, err := paritycase.TryBuildPlan(New(), launchRequest(t, "assignment"), agentic.LaunchModeExec); err != nil {
 		t.Errorf("an ordinary muse launch was refused: %v", err)
 	}
+}
+
+// argvCarriesPair reports whether argv holds flag immediately followed by
+// value. Position matters: a flag whose value landed elsewhere is a different
+// launch, and a `strings.Contains` over the joined argv could not tell.
+func argvCarriesPair(argv []string, flag, value string) bool {
+	for i := 1; i < len(argv); i++ {
+		if argv[i-1] == flag && argv[i] == value {
+			return true
+		}
+	}
+	return false
 }
 
 // TestTheUnsupportedParametersAreRefusedRatherThanDropped covers the other

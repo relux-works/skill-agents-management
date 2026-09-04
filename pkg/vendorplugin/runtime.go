@@ -361,7 +361,7 @@ const boardRegistry = "skill-project-management tools/board-cli/internal/spawn/m
 // # Why it is here and not in a vendor plugin
 //
 // Because no vendor owns it. The frozen runtimeid table records muse's broker
-// as looked-for and never established, and the board that declares the same two
+// as looked-for and never established, and the board that declares the same
 // rows says the same thing in its own words: they are "the only ones that may
 // declare their own effort axis", because there is no plugin to read one from.
 // This module's carrying of that finding is VendorUnresolved, and the rows sit
@@ -384,41 +384,94 @@ const boardRegistry = "skill-project-management tools/board-cli/internal/spawn/m
 //
 // # The tie
 //
-// Both rows score 10 and that is not a transcription accident: muse-spark is an
-// ALIAS of muse-spark-1.2-contributor, so they are the same model reached by two
-// names and no observation could separate them. The score says so; the
-// presentation position that Lineup derives is declaration order and carries no
-// claim, which is what RankedModel.Tied reports.
+// All three rows score 10 and that is not a transcription accident: muse-spark
+// is an ALIAS of muse-spark-1.3-contributor, so those two are the same model
+// reached by two names and no observation could separate them. The legacy 1.2
+// row keeps the 10 it was ported with for the reason claude-fable-5 kept its
+// 80 — a demotion is a LIFECYCLE change, not a capability correction, and
+// re-scoring it here would assert a capability observation nobody made. The
+// score says all of that; the presentation position that Lineup derives is
+// declaration order and carries no claim, which is what RankedModel.Tied
+// reports.
+//
+// # The 1.3 effort axis, and the one place it outruns the installed CLI
+//
+// muse-spark-1.3-contributor and its alias declare EffortSupportRequired over
+// high/xhigh/max, recommending high. That vocabulary is the MODEL's, from the
+// Muse Spark 1.3 API, and this package owns the model half of the effort
+// contract by design (see EffortDeclaration).
+//
+// The installed harness is behind it, and saying so here is the point.
+// `muse 1.0.2` (1.0.2-R2040.1) documents `--reasoning-effort <EFFORT>` as
+// none|minimal|low|medium|high|xhigh|ultra, default high: it has `xhigh` but no
+// `max`. So a launch configured at `max` is admitted by this declaration, is
+// transported verbatim by the muse system plugin, and is REFUSED harness-side
+// by that CLI until it ships the word. That is deliberate and it is the honest
+// shape: `max` is API truth, the transport is a pass-through by invariant 4 of
+// docs/architecture.md, and a plugin that enumerated the CLI's vocabulary to
+// pre-refuse it would be putting a harness build number in the layer that must
+// not hold one — and would silently keep refusing after the CLI catches up.
+// Narrowing the MODEL's vocabulary to what 1.0.2 accepts would be the same
+// mistake stated in this file instead.
 func museModels() []Model {
 	source := RankEvidence{
 		Source:      boardRegistry,
-		Observation: "both muse rows carry PolicyRank 10, the only score the table gives this runtime, and the pair is a contributor model and its alias",
+		Observation: "every muse row carries PolicyRank 10, the only score the table gives this runtime, and the set is a contributor model, its alias and the contributor release it superseded",
 	}
 	alias := RankEvidence{
-		Source:      "the two rows' own ids and the board's descriptions of them",
-		Observation: "muse-spark is recorded as an alias of muse-spark-1.2-contributor rather than as a second model, so the equal scores are an identity rather than a judgement nobody could defend",
+		Source:      "the rows' own ids and the board's descriptions of them",
+		Observation: "muse-spark is recorded as an alias of muse-spark-1.3-contributor rather than as a second model, so the equal scores are an identity rather than a judgement nobody could defend",
 	}
-	// 1_048_576 is the board's own figure for both rows, the same 1M-token
+	// 1_048_576 is the board's own figure for every muse row, the same 1M-token
 	// window its google rows carry. It is transcribed, not derived from a
 	// vendor page: no vendor was ever established for this runtime, so there
 	// is no page to derive it from.
 	const contextWindow = 1_048_576
+	// The 1.3 axis, declared once and shared by the versioned row and its
+	// alias: they are one model reached by two names, so a second literal here
+	// would be a second place for the vocabulary to drift.
+	//
+	// `max` is in this vocabulary and is NOT in installed muse 1.0.2's
+	// `--reasoning-effort` set (none|minimal|low|medium|high|xhigh|ultra). See
+	// this function's doc comment: the word is API truth, it passes through the
+	// system plugin verbatim, and the refusal it earns today is the harness's.
+	spark13Effort := func() EffortDeclaration {
+		return EffortDeclaration{
+			Support:     agentic.EffortSupportRequired,
+			Vocabulary:  []string{"high", "xhigh", "max"},
+			Recommended: "high",
+		}
+	}
 	return []Model{
 		{
-			ID:                  "muse-spark-1.2-contributor",
-			Description:         "The Muse Spark contributor harness: a local-first runtime whose broker this module has looked for and never established; pick it only where that unresolved binding is acceptable",
+			ID:                  "muse-spark-1.3-contributor",
+			Description:         "The Muse Spark 1.3 contributor harness: a local-first runtime whose broker this module has looked for and never established; pick it only where that unresolved binding is acceptable",
 			Rank:                CapabilityRank{Score: 10, Basis: []RankEvidence{source, alias}},
 			Lifecycle:           LifecycleCurrent,
-			Effort:              EffortDeclaration{Support: agentic.EffortSupportNone},
+			Effort:              spark13Effort(),
 			Recommended:         true,
 			ContextWindowTokens: contextWindow,
 			Systems:             []agentic.SystemID{"muse"},
 		},
 		{
 			ID:                  "muse-spark",
-			Description:         "The short alias of muse-spark-1.2-contributor, for an invocation that spells the runtime's model without its version",
+			Description:         "The short alias of muse-spark-1.3-contributor, for an invocation that spells the runtime's model without its version",
 			Rank:                CapabilityRank{Score: 10, Basis: []RankEvidence{source, alias}},
 			Lifecycle:           LifecycleCurrent,
+			Effort:              spark13Effort(),
+			ContextWindowTokens: contextWindow,
+			Systems:             []agentic.SystemID{"muse"},
+		},
+		{
+			ID:           "muse-spark-1.2-contributor",
+			Description:  "Previous-generation Muse Spark contributor harness, for a run pinned to it; prefer muse-spark-1.3-contributor for new work",
+			Rank:         CapabilityRank{Score: 10, Basis: []RankEvidence{source, alias}},
+			Lifecycle:    LifecycleLegacy,
+			SupersededBy: "muse-spark-1.3-contributor",
+			// EffortSupportNone, kept exactly as ported. 1.2 has no
+			// reasoning-effort axis and gaining one retroactively because its
+			// successor has one would be inventing a capability for a
+			// deprecated build nobody measured.
 			Effort:              EffortDeclaration{Support: agentic.EffortSupportNone},
 			ContextWindowTokens: contextWindow,
 			Systems:             []agentic.SystemID{"muse"},

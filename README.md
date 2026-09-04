@@ -262,6 +262,23 @@ plugin id and runtime id are the same spelling.
   records muse's broker as unknown; that is Layer-2's business, settled there,
   and a test holds the declaration to carrying no opinion about it.
 - The environment filter is EMPTY, with the same bound gemini's has.
+- **The effort transport is ARGV** (`--reasoning-effort`), and it is the one
+  capability row that is no longer the extraction source's. The source declared
+  `EffortTransportNone` because every muse model was effort-none;
+  `muse-spark-1.3-contributor` is not, so declaring none would refuse the
+  runtime's own current model. The word is transported VERBATIM: the model's
+  vocabulary is `high`/`xhigh`/`max` and installed `muse 1.0.2` documents
+  `none|minimal|low|medium|high|xhigh|ultra`, so `max` is a word this plugin
+  passes through and that CLI refuses — a harness-side refusal until muse ships
+  it, and deliberately not pre-empted here, because a plugin enumerating the
+  CLI's set would keep refusing afterwards.
+- **No golden covers the effort run.** muse carried no effort when the source's
+  harness captured, and a hand-written fixture claiming that provenance would be
+  a forged capture. The parity evidence is instead the SHIPPED `muse/exec` and
+  `muse/dry-run` goldens extended in memory by exactly the two-argument
+  insertion, bounded both ways: the effort plan must match the extended golden
+  and must NOT match the unextended one, and a mutant that emits the same pair
+  at the end of argv must fail.
 
 ### The agy plugin: `pkg/agentic/systems/agy`
 
@@ -484,10 +501,10 @@ run from meaning "the rule never matched anything".
 
 ### The vendor plugins: `pkg/vendorplugin/vendors/{anthropic,openai,alibaba,google}`
 
-All 44 rows of the extraction source's model registry, carried across. 42 land
-in the four vendors; the two `muse` rows belong to no vendor, because the source
-records that runtime's broker as checked-and-never-established, and the port
-accounts for them explicitly rather than dropping them.
+All 45 rows of the extraction source's model registry, carried across. 42 land
+in the four vendors; the three `muse` rows belong to no vendor, because the
+source records that runtime's broker as checked-and-never-established, and the
+port accounts for them explicitly rather than dropping them.
 
 - **Ported verbatim**: model ids, the agentic systems each row declares, the
   per-model effort vocabularies and the recommended efforts. A full-set pin
@@ -504,13 +521,16 @@ accounts for them explicitly rather than dropping them.
   what-is-this-model-best-for field and the contract refuses a blank one, so
   these were written for this repository — marked as such in every binding file,
   with a test that fails if the note is removed.
-- **The two `muse` rows** live on the vendor-unresolved runtime declaration
+- **The three `muse` rows** live on the vendor-unresolved runtime declaration
   rather than in a vendor plugin, because no vendor owns them. "No plugin owns
   this model" is not evidence that the model has no lifecycle, no context window
   and no effort axis, so the unresolved declaration carries the rows and
   `Validate` holds them to exactly the standard a registered vendor's rows are
   held to. A resolved runtime declaring model rows is REFUSED — that would be
-  the second table.
+  the second table. Since `muse-spark-1.3-contributor` the effort axis is no
+  longer hypothetical: that row and its `muse-spark` alias declare
+  `high`/`xhigh`/`max` with `high` recommended, and `muse-spark-1.2-contributor`
+  stays effort-none as a legacy row superseded by 1.3.
 - `alibaba` is the architecture's own argument: five rows under the `qwen-code`
   harness and one under `codex`. A cross-runtime pair is one vendor declaring
   one more system, and a test builds a real launch through it.

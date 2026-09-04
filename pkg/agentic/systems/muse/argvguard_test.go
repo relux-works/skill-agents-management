@@ -33,10 +33,16 @@ import (
 // "--yolo" is muse's alone: qwen spells the VALUE "yolo" as the argument to
 // --approval-mode, which is a different literal, and exact matching keeps the
 // two apart.
+//
+// "--reasoning-effort" passes the same test and is muse's alone for the same
+// reason exact matching gives: codex carries effort as the config override
+// `model_reasoning_effort="..."`, claude as `--effort` and qwen inside a
+// stream-json control request. None of those is this string.
 var museArgvSignature = []string{
 	"--yolo",
 	"--workspace",
 	"--prompt-file",
+	"--reasoning-effort",
 }
 
 const museArgsFile = "pkg/agentic/systems/muse/args.go"
@@ -189,6 +195,13 @@ func namePrompt(path string) []string { return []string{"--prompt-file", path} }
 			because: "--yolo decides whether the child stops to ask a human; a second site setting it is a second answer to that question",
 			source: `package other
 func skipApproval() []string { return []string{"--yolo"} }`,
+		},
+		{
+			name:    "the effort pair rebuilt elsewhere",
+			wantFn:  "effortPair",
+			because: "--reasoning-effort decides what the run COSTS; a second site spelling it is a second answer to that, and the one that loses is the operator's",
+			source: `package other
+func effortPair(word string) []string { return []string{"--reasoning-effort", word} }`,
 		},
 		{
 			name:    "the literal behind a package-level const",

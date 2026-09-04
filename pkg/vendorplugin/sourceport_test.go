@@ -97,11 +97,13 @@ type sourceAdmission struct {
 // It is a second, hand-written statement of the same number on purpose: a
 // count read only from the fixture would agree with a fixture regenerated
 // against a shrunken source, and the pin would then pass while silently
-// describing a smaller table. Forty-four is the number the source table now
+// describing a smaller table. Forty-five is the number the source table now
 // states, and a regeneration that changes it has to be argued rather than
 // absorbed. It moved from forty-three when the anthropic lineup gained
-// claude-fable-5-1 and kept claude-fable-5 as a legacy row.
-const sourceModelCount = 44
+// claude-fable-5-1 and kept claude-fable-5 as a legacy row, and from
+// forty-four when the muse runtime gained muse-spark-1.3-contributor and kept
+// muse-spark-1.2-contributor as a legacy row.
+const sourceModelCount = 45
 
 // portedVendors are the vendor plugins this story ports, with the number of
 // source rows each one owns. The counts are stated here for the same reason
@@ -118,10 +120,10 @@ var portedVendors = map[vendorplugin.VendorID]int{
 //
 // muse's broker is recorded by the source as checked-and-unknown, and
 // vendorplugin.VendorUnresolved is this module's carrying of that finding.
-// Naming the two rows here rather than letting them fall off the end is the
+// Naming the three rows here rather than letting them fall off the end is the
 // difference between "accounted for" and "dropped": 42 ported rows plus these
-// two is the whole 44, and TestEverySourceRowIsAccountedFor adds it up.
-var unresolvedVendorRows = []string{"muse-spark-1.2-contributor", "muse-spark"}
+// three is the whole 45, and TestEverySourceRowIsAccountedFor adds it up.
+var unresolvedVendorRows = []string{"muse-spark-1.3-contributor", "muse-spark", "muse-spark-1.2-contributor"}
 
 func loadSourceRegistry(t *testing.T) sourceRegistry {
 	t.Helper()

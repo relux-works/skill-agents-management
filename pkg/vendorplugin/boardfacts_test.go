@@ -13,12 +13,12 @@ import (
 // This file is the TRANSITIONAL transcription pin for the board-owned model
 // facts this module took over in v0.2.0: the capability score with its ties,
 // the lineup state, the supersession, the display recommendation, the context
-// window, the billing contract, and the two muse rows' effort axis.
+// window, the billing contract, and the muse rows' effort axis.
 //
 // # Why it exists and when it dies
 //
 // Forty-three rows' worth of numbers moved from one repository to another by
-// hand. A slipped digit in a price, a swapped lifecycle or a dropped tie would
+// hand, and the table has grown since. A slipped digit in a price, a swapped lifecycle or a dropped tie would
 // compile, register, launch and read correctly forever. So every ported value
 // is held against a frozen capture of the board's own table
 // (testdata/board-model-facts.json, captured by
@@ -41,8 +41,8 @@ import (
 // against a DIFFERENT capture, taken from the board's sources before the join
 // existed — see sourceport_test.go.
 //
-// The two muse rows are the exception the board itself names: no vendor owns
-// them, so their effort axis is the board's own declaration and is pinned here.
+// The muse rows are the exception the board itself names: no vendor owns them,
+// so their effort axis is the board's own declaration and is pinned here.
 //
 // Descriptions are not in the fixture at all. This module authors its own and
 // the board's display texts die with its half; a copy of them in testdata would
@@ -192,7 +192,7 @@ func TestTheBoardFixtureAndTheOlderSourceCaptureAgree(t *testing.T) {
 //
 // Reading both is the whole point. The muse rows are the ones with no plugin
 // behind them, so a pin that walked only the registered vendors would leave
-// exactly the unowned rows unchecked while reporting 41 of 43 green.
+// exactly the unowned rows unchecked while reporting 42 of 45 green.
 func portedRows(t *testing.T) map[vendorplugin.ModelID]vendorplugin.Model {
 	t.Helper()
 	rows := map[vendorplugin.ModelID]vendorplugin.Model{}
@@ -380,7 +380,7 @@ func comparePricing(id string, got *vendorplugin.Pricing, want *boardPricing) []
 	return problems
 }
 
-// TestEveryBoardFactIsPorted is the pin itself, over all forty-three rows.
+// TestEveryBoardFactIsPorted is the pin itself, over every row of the table.
 func TestEveryBoardFactIsPorted(t *testing.T) {
 	fixture := loadBoardFacts(t)
 	if len(fixture.Models) != sourceModelCount {
@@ -524,13 +524,55 @@ func TestTheBoardFactsPinFiresOnEveryPortedField(t *testing.T) {
 		{
 			name: "a vendor-unresolved row's effort axis appearing",
 			mutate: func(f *boardFacts) {
-				mutateBoardRow(f, "muse-spark", func(m *boardModel) {
+				mutateBoardRow(f, "muse-spark-1.2-contributor", func(m *boardModel) {
 					m.Joined.Reasoning = "required"
 					m.Joined.SupportedEfforts = []string{"low", "high"}
 					m.Joined.RecommendedEffort = "high"
 				})
 			},
-			expect: `vendor-unresolved model "muse-spark" declares effort support none and the board records "required"`,
+			expect: `vendor-unresolved model "muse-spark-1.2-contributor" declares effort support none and the board records "required"`,
+		},
+		{
+			// The converse, and it is the direction that got dangerous when
+			// muse-spark-1.3-contributor gained a required axis. An axis
+			// silently DISAPPEARING is what a fixture regenerated against a
+			// board that had not shipped 1.3 yet would look like, and the row
+			// would then launch at the harness default with nobody's
+			// configured word reaching it.
+			name: "a vendor-unresolved row's effort axis disappearing",
+			mutate: func(f *boardFacts) {
+				mutateBoardRow(f, "muse-spark-1.3-contributor", func(m *boardModel) {
+					m.Joined.Reasoning = "none"
+					m.Joined.SupportedEfforts = nil
+					m.Joined.RecommendedEffort = ""
+				})
+			},
+			expect: `vendor-unresolved model "muse-spark-1.3-contributor" declares effort support required and the board records "none"`,
+		},
+		{
+			// Presence is not the same fact as CONTENT. A vocabulary narrowed
+			// to what the installed muse 1.0.2 CLI accepts — dropping `max`,
+			// which that build has no word for — is the most plausible edit
+			// anyone will make to this row, and it is a MODEL fact being
+			// rewritten to match a harness build number.
+			name: "a vendor-unresolved row's vocabulary narrowed to the installed CLI",
+			mutate: func(f *boardFacts) {
+				mutateBoardRow(f, "muse-spark-1.3-contributor", func(m *boardModel) {
+					m.Joined.SupportedEfforts = []string{"high", "xhigh"}
+				})
+			},
+			expect: `vendor-unresolved model "muse-spark-1.3-contributor" accepts [high xhigh max] and the board accepts [high xhigh]`,
+		},
+		{
+			// The alias and its identity must not drift apart: they are one
+			// model reached by two names, so a recommendation moved on one
+			// side alone is a launch that costs differently depending on how
+			// it was spelled.
+			name: "the alias's recommended effort moved off its identity",
+			mutate: func(f *boardFacts) {
+				mutateBoardRow(f, "muse-spark", func(m *boardModel) { m.Joined.RecommendedEffort = "max" })
+			},
+			expect: `vendor-unresolved model "muse-spark" recommends "high" and the board recommends "max"`,
 		},
 		{
 			name: "a board row this module would then not cover",

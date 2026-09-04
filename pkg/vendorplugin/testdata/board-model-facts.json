@@ -1,5 +1,5 @@
 {
-  "model_count": 44,
+  "model_count": 45,
   "models": [
     {
       "context_window_tokens": 0,
@@ -903,15 +903,19 @@
     },
     {
       "context_window_tokens": 1048576,
-      "id": "muse-spark-1.2-contributor",
+      "id": "muse-spark-1.3-contributor",
       "joined_from_vendor_module": {
         "agentic_systems": [
           "muse"
         ],
         "broker": "",
-        "reasoning": "none",
-        "recommended_effort": "",
-        "supported_efforts": []
+        "reasoning": "required",
+        "recommended_effort": "high",
+        "supported_efforts": [
+          "high",
+          "xhigh",
+          "max"
+        ]
       },
       "lifecycle": "current",
       "policy_rank": 10,
@@ -928,9 +932,13 @@
           "muse"
         ],
         "broker": "",
-        "reasoning": "none",
-        "recommended_effort": "",
-        "supported_efforts": []
+        "reasoning": "required",
+        "recommended_effort": "high",
+        "supported_efforts": [
+          "high",
+          "xhigh",
+          "max"
+        ]
       },
       "lifecycle": "current",
       "policy_rank": 10,
@@ -938,6 +946,25 @@
       "recommended": false,
       "runtime": "muse",
       "superseded_by": ""
+    },
+    {
+      "context_window_tokens": 1048576,
+      "id": "muse-spark-1.2-contributor",
+      "joined_from_vendor_module": {
+        "agentic_systems": [
+          "muse"
+        ],
+        "broker": "",
+        "reasoning": "none",
+        "recommended_effort": "",
+        "supported_efforts": []
+      },
+      "lifecycle": "legacy",
+      "policy_rank": 10,
+      "pricing": null,
+      "recommended": false,
+      "runtime": "muse",
+      "superseded_by": "muse-spark-1.3-contributor"
     },
     {
       "context_window_tokens": 1048576,

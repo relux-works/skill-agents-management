@@ -319,3 +319,183 @@ func (m noRunIDSystem) ChildEnv(parent []string, req agentic.LaunchRequest) ([]s
 	}
 	return agentic.SetEnvValue(env, agentic.EnvRunID, ""), nil
 }
+
+// THE EFFORT RUN, AND WHY IT IS A DERIVED GOLDEN RATHER THAN A CAPTURED ONE.
+//
+// muse carried no reasoning effort when the source's harness ran, so neither
+// muse fixture records an effort pair and no captured golden covers this
+// surface at all. testdata/goldens/README.md is explicit about what that
+// absence permits: a port touching a surface with no golden "must not read the
+// absence as permission", and it must find other evidence.
+//
+// Hand-writing a `muse_exec-effort.json` would not be that evidence. Every
+// fixture carries `capture.source_repo`, `source_commit`, `source_harness` and
+// `captured_by`, and a file claiming that provenance for bytes this repository
+// invented is a forged capture — the exact thing the README says makes a golden
+// "a number somebody once believed". TestWriteGoldensFromCapture would also
+// delete it on the next regeneration, silently.
+//
+// So the evidence here is the SHIPPED golden, extended in memory by exactly the
+// insertion this change claims to make, and the claim is stated as a bound in
+// both directions:
+//
+//   - the effort-carrying plan matches muse/exec with the pair inserted after
+//     the model and NOTHING else changed — same binary, same environment diff,
+//     same stdin "none", same --workspace/--prompt-file grammar;
+//   - the same plan does NOT match muse/exec unextended, so the extension is
+//     load-bearing rather than a derivation that would admit anything.
+//
+// Mutating a loaded golden in place is the pattern this package already uses:
+// parity_negatives_test.go narrows Capture.ParentEnv the same way.
+
+// parityEffort is the word these cases carry. It is in
+// muse-spark-1.3-contributor's vocabulary and is NOT the model's recommended
+// value, so a plugin that substituted the recommendation for the operator's
+// choice would differ here.
+const parityEffort = "xhigh"
+
+// withEffortPair returns the golden with `--reasoning-effort <word>` inserted
+// immediately after the `--model <id>` pair, and fails if the fixture does not
+// hold that pair — a derivation that silently found nothing to extend would
+// compare a plan against an unchanged golden and call the result a pass.
+func withEffortPair(t *testing.T, g parity.Golden, word string) parity.Golden {
+	t.Helper()
+	args := g.Surface.Args
+	at := -1
+	for i := 1; i < len(args); i++ {
+		if args[i-1] == "--model" && args[i] == parityModel {
+			at = i + 1
+		}
+	}
+	if at < 0 {
+		t.Fatalf("%s does not carry the pair `--model %s`, so there is nothing to extend: %v", g.ID, parityModel, args)
+	}
+	extended := make([]string, 0, len(args)+2)
+	extended = append(extended, args[:at]...)
+	extended = append(extended, "--reasoning-effort", word)
+	extended = append(extended, args[at:]...)
+	g.Surface.Args = extended
+	return g
+}
+
+// withEffort is the parity request an effort-carrying launch makes: the case's
+// own request, and the two fields a required-effort model adds.
+func withEffort(req agentic.LaunchRequest, word string) agentic.LaunchRequest {
+	req.Model.Effort = agentic.EffortSupportRequired
+	req.Effort = word
+	return req
+}
+
+// TestAnEffortRunMatchesTheGoldenExtendedByExactlyTheEffortPair is the
+// acceptance for the new transport, on both modes the fixtures cover.
+func TestAnEffortRunMatchesTheGoldenExtendedByExactlyTheEffortPair(t *testing.T) {
+	for _, c := range parityCases {
+		t.Run(c.goldenID, func(t *testing.T) {
+			g, dirs, req := prepareParityCase(t, c)
+
+			// The unextended fixture must still describe the effortless launch,
+			// or the extension below is being compared against a baseline that
+			// was already wrong.
+			clean := paritycase.BuildPlan(t, New(), req, c.mode)
+			if diffs := parity.ComparePlan(g, clean, dirs.Substitutions()); len(diffs) != 0 {
+				t.Fatalf("the effortless plan already differs from %s, so the effort case proves nothing: %v", c.goldenID, diffs)
+			}
+
+			plan := paritycase.BuildPlan(t, New(), withEffort(req, parityEffort), c.mode)
+			if diffs := parity.ComparePlan(withEffortPair(t, g, parityEffort), plan, dirs.Substitutions()); len(diffs) != 0 {
+				for _, d := range diffs {
+					t.Errorf("the effort run differs from %s extended by the effort pair:\n  %s", c.goldenID, d)
+				}
+			}
+		})
+	}
+}
+
+// TestTheEffortRunDiffersFromTheUnextendedGolden is what makes the test above
+// mean something.
+//
+// A derivation is only evidence if the thing it derives is required. If the
+// effort-carrying plan also matched the SHIPPED fixture, then either the plugin
+// drops the effort or ComparePlan does not look at argv — and the acceptance
+// above would be green in both cases.
+func TestTheEffortRunDiffersFromTheUnextendedGolden(t *testing.T) {
+	for _, c := range parityCases {
+		t.Run(c.goldenID, func(t *testing.T) {
+			g, dirs, req := prepareParityCase(t, c)
+			plan := paritycase.BuildPlan(t, New(), withEffort(req, parityEffort), c.mode)
+			diffs := parity.ComparePlan(g, plan, dirs.Substitutions())
+			if len(diffs) == 0 {
+				t.Fatalf("an effort-carrying plan byte-matched %s, which records no effort; the configured word reached nothing", c.goldenID)
+			}
+			if !paritycase.NamesField(diffs, "Args") {
+				t.Errorf("the effort is an argv fact but the harness reported %v", diffs)
+			}
+		})
+	}
+}
+
+// TestAMisplacedEffortPairFailsTheExtendedGolden narrows the extension onto
+// POSITION, not presence.
+//
+// muse's grammar puts the effort with the model it qualifies. A plan that
+// emitted the same two arguments after `--prompt-file` carries an identical
+// argv MULTISET and an identical length, so an unordered or counted comparison
+// would admit it — and this is the fixture saying it does not.
+func TestAMisplacedEffortPairFailsTheExtendedGolden(t *testing.T) {
+	const subject = "muse/exec"
+	c := parityCaseFor(t, subject)
+	g, dirs, req := prepareParityCase(t, c)
+	effortReq := withEffort(req, parityEffort)
+	extended := withEffortPair(t, g, parityEffort)
+
+	clean := paritycase.BuildPlan(t, New(), effortReq, c.mode)
+	if diffs := parity.ComparePlan(extended, clean, dirs.Substitutions()); len(diffs) != 0 {
+		t.Fatalf("the correct effort plan already differs, so this mutant proves nothing: %v", diffs)
+	}
+
+	plan := paritycase.BuildPlan(t, trailingEffortSystem{System: New()}, effortReq, c.mode)
+	diffs := parity.ComparePlan(extended, plan, dirs.Substitutions())
+	if len(diffs) == 0 {
+		t.Fatalf("the extended golden admitted an effort pair moved to the end of argv; the comparison is not ordered")
+	}
+	if !paritycase.NamesField(diffs, "Args") {
+		t.Errorf("the defect was planted in Args but the harness reported %v", diffs)
+	}
+}
+
+// TestAnEffortRunStillAttachesNoStdin holds the muse-specific invariant across
+// the new surface: gaining an argv flag must not turn muse into a system that
+// streams anything.
+func TestAnEffortRunStillAttachesNoStdin(t *testing.T) {
+	c := parityCaseFor(t, "muse/exec")
+	_, _, req := prepareParityCase(t, c)
+	payload, err := New().Stdin(withEffort(req, parityEffort))
+	if err != nil {
+		t.Fatalf("Stdin returned an error for a system that reads no stdin: %v", err)
+	}
+	if payload.Attached || len(payload.Bytes) != 0 {
+		t.Errorf("an effort-carrying muse launch attached %d stdin bytes (attached=%v)", len(payload.Bytes), payload.Attached)
+	}
+}
+
+// trailingEffortSystem moves the effort pair to the end of argv, keeping every
+// argument the real plugin emits.
+type trailingEffortSystem struct{ agentic.System }
+
+func (m trailingEffortSystem) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	args, err := m.System.Argv(req, mode)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(args))
+	var moved []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--reasoning-effort" && i+1 < len(args) {
+			moved = append(moved, args[i], args[i+1])
+			i++
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return append(out, moved...), nil
+}

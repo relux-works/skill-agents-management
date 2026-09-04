@@ -582,8 +582,8 @@ func TestSeedingCarriesTheUnresolvedRuntimesRowsThroughTheRegistry(t *testing.T)
 	if declaration.VendorResolved() {
 		t.Fatalf("the muse runtime resolved to vendor %q; its broker was looked for and never established", declaration.Vendor)
 	}
-	if len(declaration.Models) != 2 {
-		t.Fatalf("the muse runtime carries %d model rows through the registry; the board's table gives it two", len(declaration.Models))
+	if len(declaration.Models) != 3 {
+		t.Fatalf("the muse runtime carries %d model rows through the registry; the board's table gives it three", len(declaration.Models))
 	}
 
 	// Deeply copied: a caller writing through one read must not reach the
