@@ -365,6 +365,10 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 		return fmt.Errorf("%w: vendor %s returned a launch for model %q after %q was admitted",
 			ErrVendorContract, runtime.VendorID, launch.Model.ID, model.ID)
 	}
+	if launch.Model.AliasOf != string(model.AliasOf) {
+		return fmt.Errorf("%w: vendor %s returned alias target %q for model %q, which declares %q; the identity a launch resolves to is the registry's, and a vendor that could set it could redirect an admitted launch onto any model at all",
+			ErrVendorContract, runtime.VendorID, launch.Model.AliasOf, model.ID, model.AliasOf)
+	}
 	if launch.Model.Effort != model.Effort.Support {
 		return fmt.Errorf("%w: vendor %s returned effort support %s for model %q, which declares %s",
 			ErrVendorContract, runtime.VendorID, launch.Model.Effort, model.ID, model.Effort.Support)

@@ -147,6 +147,14 @@ var (
 	// ErrModelInvalid is returned when a model row is not a usable
 	// declaration.
 	ErrModelInvalid = errors.New("vendorplugin: model declaration is unusable")
+	// ErrAliasInvalid is returned when a row's AliasOf could not mean what it
+	// says: an unusable or self-referential target, a target no model in the
+	// same lineup declares, a target that is itself an alias, or an alias whose
+	// effort axis or agentic systems do not mirror the identity it launches as.
+	// Every one of them would produce a launch that ran a model the caller did
+	// not name, or ran it under a contract the caller was validated against and
+	// it does not have.
+	ErrAliasInvalid = errors.New("vendorplugin: model alias is unusable")
 	// ErrDescriptionEmpty is returned when a model's usage description is
 	// blank. It is its own error because it is the field an operator reads to
 	// choose between models, and a blank one must fail loudly at registration
@@ -312,6 +320,9 @@ func (r *Registry) Register(vendor Vendor) error {
 		}
 	}
 	if err := checkSupersession(models); err != nil {
+		return fmt.Errorf("vendorplugin: vendor %s: %w", id, err)
+	}
+	if err := checkAliases(models); err != nil {
 		return fmt.Errorf("vendorplugin: vendor %s: %w", id, err)
 	}
 	if err := checkRecommendations(models); err != nil {

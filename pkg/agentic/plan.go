@@ -40,6 +40,12 @@ type Plan struct {
 	WorkDir string
 	Home    string
 
+	// ModelIdentity is what the caller asked for and what the harness was
+	// handed. It is populated for EVERY plan, alias or not, because a consumer
+	// that had to infer "no alias" from an absent field would be inferring it
+	// from a read it cannot distinguish from a field nobody set.
+	ModelIdentity ModelIdentity
+
 	Provenance LaunchProvenance
 
 	// Nodes is empty for the source-compatible single-process plan. A
@@ -48,6 +54,25 @@ type Plan struct {
 	// process and adds a validated, dependency-ordered node graph here.
 	Nodes []PlanNode `json:"nodes,omitempty"`
 }
+
+// ModelIdentity is the pair one plan must keep: the model spelling the caller
+// REQUESTED and the identity the harness was actually LAUNCHED under.
+//
+// They differ exactly when the request carried Model.AliasOf. Both are kept
+// because they answer different questions and a run needs both answered: argv,
+// cost and the provider's own logs are about Launched, while the operator's
+// choice, the board's admission record and every audit line that has to
+// reproduce what a human asked for are about Requested. Collapsing them onto
+// one field would make an alias launch indistinguishable from a launch of the
+// identity, which is the fact an audit is for.
+type ModelIdentity struct {
+	Requested string
+	Launched  string
+}
+
+// IsAlias reports whether the plan substituted an identity for the requested
+// spelling.
+func (m ModelIdentity) IsAlias() bool { return m.Requested != m.Launched }
 
 var (
 	// ErrUnknownSystem is returned when no plugin is registered for the
@@ -151,6 +176,24 @@ func BuildPlan(r *Registry, req LaunchRequest, mode LaunchMode) (Plan, error) {
 		}
 	}
 
+	// ALIAS SUBSTITUTION, and the ONLY place in this module it happens.
+	//
+	// It sits after every contract refusal above and before the first plugin
+	// surface below, and both halves of that position are load-bearing. After,
+	// so a refusal names the spelling the operator typed rather than an
+	// identity they never wrote. Before, so ResolveBinary, Argv, ChildEnv and
+	// Stdin are ALL dispatched under the identity — a substitution applied to
+	// argv alone would leave a system whose environment or binary lookup reads
+	// the model with the alias the backend refuses.
+	//
+	// AliasOf is cleared on the way through. The substitution is then
+	// idempotent by construction and no plugin can resolve it a second time,
+	// which is what keeps "one hop" a property of the code rather than of the
+	// data it happened to be given.
+	identity := ModelIdentity{Requested: strings.TrimSpace(req.Model.ID), Launched: req.Model.LaunchIdentity()}
+	req.Model.ID = identity.Launched
+	req.Model.AliasOf = ""
+
 	binary, err := sys.ResolveBinary(req)
 	if err != nil {
 		return Plan{}, fmt.Errorf("agentic: %s could not resolve its binary: %w", id, err)
@@ -183,13 +226,14 @@ func BuildPlan(r *Registry, req LaunchRequest, mode LaunchMode) (Plan, error) {
 	}
 
 	return Plan{
-		System:  id,
-		Mode:    mode,
-		Binary:  binary,
-		Argv:    argv,
-		Env:     env,
-		Stdin:   stdin,
-		WorkDir: req.WorkDir,
-		Home:    home,
+		System:        id,
+		Mode:          mode,
+		Binary:        binary,
+		Argv:          argv,
+		Env:           env,
+		Stdin:         stdin,
+		WorkDir:       req.WorkDir,
+		Home:          home,
+		ModelIdentity: identity,
 	}, nil
 }

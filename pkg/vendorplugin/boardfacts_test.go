@@ -47,6 +47,15 @@ import (
 // Descriptions are not in the fixture at all. This module authors its own and
 // the board's display texts die with its half; a copy of them in testdata would
 // be an invitation to cite one as a ported fact.
+//
+// Model.AliasOf is not in the fixture either, and for the SAME reason rather
+// than by oversight. The board's table has no alias column: it carried
+// muse-spark as an ordinary row and put that spelling straight into argv, which
+// is the bug the field exists to close. Adding an alias_of key to a capture of
+// the board's own projection would be inventing a source fact — the one thing
+// this file exists to make impossible — so the field is authored here, checked
+// by checkAliases where the rows are registered, and pinned end to end by
+// muse_alias_test.go instead.
 
 const boardFactsFixture = "testdata/board-model-facts.json"
 

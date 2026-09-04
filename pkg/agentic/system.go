@@ -25,6 +25,7 @@ package agentic
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/relux-works/skill-agents-management/internal/ident"
 )
@@ -279,6 +280,37 @@ type StdinPayload struct {
 type Model struct {
 	ID     string
 	Effort EffortSupport
+
+	// AliasOf is the model identity this id STANDS FOR, empty when the id is
+	// already the identity. A launch is admitted, audited and displayed under
+	// the requested spelling and is EXECUTED under the identity: BuildPlan
+	// substitutes it once, before any plugin surface is dispatched, so no
+	// harness is ever handed a name its backend does not answer to.
+	//
+	// The failure it closes was measured, not imagined. skill-project-management
+	// spawned `--model muse-spark --reasoning-effort high`, the alias reached
+	// muse's argv verbatim, and the Meta backend refused the run with "model
+	// muse-spark does not exist or you lack access" while the same launch under
+	// muse-spark-1.3-contributor succeeded end to end.
+	//
+	// This layer never DERIVES an alias — it holds no catalogue to derive one
+	// from. The vendor layer states it (vendorplugin.Model.AliasOf, validated
+	// where the rows are registered) and carries it here through Launchable.
+	// Empty means "no alias was stated", never "look one up".
+	AliasOf string
+}
+
+// LaunchIdentity is the id a harness must be handed for this model: the alias
+// target when one was declared, and the id itself otherwise.
+//
+// It is deliberately NOT a fallback chain. One hop is the whole rule, because
+// the vendor layer refuses an alias whose target is itself an alias — a chain
+// resolved here would be this layer inventing a lookup it has no table for.
+func (m Model) LaunchIdentity() string {
+	if identity := strings.TrimSpace(m.AliasOf); identity != "" {
+		return identity
+	}
+	return strings.TrimSpace(m.ID)
 }
 
 // Goal is the immutable objective snapshot a launch is bound to. Only its

@@ -530,13 +530,49 @@ port accounts for them explicitly rather than dropping them.
   the second table. Since `muse-spark-1.3-contributor` the effort axis is no
   longer hypothetical: that row and its `muse-spark` alias declare
   `high`/`xhigh`/`max` with `high` recommended, and `muse-spark-1.2-contributor`
-  stays effort-none as a legacy row superseded by 1.3.
+  stays effort-none as a legacy row superseded by 1.3. `muse-spark` carries
+  `AliasOf: muse-spark-1.3-contributor`, so it is admitted and audited under its
+  own spelling and EXECUTES under the contributor id — see *Alias identity
+  resolution* below.
 - `alibaba` is the architecture's own argument: five rows under the `qwen-code`
   harness and one under `codex`. A cross-runtime pair is one vendor declaring
   one more system, and a test builds a real launch through it.
 - `google` is one vendor over two harnesses (`gemini-cli` and `antigravity`),
   which is why a rank is comparable within a broker rather than within a
   harness.
+
+### Alias identity resolution
+
+A model row may declare `AliasOf`: the identity it is a short spelling of.
+`muse-spark` is the only one in the module today, and it exists because the
+alias is a name operators, configuration and spawn ceilings use and the
+provider does not have. Measured, not assumed: a spawn of `--model muse-spark
+--reasoning-effort high` put the alias into muse's argv verbatim and the
+backend answered `model muse-spark does not exist or you lack access`, while
+the identical launch spelled `muse-spark-1.3-contributor` ran end to end.
+
+- `agentic.BuildPlan` substitutes the identity ONCE, after every contract
+  refusal and before the first plugin surface, so binary resolution, argv, the
+  child environment and stdin are all built from the identity — a substitution
+  applied to argv alone would still describe a model the provider does not have.
+- `Plan.ModelIdentity` keeps both spellings for every plan. The requested one is
+  what an audit trail, a cost attribution and an operator asking "what did I ask
+  for" need; the launched one is what argv, the provider and its logs carry.
+- The alias stays a real row: ranked, displayed, admitted under its own id, and
+  the effort word a caller supplies is validated against ITS vocabulary.
+  Resolving at admission time instead would silently change which configured
+  pairs a board admits.
+- It is DECLARED, never derived. No prefix, suffix, version, score or
+  description rule resolves a name anywhere in this module; a launch redirected
+  by a spelling rule is a launch nobody authorized.
+- Registration refuses a target the same lineup does not declare, a target that
+  is itself an alias (resolution is one hop), and an alias whose effort axis or
+  agentic systems do not mirror the identity. It deliberately does NOT hold the
+  two rows' rank, lifecycle, context window, pricing, recommendation or
+  description equal — none of those reaches argv or an admitted-pair digest.
+- `checkLaunchFidelity` refuses a vendor plugin that sets or clears `AliasOf` on
+  the way out of `Spawn`: that would let a plugin choose which model actually
+  executes after admission passed on a different one.
 
 ### Admitted-pair digests
 

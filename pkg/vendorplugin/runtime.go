@@ -281,6 +281,9 @@ func (d RuntimeDeclaration) validateModels() error {
 	if err := checkSupersession(d.Models); err != nil {
 		return fmt.Errorf("%w: runtime %q: %w", ErrRuntimeInvalid, d.ID, err)
 	}
+	if err := checkAliases(d.Models); err != nil {
+		return fmt.Errorf("%w: runtime %q: %w", ErrRuntimeInvalid, d.ID, err)
+	}
 	if err := checkRecommendations(d.Models); err != nil {
 		return fmt.Errorf("%w: runtime %q: %w", ErrRuntimeInvalid, d.ID, err)
 	}
@@ -454,8 +457,16 @@ func museModels() []Model {
 			Systems:             []agentic.SystemID{"muse"},
 		},
 		{
-			ID:                  "muse-spark",
-			Description:         "The short alias of muse-spark-1.3-contributor, for an invocation that spells the runtime's model without its version",
+			ID:          "muse-spark",
+			Description: "The short alias of muse-spark-1.3-contributor, for an invocation that spells the runtime's model without its version",
+			// The alias is DECLARED here, not inferred from the shared prefix
+			// or the equal score. Until it was, a spawn of `muse-spark` put
+			// that spelling straight into muse's argv and the backend refused
+			// the run — "model muse-spark does not exist or you lack access" —
+			// while the identical launch under the contributor id succeeded.
+			// agentic.BuildPlan substitutes the target before argv; this row
+			// stays admissible, rankable and auditable under its own id.
+			AliasOf:             "muse-spark-1.3-contributor",
 			Rank:                CapabilityRank{Score: 10, Basis: []RankEvidence{source, alias}},
 			Lifecycle:           LifecycleCurrent,
 			Effort:              spark13Effort(),

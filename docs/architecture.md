@@ -108,6 +108,13 @@ A vendor plugin's interface, at minimum:
     no contract registered is not free use,
   - its reasoning-effort vocabulary and recommended effort (effort is a
     required per-model axis; no defaults are injected anywhere),
+  - optionally, `AliasOf`: the model identity this row is a short spelling of.
+    An alias is a real row — admitted, ranked, displayed and audited under its
+    own id — that EXECUTES under the target. It is declared, never derived: no
+    prefix, suffix, score or description rule resolves a name anywhere in this
+    module. Registration refuses a target the same lineup does not declare, a
+    target that is itself an alias, and an alias whose effort axis or agentic
+    systems do not mirror the identity it launches as,
 - **Availability** — limit state (if the vendor rate-limits), and a health
   check that answers "can requests actually be made right now",
 - **Spawn** — launching a model under one of its supported agentic systems
@@ -199,6 +206,32 @@ admits a system-only declaration only after `DeclareRuntime` has validated its
 declaration-owned model rows and only when the declared system plugin is
 registered; an unresolved declaration with no rows keeps the strict refusal.
 
+### Alias identity resolution
+
+`agentic.BuildPlan` substitutes `Model.AliasOf` into the launch request once,
+after every contract refusal and before the first plugin surface, so
+`ResolveBinary`, `Argv`, `ChildEnv` and `Stdin` are all dispatched under the
+identity and `AliasOf` is spent by the time a plugin sees it. `Plan.ModelIdentity`
+records `{Requested, Launched}` for every plan, alias or not.
+
+The failure this closes was measured rather than reasoned about: a `muse`
+launch spelled `--model muse-spark --reasoning-effort high` put the alias into
+argv verbatim and the backend refused it with "model muse-spark does not exist
+or you lack access", while the same launch spelled
+`muse-spark-1.3-contributor` ran end to end.
+
+The split of duties is the usual one. `pkg/agentic` holds no catalogue and so
+asks no question about an alias — it substitutes what the request carries.
+`pkg/vendorplugin` is where an alias is checked, and `checkLaunchFidelity`
+refuses a vendor plugin that sets or clears `AliasOf` on the way out: choosing
+which model actually executes, after admission passed on a different one, is
+the most direct redirection a plugin could attempt.
+
+Resolution is deliberately at LAUNCH time and not at admission time. The alias
+is a row a repository's spawn ceilings name, and the effort word a caller
+supplies is validated against ITS vocabulary; resolving earlier would silently
+change which configured pairs a board admits.
+
 `SpawnRequest.Run` carries `agentic.RunContext` without flattening it into
 environment strings. `PassthroughLaunch` and contributing vendors preserve it,
 and the fidelity check refuses a vendor that changes or drops any of `RunID`,
@@ -242,7 +275,8 @@ this module's plan/provenance boundary.
 ## Typed multi-node launch plans
 
 `agentic.BuildPlan` remains source- and behavior-compatible: it returns the
-same primary `Plan{System, Mode, Binary, Argv, Env, Stdin, WorkDir, Home}` and
+same primary `Plan{System, Mode, Binary, Argv, Env, Stdin, WorkDir, Home,
+ModelIdentity}` and
 leaves `Plan.Nodes` empty. `agentic.BuildMultiNodePlan` adds a validated node
 graph while preserving those legacy fields verbatim.
 

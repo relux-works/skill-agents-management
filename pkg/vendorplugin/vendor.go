@@ -507,6 +507,30 @@ func (e EffortDeclaration) Accepts(word string) bool {
 	return false
 }
 
+// SameAxis reports whether two declarations state the same effort contract:
+// the same support, the same words in the same ORDER, and the same
+// recommendation.
+//
+// Order matters here and does not in sameSystems, and the asymmetry is the
+// point. A vocabulary is published, printed and offered to an operator in the
+// order the vendor wrote it — the refusal text for an unknown word names it
+// verbatim — so two orders are two different things a reader is told. A system
+// list carries no such ordering claim.
+func (e EffortDeclaration) SameAxis(other EffortDeclaration) bool {
+	if e.Support != other.Support || e.Recommended != other.Recommended {
+		return false
+	}
+	if len(e.Vocabulary) != len(other.Vocabulary) {
+		return false
+	}
+	for i, word := range e.Vocabulary {
+		if other.Vocabulary[i] != word {
+			return false
+		}
+	}
+	return true
+}
+
 // Model is one row of a vendor's model list: what it is called, what it is for,
 // where it sits in the vendor's lineup and on what evidence, its lineup state,
 // its effort axis, its context window, its billing contract, and the agentic
@@ -549,6 +573,27 @@ type Model struct {
 	// SAME vendor declares. A successor nobody registers is a dangling pointer
 	// an operator would follow to nothing.
 	SupersededBy ModelID
+
+	// AliasOf names the model this row is a SHORT SPELLING OF, and is empty
+	// when the row is its own identity. An alias is a real, launchable row —
+	// it is admitted, ranked, displayed and audited under its own id — and it
+	// EXECUTES under the target: agentic.BuildPlan substitutes the target into
+	// the launch request before any plugin surface sees it.
+	//
+	// The field exists because a floating alias is a name the operator uses and
+	// the provider's backend does not have. Measured, not assumed: a spawn of
+	// `muse-spark` at effort high reached muse's argv verbatim and the backend
+	// refused it with "model muse-spark does not exist or you lack access",
+	// while muse-spark-1.3-contributor ran the identical launch end to end.
+	//
+	// It is DECLARED, never derived. Nothing in this module infers an alias
+	// from a shared prefix, a version suffix, an equal capability score or a
+	// shared description: those are all spellings, and a launch redirected by a
+	// spelling rule is a launch nobody authorized.
+	//
+	// checkAliases refuses a row this cannot be true of — see it for the four
+	// rules and for what they deliberately do not cover.
+	AliasOf ModelID
 
 	// Recommended is the vendor's DISPLAY pick, and never a launch default.
 	// Nothing in this module substitutes a recommended model for an unstated
@@ -636,6 +681,14 @@ func (m Model) Validate() error {
 				ErrSupersessionInvalid, m.ID, m.Lifecycle, m.SupersededBy)
 		}
 	}
+	if m.AliasOf != "" {
+		if err := ValidateModelID(m.AliasOf); err != nil {
+			return fmt.Errorf("%w: model %q names an alias target that is not a usable model id: %w", ErrAliasInvalid, m.ID, err)
+		}
+		if m.AliasOf == m.ID {
+			return fmt.Errorf("%w: model %q names itself as its own alias target", ErrAliasInvalid, m.ID)
+		}
+	}
 	if m.ContextWindowTokens < 0 {
 		return fmt.Errorf("%w: model %q declares a context window of %d tokens; zero means none was recorded and a negative means nothing at all",
 			ErrModelInvalid, m.ID, m.ContextWindowTokens)
@@ -721,6 +774,102 @@ func checkSupersession(models []Model) error {
 	return nil
 }
 
+// checkAliases refuses an alias row that could not mean what it says.
+//
+// It is list-wide for the same reason checkSupersession is: Model.Validate can
+// see that "muse-spark-1.3-contributor" is a usable id, and only the list can
+// see whether anybody declares it. Same LIST rather than same vendor, so one
+// function holds a registered vendor's rows and a vendor-unresolved runtime's
+// own rows to one rule — which matters here because the only alias in the
+// module today lives in the second home.
+//
+// The four rules, and what each one closes:
+//
+//   - The target must be DECLARED IN THE SAME LIST. An alias pointing outside
+//     it would substitute an id this registry cannot admit, rank or price, and
+//     the launch would be the first thing to discover that.
+//   - The target must not itself be an ALIAS. One hop is the whole contract:
+//     agentic.Model.LaunchIdentity resolves exactly once, so a chain would
+//     silently launch the middle of it.
+//   - The alias must mirror the target's EFFORT declaration. The effort word is
+//     validated against the REQUESTED row's vocabulary and then transported to
+//     a process running the TARGET; a narrower or wider vocabulary on either
+//     side means an accepted word the executing model refuses, or a refused
+//     word it accepts.
+//   - The alias must mirror the target's SYSTEMS. The harness is chosen from
+//     the requested row and runs the target, so a row driving a system its
+//     target never declared would launch the target on a harness nobody has
+//     evidence runs it.
+//
+// STATED BOUND, so nobody reads this checker as covering more than it does: it
+// does NOT hold the two rows' rank, lifecycle, context window, pricing,
+// recommendation or description equal. Those are presentation and catalogue
+// facts, none of them reaches argv or the admitted-pair digest, and pinning
+// them here would be this checker asserting an editorial rule rather than a
+// launch invariant. A pair that disagrees on them is legal and unchecked.
+func checkAliases(models []Model) error {
+	for _, model := range models {
+		if model.AliasOf == "" {
+			continue
+		}
+		var target Model
+		targetDeclared := false
+		for _, candidate := range models {
+			if candidate.ID == model.AliasOf {
+				target = candidate
+				targetDeclared = true
+			}
+		}
+		if !targetDeclared {
+			return fmt.Errorf("%w: model %q is an alias of %q and no model in the same lineup answers to that id; a launch would substitute an identity this registry does not declare",
+				ErrAliasInvalid, model.ID, model.AliasOf)
+		}
+		if target.AliasOf != "" {
+			return fmt.Errorf("%w: model %q is an alias of %q, which is itself an alias of %q; resolution is one hop and a chain would launch the middle of it",
+				ErrAliasInvalid, model.ID, target.ID, target.AliasOf)
+		}
+		if !model.Effort.SameAxis(target.Effort) {
+			return fmt.Errorf("%w: model %q is an alias of %q and declares effort %s%v recommending %q while %q declares %s%v recommending %q; the word is validated against the alias and transported to the target",
+				ErrAliasInvalid, model.ID, target.ID,
+				model.Effort.Support, model.Effort.Vocabulary, model.Effort.Recommended,
+				target.ID, target.Effort.Support, target.Effort.Vocabulary, target.Effort.Recommended)
+		}
+		if !sameSystems(model.Systems, target.Systems) {
+			return fmt.Errorf("%w: model %q is an alias of %q and declares systems %v while %q declares %v; the harness is chosen from the alias and runs the target",
+				ErrAliasInvalid, model.ID, target.ID, model.Systems, target.ID, target.Systems)
+		}
+	}
+	return nil
+}
+
+// sameSystems reports whether two rows can be driven by exactly the same set of
+// harnesses.
+//
+// Order-insensitive, because declaration order is presentation: two rows that
+// list one system pair in two orders are drivable in the same places, and
+// refusing that would be a style rule wearing a launch rule's error message.
+// Scanned against slices rather than collected into a map[agentic.SystemID]bool
+// for the reason Model.Validate already states.
+func sameSystems(left, right []agentic.SystemID) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	contains := func(haystack []agentic.SystemID, needle agentic.SystemID) bool {
+		for _, candidate := range haystack {
+			if candidate == needle {
+				return true
+			}
+		}
+		return false
+	}
+	for _, system := range left {
+		if !contains(right, system) {
+			return false
+		}
+	}
+	return true
+}
+
 // checkRecommendations refuses two display picks for one agentic system.
 //
 // The pairs are scanned against a slice rather than collected into a
@@ -758,7 +907,7 @@ func checkRecommendations(models []Model) error {
 // description, the rank, the vocabulary — stays here, which is what keeps the
 // two layers from re-declaring each other.
 func (m Model) Launchable() agentic.Model {
-	return agentic.Model{ID: string(m.ID), Effort: m.Effort.Support}
+	return agentic.Model{ID: string(m.ID), Effort: m.Effort.Support, AliasOf: string(m.AliasOf)}
 }
 
 // AvailabilityQuery is what a caller wants an availability verdict about.

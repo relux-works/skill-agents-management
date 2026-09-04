@@ -120,6 +120,8 @@ type narwhalVendor struct {
 	spawnErr           error
 	spawnSystem        agentic.SystemID
 	spawnModelID       string
+	spawnAliasOf       string
+	spawnDropAlias     bool
 	spawnEffortSupport *agentic.EffortSupport
 	spawnEffort        *string
 	spawnRun           *agentic.RunContext
@@ -229,6 +231,12 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 	}
 	if n.spawnModelID != "" {
 		launch.Model.ID = n.spawnModelID
+	}
+	if n.spawnAliasOf != "" {
+		launch.Model.AliasOf = n.spawnAliasOf
+	}
+	if n.spawnDropAlias {
+		launch.Model.AliasOf = ""
 	}
 	if n.spawnEffortSupport != nil {
 		launch.Model.Effort = *n.spawnEffortSupport

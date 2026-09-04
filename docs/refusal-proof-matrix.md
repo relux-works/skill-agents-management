@@ -6,11 +6,20 @@ public production entry point. `.scripts/verify-refusal-matrix.py` copies the
 current tree, narrows exactly one refusal in each copy, and runs only the named
 owner test with `-count=1`.
 
-The authoritative v0.4.3 run contains 37 compile-clean mutants. Every named
-test exits `1`; a zero exit, build failure, or failure in a different test makes
-the harness fail. The nine-mutant v0.4.1 report was accurate; its older logbook
-count of eight was not. The 37-row run supersedes that partial inventory rather
-than adding to it.
+The current run contains 41 compile-clean mutants: the 37 of the authoritative
+v0.4.3 run plus the four `ErrAliasInvalid` rows the alias contract added. Every
+named test exits `1`; a zero exit, build failure, or failure in a different test
+makes the harness fail. The nine-mutant v0.4.1 report was accurate; its older
+logbook count of eight was not. The 37-row run superseded that partial
+inventory rather than adding to it, and this one supersedes the 37.
+
+`ErrAliasInvalid`'s two per-row cases — a self-referential target and a target
+that is not a usable model id — are raised by `Model.Validate` rather than by
+`checkAliases` and are covered by the same owning test. They are not separate
+rows here because they are not separate call sites: `Model.Validate` already
+owns a row in this table, and both call sites below run it before
+`checkAliases`, which is why narrowing `checkAliases` alone still leaves them
+refused.
 
 ## Raw plugin graph
 
@@ -95,6 +104,10 @@ narrow without manufacturing impossible internal state.
 | `vendorplugin.ErrLifecycleInvalid` | `Registry.Register` -> `Model.Validate` -> `Lifecycle.Validate` | `TestRegisterRefusesAModelWithNoLineupState` | Retain refusal for one undeclared word while admitting the rest of the undeclared set. |
 | `vendorplugin.ErrEffortDeclaration` | `Registry.Register` -> `Model.Validate` -> `EffortDeclaration.Validate` | `TestRegisterRefusesAContradictoryEffortDeclaration` | Refuse only an empty repeated vocabulary word, admitting ordinary repeats. |
 | `vendorplugin.ErrSupersessionInvalid` | `Registry.Register` -> `Model.Validate` / `checkSupersession` | `TestRegisterRefusesAnUnusableSupersession` | Retain per-row checks but admit a validly spelled successor absent from the lineup. |
+| `vendorplugin.ErrAliasInvalid` (dangling target) | `Registry.Register` / `Registry.DeclareRuntime` -> `checkAliases` | `TestTheAliasGateRefusesWhatItMustReject` | Refuse a target absent from the lineup only when it equals the alias's own id, admitting every other dangling target. |
+| `vendorplugin.ErrAliasInvalid` (alias chain) | `Registry.Register` / `Registry.DeclareRuntime` -> `checkAliases` | `TestTheAliasGateRefusesWhatItMustReject` | Refuse a chained target only when it points back at the alias, admitting every longer chain. |
+| `vendorplugin.ErrAliasInvalid` (effort mirror) | `Registry.Register` / `Registry.DeclareRuntime` -> `checkAliases` | `TestTheAliasGateRefusesWhatItMustReject` | Compare only effort SUPPORT, admitting a vocabulary or recommendation that differs from the identity's. |
+| `vendorplugin.ErrAliasInvalid` (systems mirror) | `Registry.Register` / `Registry.DeclareRuntime` -> `checkAliases` | `TestTheAliasGateRefusesWhatItMustReject` | Compare the system sets only when they are the same length, admitting an alias that declares an extra harness. |
 | `vendorplugin.ErrRecommendationAmbiguous` | `Registry.Register` -> `checkRecommendations` | `TestRegisterRefusesTwoRecommendationsForOneSystem` | Refuse a repeated pick only when it comes from the same model. |
 | `vendorplugin.ErrPricingInvalid` | `Registry.Register` -> `Model.Validate` -> `Pricing.Validate` | `TestRegisterRefusesAnUnusablePricingContract` | Refuse `NaN` list prices while admitting infinities. |
 | `vendorplugin.ErrModelInvalid` | `Registry.Register` -> `Model.Validate` | `TestRegisterRefusesANegativeContextWindow` | Refuse context windows below `-1`, admitting `-1`. |

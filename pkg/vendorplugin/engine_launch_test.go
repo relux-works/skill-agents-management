@@ -655,6 +655,17 @@ func canonicalIdentityPlan(plan agentic.Plan, ids launchIdentityTuple) agentic.P
 			plan.Env[index] = replacement
 		}
 	}
+	// ModelIdentity carries the model id twice — the requested spelling and the
+	// identity the launch resolved to — so it is an identity-bearing field and
+	// is canonicalized like argv and the environment. Leaving it raw would make
+	// every case differ on the model axis alone, which is the axis this test
+	// renames on purpose.
+	if replacement, ok := replacements[plan.ModelIdentity.Requested]; ok {
+		plan.ModelIdentity.Requested = replacement
+	}
+	if replacement, ok := replacements[plan.ModelIdentity.Launched]; ok {
+		plan.ModelIdentity.Launched = replacement
+	}
 	return plan
 }
 

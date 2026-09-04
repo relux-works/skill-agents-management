@@ -81,18 +81,29 @@ func TestTheMuseEffortWordSurvivesTheWholeLaunchPath(t *testing.T) {
 	// transport it and let the harness refuse. Narrowing the vocabulary to the
 	// installed build would put a CLI version number in the model layer and
 	// would keep refusing after muse ships the word.
-	for _, model := range []vendorplugin.ModelID{"muse-spark-1.3-contributor", "muse-spark"} {
+	//
+	// The two names do NOT put the same string in argv, and that asymmetry is
+	// the alias contract rather than an inconsistency: `muse-spark` is admitted
+	// under its own spelling and executed as museSparkIdentity, so the second
+	// column below is what the harness is handed. See alias_test.go.
+	for _, model := range []struct {
+		requested vendorplugin.ModelID
+		launched  vendorplugin.ModelID
+	}{
+		{requested: museSparkIdentity, launched: museSparkIdentity},
+		{requested: museSparkAlias, launched: museSparkIdentity},
+	} {
 		for _, word := range []string{"high", "xhigh", "max"} {
-			t.Run(string(model)+"/"+word, func(t *testing.T) {
-				plan, err := vendorplugin.BuildLaunch(context.Background(), registry, museRequest(t, model, word), agentic.LaunchModeExec)
+			t.Run(string(model.requested)+"/"+word, func(t *testing.T) {
+				plan, err := vendorplugin.BuildLaunch(context.Background(), registry, museRequest(t, model.requested, word), agentic.LaunchModeExec)
 				if err != nil {
 					t.Fatalf("BuildLaunch refused a word the model declares: %v", err)
 				}
 				if !museArgvPair(plan.Argv, museEffortFlag, word) {
 					t.Fatalf("the configured effort did not reach argv as a %s pair: %v", museEffortFlag, plan.Argv)
 				}
-				if !museArgvPair(plan.Argv, "--model", string(model)) {
-					t.Errorf("the model did not reach argv: %v", plan.Argv)
+				if !museArgvPair(plan.Argv, "--model", string(model.launched)) {
+					t.Errorf("argv names a model other than the launch identity %q: %v", model.launched, plan.Argv)
 				}
 			})
 		}

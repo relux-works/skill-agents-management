@@ -65,6 +65,18 @@ vendor-unresolved runtime (`RuntimeDeclaration.Models`, which is how the two
 that is the point of the release. What does NOT move is POLICY: which models a
 repository may spawn stays your configuration's decision.
 
+`Model.AliasOf` is an additive optional catalog fact: the model identity a row
+is a short spelling of, empty when the row is its own identity. A consumer does
+not act on it — `agentic.BuildPlan` substitutes it before argv, so a launch
+built through `BuildLaunch` already runs the identity — but a consumer that
+records what ran should read `Plan.ModelIdentity`, which carries `Requested`
+and `Launched` for every plan. Do not resolve an alias yourself, and do not
+infer one from a shared prefix, a version suffix or an equal capability score:
+the module refuses an alias declaration it cannot check, and a consumer-side
+rule would be a redirection nobody validated. Admission stays keyed on the
+spelling the operator configured, which is why the alias remains a first-class
+row rather than being folded into its target.
+
 `Model.CacheBudgetBytes` is an additive optional-positive catalog fact for
 configured local models. A consumer must distinguish `nil` (unrecorded) from a
 present byte count; zero is never a valid declaration. Use the declared value
@@ -237,7 +249,8 @@ digests, and a rebind orphans that state with no error anywhere.
 
 | You want | Call | It does not |
 | --- | --- | --- |
-| The launch surface for one (system, mode) | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` | execute anything |
+| The launch surface for one (system, mode) | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, ModelIdentity, …}` | execute anything |
+| What the caller asked for versus what ran | `plan.ModelIdentity` → `{Requested, Launched}` | resolve an alias yourself, or infer one from a spelling |
 | Add engine/sidecar process nodes | `agentic.BuildMultiNodePlan(primary, primaryDependencies, nodes...)` → the same primary fields plus dependency-ordered `Plan.Nodes` | execute, supervise or attest a process |
 | The same, resolved through a runtime launch binding | `vendorplugin.BuildLaunch(ctx, registry, SpawnRequest{…}, mode)` — resolves either an established vendor binding or an explicit declaration-owned system-only binding, validates the effort word against the owning model row, preserves typed `RunContext`, asks a vendor for a `LaunchRequest` when one exists (refusing redirects, including changed/dropped tracked-run identity), otherwise projects the validated declaration losslessly, runs the resolved system's `Preflightable` check unless dry-run, then hands it to `BuildPlan` | execute anything, fabricate a vendor for a system-only runtime, inject a default effort, or ask callers to duplicate run identity in `Env` |
 | Versioned configured/resolved engine metadata | `plan.ConsumerProvenance()` → `LaunchProvenanceV1`; after unmarshalling call `registry.ValidateLaunchProvenance(record)`, which obtains configured authority from runtime/model declarations and resolved authority from that registry's graph; `ValidateAgainst(configured, resolved)` is the lower-level gate and neither argument may come from the record; inspect mandatory `engine_binding` (`none|required`); `none` requires a system-only legacy shape | execute or attest a model runtime; treat two equal persisted refs as corroboration; accept a downgraded engine-bound shape or absent/partial/malformed/wrong-kind/unconfigured/mismatched required engine refs |

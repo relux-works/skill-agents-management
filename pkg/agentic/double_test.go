@@ -46,6 +46,13 @@ type pangolinSystem struct {
 	// exactly the way an accident would, rather than one that never agrees
 	// with itself. Registry.Register reads ID() twice and must refuse it.
 	unstableID SystemID
+
+	// seenModel is the Model each dispatched surface was actually handed,
+	// keyed by surface name. Argv's answer is observable in the plan; the
+	// other three surfaces' is not, and the alias substitution has to reach
+	// all four — a binary lookup or an environment built from the alias would
+	// be exactly the half-applied fix this capture exists to refuse.
+	seenModel map[string]Model
 }
 
 func newPangolin() *pangolinSystem {
@@ -63,9 +70,19 @@ func newPangolin() *pangolinSystem {
 			AuthHint:            "run `pangolin login` and retry",
 		},
 		calls:         map[string]int{},
+		seenModel:     map[string]Model{},
 		binary:        "/opt/pangolin/bin/pangolin",
 		compositionOK: true,
 	}
+}
+
+// see records the model one dispatched surface was handed. It is separate from
+// record because record is called by surfaces that are given no request at all.
+func (p *pangolinSystem) see(surface string, req LaunchRequest) {
+	if p.seenModel == nil {
+		p.seenModel = map[string]Model{}
+	}
+	p.seenModel[surface] = req.Model
 }
 
 func (p *pangolinSystem) record(surface string) { p.calls[surface]++ }
@@ -83,8 +100,9 @@ func (p *pangolinSystem) Capabilities() Capabilities {
 	return p.caps
 }
 
-func (p *pangolinSystem) ResolveBinary(LaunchRequest) (string, error) {
+func (p *pangolinSystem) ResolveBinary(req LaunchRequest) (string, error) {
 	p.record("ResolveBinary")
+	p.see("ResolveBinary", req)
 	if p.binaryErr != nil {
 		return "", p.binaryErr
 	}
@@ -96,6 +114,7 @@ func (p *pangolinSystem) ResolveBinary(LaunchRequest) (string, error) {
 
 func (p *pangolinSystem) Argv(req LaunchRequest, mode LaunchMode) ([]string, error) {
 	p.record("Argv")
+	p.see("Argv", req)
 	if p.argvErr != nil {
 		return nil, p.argvErr
 	}
@@ -124,6 +143,7 @@ func (p *pangolinSystem) Argv(req LaunchRequest, mode LaunchMode) ([]string, err
 
 func (p *pangolinSystem) ChildEnv(parent []string, req LaunchRequest) ([]string, error) {
 	p.record("ChildEnv")
+	p.see("ChildEnv", req)
 	if p.envErr != nil {
 		return nil, p.envErr
 	}
@@ -145,6 +165,7 @@ func (p *pangolinSystem) ChildEnv(parent []string, req LaunchRequest) ([]string,
 
 func (p *pangolinSystem) Stdin(req LaunchRequest) (StdinPayload, error) {
 	p.record("Stdin")
+	p.see("Stdin", req)
 	if p.stdinErr != nil {
 		return StdinPayload{}, p.stdinErr
 	}
