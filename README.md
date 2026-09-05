@@ -72,6 +72,14 @@ The agentic-system plugin contract and its registry.
   declaration (launch modes, effort transport, goal/budget/service-tier
   support, composition grammar, home, auth hint), and five dispatch surfaces —
   `ResolveBinary`, `Argv`, `ChildEnv`, `Stdin`, `ValidateComposition`.
+- Four launch modes: `exec`, `dry-run`, `managed-session`, and `interactive`
+  (curator-spec Decision 0013 §5) — the complete argv a launcher hands to a
+  human's terminal, holding model selection and effort transport only.
+  `BuildPlan` refuses an interactive request carrying a composition
+  (`ErrCompositionNotInteractive`) or a goal, budget, service tier or prompt
+  (`ErrParameterNotInteractive`), and holds every plugin to a detached stdin
+  unless its effort transport is stdin. `claude-code`, `codex` and `pi` declare
+  the mode; the other four refuse it with `ErrUnsupportedLaunchMode`.
 - `Registry` is the only place a system binding may live. `Register` is the
   only way one comes to exist, and it refuses a duplicate id, an id that does
   not normalize, an id that normalizes to a spelling other than itself, an id
@@ -130,8 +138,9 @@ proven against all four codex launch-surface goldens through the real
   are covered by a golden and again by hermetic stub layouts that attack the
   ORDER between them.
 - **One argv construction site.** `args.go`'s `Args` is the only place codex CLI
-  flags are spelled, for both the `codex exec` grammar (shared verbatim by the
-  dry-run mirror) and the managed-session provider-args fragment.
+  flags are spelled, for the `codex exec` grammar (shared verbatim by the
+  dry-run mirror), the managed-session provider-args fragment, and the
+  interactive session (`-m <model>` plus the effort override, nothing else).
   `argvguard_test.go` scans every non-test Go file in the module and fails if a
   second site appears; it narrows itself onto the real `Args` to prove it can
   fire, holds nine mutant spellings, and demonstrates its three declared-open

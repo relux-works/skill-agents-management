@@ -258,6 +258,19 @@ digests, and a rebind orphans that state with no error anywhere.
 | Observed engine contract | at trusted assembly call `vendorplugin.NewRegistryWithEngineObservationAdapters`, then call `BuildLaunch`; it resolves the vendor-owned launch/profile first and validates the registered adapter's exact version, identity, freshness and readings before `Preflight` or plan materialization | pass an adapter or observation through `SpawnRequest`; mutate adapter identity after construction; treat schema validation as authorization; treat absence as read failure; run process, SSH, pressure, or supervision actions in this module |
 | Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |
 
+**Interactive sessions.** A launcher that starts a terminal session for a human
+— the curator launcher at `0.2.0-draft` §4.1 is the named consumer — requests
+`agentic.LaunchModeInteractive` by name and never spells a provider flag
+itself. The plan it gets back holds model selection and the system's effort
+transport and nothing else: no `-p`/`exec`, no output format, no permission
+bypass, no goal, budget, service tier or assignment prompt, no MCP composition
+prefix, and no stdin unless the system carries effort on stdin. `BuildPlan`
+refuses a request carrying any of those (`ErrCompositionNotInteractive`,
+`ErrParameterNotInteractive`) rather than dropping them; the MCP channel, the
+system-prompt channel and the permission posture are the composer's to append
+after the plan's `Argv`. `claude-code`, `codex` and `pi` declare the mode; a
+system that does not is refused with `ErrUnsupportedLaunchMode`.
+
 ## What stays yours
 
 The module ends at a plan. A consumer still owns:

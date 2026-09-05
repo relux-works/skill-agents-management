@@ -74,7 +74,11 @@ An agentic-system plugin declares (this mirrors the adapter table the
 extraction source already proved out):
 
 - binary resolution (including managed/npm/native shim paths),
-- argv construction per launch mode,
+- argv construction per launch mode — `exec` (the one-shot child this tool
+  owns), `dry-run` (its side-effect-free mirror), `managed-session` (the
+  provider-args fragment an external composer splices in), and `interactive`
+  (the complete argv a launcher hands to a human's terminal, curator-spec
+  Decision 0013 §5; declared today by `claude-code`, `codex` and `pi`),
 - environment filtering — what the child must and must not inherit,
 - stdin transport,
 - reasoning-effort **transport** (argv / stdin / none),
@@ -327,6 +331,18 @@ contracts here, not suggestions:
    source paid repeatedly for shadow tables and duplicate charsets; a plugin
    declaration is the only place its kind and dependency edges may live, and
    guards should make a second binding fail a test.
+6. **An interactive plan carries model selection and effort transport, and
+   nothing else.** `LaunchModeInteractive` (curator-spec Decision 0013 §5)
+   spells no print or headless mode, no output-format flag, no permission
+   bypass, no goal or assignment-prompt machinery, no budget and no service
+   tier; `BuildPlan` refuses a composition in this mode
+   (`ErrCompositionNotInteractive`) and any parameter the grammar has no
+   channel for (`ErrParameterNotInteractive`), and attaches no stdin unless the
+   system's effort transport IS stdin. The MCP channel and the permission
+   posture belong to the composer that owns the terminal; a second component
+   spelling either is the defect class the decision names M2. Each declaring
+   plugin pins its exact interactive argv and a negative proving every
+   exec-mode marker absent, with the sweep shown to fire on its own exec argv.
 
 ## The local-model plugin: module-side M1 candidate, end-to-end M1 pending
 
