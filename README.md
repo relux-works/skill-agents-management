@@ -513,7 +513,9 @@ run from meaning "the rule never matched anything".
 All 45 rows of the extraction source's model registry, carried across. 42 land
 in the four vendors; the three `muse` rows belong to no vendor, because the
 source records that runtime's broker as checked-and-never-established, and the
-port accounts for them explicitly rather than dropping them.
+port accounts for them explicitly rather than dropping them. One further row —
+`gpt-6-astra` — is declared HERE and not ported; see *Rows declared ahead of the
+board's registry* below.
 
 - **Ported verbatim**: model ids, the agentic systems each row declares, the
   per-model effort vocabularies and the recommended efforts. A full-set pin
@@ -549,6 +551,47 @@ port accounts for them explicitly rather than dropping them.
 - `google` is one vendor over two harnesses (`gemini-cli` and `antigravity`),
   which is why a rank is comparable within a broker rather than within a
   harness.
+
+### Rows declared ahead of the board's registry
+
+Since v0.2.0 the board maps its model registry OUT of these plugins, so a model
+the vendor publishes now reaches this repository first. Both full-set pins are
+bijections against captures of the board's own table, and a row that exists in
+neither capture has to be accounted for rather than absorbed.
+
+The cheap way to make such a row green is to hand-write it into
+`pkg/vendorplugin/testdata/source-model-registry.json`. That file is a capture
+of another repository's sources at a named commit with a recorded sha256, so a
+row added to it by hand is a claim about a file that does not contain it — and
+the basis a ported row must carry (`the row carries PolicyRank N`, naming
+`internal/spawn/models.go`) would then quote a number a reader opens that file
+and does not find. `pkg/vendorplugin/declaredhere_test.go` refuses that trade
+and names the alternative:
+
+- the row is listed in `declaredHereRows` against the vendor that declares it,
+  and the vendor must actually declare it;
+- its rank rests on the vendor's own surface — for `gpt-6-astra`, the Codex CLI
+  catalog read with `codex debug models` — through a SEPARATE `declaredRank`
+  constructor, so a declared row cannot borrow a ported row's source evidence
+  and a ported row cannot lose it;
+- it must not share a capability score with a ported row of the same vendor,
+  which would flip that ported row to `Tied` and publish an equality no capture
+  records;
+- and the moment either capture starts carrying it, both pins report it and the
+  list has to shrink. The entry is a bridge, not a permanent allowance.
+
+A row NOT on that list is still refused by both pins exactly as before, and
+`TestAnUnnamedExtraRowIsStillRefusedByBothPins` is the mutant that proves the
+skip did not quietly widen to every leftover row.
+
+`gpt-6-astra` is the only entry today: OpenAI's most capable Codex row, current,
+`low`/`medium`/`high`/`xhigh`/`max`/`ultra`, scored 130 above `gpt-5.6-sol`'s
+120, with a 272000-token context window. It is deliberately NOT `Recommended`:
+`sol` keeps the display pick, and admitting a more capable model is not a
+decision to change what an operator is steered towards by default. It is absent
+from the frozen v2 admission snapshot and from the provider-limit group table,
+and in both places that absence is the documented answer for a row registered
+after those tables were captured rather than a gap.
 
 ### Alias identity resolution
 

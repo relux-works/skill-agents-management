@@ -715,7 +715,10 @@ func TestRuntimeModelsScopeToTheHarnessThatDrivesThem(t *testing.T) {
 		{runtime: "qwen-codex", system: "codex", count: 1, holds: "qwen3.7-plus-via-codex", excedes: "qwen3.7-plus"},
 		{runtime: "gemini", system: "gemini-cli", count: 7, holds: "gemini-2.5-pro", excedes: "gemini-3.6-flash-high"},
 		{runtime: "agy", system: "antigravity", count: 8, holds: "gemini-3.6-flash-high", excedes: "gemini-2.5-pro"},
-		{runtime: "codex", system: "codex", count: 12, holds: "gpt-5.6-sol", excedes: "qwen3.7-plus-via-codex"},
+		// 13, not the source table's 12: gpt-6-astra is declared ahead of the
+		// board's registry and is a real openai row the codex harness drives.
+		// See declaredhere_test.go.
+		{runtime: "codex", system: "codex", count: 13, holds: "gpt-6-astra", excedes: "qwen3.7-plus-via-codex"},
 		{runtime: "claude", system: "claude-code", count: 9, holds: "claude-opus-5", excedes: "gpt-5.6-sol"},
 	}
 	for _, tt := range tests {

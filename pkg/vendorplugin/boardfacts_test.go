@@ -277,6 +277,22 @@ func compareBoardFacts(fixture boardFacts, rows map[vendorplugin.ModelID]vendorp
 		}
 	}
 
+	// Rows this module declares BEFORE the board does have no board row, and
+	// are accounted for by name rather than absorbed — see
+	// declaredhere_test.go. Only a NAMED row is removed, so the leftover sweep
+	// below still reports every other undeclared model.
+	boardIDs := map[vendorplugin.ModelID]bool{}
+	for _, row := range fixture.Models {
+		boardIDs[vendorplugin.ModelID(row.ID)] = true
+	}
+	for _, id := range sortedModelIDs(declaredHereRows) {
+		if boardIDs[id] {
+			report("the board table now holds %q, which this port records as declared here; the row is a ported one and its facts belong in the fixture comparison rather than on that list", id)
+			continue
+		}
+		delete(remaining, id)
+	}
+
 	leftover := make([]string, 0, len(remaining))
 	for id := range remaining {
 		leftover = append(leftover, string(id))

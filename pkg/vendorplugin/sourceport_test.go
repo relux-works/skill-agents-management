@@ -348,6 +348,33 @@ func comparePort(fixture sourceRegistry, declarations []vendorplugin.RuntimeDecl
 		}
 	}
 
+	// Rows this module declares BEFORE the board's registry does have no source
+	// row to be compared against, and are accounted for by name rather than
+	// absorbed: declaredhere_test.go says what a name costs and what it does
+	// not buy. Only a NAMED row is removed here, so the leftover sweep below
+	// still reports any other undeclared model — the mutant that proves it is
+	// TestAnUnnamedExtraRowIsStillRefusedByBothPins.
+	sourceIDs := map[vendorplugin.ModelID]bool{}
+	for _, source := range fixture.Models {
+		sourceIDs[vendorplugin.ModelID(source.ID)] = true
+	}
+	for _, id := range sortedModelIDs(declaredHereRows) {
+		vendor := declaredHereRows[id]
+		rows, ported := remaining[vendor]
+		switch {
+		case !ported:
+			report("this port records %q as declared by vendor %q, which is not a vendor it registers", id, vendor)
+		case sourceIDs[id]:
+			report("the source table now holds %q, which this port records as declared here; a row the source declares is a PORTED row, and it must carry the source's own score as evidence instead of a machine-local catalog read", id)
+		default:
+			if _, declared := rows[id]; !declared {
+				report("this port records %q as a row vendor %s declares here, and that vendor declares no such model", id, vendor)
+				continue
+			}
+			delete(rows, id)
+		}
+	}
+
 	vendors := make([]vendorplugin.VendorID, 0, len(remaining))
 	for vendor := range remaining {
 		vendors = append(vendors, vendor)
@@ -527,49 +554,149 @@ func mutateSourceRow(models []sourceModel, id string, apply func(*sourceModel)) 
 // them was lying about equality in the quietest possible way.
 func TestPortedScoresAreTheSourceScoresAndTheDerivedOrderFollowsThem(t *testing.T) {
 	fixture := loadSourceRegistry(t)
-
 	for vendor := range portedVendors {
-		want := make([]sourceModel, 0)
-		for _, model := range fixture.Models {
-			if model.Broker == string(vendor) {
-				want = append(want, model)
+		plugin, registered := vendorplugin.Default.Lookup(vendor)
+		if !registered {
+			t.Fatalf("vendor %s is not registered", vendor)
+		}
+		for _, problem := range comparePortedLineup(fixture, vendor, plugin) {
+			t.Error(problem)
+		}
+	}
+}
+
+// comparePortedLineup reports every disagreement between one vendor's source
+// rows and the lineup its plugin derives.
+//
+// The whole lineup's POSITIONS are checked, rows declared ahead of the board's
+// registry included: 1..n with no gaps is a property of Lineup itself and a
+// declared row must not put a hole in it. Everything the SOURCE has an opinion
+// about — the order, the scores, the ties — is then checked over the ported
+// subsequence, because the source has no opinion about a row it does not carry.
+//
+// Tied is read off the derived lineup and compared against a tie computed from
+// the SOURCE's scores. That is what makes a declared row landing on a ported
+// score a failure rather than a silent reshaping: the added row flips its
+// neighbour to Tied while the source's own numbers say it is alone.
+//
+// It is a function rather than a test body so a mutant can drive it over a
+// reshaped row list — TestThePortedLineupPinFiresOnADeclaredRowThatDisturbsIt.
+func comparePortedLineup(fixture sourceRegistry, vendor vendorplugin.VendorID, plugin vendorplugin.Vendor) []string {
+	var problems []string
+	report := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
+
+	want := make([]sourceModel, 0)
+	for _, model := range fixture.Models {
+		if model.Broker == string(vendor) {
+			want = append(want, model)
+		}
+	}
+	sort.SliceStable(want, func(i, j int) bool { return want[i].PolicyRank > want[j].PolicyRank })
+
+	// The position half restates a LineupOf invariant over the real production
+	// rows, and it has NO mutant below, because a Vendor cannot produce one:
+	// positions are derived inside LineupOf from the row list, so no reshaping
+	// of that list makes them non-contiguous. It is kept as the check it always
+	// was and is claimed as nothing more.
+	full := vendorplugin.LineupOf(plugin)
+	got := make([]vendorplugin.RankedModel, 0, len(full))
+	for i, entry := range full {
+		if entry.Position != i+1 {
+			report("vendor %s's model %q sits at derived position %d where the ordering expects %d; positions must run 1..n with no gaps",
+				vendor, entry.Model.ID, entry.Position, i+1)
+		}
+		if declaredHereRows[entry.Model.ID] == vendor {
+			continue
+		}
+		got = append(got, entry)
+	}
+
+	if len(got) != len(want) {
+		report("vendor %s declares %d models the source table should carry and the source table gives it %d", vendor, len(got), len(want))
+		return problems
+	}
+	for i := range want {
+		if string(got[i].Model.ID) != want[i].ID {
+			report("vendor %s's derived lineup puts %q at ported position %d; the source's scores in descending declaration order put %q there",
+				vendor, got[i].Model.ID, i+1, want[i].ID)
+		}
+		if got[i].Model.Rank.Score != want[i].PolicyRank {
+			report("vendor %s's model %q carries score %d and the source scores it %d",
+				vendor, got[i].Model.ID, got[i].Model.Rank.Score, want[i].PolicyRank)
+		}
+		// Tied is checked against the SOURCE's scores rather than against
+		// the ported ones, so a port that dropped a tie by nudging one
+		// score is reported here rather than agreeing with itself.
+		shared := 0
+		for _, other := range want {
+			if other.PolicyRank == want[i].PolicyRank {
+				shared++
 			}
 		}
-		sort.SliceStable(want, func(i, j int) bool { return want[i].PolicyRank > want[j].PolicyRank })
-
-		plugin, _ := vendorplugin.Default.Lookup(vendor)
-		got := vendorplugin.LineupOf(plugin)
-
-		if len(got) != len(want) {
-			t.Fatalf("vendor %s declares %d models and the source table gives it %d", vendor, len(got), len(want))
+		if wantTied := shared > 1; got[i].Tied != wantTied {
+			report("vendor %s's model %q reports Tied=%v and the source's score %d is carried by %d of its rows",
+				vendor, got[i].Model.ID, got[i].Tied, want[i].PolicyRank, shared)
 		}
-		for i := range want {
-			if got[i].Position != i+1 {
-				t.Errorf("vendor %s's model %q sits at derived position %d where the ordering expects %d; positions must run 1..n with no gaps",
-					vendor, got[i].Model.ID, got[i].Position, i+1)
-			}
-			if string(got[i].Model.ID) != want[i].ID {
-				t.Errorf("vendor %s's derived lineup puts %q at position %d; the source's scores in descending declaration order put %q there",
-					vendor, got[i].Model.ID, i+1, want[i].ID)
-			}
-			if got[i].Model.Rank.Score != want[i].PolicyRank {
-				t.Errorf("vendor %s's model %q carries score %d and the source scores it %d",
-					vendor, got[i].Model.ID, got[i].Model.Rank.Score, want[i].PolicyRank)
-			}
-			// Tied is checked against the SOURCE's scores rather than against
-			// the ported ones, so a port that dropped a tie by nudging one
-			// score is reported here rather than agreeing with itself.
-			shared := 0
-			for _, other := range want {
-				if other.PolicyRank == want[i].PolicyRank {
-					shared++
+	}
+	return problems
+}
+
+// TestThePortedLineupPinFiresOnADeclaredRowThatDisturbsIt narrows the gate that
+// the skip in comparePortedLineup opened.
+//
+// Skipping a declared row from the ported comparison is correct and is also the
+// exact place a bypass could hide, so each mutant reshapes the openai row list
+// the way a careless addition would and requires the pin to name it.
+//
+// What is deliberately NOT a mutant here: a declared row scored BETWEEN two
+// ported ones. That was tried and produced no disagreement, correctly — the
+// ported subsequence keeps its relative order whatever a skipped row scores
+// between two of them, and only a SHARED score changes what the source's own
+// numbers say about a ported row. An interleaving mutant would have been a test
+// asserting a failure the design does not have.
+func TestThePortedLineupPinFiresOnADeclaredRowThatDisturbsIt(t *testing.T) {
+	fixture := loadSourceRegistry(t)
+
+	tests := []struct {
+		name    string
+		reshape func([]vendorplugin.Model) []vendorplugin.Model
+		expect  string
+	}{
+		{
+			// The comparison is keyed on the skipped row's NEIGHBOURS, not on
+			// the skipped row: sol keeps 120, the declared row joins it there,
+			// and the source's table says that score is carried by one row.
+			name: "a declared row landing on a ported score",
+			reshape: func(rows []vendorplugin.Model) []vendorplugin.Model {
+				out := vendorplugin.CloneModels(rows)
+				for i := range out {
+					if declaredHereRows[out[i].ID] == "openai" {
+						out[i].Rank.Score = 120
+					}
 				}
-			}
-			if wantTied := shared > 1; got[i].Tied != wantTied {
-				t.Errorf("vendor %s's model %q reports Tied=%v and the source's score %d is carried by %d of its rows",
-					vendor, got[i].Model.ID, got[i].Tied, want[i].PolicyRank, shared)
-			}
-		}
+				return out
+			},
+			expect: `model "gpt-5.6-sol" reports Tied=true and the source's score 120 is carried by 1 of its rows`,
+		},
+		{
+			// The skip is keyed on the NAME. A row nobody named has to stay in
+			// the ported comparison and blow the count, or the skip would be a
+			// standing allowance for any invented model.
+			name: "a row nobody named, which the skip must not cover",
+			reshape: func(rows []vendorplugin.Model) []vendorplugin.Model {
+				out := vendorplugin.CloneModels(rows)
+				extra := vendorplugin.CloneModels(rows)[0]
+				extra.ID = "gpt-7-nobody-published-this"
+				extra.Rank.Score = 5
+				return append(out, extra)
+			},
+			expect: "vendor openai declares 13 models the source table should carry and the source table gives it 12",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requireReport(t, comparePortedLineup(fixture, "openai", vendorRowsWith(t, "openai", tt.reshape)), tt.expect)
+		})
 	}
 }
 
@@ -591,9 +718,11 @@ func TestTheSourceTiesSurviveThePort(t *testing.T) {
 			{"gemini-3.1-flash-lite", "gemini-3.5-flash-high"},
 			{"gemini-2.5-pro", "gemini-3.5-flash-medium"},
 		},
-		// openai's twelve rows carry twelve distinct scores. The empty entry
-		// is deliberate: it states that this vendor was checked and has none,
-		// which is a different fact from this vendor being absent from the map.
+		// openai's thirteen rows carry thirteen distinct scores. The empty
+		// entry is deliberate: it states that this vendor was checked and has
+		// none, which is a different fact from this vendor being absent from
+		// the map. TestADeclaredRowMayNotTieAPortedOne is what keeps it true
+		// as rows are declared ahead of the board's registry.
 		"openai": {},
 	}
 	if len(ties) != len(portedVendors) {
@@ -654,7 +783,24 @@ func TestEveryRankCarriesTheSourceEvidence(t *testing.T) {
 			}
 			score, known := scores[string(model.ID)]
 			if !known {
-				continue // already reported by the full-set pin
+				// No source row, so no source score to carry. That is either a
+				// row nobody accounted for — the full-set pin reports it — or a
+				// row this module declares first, and the one thing that must
+				// not happen is the second silently escaping the evidence rule.
+				// It is REDIRECTED rather than dropped: the mirror requirement
+				// lives in TestEveryDeclaredHereRowRestsOnTheVendorCatalog, and
+				// what is refused right here is such a row quoting a board
+				// score no board file contains.
+				if declaredHereRows[model.ID] != vendor {
+					continue // reported by the full-set pin
+				}
+				for _, evidence := range model.Rank.Basis {
+					if strings.Contains(evidence.Observation, portedScoreObservation) {
+						t.Errorf("vendor %s model %q is declared ahead of the source registry and no row of it exists, yet a basis entry quotes %q; that is a number a reader opens the named file and does not find",
+							vendor, model.ID, evidence.Observation)
+					}
+				}
+				continue
 			}
 			needle := "PolicyRank " + strconv.Itoa(score)
 			carried := false

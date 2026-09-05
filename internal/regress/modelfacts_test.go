@@ -38,6 +38,17 @@ import (
 // test that counts whatever it finds.
 const boardModelCount = 45
 
+// declaredHereRows are the rows this binary carries that the board's table does
+// NOT, because they reached this repository before the board's registry.
+//
+// They are NAMED rather than folded into boardModelCount, and that is the whole
+// point. Bumping the constant would make an accidental extra row indisting-
+// uishable from a deliberate one; naming keeps the divergence readable and
+// keeps an unnamed row failing the sum below exactly as it did before. The
+// vendor package holds each of these to its own evidence rule — see
+// pkg/vendorplugin/declaredhere_test.go.
+var declaredHereRows = []vendorplugin.ModelID{"gpt-6-astra"}
+
 // carriedRows collects every model row this binary carries, from both homes,
 // and reports which home each came from.
 func carriedRows(t *testing.T) (fromVendors, fromUnresolved []vendorplugin.Model) {
@@ -67,9 +78,22 @@ func TestEveryModelRowThisBinaryCarriesIsWholeAndAccountedFor(t *testing.T) {
 	if len(fromUnresolved) == 0 {
 		t.Fatal("no vendor-unresolved runtime carries a model row, so the second home is untested; muse's two rows have no vendor plugin and are exactly what a vendors-only check would miss")
 	}
-	if total := len(fromVendors) + len(fromUnresolved); total != boardModelCount {
-		t.Errorf("this binary carries %d model rows (%d from vendor plugins, %d from vendor-unresolved runtimes) and the board table has %d; a changed count is a divergence between two repositories and has to be argued",
-			total, len(fromVendors), len(fromUnresolved), boardModelCount)
+	if total := len(fromVendors) + len(fromUnresolved); total != boardModelCount+len(declaredHereRows) {
+		t.Errorf("this binary carries %d model rows (%d from vendor plugins, %d from vendor-unresolved runtimes) and the board table has %d plus %d rows declared ahead of it (%v); a changed count is a divergence between two repositories and has to be argued",
+			total, len(fromVendors), len(fromUnresolved), boardModelCount, len(declaredHereRows), declaredHereRows)
+	}
+
+	// Named, not merely counted: an allowance of n rows that never says WHICH
+	// rows would absorb any future extra, which is the failure the constant
+	// above exists to prevent in the first place.
+	carried := map[vendorplugin.ModelID]bool{}
+	for _, model := range append(append([]vendorplugin.Model(nil), fromVendors...), fromUnresolved...) {
+		carried[model.ID] = true
+	}
+	for _, id := range declaredHereRows {
+		if !carried[id] {
+			t.Errorf("this binary carries no model %q, which is recorded as a row declared ahead of the board's table; the allowance is one row wide and covers nothing", id)
+		}
 	}
 
 	seen := make([]vendorplugin.ModelID, 0, boardModelCount)
