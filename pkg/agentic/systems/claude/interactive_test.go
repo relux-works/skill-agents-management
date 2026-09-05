@@ -141,19 +141,43 @@ func TestAnInteractiveLaunchRefusesWhatItsGrammarCannotCarry(t *testing.T) {
 	t.Parallel()
 	workDir := tempSlot(t)
 
-	t.Run("a composition is refused with the decision's sentinel", func(t *testing.T) {
+	// The composition refusal is driven three ways — both halves, the prefix
+	// alone, the server list alone — so a gate narrowed to `Prefix && Servers`
+	// is caught here rather than only in the core double's test.
+	prefix := []string{mcpConfigFlag, `{"mcpServers":{"docs":{"type":"stdio","command":"docs-server"}}}`}
+	servers := []agentic.CompositionServer{{Name: "docs", Transport: "stdio"}}
+	for name, composition := range map[string]agentic.Composition{
+		"prefix and servers": {Prefix: prefix, Servers: servers},
+		"prefix only":        {Prefix: prefix},
+		"servers only":       {Servers: servers},
+	} {
+		t.Run("a composition of "+name+" is refused with the decision's sentinel", func(t *testing.T) {
+			req := interactiveRequest(workDir)
+			req.Composition = composition
+			if err := planErrorFor(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrCompositionNotInteractive) {
+				t.Fatalf("err = %v, want ErrCompositionNotInteractive", err)
+			}
+		})
+	}
+	t.Run("and the full composition leads the exec argv", func(t *testing.T) {
+		// So the refusal above is the mode's rather than the grammar's.
 		req := interactiveRequest(workDir)
-		req.Composition = agentic.Composition{
-			Prefix:  []string{mcpConfigFlag, `{"mcpServers":{"docs":{"type":"stdio","command":"docs-server"}}}`},
-			Servers: []agentic.CompositionServer{{Name: "docs", Transport: "stdio"}},
-		}
-		if err := planErrorFor(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrCompositionNotInteractive) {
-			t.Fatalf("err = %v, want ErrCompositionNotInteractive", err)
-		}
-		// The same composition leads the exec argv, so the refusal is the
-		// mode's rather than the grammar's.
+		req.Composition = agentic.Composition{Prefix: prefix, Servers: servers}
 		if args := argvFor(t, req, agentic.LaunchModeExec); args[0] != mcpConfigFlag {
 			t.Errorf("the exec argv does not lead with the composition: %v", args)
+		}
+	})
+
+	t.Run("an empty model is refused in interactive and exec mode by the core sentinel", func(t *testing.T) {
+		for _, mode := range []agentic.LaunchMode{agentic.LaunchModeInteractive, agentic.LaunchModeExec} {
+			req := interactiveRequest(workDir)
+			req.Model.ID = "  "
+			if mode == agentic.LaunchModeExec {
+				req.PromptPath = writePromptFile(t, workDir, parityPromptBody)
+			}
+			if err := planErrorFor(t, req, mode); !errors.Is(err, agentic.ErrModelMissing) {
+				t.Fatalf("%s: err = %v, want ErrModelMissing", mode, err)
+			}
 		}
 	})
 

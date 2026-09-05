@@ -343,6 +343,13 @@ contracts here, not suggestions:
    spelling either is the defect class the decision names M2. Each declaring
    plugin pins its exact interactive argv and a negative proving every
    exec-mode marker absent, with the sweep shown to fire on its own exec argv.
+7. **A launch names its model.** `BuildPlan` refuses a request whose
+   `Model.ID` is empty or whitespace (`ErrModelMissing`) once, in every mode,
+   before any plugin surface is dispatched. The exec grammar used to admit
+   `--model ""`, which launches the harness under a default nobody chose —
+   the same silent substitution the effort and alias rules refuse. pi keeps
+   its own interactive refusal as a second line of defence for a caller
+   holding the plugin directly.
 
 ## The local-model plugin: module-side M1 candidate, end-to-end M1 pending
 

@@ -118,6 +118,37 @@ func TestBuildPlanRefusesRequiredEffortWithNoValue(t *testing.T) {
 	}
 }
 
+// A request naming no model is refused once, here, for every mode the system
+// declares, before any plugin surface is dispatched. The exec grammar admitted
+// `--model ""` before this sentinel: the harness would then launch under its
+// own default, which is a model nobody chose.
+func TestBuildPlanRefusesAnEmptyModelInEveryMode(t *testing.T) {
+	sys := interactivePangolin()
+	registry := registerPangolin(t, sys)
+
+	for _, mode := range sys.caps.LaunchModes {
+		for _, model := range []string{"", "   "} {
+			req := pangolinRequest()
+			if mode == LaunchModeInteractive {
+				req = interactiveRequest()
+			}
+			req.Model.ID = model
+			_, err := BuildPlan(registry, req, mode)
+			if !errors.Is(err, ErrModelMissing) {
+				t.Fatalf("BuildPlan(%s) with model %q err = %v, want ErrModelMissing", mode, model, err)
+			}
+			if !strings.Contains(err.Error(), mode.String()) {
+				t.Errorf("refusal %q does not name the mode", err)
+			}
+		}
+	}
+	for _, surface := range []string{"ResolveBinary", "Argv", "ChildEnv", "Stdin"} {
+		if sys.calls[surface] != 0 {
+			t.Errorf("%s was dispatched %d time(s) for a request naming no model; the refusal must come before every plugin surface", surface, sys.calls[surface])
+		}
+	}
+}
+
 // A transport that CAN carry effort must still admit a model that needs none;
 // otherwise the gate is refusing a class it was never meant to cover.
 func TestBuildPlanAdmitsAnEffortlessModelUnderEveryTransport(t *testing.T) {

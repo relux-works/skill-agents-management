@@ -133,7 +133,16 @@ func TestAnInteractiveLaunchRefusesWhatItsGrammarCannotCarry(t *testing.T) {
 			t.Fatalf("err = %v, want ErrParameterNotInteractive", err)
 		}
 	})
+	t.Run("a missing model is refused by the core sentinel before the plugin sees it", func(t *testing.T) {
+		req, _ := interactiveRequest(t)
+		req.Model.ID = ""
+		if _, err := buildPlan(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrModelMissing) {
+			t.Fatalf("err = %v, want ErrModelMissing", err)
+		}
+	})
 	t.Run("a missing model is refused by the plugin itself", func(t *testing.T) {
+		// The plugin's own refusal is kept as a second line of defence for
+		// a caller holding the plugin directly, outside BuildPlan.
 		if _, err := New(&fakeStatusReader{}).Argv(agentic.LaunchRequest{Profile: "local-qwen"}, agentic.LaunchModeInteractive); err == nil {
 			t.Fatal("Argv built `pi --model` with an empty model id")
 		}

@@ -82,6 +82,14 @@ var (
 	// ErrUnsupportedLaunchMode is returned when a system was not declared for
 	// the requested mode.
 	ErrUnsupportedLaunchMode = errors.New("agentic: system does not support launch mode")
+	// ErrModelMissing is returned when the request names no model. It is
+	// checked once here, for every mode, before any plugin surface is
+	// dispatched: a plan built around an empty Model.ID would hand the harness
+	// its own default, and a run under a model nobody chose is the same
+	// silent-substitution failure the effort and alias rules already refuse.
+	// The exec grammar admitted `--model ""` before this sentinel existed;
+	// pi's interactive argv kept its own refusal as a second line of defence.
+	ErrModelMissing = errors.New("agentic: launch request names no model")
 	// ErrEffortNotTransportable is returned when a model requires an explicit
 	// reasoning effort and the system's declared transport cannot carry one.
 	// The source repo's failure this closes is the silent one: the launch
@@ -196,6 +204,9 @@ func BuildPlan(r *Registry, req LaunchRequest, mode LaunchMode) (Plan, error) {
 	req, err = PrepareLaunchRequest(sys, req, mode)
 	if err != nil {
 		return Plan{}, fmt.Errorf("agentic: %s rejected the launch request before planning: %w", id, err)
+	}
+	if strings.TrimSpace(req.Model.ID) == "" {
+		return Plan{}, fmt.Errorf("%w: %s in %s mode", ErrModelMissing, id, mode)
 	}
 
 	effort := strings.TrimSpace(req.Effort)

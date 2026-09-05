@@ -133,17 +133,52 @@ func TestAnInteractivePlanCarriesNoExecMarkerForAnyMappedSystem(t *testing.T) {
 // TestAnInteractivePlanRefusesACompositionForEveryMappedSystem is the
 // decision's sentinel, once per system, through the real registry: whatever
 // grammar the system declares, the composer's prefix does not reach a terminal.
+//
+// Each system is driven with both halves, the prefix alone and the server
+// list alone, so a gate narrowed to `Prefix && Servers` fails here per plugin.
 func TestAnInteractivePlanRefusesACompositionForEveryMappedSystem(t *testing.T) {
+	prefix := []string{"--x", "y"}
+	servers := []agentic.CompositionServer{{Name: "x", Transport: "http"}}
+	compositions := map[string]agentic.Composition{
+		"prefix and servers": {Prefix: prefix, Servers: servers},
+		"prefix only":        {Prefix: prefix},
+		"servers only":       {Servers: servers},
+	}
 	for name, c := range interactiveCases {
-		t.Run(name, func(t *testing.T) {
-			workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
-			req := interactiveRequest(t, c, workDir, binDir)
-			req.Composition = agentic.Composition{Prefix: []string{"--x", "y"}, Servers: []agentic.CompositionServer{{Name: "x", Transport: "http"}}}
-			_, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeInteractive)
-			if !errors.Is(err, agentic.ErrCompositionNotInteractive) {
-				t.Fatalf("%s: err = %v, want ErrCompositionNotInteractive", name, err)
-			}
-		})
+		for shape, composition := range compositions {
+			t.Run(name+"/"+shape, func(t *testing.T) {
+				workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
+				req := interactiveRequest(t, c, workDir, binDir)
+				req.Composition = composition
+				_, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeInteractive)
+				if !errors.Is(err, agentic.ErrCompositionNotInteractive) {
+					t.Fatalf("%s/%s: err = %v, want ErrCompositionNotInteractive", name, shape, err)
+				}
+			})
+		}
+	}
+}
+
+// TestAPlanRefusesAnEmptyModelForEveryMappedSystemInEveryMode is the core
+// ErrModelMissing sentinel through the real registry: whatever the mode, a
+// request naming no model never reaches a plugin's argv, where the exec
+// grammar used to admit `--model ""`.
+func TestAPlanRefusesAnEmptyModelForEveryMappedSystemInEveryMode(t *testing.T) {
+	for name, c := range interactiveCases {
+		for _, mode := range []agentic.LaunchMode{agentic.LaunchModeInteractive, agentic.LaunchModeExec} {
+			t.Run(name+"/"+mode.String(), func(t *testing.T) {
+				workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
+				req := interactiveRequest(t, c, workDir, binDir)
+				if mode == agentic.LaunchModeExec {
+					req = c.exec(t, req, workDir)
+				}
+				req.Model.ID = ""
+				_, err := paritycase.TryBuildPlan(c.system, req, mode)
+				if !errors.Is(err, agentic.ErrModelMissing) {
+					t.Fatalf("%s/%s: err = %v, want ErrModelMissing", name, mode, err)
+				}
+			})
+		}
 	}
 }
 
