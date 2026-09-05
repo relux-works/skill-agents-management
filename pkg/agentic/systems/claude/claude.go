@@ -89,19 +89,26 @@ func (*System) ID() agentic.SystemID { return systemID }
 
 // Capabilities is the static declaration.
 //
-// TWO launch modes, not three. The source registers claude with a BuildCommand
-// and a DryRunArgs and nothing else: there is no managed-session args builder
-// for claude anywhere in the adapter table. The interactive path that does
-// exist — cmd/claude_manager.go — FILTERS argv a human typed rather than
-// constructing it from a config, which is a structurally different surface the
-// goldens' own README names as uncovered by anything here. Declaring
-// LaunchModeManagedSession for it would be a capability claim with no
-// construction behind it.
+// THREE launch modes: the source's two, and the interactive terminal session
+// curator-spec Decision 0013 §5 added. The source registers claude with a
+// BuildCommand and a DryRunArgs and nothing else: there is no managed-session
+// args builder for claude anywhere in the adapter table. The interactive path
+// that did exist there — cmd/claude_manager.go — FILTERS argv a human typed
+// rather than constructing it from a config, which is a structurally different
+// surface the goldens' own README names as uncovered by anything here.
+// Declaring LaunchModeManagedSession for it would be a capability claim with
+// no construction behind it.
+//
+// LaunchModeInteractive is NOT that filter. It is a constructed argv of model
+// selection and effort transport only — `--model <id> [--effort <e>]` — with
+// no golden behind it because no source capture ever produced one;
+// interactive_test.go is its evidence and says so.
 func (*System) Capabilities() agentic.Capabilities {
 	return agentic.Capabilities{
 		LaunchModes: []agentic.LaunchMode{
 			agentic.LaunchModeExec,
 			agentic.LaunchModeDryRun,
+			agentic.LaunchModeInteractive,
 		},
 		// Argv: claude carries effort as `--effort <value>`. TRANSPORT only —
 		// the words themselves belong to the model row in the vendor layer.
@@ -166,6 +173,13 @@ func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, e
 
 // Stdin is claude's prompt transport, and it is MODE-DEPENDENT in a way no
 // other ported system's is.
+//
+// An INTERACTIVE launch attaches nothing, and that is enforced upstream of this
+// method rather than inside it: the surface takes no mode, and BuildPlan
+// refuses an interactive request carrying a prompt (ErrParameterNotInteractive)
+// before any plugin surface runs, then refuses an attached stdin under an argv
+// effort transport after this one does. With neither a prompt nor a goal on
+// the request, the last return below is the answer.
 //
 // A prompt-mode launch streams the assignment file on standard input. A
 // GOAL-BOUND launch attaches nothing: the source's buildClaudeCommand sets

@@ -40,6 +40,13 @@ type pangolinSystem struct {
 	// Register's — have something real to refuse.
 	emptyBinary        bool
 	detachedStdinBytes bool
+	// attachedStdin, when set, is returned attached regardless of the
+	// request's prompt — the shape a plugin has when it has found a stdin
+	// channel of its own.
+	attachedStdin []byte
+	// detachedStdin, when set, attaches nothing at all — the interactive
+	// baseline, where a plugin has no prompt and no effort to put on stdin.
+	detachedStdin bool
 
 	// unstableID, when set, makes ID() answer p.id once and this value on
 	// every later call: a plugin that violates System.ID's stability rule
@@ -171,6 +178,12 @@ func (p *pangolinSystem) Stdin(req LaunchRequest) (StdinPayload, error) {
 	}
 	if p.detachedStdinBytes {
 		return StdinPayload{Attached: false, Bytes: []byte("orphaned")}, nil
+	}
+	if p.detachedStdin {
+		return StdinPayload{}, nil
+	}
+	if p.attachedStdin != nil {
+		return StdinPayload{Attached: true, Bytes: append([]byte(nil), p.attachedStdin...)}, nil
 	}
 	return StdinPayload{Attached: true, Bytes: req.Prompt}, nil
 }

@@ -36,11 +36,22 @@ import (
 // agentic.LaunchModeManagedSession is the provider-args FRAGMENT handed to an
 // external composer that owns the PTY. It is not a complete argv and this
 // module never execs it.
+//
+// agentic.LaunchModeInteractive (curator-spec Decision 0013 §5) is the
+// interactive `codex` session a human drives, as a COMPLETE argv the launcher
+// hands to a terminal: `-m <model>` plus the `-c model_reasoning_effort=…`
+// override when an effort was requested, and nothing else. No `exec`, no
+// `--dangerously-bypass-approvals-and-sandbox`, no sandbox or approval policy,
+// no profile, no service tier, no composition prefix, no `-` prompt marker: the
+// composer that owns the terminal spells the MCP channel and the permission
+// posture. Both spellings were checked against `codex --help` at 0.153.2:
+// `-m, --model <MODEL>` and `-c, --config <key=value>` are top-level flags of
+// the interactive invocation, not `exec` subcommand flags.
 
 // Args builds the codex argv for one launch mode, excluding the binary.
 //
 // It is the single construction site. Every surface of this plugin that needs
-// codex flags calls it: System.Argv for all three modes, and nothing else.
+// codex flags calls it: System.Argv for all four modes, and nothing else.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
 	model := strings.TrimSpace(req.Model.ID)
 	switch mode {
@@ -75,6 +86,24 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		}
 		args = appendReasoningAndTier(args, req)
 		return args, nil
+	case agentic.LaunchModeInteractive:
+		// The profile and tier refusals are BuildPlan's too (a tier, through
+		// ErrParameterNotInteractive), and are repeated here because a caller
+		// holding the plugin directly meets this function first. A profile is
+		// codex's own fact and no core rule names it, so this is its ONLY
+		// refusal: the interactive grammar has no `-p`, and an admitted
+		// profile that reached no flag would be a configured profile dropped.
+		if profile := strings.TrimSpace(req.Profile); profile != "" {
+			return nil, fmt.Errorf("codex: an interactive launch carries no profile; %q would reach no flag", profile)
+		}
+		if tier := strings.TrimSpace(req.ServiceTier); tier != "" {
+			return nil, fmt.Errorf("codex: an interactive launch carries no service tier; %q would reach no override", tier)
+		}
+		args := []string{"-m", model}
+		// With the tier refused above, appendReasoningAndTier contributes the
+		// effort override alone — the same spelling the other two grammars use,
+		// from the same fragment, so the three cannot drift.
+		return appendReasoningAndTier(args, req), nil
 	default:
 		return nil, fmt.Errorf("codex: unsupported launch mode %s", mode)
 	}

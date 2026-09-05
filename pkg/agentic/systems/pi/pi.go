@@ -64,11 +64,18 @@ func (*System) ID() agentic.SystemID { return systemID }
 // transport — none of these are specified anywhere in the architecture
 // decision for Process A's wrapper, and declaring one with no construction
 // behind it would be a capability claim nothing backs.
+//
+// LaunchModeInteractive (curator-spec Decision 0013 §5) is the interactive
+// primary session the SAME wrapper starts when its first argument is not
+// `spawn`, `turn` or `lifecycle`: `agents-infra pi --model <id>`, through the
+// same resolved binary. With EffortTransportNone the argv is the model flag
+// alone and stdin stays detached. See args.go.
 func (*System) Capabilities() agentic.Capabilities {
 	return agentic.Capabilities{
 		LaunchModes: []agentic.LaunchMode{
 			agentic.LaunchModeExec,
 			agentic.LaunchModeDryRun,
+			agentic.LaunchModeInteractive,
 		},
 		EffortTransport:     agentic.EffortTransportNone,
 		SupportsGoal:        false,
@@ -100,7 +107,9 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 // PrepareLaunchRequest validates and snapshots the exact profile/prompt input
 // before vendorplugin may observe an engine or invoke Preflight. PromptPath is
 // read once and replaced with copied bytes, so the later BuildPlan cannot see a
-// different file value. Dry-run retains its no-read placeholder behavior.
+// different file value. Dry-run retains its no-read placeholder behavior. An
+// interactive launch has no prompt to snapshot and no profile flag to assert,
+// so it passes through byte-for-byte (args.go says why).
 func (s *System) PrepareLaunchRequest(req agentic.LaunchRequest, mode agentic.LaunchMode) (agentic.LaunchRequestPreparation, error) {
 	if !s.Capabilities().SupportsMode(mode) {
 		return agentic.LaunchRequestPreparation{}, fmt.Errorf("pi: launch mode %s is not declared by this system", mode)

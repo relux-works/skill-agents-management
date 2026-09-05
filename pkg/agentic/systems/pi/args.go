@@ -22,7 +22,33 @@ func Args(req agentic.LaunchRequest) ([]string, error) {
 	return args(req, agentic.LaunchModeExec)
 }
 
+// interactiveArgs is the interactive primary-session argv (curator-spec
+// Decision 0013 §5): `pi --model <id>` on the same agents-infra wrapper the
+// exec mode resolves. The wrapper hands every argument that is not a `spawn`,
+// `turn` or `lifecycle` subcommand to its interactive session launcher
+// (relux-agents-infra, tools/agents-infra/main.go runPi), and raw pi accepts
+// `--model <pattern>` (checked against `pi --help` at 0.84.2). This system
+// declares EffortTransportNone, so there is no effort flag to add and BuildPlan
+// has already refused a request carrying one.
+//
+// The profile is deliberately NOT spelled. It is the Process-A lease assertion
+// of the `spawn` subcommand; the interactive wrapper resolves its own profile
+// from the project configuration under AGENTS_INFRA_CALLER_CWD, which env.go
+// passes through verbatim. A Profile arriving on the request — local-models'
+// Spawn always contributes one — therefore reaches no flag here, which is the
+// wrapper's contract rather than a drop.
+func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
+	model := strings.TrimSpace(req.Model.ID)
+	if model == "" {
+		return nil, fmt.Errorf("pi: an interactive launch requires a model id")
+	}
+	return []string{"pi", "--model", model}, nil
+}
+
 func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	if mode == agentic.LaunchModeInteractive {
+		return interactiveArgs(req)
+	}
 	prepared, err := prepareLaunchRequest(req, mode)
 	if err != nil {
 		return nil, err
@@ -42,6 +68,9 @@ func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 }
 
 func prepareLaunchRequest(req agentic.LaunchRequest, mode agentic.LaunchMode) (agentic.LaunchRequest, error) {
+	if mode == agentic.LaunchModeInteractive {
+		return req, nil
+	}
 	if strings.TrimSpace(req.Profile) == "" {
 		return agentic.LaunchRequest{}, fmt.Errorf("%w: the vendor must resolve an exact profile before planning", ErrProfileMissing)
 	}

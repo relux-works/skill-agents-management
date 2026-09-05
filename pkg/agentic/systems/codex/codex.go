@@ -77,10 +77,13 @@ func (*System) ID() agentic.SystemID { return systemID }
 
 // Capabilities is the static declaration.
 //
-// The three launch modes are the source's three codex surfaces: the one-shot
-// `codex exec` this tool owns, its side-effect-free dry-run mirror, and the
-// provider-args fragment an external composer splices into a PTY-owned managed
-// session.
+// The first three launch modes are the source's three codex surfaces: the
+// one-shot `codex exec` this tool owns, its side-effect-free dry-run mirror,
+// and the provider-args fragment an external composer splices into a PTY-owned
+// managed session. The fourth, LaunchModeInteractive, is curator-spec Decision
+// 0013 §5: the interactive (non-`exec`) grammar reduced to model selection and
+// the effort override, with no golden behind it because no source capture ever
+// produced one — interactive_test.go is its evidence and says so.
 //
 // LaunchModeManagedSession is declared with its evidence named, because the
 // goldens have NONE for it — the source's capture harness lives in package
@@ -95,6 +98,7 @@ func (*System) Capabilities() agentic.Capabilities {
 			agentic.LaunchModeExec,
 			agentic.LaunchModeDryRun,
 			agentic.LaunchModeManagedSession,
+			agentic.LaunchModeInteractive,
 		},
 		// Argv: codex carries effort as a `-c model_reasoning_effort=...`
 		// config override. TRANSPORT only — the words themselves belong to the

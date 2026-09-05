@@ -100,6 +100,31 @@ const (
 	// external composer that owns the PTY, rather than a complete argv this
 	// tool executes.
 	LaunchModeManagedSession
+	// LaunchModeInteractive is the terminal session a human drives: a complete
+	// argv the launcher hands to a terminal, with no prompt and no result
+	// protocol. It is curator-spec Decision 0013 §5, and its grammar is a
+	// CLOSED set of constraints rather than a spelling:
+	//
+	//   - The argv contains ONLY model selection and the system's declared
+	//     effort transport for the requested effort. It carries no print or
+	//     headless mode, no output-format flag, no permission-bypass or
+	//     unrestricted-mode flag, no goal or assignment-prompt machinery, no
+	//     budget flag and no service-tier flag. What it may not contain is the
+	//     invariant; what it does contain is the system plugin's to spell.
+	//   - Composition is NOT part of the interactive argv. The MCP composition
+	//     prefix is the composer's plane, and BuildPlan refuses a request
+	//     carrying one with ErrCompositionNotInteractive.
+	//   - StdinPayload is Attached: false, unless the system's EffortTransport
+	//     is EffortTransportStdin — then it is exactly the effort encoding that
+	//     system declares and nothing else. BuildPlan holds every plugin to it.
+	//   - Home and WorkDir carry as in every other mode. Model is required;
+	//     effort follows the model's EffortSupport with no default injected.
+	//   - A system that does not declare the mode is refused with
+	//     ErrUnsupportedLaunchMode, as for any undeclared mode.
+	//
+	// It is appended, never inserted: the integer values above are the ones
+	// existing declarations and goldens were built against.
+	LaunchModeInteractive
 )
 
 // Valid reports whether m is one of the declared modes. A mode value outside
@@ -107,7 +132,7 @@ const (
 // interpret.
 func (m LaunchMode) Valid() bool {
 	switch m {
-	case LaunchModeExec, LaunchModeDryRun, LaunchModeManagedSession:
+	case LaunchModeExec, LaunchModeDryRun, LaunchModeManagedSession, LaunchModeInteractive:
 		return true
 	default:
 		return false
@@ -122,6 +147,8 @@ func (m LaunchMode) String() string {
 		return "dry-run"
 	case LaunchModeManagedSession:
 		return "managed-session"
+	case LaunchModeInteractive:
+		return "interactive"
 	default:
 		return fmt.Sprintf("launch-mode(%d)", int(m))
 	}

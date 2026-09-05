@@ -41,31 +41,40 @@ const promptFilePlaceholder = "<assignment-prompt-file>"
 // Args builds the claude argv for one launch mode, excluding the binary.
 //
 // It is the single construction site. Every surface of this plugin that needs
-// claude flags calls it: System.Argv for both modes, and nothing else.
+// claude flags calls it: System.Argv for all three modes, and nothing else.
 //
 // The ORDER is the source's, verbatim, and it is contract rather than taste:
 // the composition prefix comes first because it is spliced ahead of every
 // provider flag, and the goal pair comes last because the `/goal` directive is
 // the child's user turn and everything after it would be read as part of it.
+//
+// # The interactive mode is a different grammar, not a subset
+//
+// LaunchModeInteractive (curator-spec Decision 0013 §5) is the terminal session
+// a human drives, and its argv is `--model <id>` plus the effort transport when
+// an effort was requested — and NOTHING else. No `-p`, no `--output-format`,
+// no `--dangerously-skip-permissions`, no budget, no composition prefix, no
+// goal pair: the composer that owns the terminal spells the MCP channel and the
+// permission posture, and a second component spelling either is the M2 defect
+// the decision names. The refusals for a goal, a budget, a prompt or a
+// composition arriving in this mode are BuildPlan's (ErrParameterNotInteractive,
+// ErrCompositionNotInteractive); the goal and budget refusals are repeated
+// here, because a caller holding the plugin directly meets this function
+// first. Both spellings were checked against `claude --help` at 2.1.261:
+// `--model <model>` and `--effort <level>` are session flags, not `--print`
+// ones.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
 	switch mode {
 	case agentic.LaunchModeExec, agentic.LaunchModeDryRun:
+	case agentic.LaunchModeInteractive:
+		return interactiveArgs(req)
 	default:
 		return nil, fmt.Errorf("claude: unsupported launch mode %s", mode)
 	}
 
 	args := compositionArgvPrefix(req)
 	args = append(args, "-p", "--output-format", "json", "--model", strings.TrimSpace(req.Model.ID))
-	if effort := strings.TrimSpace(req.Effort); effort != "" {
-		// Pure TRANSPORT. The word itself — "high", "xhigh", whatever a model's
-		// vocabulary contains — arrives on the request from the vendor layer and
-		// is passed through verbatim. This plugin does not know which words are
-		// legal for which model and must not learn: that is invariant 4 of
-		// docs/architecture.md, and a system enumerating a vocabulary is how a
-		// model that gains an effort level becomes a launch that silently
-		// refuses it.
-		args = append(args, "--effort", effort)
-	}
+	args = appendEffort(args, req)
 	if req.Budget != nil && req.Budget.USD > 0 {
 		// The source's `%.2f` and its `> 0` guard, both kept rather than
 		// improved. The guard means a Budget carrying zero or a negative figure
@@ -95,6 +104,38 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	}
 	args = append(args, "--append-system-prompt-file", assignmentPath, directive)
 	return args, nil
+}
+
+// interactiveArgs is the interactive branch of Args, split out only so the
+// exec grammar above reads as the source wrote it. It is NOT a second
+// construction site: it is reached from Args alone, and argvguard_test.go's
+// allowlist names it with that reason.
+func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
+	if req.Goal != nil {
+		return nil, fmt.Errorf("claude: an interactive launch carries no goal; the `%s` directive is exec-mode machinery", strings.TrimSpace(goalDirectivePrefix))
+	}
+	if req.Budget != nil {
+		return nil, fmt.Errorf("claude: an interactive launch carries no budget ceiling")
+	}
+	args := []string{"--model", strings.TrimSpace(req.Model.ID)}
+	return appendEffort(args, req), nil
+}
+
+// appendEffort appends the effort transport when an effort was requested. Both
+// grammars splice it identically, and inlining it into each branch is what
+// would create a second spelling one branch at a time.
+//
+// Pure TRANSPORT. The word itself — "high", "xhigh", whatever a model's
+// vocabulary contains — arrives on the request from the vendor layer and is
+// passed through verbatim. This plugin does not know which words are legal for
+// which model and must not learn: that is invariant 4 of docs/architecture.md,
+// and a system enumerating a vocabulary is how a model that gains an effort
+// level becomes a launch that silently refuses it.
+func appendEffort(args []string, req agentic.LaunchRequest) []string {
+	if effort := strings.TrimSpace(req.Effort); effort != "" {
+		args = append(args, "--effort", effort)
+	}
+	return args
 }
 
 // compositionArgvPrefix returns the already-composed MCP prefix a launch

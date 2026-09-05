@@ -103,6 +103,21 @@ var (
 	// ErrCompositionUnsupported is returned when a composition is attached to
 	// a system declaring GrammarNone.
 	ErrCompositionUnsupported = errors.New("agentic: system declares no launch composition grammar")
+	// ErrCompositionNotInteractive is returned when an interactive launch
+	// carries a composition — a prefix, a server list, or both. It is a
+	// different refusal from ErrCompositionUnsupported on purpose: the system
+	// may well declare a grammar, but in LaunchModeInteractive the MCP channel
+	// belongs to the composer that owns the terminal session (Decision 0013
+	// §6.5), and a second component spelling MCP flags is the defect class the
+	// decision names M2.
+	ErrCompositionNotInteractive = errors.New("agentic: interactive launch carries no composition; the MCP prefix is the composer's")
+	// ErrParameterNotInteractive is returned when an interactive launch
+	// carries a parameter its grammar has no channel for: a goal, a budget, a
+	// service tier, or an assignment prompt. Decision 0013 §5 forbids each of
+	// them on the interactive argv and on stdin, and a parameter a plugin
+	// cannot place is refused rather than dropped — a dropped one produces a
+	// session that looks like the one that was asked for and is not.
+	ErrParameterNotInteractive = errors.New("agentic: interactive launch carries a parameter its grammar has no channel for")
 	// ErrPluginContract is returned when a plugin answers a dispatch surface
 	// with something the contract forbids — an empty binary reported as a
 	// success, or a stdin payload carrying bytes while claiming nothing is
@@ -110,6 +125,44 @@ var (
 	// half-formed launch downstream.
 	ErrPluginContract = errors.New("agentic: system violated the plugin contract")
 )
+
+// refuseNonInteractiveParameters is the interactive grammar's request-side
+// half, applied once here so that no plugin has to carry its own copy of the
+// rule and no plugin can forget one.
+//
+// The composition refusal is the decision's own sentinel. The parameter
+// refusal is the same constraint read from the other side: a goal, a budget, a
+// service tier or a prompt would each have to reach the child through a flag
+// or a stdin the mode forbids, so admitting one and building an argv without
+// it is a launch parameter silently dropped — the refusal-over-drop rule every
+// other sentinel in this file already follows.
+//
+// It sits BEFORE the composition-grammar checks below, so an interactive
+// request carrying a composition is refused for being interactive rather than
+// for its grammar: the operator fixing it needs to know the prefix does not
+// belong here at all, not that it is malformed.
+func refuseNonInteractiveParameters(id SystemID, req LaunchRequest) error {
+	if !req.Composition.IsZero() {
+		return fmt.Errorf("%w: %s was handed %d prefix argument(s) and %d server(s)", ErrCompositionNotInteractive, id, len(req.Composition.Prefix), len(req.Composition.Servers))
+	}
+	var carried []string
+	if req.Goal != nil {
+		carried = append(carried, "goal")
+	}
+	if req.Budget != nil {
+		carried = append(carried, "budget")
+	}
+	if strings.TrimSpace(req.ServiceTier) != "" {
+		carried = append(carried, "service tier")
+	}
+	if strings.TrimSpace(req.PromptPath) != "" || len(req.Prompt) > 0 {
+		carried = append(carried, "assignment prompt")
+	}
+	if len(carried) > 0 {
+		return fmt.Errorf("%w: %s was handed %s", ErrParameterNotInteractive, id, strings.Join(carried, ", "))
+	}
+	return nil
+}
 
 // BuildPlan resolves one launch through the registry.
 //
@@ -167,6 +220,12 @@ func BuildPlan(r *Registry, req LaunchRequest, mode LaunchMode) (Plan, error) {
 		return Plan{}, fmt.Errorf("%w: %s", ErrServiceTierUnsupported, id)
 	}
 
+	if mode == LaunchModeInteractive {
+		if err := refuseNonInteractiveParameters(id, req); err != nil {
+			return Plan{}, err
+		}
+	}
+
 	if !req.Composition.IsZero() {
 		if caps.CompositionGrammar == GrammarNone {
 			return Plan{}, fmt.Errorf("%w: %s", ErrCompositionUnsupported, id)
@@ -218,6 +277,13 @@ func BuildPlan(r *Registry, req LaunchRequest, mode LaunchMode) (Plan, error) {
 	}
 	if !stdin.Attached && len(stdin.Bytes) > 0 {
 		return Plan{}, fmt.Errorf("%w: %s returned %d stdin bytes while reporting nothing attached", ErrPluginContract, id, len(stdin.Bytes))
+	}
+	if mode == LaunchModeInteractive && stdin.Attached && caps.EffortTransport != EffortTransportStdin {
+		// Decision 0013 §5: an interactive session attaches nothing unless the
+		// effort itself rides stdin. A plugin that attached bytes anyway has
+		// found a prompt channel the mode does not have, and the plan must not
+		// carry it out to a terminal.
+		return Plan{}, fmt.Errorf("%w: %s attached %d stdin bytes to an interactive launch under effort transport %s", ErrPluginContract, id, len(stdin.Bytes), caps.EffortTransport)
 	}
 
 	home := strings.TrimSpace(req.Home)
