@@ -723,6 +723,15 @@ cheaper than discovering it.
 
 ## Status
 
+`v0.5.9` is the signed re-cut of the `v0.5.8` head. `v0.5.8` added the
+`gpt-6-astra` openai row (declared here ahead of the board's registry, with a
+probe-backed effort vocabulary, ranked above `gpt-5.6-sol`, changing no default
+or recommendation), but its landing commit `052dee1` was published unsigned,
+against this repository's signed-landing policy. Published tags are immutable
+and `main` is never force-updated, so the repair is this signed follow-up and a
+new tag: `v0.5.9` carries the same module surface as `v0.5.8` plus this note,
+and it is the tag consumers pin for `gpt-6-astra`.
+
 `v0.4.3` is the exhaustive refusal-proof patch for the general-plugin-graph
 release. Its checked-in matrix independently enumerates all nine raw
 registration and three raw resolution error-producing paths, plus every typed
