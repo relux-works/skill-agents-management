@@ -3,6 +3,7 @@ package vendorplugin_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -143,28 +144,111 @@ func TestEveryDeclaredHereRowRestsOnTheVendorCatalog(t *testing.T) {
 		if !declared {
 			continue // reported by TestEveryDeclaredHereRowIsDeclared
 		}
-		if err := model.Rank.Validate(); err != nil {
-			t.Errorf("declared-here model %q: %v", id, err)
-			continue
-		}
-		named, borrowed := false, ""
-		for _, evidence := range model.Rank.Basis {
-			if strings.Contains(evidence.Source, declaredHereCatalogEvidence) {
-				named = true
-			}
-			if strings.Contains(evidence.Observation, portedScoreObservation) {
-				borrowed = evidence.Observation
-			}
-		}
-		if !named {
-			t.Errorf("declared-here model %q carries no basis entry naming %q; a row no capture holds and no vendor surface names is ranked on this repository's say-so",
-				id, declaredHereCatalogEvidence)
-		}
-		if borrowed != "" {
-			t.Errorf("declared-here model %q quotes a ported score observation (%q); the source registry has no row for it, so the number is one a reader opens that file and does not find",
-				id, borrowed)
+		for _, problem := range declaredHereEvidenceProblems(id, model) {
+			t.Error(problem)
 		}
 	}
+}
+
+// declaredHereEvidenceProblems is the evidence rule itself, returning
+// disagreements instead of failing.
+//
+// Extracted from the test body so a mutant can drive the SAME rule over a
+// reshaped basis. This checker reads STRINGS — it searches for a source
+// substring and for a borrowed observation — and a string search is the kind of
+// gate that is easiest to satisfy while meaning nothing: a row can name the
+// catalog in one entry and quote a board score in the next.
+// TestTheDeclaredHereEvidenceRuleFiresOnABasisThatKeepsTheToken is the mutant
+// that keeps the searched-for token in place and changes what the basis claims.
+func declaredHereEvidenceProblems(id vendorplugin.ModelID, model vendorplugin.Model) []string {
+	var problems []string
+	if err := model.Rank.Validate(); err != nil {
+		return append(problems, fmt.Sprintf("declared-here model %q: %v", id, err))
+	}
+	named, borrowed := false, ""
+	for _, evidence := range model.Rank.Basis {
+		if strings.Contains(evidence.Source, declaredHereCatalogEvidence) {
+			named = true
+		}
+		if strings.Contains(evidence.Observation, portedScoreObservation) {
+			borrowed = evidence.Observation
+		}
+	}
+	if !named {
+		problems = append(problems, fmt.Sprintf("declared-here model %q carries no basis entry naming %q; a row no capture holds and no vendor surface names is ranked on this repository's say-so",
+			id, declaredHereCatalogEvidence))
+	}
+	if borrowed != "" {
+		problems = append(problems, fmt.Sprintf("declared-here model %q quotes a ported score observation (%q); the source registry has no row for it, so the number is one a reader opens that file and does not find",
+			id, borrowed))
+	}
+	return problems
+}
+
+// TestTheDeclaredHereEvidenceRuleFiresOnABasisThatKeepsTheToken is the
+// token-preserving mutant for a gate that inspects text.
+//
+// Deleting the catalog source is the obvious attack and the useless one: it
+// proves the substring search runs. The interesting mutant KEEPS
+// declaredHereCatalogEvidence exactly where the checker looks for it and
+// changes what the basis claims — the row still names `codex debug models` and
+// now also quotes a board PolicyRank that no capture of the board's table
+// contains. That is the self-minted-evidence shape this whole file exists to
+// refuse, and it is invisible to a checker that stopped at "the token is
+// present".
+//
+// The second half of the pair is the LAUNCH suite run under the same mutant: a
+// rank basis is presentation and must not be able to move what executes. Both
+// halves matter, because a basis rule that also changed a launch would be two
+// facts in one field.
+func TestTheDeclaredHereEvidenceRuleFiresOnABasisThatKeepsTheToken(t *testing.T) {
+	const id vendorplugin.ModelID = "astra"
+	model, declared := declaredHereModel(t, id)
+	if !declared {
+		t.Fatalf("vendor %s no longer declares %q", declaredHereRows[id], id)
+	}
+
+	t.Run("the token stays and a board score is quoted beside it", func(t *testing.T) {
+		mutant := model
+		mutant.Rank.Basis = append(append([]vendorplugin.RankEvidence(nil), model.Rank.Basis...),
+			vendorplugin.RankEvidence{
+				Source:      "skill-project-management tools/board-cli/internal/spawn/models.go",
+				Observation: portedScoreObservation + "130, read from the board's own table",
+			})
+		problems := declaredHereEvidenceProblems(id, mutant)
+		if len(problems) == 0 {
+			t.Fatal("a basis naming the catalog AND quoting a board PolicyRank passed the evidence rule; the search for the catalog token is then satisfiable by a row that also invents a board number")
+		}
+		requireReport(t, problems, "quotes a ported score observation")
+	})
+
+	t.Run("the token removed", func(t *testing.T) {
+		mutant := model
+		mutant.Rank.Basis = append([]vendorplugin.RankEvidence(nil), model.Rank.Basis...)
+		for i := range mutant.Rank.Basis {
+			mutant.Rank.Basis[i].Source = "somebody's recollection"
+		}
+		requireReport(t, declaredHereEvidenceProblems(id, mutant), "carries no basis entry naming")
+	})
+
+	t.Run("the launch is unmoved by either", func(t *testing.T) {
+		// The behavioral suite, not the static checker. A rank basis is
+		// presentation; if editing one could change what runs, the field would
+		// be carrying a launch fact as well as an evidence one.
+		registry, err := astraMutantRegistry(t, func(m vendorplugin.Model) vendorplugin.Model {
+			if m.ID == id {
+				m.Rank.Basis = append(append([]vendorplugin.RankEvidence(nil), m.Rank.Basis...),
+					vendorplugin.RankEvidence{Source: "somebody's recollection", Observation: portedScoreObservation + "130"})
+			}
+			return m
+		})
+		if err != nil {
+			t.Fatalf("the reshaped basis did not register: %v", err)
+		}
+		for _, problem := range astraLaunchProblems(t, registry, "astra", "gpt-6-astra") {
+			t.Errorf("a rank basis edit moved the launch: %s", problem)
+		}
+	})
 }
 
 // TestADeclaredRowMayNotTieAPortedOne is a gate rather than an aesthetic rule.
