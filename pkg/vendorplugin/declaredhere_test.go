@@ -57,11 +57,21 @@ import (
 // declaredHereRows maps a row this module declares first to the vendor that
 // declares it.
 //
-// One entry today. gpt-6-astra was published by OpenAI and read off the
-// installed Codex CLI's own catalog; the board's registry has no row for it and
-// neither capture can be regenerated into one.
+// Two entries today, and they are ONE model under two spellings.
+//
+// gpt-6-astra was published by OpenAI and read off the installed Codex CLI's
+// own catalog; the board's registry has no row for it and neither capture can
+// be regenerated into one. `astra` is the short spelling of that same head,
+// declared here with AliasOf and published by nobody — the catalog carries no
+// such slug — so no capture will ever carry it either.
+//
+// The two share a capability score, which is legal precisely because both are
+// named here: TestADeclaredRowMayNotTieAPortedOne forbids a declared row tying
+// a PORTED one, because that would publish an equality no capture recorded. A
+// tie between an alias and its own identity records nothing about two models.
 var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
 	"gpt-6-astra": "openai",
+	"astra":       "openai",
 }
 
 // declaredHereCatalogEvidence is the substring a declared-here row's basis must

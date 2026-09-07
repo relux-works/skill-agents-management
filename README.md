@@ -513,9 +513,9 @@ run from meaning "the rule never matched anything".
 All 45 rows of the extraction source's model registry, carried across. 42 land
 in the four vendors; the three `muse` rows belong to no vendor, because the
 source records that runtime's broker as checked-and-never-established, and the
-port accounts for them explicitly rather than dropping them. One further row —
-`gpt-6-astra` — is declared HERE and not ported; see *Rows declared ahead of the
-board's registry* below.
+port accounts for them explicitly rather than dropping them. Two further rows —
+`gpt-6-astra` and its `astra` alias — are declared HERE and not ported; see
+*Rows declared ahead of the board's registry* below.
 
 - **Ported verbatim**: model ids, the agentic systems each row declares, the
   per-model effort vocabularies and the recommended efforts. A full-set pin
@@ -584,7 +584,9 @@ A row NOT on that list is still refused by both pins exactly as before, and
 `TestAnUnnamedExtraRowIsStillRefusedByBothPins` is the mutant that proves the
 skip did not quietly widen to every leftover row.
 
-`gpt-6-astra` is the only entry today: OpenAI's most capable Codex row, current,
+Two entries today, and they are ONE model under two spellings.
+
+`gpt-6-astra` is OpenAI's most capable Codex row: current,
 `low`/`medium`/`high`/`xhigh`/`max`/`ultra`, scored 130 above `gpt-5.6-sol`'s
 120, with a 272000-token context window. It is deliberately NOT `Recommended`:
 `sol` keeps the display pick, and admitting a more capable model is not a
@@ -593,15 +595,34 @@ from the frozen v2 admission snapshot and from the provider-limit group table,
 and in both places that absence is the documented answer for a row registered
 after those tables were captured rather than a gap.
 
+`astra` is the short spelling of that head, and it is the one row here the
+vendor does not publish AT ALL: `codex debug models` carries nine slugs and
+none of them is that word. It therefore declares `AliasOf: gpt-6-astra` and
+executes as the head — see *Alias identity resolution* below — while staying a
+real row that is indexed, ranked, displayed and admitted under `astra`. It
+carries the head's score, so the two TIE. That tie is legal precisely because
+both rows are named in `declaredHereRows`: the rule forbids a declared row
+tying a PORTED one, because that publishes an equality no capture recorded, and
+an alias tying its own identity records nothing about two models. It is also
+why its rank rests on a SECOND catalog read, quoted for what the catalog does
+NOT contain rather than for what it does.
+
 ### Alias identity resolution
 
 A model row may declare `AliasOf`: the identity it is a short spelling of.
-`muse-spark` is the only one in the module today, and it exists because the
-alias is a name operators, configuration and spawn ceilings use and the
-provider does not have. Measured, not assumed: a spawn of `--model muse-spark
---reasoning-effort high` put the alias into muse's argv verbatim and the
-backend answered `model muse-spark does not exist or you lack access`, while
-the identical launch spelled `muse-spark-1.3-contributor` ran end to end.
+Two rows do today — `muse-spark` → `muse-spark-1.3-contributor` and `astra` →
+`gpt-6-astra` — and both exist for the same reason: the alias is a name
+operators, configuration and spawn ceilings use and the provider does not have.
+
+Measured, not assumed. A spawn of `--model muse-spark --reasoning-effort high`
+put the alias into muse's argv verbatim and the backend answered `model
+muse-spark does not exist or you lack access`, while the identical launch
+spelled `muse-spark-1.3-contributor` ran end to end. `astra` is the same shape
+caught before it could be paid for: the Codex catalog publishes no such slug,
+so the substitution is declared up front and
+`pkg/vendorplugin/openai_astra_alias_test.go` drives `BuildLaunch` at all six
+efforts, in both launch modes, requiring `-m gpt-6-astra` on argv and the alias
+spelling to be absent from argv, the child environment and stdin.
 
 - `agentic.BuildPlan` substitutes the identity ONCE, after every contract
   refusal and before the first plugin surface, so binary resolution, argv, the

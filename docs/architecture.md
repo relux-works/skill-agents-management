@@ -224,6 +224,11 @@ argv verbatim and the backend refused it with "model muse-spark does not exist
 or you lack access", while the same launch spelled
 `muse-spark-1.3-contributor` ran end to end.
 
+The openai `astra` row is the second declaration of this shape and the first
+made BEFORE the refusal: `codex debug models` publishes no `astra` slug, so a
+launch under that spelling would earn the same answer from OpenAI, and the row
+declares `AliasOf: gpt-6-astra` rather than waiting to find out.
+
 The split of duties is the usual one. `pkg/agentic` holds no catalogue and so
 asks no question about an alias — it substitutes what the request carries.
 `pkg/vendorplugin` is where an alias is checked, and `checkLaunchFidelity`

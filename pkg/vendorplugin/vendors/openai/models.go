@@ -100,6 +100,22 @@ var lineup = vendorplugin.RankEvidence{
 // moved.
 const codexCatalog = "the OpenAI Codex CLI model catalog, read with `codex debug models` (codex-cli 0.153.4, 2026-09-05)"
 
+// codexCatalogAliasProbe is a SECOND read of the same catalog, recorded
+// separately because it establishes a different kind of fact.
+//
+// codexCatalog above is quoted for what the catalog CONTAINS. This one is
+// quoted for what it does NOT: at this version, on this date, the catalog
+// carries nine rows — gpt-6-astra, gpt-reserve, gpt-5.6-sol, gpt-5.6-terra,
+// gpt-5.6-luna, gpt-5.5, gpt-5.4-mini, gpt-5.3-codex-spark and
+// codex-auto-review — and none of them is spelled `astra`. That absence is the
+// whole justification for the `astra` row declaring AliasOf, so it must rest on
+// a read somebody actually performed rather than on the earlier entry's date.
+//
+// The two versions differ (0.153.2 here, 0.153.4 above) and that is stated
+// rather than smoothed over: they are two reads, and a single entry claiming
+// both would be one of them invented.
+const codexCatalogAliasProbe = "the OpenAI Codex CLI model catalog, read with `codex debug models` (codex-cli 0.153.2, 2026-09-07)"
+
 // rank builds a capability rank that carries the source's own evidence.
 //
 // The contract refuses a rank with no observation behind it, and the
@@ -148,6 +164,19 @@ func effortRequired(recommended string, vocabulary []string) vendorplugin.Effort
 	}
 }
 
+// astraEffort is the astra head's effort axis, declared ONCE and shared by the
+// identity row and its alias.
+//
+// It is a function rather than a package-level value for the reason the muse
+// pair already states: the two rows are one model reached by two names, the
+// registration refuses a pair whose axes disagree (checkAliases), and a second
+// literal here would be a second place for the vocabulary to drift into that
+// refusal. A function also hands each row its own backing array, so nothing
+// that edits one row's vocabulary can reach the other's.
+func astraEffort() vendorplugin.EffortDeclaration {
+	return effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"})
+}
+
 // models is the declaration itself, most capable first.
 var models = []vendorplugin.Model{
 	{
@@ -167,7 +196,7 @@ var models = []vendorplugin.Model{
 				Observation: "the source registry's highest openai row, gpt-5.6-sol, carries PolicyRank 120, and this row is scored above it; the source registry contains NO row for gpt-6-astra and this score is therefore not a ported one",
 			}),
 		Lifecycle: vendorplugin.LifecycleCurrent,
-		Effort:    effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
+		Effort:    astraEffort(),
 		// NOT Recommended, deliberately. Recommended is the vendor's display
 		// pick and at most one openai row may carry it; sol holds it, and
 		// admitting a more capable model is not a decision to change what an
@@ -189,6 +218,65 @@ var models = []vendorplugin.Model{
 		// all, and no openai row here carries a billing contract. A contract
 		// invented from a speed tier would be a price nobody published.
 		Systems: []agentic.SystemID{"codex"},
+	},
+	{
+		// THE FLOATING SPELLING, and the one row here that the vendor does not
+		// publish at all.
+		//
+		// `astra` is the name an operator, a spawn ceiling and a board config
+		// reach for when they mean "the current astra head". The vendor has no
+		// such id: the catalog probe recorded in codexCatalogAliasProbe lists
+		// nine slugs and the only astra spelling among them is `gpt-6-astra`.
+		// A launch that put `astra` on argv would therefore ask the provider
+		// for a model it never published — the failure the muse-spark alias was
+		// MEASURED making ("model muse-spark does not exist or you lack
+		// access") before AliasOf existed to prevent it.
+		//
+		// AliasOf is what closes that, and where it closes it matters:
+		// agentic.BuildPlan substitutes the identity ONCE, after every contract
+		// refusal and before the first plugin surface, so binary resolution,
+		// argv, the child environment and stdin are all built from
+		// `gpt-6-astra`, while Plan.ModelIdentity keeps `astra` as Requested
+		// for the audit trail and cost attribution. A substitution applied to
+		// argv alone would still describe a model the provider does not have.
+		//
+		// DECLARED, never derived. Nothing in this module resolves a name by
+		// prefix, suffix, version, score or description, and this row is not
+		// the exception that starts: `astra` reaches `gpt-6-astra` because
+		// this line says so, and a future `gpt-7-astra` does not inherit the
+		// spelling by looking like it — somebody has to move this field.
+		ID: "astra",
+		// "the current astra head" is what the alias promises, and the
+		// description says so rather than naming a version an edit could leave
+		// stale. What it must NOT promise is a vendor id: this spelling is
+		// admitted and audited under its own name and EXECUTES as gpt-6-astra.
+		Description: "The short spelling of the current astra head, for an invocation that names the model without its generation; it executes as gpt-6-astra",
+		// The identity's score, because this is the identity under another
+		// name. The two rows therefore TIE, and that tie is an identity rather
+		// than a judgement about two models — the same shape the muse pair
+		// carries. It ties no PORTED row: 130 belongs to the pair alone, and
+		// TestADeclaredRowMayNotTieAPortedOne is what keeps that true.
+		Rank: declaredRank(130,
+			"this row is a short spelling of gpt-6-astra and carries that row's score; the catalog presents gpt-6-astra at picker priority 1 and publishes no separate row for the spelling `astra`, so there is no second capability to score",
+			vendorplugin.RankEvidence{
+				Source:      codexCatalogAliasProbe,
+				Observation: "the catalog's nine rows are gpt-6-astra, gpt-reserve, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4-mini, gpt-5.3-codex-spark and codex-auto-review; NONE is spelled `astra`, which is why this row declares AliasOf instead of reaching argv under its own id",
+			}),
+		AliasOf:   "gpt-6-astra",
+		Lifecycle: vendorplugin.LifecycleCurrent,
+		// The identity's axis, from the one constructor both rows call.
+		// checkAliases refuses a pair whose axes disagree, because the word is
+		// validated against the REQUESTED row and transported to a process
+		// running the TARGET.
+		Effort: astraEffort(),
+		// NOT Recommended, for the same reason gpt-6-astra is not: sol holds
+		// this vendor's display pick, and at most one openai row may carry it.
+		//
+		// The context window is the identity's, transcribed rather than
+		// derived: it is one model, so an alias declaring a different window
+		// would be describing a run nobody can have.
+		ContextWindowTokens: 272_000,
+		Systems:             []agentic.SystemID{"codex"},
 	},
 	{
 		ID:          "gpt-5.6-sol",

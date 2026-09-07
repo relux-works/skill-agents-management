@@ -47,7 +47,7 @@ const boardModelCount = 45
 // keeps an unnamed row failing the sum below exactly as it did before. The
 // vendor package holds each of these to its own evidence rule — see
 // pkg/vendorplugin/declaredhere_test.go.
-var declaredHereRows = []vendorplugin.ModelID{"gpt-6-astra"}
+var declaredHereRows = []vendorplugin.ModelID{"gpt-6-astra", "astra"}
 
 // carriedRows collects every model row this binary carries, from both homes,
 // and reports which home each came from.

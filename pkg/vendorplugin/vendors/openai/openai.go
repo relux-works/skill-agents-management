@@ -19,9 +19,11 @@
 // # Two vocabularies, not one
 //
 // This vendor is the one whose rows genuinely disagree with each other about
-// effort: the five legacy ids accept `minimal` and the seven current ones do
+// effort: the five legacy ids accept `minimal` and the nine current ones do
 // not, and the current top rows accept `ultra` while the older current rows
-// stop at `xhigh`. That is why invariant 4 of docs/architecture.md makes effort
+// stop at `xhigh`. (Nine, not eight: `astra` is a current row of its own, an
+// alias whose effort word is validated against ITS vocabulary before the launch
+// substitutes `gpt-6-astra` in.) That is why invariant 4 of docs/architecture.md makes effort
 // a per-MODEL axis rather than a per-provider one — a single provider-level
 // vocabulary here would either refuse a word `gpt-5.3-codex` accepts or admit
 // one `gpt-5.6-sol` does not.

@@ -160,6 +160,15 @@ func TestTheDigestStillMovesOnTheFactsItCovers(t *testing.T) {
 			if m.SupersededBy != "" {
 				m.SupersededBy = m.SupersededBy + "-x"
 			}
+			// AliasOf follows the id for exactly the same reason: checkAliases
+			// refuses an alias whose target no row in the lineup answers to,
+			// and that refusal happens at REGISTRATION — before a ceiling is
+			// ever expanded — so leaving it behind would kill the mutant
+			// harness in isolatedRegistry and report nothing about the digest.
+			// openai's `astra` row is the one this reaches today.
+			if m.AliasOf != "" {
+				m.AliasOf = m.AliasOf + "-x"
+			}
 			if m.Pricing != nil {
 				contract := m.Pricing.Clone()
 				for i := range contract.Plans {

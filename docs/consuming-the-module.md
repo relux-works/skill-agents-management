@@ -66,7 +66,9 @@ that is the point of the release. What does NOT move is POLICY: which models a
 repository may spawn stays your configuration's decision.
 
 `Model.AliasOf` is an additive optional catalog fact: the model identity a row
-is a short spelling of, empty when the row is its own identity. A consumer does
+is a short spelling of, empty when the row is its own identity. Two rows carry
+it today: `muse-spark` → `muse-spark-1.3-contributor` and `astra` →
+`gpt-6-astra`. A consumer does
 not act on it — `agentic.BuildPlan` substitutes it before argv, so a launch
 built through `BuildLaunch` already runs the identity — but a consumer that
 records what ran should read `Plan.ModelIdentity`, which carries `Requested`

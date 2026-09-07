@@ -718,11 +718,17 @@ func TestTheSourceTiesSurviveThePort(t *testing.T) {
 			{"gemini-3.1-flash-lite", "gemini-3.5-flash-high"},
 			{"gemini-2.5-pro", "gemini-3.5-flash-medium"},
 		},
-		// openai's thirteen rows carry thirteen distinct scores. The empty
+		// openai's twelve PORTED rows carry twelve distinct scores. The empty
 		// entry is deliberate: it states that this vendor was checked and has
 		// none, which is a different fact from this vendor being absent from
 		// the map. TestADeclaredRowMayNotTieAPortedOne is what keeps it true
 		// as rows are declared ahead of the board's registry.
+		//
+		// The vendor's fourteen DECLARED rows do carry one tie — `astra` and
+		// `gpt-6-astra`, at 130 — and it is outside this map on purpose: this
+		// map records ties THE SOURCE carries, and the source carries neither
+		// row. That tie is an alias and its identity scoring the same, which
+		// is one model under two names rather than an equality between two.
 		"openai": {},
 	}
 	if len(ties) != len(portedVendors) {
