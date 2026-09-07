@@ -387,8 +387,7 @@ What is deliberately NOT here:
 - **No group rows for `pi-*`.** Pi's own limit output has not been captured, so
   models resolve to `pi-<vendor>-unmapped:<model>` singletons. `pi-google` has
   no classifier and can never be suppressed.
-- **No thinking-word clamp.** The row's vocabulary is transported verbatim;
-  what installed Pi accepts is the harness residual.
+- **Explicit thinking-word refusal.** Native Pi refuses model vocabulary words that Pi 0.84.2 would drop or clamp: `ultra` on `gpt-5.6-sol`/`gpt-5.6-terra`, and `minimal` on `gpt-5.3-codex`/`gpt-5.2`. `BuildLaunch` returns `ErrEffortNotNativelySupported`, naming the model, runtime, native supported vocabulary and row recommendation. Global model vocabularies and Codex support remain unchanged; no translation, clamp or default is injected. Effort-none rows emit no `--thinking`; Pi may apply its own settings default, which the module does not control.
 - **No `claude-fable-5-1` on `pi-native`.** Absent from the Pi 0.84.2 catalog;
   refused rather than routed through Pi's custom-model fallback.
 - **No v2 snapshot tiers for `pi-*`** (`V2SnapshotTiers` answers false;

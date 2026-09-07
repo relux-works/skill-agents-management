@@ -36,9 +36,15 @@
 // Which models the installed Pi catalog can launch. That is the vendor layer's
 // fact — a row declares `pi-native` in Systems only when the id is present in
 // the installed catalog's provider data — and BuildLaunch refuses a row that
-// does not (ErrModelNotDrivenBySystem) before this plugin sees it. The plugin
-// also does not know which thinking words Pi accepts: the effort is the row's
-// vocabulary and is transported verbatim (invariant 4 of docs/architecture.md).
+// does not (ErrModelNotDrivenBySystem) before this plugin sees it.
+//
+// What it DOES know, because a plan must not misrepresent the session it
+// starts: which thinking words the installed Pi 0.84.2 runs as requested per
+// model (catalog.go). The row's vocabulary stays the model's contract
+// (invariant 4 of docs/architecture.md); a word Pi would warn about and drop
+// or silently clamp is refused with ErrEffortNotNativelySupported through
+// BuildLaunch (agentic.EffortAdmitter) and through Args. Nothing is clamped,
+// translated or defaulted here.
 package pinative
 
 import (

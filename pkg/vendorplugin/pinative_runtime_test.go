@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -368,4 +369,198 @@ func TestPiNativeMembershipMatchesTheInstalledCatalog(t *testing.T) {
 			t.Errorf("%s: %s", vendor, strings.Join(mismatches, "; "))
 		}
 	}
+}
+
+// The installed-Pi thinking contract (review rev1, finding R1): a word the
+// row's vocabulary admits but Pi 0.84.2 would warn-and-drop (`ultra`, not a
+// parser level) or silently clamp (`minimal` on rows whose catalog
+// thinkingLevelMap maps it to null) is REFUSED through BuildLaunch, never
+// transported into a plan that misrepresents the session. Production call
+// site: spawn.go, the agentic.EffortAdmitter dispatch after resolveEffort.
+
+func TestBuildLaunchRefusesAnEffortInstalledPiWouldDropOrClamp(t *testing.T) {
+	registry := isolatedRegistry(t, nil)
+	for _, tt := range []struct {
+		runtime         vendorplugin.RuntimeID
+		model, effort   string
+		accepted, recom string
+	}{
+		{"pi-openai", "gpt-5.6-sol", "ultra", "[low medium high xhigh max]", `"max"`},
+		{"pi-openai", "gpt-5.6-terra", "ultra", "[low medium high xhigh max]", `"max"`},
+		{"pi-openai", "gpt-5.3-codex", "minimal", "[low medium high xhigh]", `"xhigh"`},
+		{"pi-openai", "gpt-5.2", "minimal", "[low medium high xhigh]", `"xhigh"`},
+	} {
+		t.Run(tt.model+"/"+tt.effort, func(t *testing.T) {
+			plan, err := vendorplugin.BuildLaunch(context.Background(), registry, piRequest(t, tt.runtime, tt.model, tt.effort), agentic.LaunchModeInteractive)
+			if !errors.Is(err, vendorplugin.ErrEffortNotNativelySupported) || !errors.Is(err, pinative.ErrEffortNotNativelySupported) {
+				t.Fatalf("BuildLaunch(%s, %s, %s) = argv %v, err %v; want ErrEffortNotNativelySupported (both identities)", tt.runtime, tt.model, tt.effort, plan.Argv, err)
+			}
+			for _, want := range []string{`"` + tt.model + `"`, string(tt.runtime), `"` + tt.effort + `"`, tt.accepted, "recommends " + tt.recom} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not name %s", err, want)
+				}
+			}
+			if len(plan.Argv) != 0 {
+				t.Errorf("a refused launch still produced argv %v", plan.Argv)
+			}
+			// Same word, same row, on Codex: the vocabulary is global and the
+			// refusal is native Pi's alone.
+			codex, err := vendorplugin.BuildLaunch(context.Background(), registry, codexRequestFor(t, tt.model, tt.effort), agentic.LaunchModeDryRun)
+			if err != nil {
+				t.Fatalf("the same (model, effort) on codex must still build: %v", err)
+			}
+			if !strings.Contains(strings.Join(codex.Argv, " "), `model_reasoning_effort="`+tt.effort+`"`) {
+				t.Errorf("codex argv %v does not carry %q", codex.Argv, tt.effort)
+			}
+		})
+	}
+}
+
+func codexRequestFor(t *testing.T, model, effort string) vendorplugin.SpawnRequest {
+	t.Helper()
+	binDir := t.TempDir()
+	writeStubBinary(t, binDir, "codex")
+	return vendorplugin.SpawnRequest{
+		Runtime: "codex", Model: vendorplugin.ModelID(model), Effort: effort,
+		WorkDir: "/Users/op/project", Env: []string{"PATH=" + binDir},
+		Run: agentic.RunContext{RunID: "RUN-codex", TaskID: "TASK-codex"},
+	}
+}
+
+func TestTheMaxWordStillBuildsWhereInstalledPiRunsIt(t *testing.T) {
+	registry := isolatedRegistry(t, nil)
+	for _, tt := range []struct {
+		runtime vendorplugin.RuntimeID
+		model   string
+		want    []string
+	}{
+		{"pi-openai", "gpt-5.6-sol", []string{"--model", "openai/gpt-5.6-sol", "--thinking", "max"}},
+		{"pi-anthropic", "claude-opus-5", []string{"--model", "anthropic/claude-opus-5", "--thinking", "max"}},
+	} {
+		plan, err := vendorplugin.BuildLaunch(context.Background(), registry, piRequest(t, tt.runtime, tt.model, "max"), agentic.LaunchModeInteractive)
+		if err != nil {
+			t.Fatalf("BuildLaunch(%s, %s, max): %v", tt.runtime, tt.model, err)
+		}
+		if !reflect.DeepEqual(plan.Argv, tt.want) {
+			t.Errorf("Argv = %#v, want %#v", plan.Argv, tt.want)
+		}
+	}
+}
+
+// TestPiNativeThinkingRestrictionsMatchTheInstalledCatalog is the thinking
+// half of the no-secret installed-Pi probe. From the installed bytes it
+// re-derives (a) the parser list in dist/cli/args.js and (b) per catalog model
+// `getSupportedThinkingLevels` (pi-ai models.js:548-560: reasoning required;
+// a level mapped to null is unsupported; xhigh/max need an explicit mapping),
+// then checks EVERY (pi-native row × vocabulary word) in both directions
+// against pinative.AdmitEffort: a word the module refuses that Pi runs, or a
+// word Pi drops or clamps that the module admits, fails. Reads bytes only.
+func TestPiNativeThinkingRestrictionsMatchTheInstalledCatalog(t *testing.T) {
+	root := os.Getenv("PI_CODING_AGENT_ROOT")
+	if root == "" {
+		root = "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent"
+	}
+	argsJS, err := os.ReadFile(filepath.Join(root, "dist", "cli", "args.js"))
+	if os.IsNotExist(err) {
+		t.Skipf("installed Pi not found at %s (%v); set PI_CODING_AGENT_ROOT", root, err)
+	}
+	if err != nil {
+		t.Fatalf("reading installed Pi parser: %v", err)
+	}
+	re := regexp.MustCompile(`VALID_THINKING_LEVELS\s*=\s*\[([^\]]*)\]`)
+	m := re.FindSubmatch(argsJS)
+	if m == nil {
+		t.Fatalf("args.js does not declare VALID_THINKING_LEVELS")
+	}
+	var parser []string
+	for _, q := range strings.Split(string(m[1]), ",") {
+		parser = append(parser, strings.Trim(strings.TrimSpace(q), `"`))
+	}
+	if !reflect.DeepEqual(parser, pinative.ParserThinkingLevels) {
+		t.Fatalf("installed parser levels %v != pinative.ParserThinkingLevels %v", parser, pinative.ParserThinkingLevels)
+	}
+	parses := map[string]bool{}
+	for _, p := range parser {
+		parses[p] = true
+	}
+
+	dataDir := filepath.Join(root, "node_modules", "@earendil-works", "pi-ai", "dist", "providers", "data")
+	admitter := pinative.New()
+	registry := isolatedRegistry(t, nil)
+	var mismatches []string
+	checked := 0
+	for _, vendor := range []vendorplugin.VendorID{"anthropic", "openai", "google"} {
+		raw, err := os.ReadFile(filepath.Join(dataDir, string(vendor)+".json"))
+		if err != nil {
+			t.Fatalf("reading %s catalog: %v", vendor, err)
+		}
+		var byAPI map[string]map[string]struct {
+			Reasoning        bool                        `json:"reasoning"`
+			ThinkingLevelMap map[string]*json.RawMessage `json:"thinkingLevelMap"`
+		}
+		if err := json.Unmarshal(raw, &byAPI); err != nil {
+			t.Fatalf("decoding %s catalog: %v", vendor, err)
+		}
+		plugin, _ := vendorplugin.Default.Lookup(vendor)
+		for _, row := range plugin.Models() {
+			if !row.DrivenBy("pi-native") {
+				continue
+			}
+			identity := row.Launchable().LaunchIdentity()
+			var entry *struct {
+				Reasoning        bool                        `json:"reasoning"`
+				ThinkingLevelMap map[string]*json.RawMessage `json:"thinkingLevelMap"`
+			}
+			for _, models := range byAPI {
+				if e, ok := models[identity]; ok {
+					e := e
+					entry = &e
+				}
+			}
+			if entry == nil {
+				t.Fatalf("%s: pi-native row %s is not in the catalog (membership test owns this)", vendor, row.ID)
+			}
+			piSupports := func(word string) bool {
+				if !parses[word] || !entry.Reasoning {
+					return false
+				}
+				mapped, present := entry.ThinkingLevelMap[word]
+				if present && mapped == nil {
+					return false
+				}
+				if word == "xhigh" || word == "max" {
+					return present
+				}
+				return true
+			}
+			for _, word := range row.Effort.Vocabulary {
+				checked++
+				_, admitErr := admitter.AdmitEffort(string(vendor), identity, word, row.Effort.Vocabulary)
+				for _, mode := range []agentic.LaunchMode{agentic.LaunchModeInteractive, agentic.LaunchModeDryRun} {
+					plan, err := vendorplugin.BuildLaunch(context.Background(), registry, piRequest(t, vendorplugin.RuntimeID("pi-"+string(vendor)), string(row.ID), word), mode)
+					if piSupports(word) {
+						if err != nil || !reflect.DeepEqual(plan.Argv, []string{"--model", string(vendor) + "/" + identity, "--thinking", word}) {
+							t.Errorf("%s/%s/%s: supported plan = %v, %v", row.ID, word, mode, plan.Argv, err)
+						}
+					} else if !errors.Is(err, vendorplugin.ErrEffortNotNativelySupported) || len(plan.Argv) != 0 {
+						t.Errorf("%s/%s/%s: unsupported plan = %v, %v", row.ID, word, mode, plan.Argv, err)
+					}
+				}
+				switch {
+				case piSupports(word) && admitErr != nil:
+					mismatches = append(mismatches, string(row.ID)+": module refuses "+word+" but installed Pi runs it")
+				case !piSupports(word) && admitErr == nil:
+					mismatches = append(mismatches, string(row.ID)+": module admits "+word+" but installed Pi drops or clamps it")
+				}
+			}
+		}
+	}
+	sort.Strings(mismatches)
+	if len(mismatches) != 0 {
+		t.Errorf("%s", strings.Join(mismatches, "; "))
+	}
+	if checked != 71 {
+		t.Fatalf("checked %d (row × word) pairs, want the 71 catalog-verified pairs", checked)
+	}
+	t.Logf("checked %d (pi-native row × vocabulary word) pairs against the installed catalog", checked)
 }

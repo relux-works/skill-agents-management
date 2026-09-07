@@ -367,3 +367,34 @@ func TestAnEmptyModelIsRefusedBeforeArgv(t *testing.T) {
 		t.Fatalf("err = %v, want ErrModelMissing", err)
 	}
 }
+
+// TestArgsRefusesAWordInstalledPiWouldDropOrClamp closes the direct-plugin
+// path: a caller holding the plugin (agentic.BuildPlan) cannot obtain the
+// misleading `--thinking ultra` / `--thinking minimal` argv either. The
+// BuildLaunch path is driven in pkg/vendorplugin/pinative_runtime_test.go.
+func TestArgsRefusesAWordInstalledPiWouldDropOrClamp(t *testing.T) {
+	for _, tt := range []struct{ vendor, model, effort string }{
+		{"openai", "gpt-5.6-sol", "ultra"},
+		{"openai", "gpt-5.6-terra", "ultra"},
+		{"anthropic", "claude-opus-5", "ultra"},
+		{"openai", "gpt-5.3-codex", "minimal"},
+		{"openai", "gpt-5.2", "minimal"},
+	} {
+		req := agentic.LaunchRequest{System: "pi-native", Vendor: tt.vendor, Model: agentic.Model{ID: tt.model, Effort: agentic.EffortSupportRequired}, Effort: tt.effort}
+		argv, err := pinative.Args(req, agentic.LaunchModeInteractive)
+		if !errors.Is(err, pinative.ErrEffortNotNativelySupported) {
+			t.Errorf("Args(%s/%s, %s) = %v, err %v; want ErrEffortNotNativelySupported", tt.vendor, tt.model, tt.effort, argv, err)
+		}
+	}
+	// max remains supported on sol; the refusal never clamps another word to it.
+	if _, err := pinative.Args(agentic.LaunchRequest{Vendor: "openai", Model: agentic.Model{ID: "gpt-5.6-sol"}, Effort: "max"}, agentic.LaunchModeInteractive); err != nil {
+		t.Errorf("max on gpt-5.6-sol must build: %v", err)
+	}
+	got, err := pinative.New().AdmitEffort("openai", "gpt-5.6-sol", "", []string{"low", "medium", "high", "xhigh", "max", "ultra"})
+	if err != nil || !reflect.DeepEqual(got, []string{"low", "medium", "high", "xhigh", "max"}) {
+		t.Errorf("AdmitEffort(sol, \"\") = %v, %v; want the native subset and no error", got, err)
+	}
+	if _, ok := any(pinative.New()).(agentic.EffortAdmitter); !ok {
+		t.Fatalf("pi-native does not implement agentic.EffortAdmitter; BuildLaunch would transport the word unchecked")
+	}
+}

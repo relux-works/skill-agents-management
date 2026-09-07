@@ -40,6 +40,12 @@ var (
 	// ErrEffortNotInVocabulary is returned when an effort word is not one the
 	// model accepts, or when a model with no effort axis was given one.
 	ErrEffortNotInVocabulary = errors.New("vendorplugin: effort is not in the model's vocabulary")
+	// ErrEffortNotNativelySupported is returned when the effort word is in the
+	// model's vocabulary but the runtime's agentic system declares (through
+	// agentic.EffortAdmitter) that its harness would not run it as requested
+	// for this model — dropping or clamping it instead. The word stays in the
+	// row's global vocabulary for other harnesses; nothing is clamped here.
+	ErrEffortNotNativelySupported = errors.New("vendorplugin: effort is not run natively by the runtime's harness for this model")
 	// ErrAvailabilityInvalid is returned when a verdict's state and its
 	// evidence contradict each other.
 	ErrAvailabilityInvalid = errors.New("vendorplugin: availability verdict contradicts its own evidence")
@@ -156,6 +162,17 @@ func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	effort, err := resolveEffort(binding.ID, model, req.Effort)
 	if err != nil {
 		return agentic.Plan{}, err
+	}
+	// A harness may run only a subset of the row's vocabulary for this model.
+	// The dispatch is by capability (agentic.EffortAdmitter), never by system
+	// id, and the outcome is a refusal that names what the harness does run
+	// and the row's recommendation — never a clamp or a substituted default.
+	if admitter, ok := binding.System.(agentic.EffortAdmitter); ok {
+		accepted, admitErr := admitter.AdmitEffort(string(binding.VendorID), model.Launchable().LaunchIdentity(), effort, model.Effort.Vocabulary)
+		if admitErr != nil {
+			return agentic.Plan{}, fmt.Errorf("%w: model %q on runtime %s with effort %q; the runtime's harness runs %v for this model and the row recommends %q: %w",
+				ErrEffortNotNativelySupported, model.ID, binding.ID, effort, accepted, model.Effort.Recommended, admitErr)
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return agentic.Plan{}, err

@@ -565,6 +565,23 @@ type System interface {
 	ValidateComposition(c Composition) error
 }
 
+// EffortAdmitter is implemented by a system whose HARNESS runs, for a given
+// model, only a subset of the effort words the vendor row declares — and would
+// otherwise drop or rewrite the rest silently. The row's vocabulary remains
+// the model's contract for every other harness; this is the harness saying
+// which of those words it runs AS REQUESTED, so a plan never promises an
+// effort the session will not have.
+//
+// AdmitEffort is called by vendorplugin.BuildLaunch after the vocabulary gate,
+// with the runtime's vendor, the launch identity Pi (or any harness) will be
+// handed, the resolved effort (possibly empty for an effort-none row) and the
+// row's vocabulary. It returns the vocabulary words the harness runs for that
+// model and a non-nil error when the requested word is not one of them. It
+// must never rewrite the word: the caller refuses on error.
+type EffortAdmitter interface {
+	AdmitEffort(vendor, launchIdentity, effort string, vocabulary []string) (accepted []string, err error)
+}
+
 // LaunchRequestPreparer is an optional, pure pre-plan gate for a system that
 // must validate or snapshot request-owned input before any caller performs an
 // observation or preflight. Implementations may read request-named files, but

@@ -537,3 +537,7 @@ others), the local-model resource plane — is deliberately after.
 
 [shipped-state.md](shipped-state.md) carries the per-story detail and the
 outcomes that are true but easy to lose.
+
+### Native Pi effort admission
+
+Native Pi refuses model vocabulary words that Pi 0.84.2 would drop or clamp: `ultra` on `gpt-5.6-sol`/`gpt-5.6-terra`, and `minimal` on `gpt-5.3-codex`/`gpt-5.2`. `BuildLaunch` returns `ErrEffortNotNativelySupported`, naming the model, runtime, native supported vocabulary and row recommendation. Global model vocabularies and Codex support remain unchanged; no translation, clamp or default is injected. Effort-none rows emit no `--thinking`; Pi may apply its own settings default, which the module does not control.

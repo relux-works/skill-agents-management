@@ -309,8 +309,7 @@ Plugin id `pi-native`; the frozen runtimes that bind it are `pi-anthropic`,
   `LaunchRequest.Vendor`, which `BuildLaunch` sets from the runtime binding
   after the vendor's `Spawn` and overwrites unconditionally. A request with
   no vendor is refused (`ErrVendorMissing`), never downgraded to a bare id.
-- **Effort is `--thinking <word>`**, transported verbatim from the row's
-  vocabulary; no Pi thinking level is enumerated here.
+- **Effort is `--thinking <word>`**, transported unchanged after native harness admission. Native Pi refuses model vocabulary words that Pi 0.84.2 would drop or clamp: `ultra` on `gpt-5.6-sol`/`gpt-5.6-terra`, and `minimal` on `gpt-5.3-codex`/`gpt-5.2`. `BuildLaunch` returns `ErrEffortNotNativelySupported`, naming the model, runtime, native supported vocabulary and row recommendation. Global model vocabularies and Codex support remain unchanged; no translation, clamp or default is injected. Effort-none rows emit no `--thinking`; Pi may apply its own settings default, which the module does not control.
 - **Home is `PI_CODING_AGENT_DIR`, default `~/.pi/agent`.** Provider-limit
   identity is (runtime, home), so two managed Pi homes hold separate records.
 - **No preflight.** The plugin does not implement `Preflightable`; a plan

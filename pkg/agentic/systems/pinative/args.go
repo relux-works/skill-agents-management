@@ -26,14 +26,17 @@ import (
 // a wrong-prefix id (`openai/claude-opus-5`) falls to Pi's custom-model path
 // with only a warning — an unverified launch that looks like the one asked for.
 //
-// # The effort is pure transport
+// # The effort is transport, gated by the installed Pi contract
 //
 // `--thinking <word>` is emitted exactly when the request carries an effort.
 // BuildLaunch has already refused a word outside the row's vocabulary and a
 // required-effort row given none, so reaching that line means a value the
-// operator chose. Which words the installed Pi build accepts is not known
-// here (invariant 4): the row's vocabulary is the contract, the harness's
-// acceptance is the harness's.
+// operator chose. The row's vocabulary stays the model's contract (invariant
+// 4), but a word installed Pi would drop or clamp is REFUSED here, never
+// rewritten (catalog.go, ErrEffortNotNativelySupported): a plan must not
+// claim an effort the session will not run. BuildLaunch applies the same
+// check earlier, through agentic.EffortAdmitter, where it can also name the
+// row's recommendation; this second call closes the direct-plugin path.
 //
 // # The two modes build the SAME argv
 //
@@ -71,6 +74,9 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	}
 	args := []string{"--model", vendor + "/" + model}
 	if effort := strings.TrimSpace(req.Effort); effort != "" {
+		if _, err := checkNativeEffort(vendor, model, effort, nil); err != nil {
+			return nil, err
+		}
 		args = append(args, "--thinking", effort)
 	}
 	return args, nil
