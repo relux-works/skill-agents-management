@@ -270,8 +270,21 @@ prefix, and no stdin unless the system carries effort on stdin. `BuildPlan`
 refuses a request carrying any of those (`ErrCompositionNotInteractive`,
 `ErrParameterNotInteractive`) rather than dropping them; the MCP channel, the
 system-prompt channel and the permission posture are the composer's to append
-after the plan's `Argv`. `claude-code`, `codex` and `pi` declare the mode; a
-system that does not is refused with `ErrUnsupportedLaunchMode`.
+after the plan's `Argv`. `claude-code`, `codex`, `pi` and `pi-native` declare
+the mode; a system that does not is refused with `ErrUnsupportedLaunchMode`.
+
+For native Pi the launcher resolves one of the frozen `pi-anthropic`,
+`pi-openai` or `pi-google` runtimes, asks
+`providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime: "pi-<vendor>",
+Home: <managed PI_CODING_AGENT_DIR>, Model: <id>})`, then calls
+`vendorplugin.BuildLaunch(…, agentic.LaunchModeInteractive)` and runs the
+plan's `Binary`/`Argv` as they are. The argv is `--model <vendor>/<model>`
+plus `--thinking <effort>` when the row carries one; the launcher never
+rebuilds it and never spells a bare id. Exec mode, a composition, a model
+absent from the installed Pi catalog (`ErrModelNotDrivenBySystem`), a vendor
+the runtime does not bind (`ErrUnknownModel`) and an effort outside the row's
+vocabulary are refused. Provider login in the managed home is the operator's,
+through Pi's own `/login`; this module never touches credentials.
 
 ## What stays yours
 

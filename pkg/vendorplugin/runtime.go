@@ -301,7 +301,8 @@ func (d RuntimeDeclaration) LineupOfDeclaration() []RankedModel { return Lineup(
 const runtimeIDSource = "skill-project-management pkg/remoteconfig/runtimeid (frozen table)"
 
 // frozenRuntimes are the six historical runtime ids, carried verbatim from the
-// extraction source's frozen table.
+// extraction source's frozen table, plus the three native-Pi rows added by
+// TASK-260908-ggxfte.
 //
 // It is a SLICE, not a map: the binding table these declarations end up in is
 // the registry's, and a second id-keyed map here would be the shadow table
@@ -352,6 +353,38 @@ var frozenRuntimes = []RuntimeDeclaration{
 		Broker: BrokerProvenance{Checked: []string{runtimeIDSource}},
 		Models: museModels(),
 	},
+	// The three native-Pi rows (TASK-260908-ggxfte rev2 §3.4). They are FROZEN
+	// rather than consumer-declared because providerlimits.brokerForRuntime
+	// walks this slice only: a consumer-declared pi-anthropic would resolve to
+	// no broker there, take the unclassifiable carve-out, and read Healthy
+	// while its managed home held a limited record. The binding is what the
+	// installed Pi catalog established — its provider data files are literally
+	// anthropic.json, openai.json and google.json — and that is the checked
+	// source recorded here.
+	{
+		ID:     "pi-anthropic",
+		System: "pi-native",
+		Vendor: "anthropic",
+		Broker: BrokerProvenance{Checked: []string{piCatalogSource("anthropic")}, Found: "the installed Pi catalog resolves anthropic/<model> against its anthropic provider data"},
+	},
+	{
+		ID:     "pi-openai",
+		System: "pi-native",
+		Vendor: "openai",
+		Broker: BrokerProvenance{Checked: []string{piCatalogSource("openai")}, Found: "the installed Pi catalog resolves openai/<model> against its openai provider data"},
+	},
+	{
+		ID:     "pi-google",
+		System: "pi-native",
+		Vendor: "google",
+		Broker: BrokerProvenance{Checked: []string{piCatalogSource("google")}, Found: "the installed Pi catalog resolves google/<model> against its google provider data"},
+	},
+}
+
+// piCatalogSource names the installed Pi provider data file a native-Pi runtime
+// row was checked against, spelled once.
+func piCatalogSource(vendor string) string {
+	return "pi 0.84.2 pi-ai providers/data/" + vendor + ".json"
 }
 
 // boardRegistry is where the muse rows' facts were read from. It names the

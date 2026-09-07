@@ -454,6 +454,20 @@ type LaunchRequest struct {
 	// not need it (every one except pi today) simply never reads it, the same
 	// pattern Profile already established.
 	Runtime string
+
+	// Vendor is the vendorplugin.VendorID string of the broker the resolved
+	// runtime binds to, under the SAME contract as Runtime: an opaque string
+	// (no import cycle), populated uniformly by vendorplugin.BuildLaunch after
+	// the vendor's Spawn returns and never by a vendor or system plugin. A
+	// vendor double that sets it is overwritten. A system-only binding (muse)
+	// carries "" here, because its broker is recorded as unresolved and this
+	// field never fabricates one.
+	//
+	// pi-native is the one reader today: Pi's model identity is
+	// `<provider>/<model>` and a bare id is ambiguous across providers, so
+	// the plugin refuses to build argv without this value rather than emit an
+	// identity Pi would resolve to whichever provider it likes.
+	Vendor string
 }
 
 // RunContext is the caller's identity for one tracked run, carried to the

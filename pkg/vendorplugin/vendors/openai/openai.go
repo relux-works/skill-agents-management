@@ -44,6 +44,7 @@ import (
 
 	// The agentic system this vendor's models declare. See the package doc.
 	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
+	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/pinative"
 )
 
 // vendorID is this plugin's identity, and the spelling the frozen runtime

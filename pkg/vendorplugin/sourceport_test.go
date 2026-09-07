@@ -294,6 +294,18 @@ func comparePort(fixture sourceRegistry, declarations []vendorplugin.RuntimeDecl
 		remaining[vendor] = index
 	}
 
+	// The systems the SOURCE table knows about. A system this module added
+	// after the port — pi-native, which never existed in the extraction
+	// source — is not a drift from the source and is filtered out of the
+	// comparison below; TestTheSourcePortPinStillSeesASourceSystemDropped
+	// proves the filter does not blind the pin to the systems it does own.
+	sourceSystems := map[string]bool{}
+	for _, source := range fixture.Models {
+		for _, system := range source.AgenticSystems {
+			sourceSystems[system] = true
+		}
+	}
+
 	for _, source := range fixture.Models {
 		if source.Broker == "" {
 			continue
@@ -312,8 +324,13 @@ func comparePort(fixture sourceRegistry, declarations []vendorplugin.RuntimeDecl
 		delete(rows, model.ID)
 
 		gotSystems := make([]string, 0, len(model.Systems))
+		var portedSystems []agentic.SystemID
 		for _, system := range model.Systems {
+			if !sourceSystems[string(system)] {
+				continue
+			}
 			gotSystems = append(gotSystems, string(system))
+			portedSystems = append(portedSystems, system)
 		}
 		if !equalStrings(gotSystems, source.AgenticSystems) {
 			report("model %q declares systems %v and the source binds it to %v", source.ID, gotSystems, source.AgenticSystems)
@@ -322,14 +339,14 @@ func comparePort(fixture sourceRegistry, declarations []vendorplugin.RuntimeDecl
 		// The runtime binding, DERIVED from the (system x vendor) pair rather
 		// than restated: a table of runtimes written here would be one more
 		// place the bindings live.
-		if len(model.Systems) > 0 {
-			got, unique := runtimeOf(declarations, model.Systems[0], vendor)
+		if len(portedSystems) > 0 {
+			got, unique := runtimeOf(declarations, portedSystems[0], vendor)
 			switch {
 			case !unique:
-				report("model %q's pair (%s x %s) does not name exactly one declared runtime", source.ID, model.Systems[0], vendor)
+				report("model %q's pair (%s x %s) does not name exactly one declared runtime", source.ID, portedSystems[0], vendor)
 			case string(got) != source.Runtime:
 				report("model %q resolves to runtime %s through (%s x %s) and the source registers it under %s",
-					source.ID, got, model.Systems[0], vendor, source.Runtime)
+					source.ID, got, portedSystems[0], vendor, source.Runtime)
 			}
 		}
 
@@ -414,6 +431,34 @@ func TestEverySourceModelRowIsPorted(t *testing.T) {
 	for _, problem := range problems {
 		t.Error(problem)
 	}
+}
+
+// TestTheSourcePortPinStillSeesASourceSystemDropped is the narrowing for the
+// source-systems filter above: a ported row that keeps pi-native and LOSES its
+// source harness must still be reported, or the filter has turned the pin
+// into one that accepts any row naming a post-port system.
+func TestTheSourcePortPinStillSeesASourceSystemDropped(t *testing.T) {
+	models := portedModels(t)
+	rows := append([]vendorplugin.Model(nil), models["anthropic"]...)
+	mutated := false
+	for i := range rows {
+		if rows[i].ID == "claude-opus-5" {
+			rows[i].Systems = []agentic.SystemID{"pi-native"}
+			mutated = true
+		}
+	}
+	if !mutated {
+		t.Fatal("fixture assumption broken: anthropic declares no claude-opus-5 row")
+	}
+	models["anthropic"] = rows
+	problems := comparePort(loadSourceRegistry(t), declaredRuntimes(t), models)
+	want := `model "claude-opus-5" declares systems [] and the source binds it to [claude-code]`
+	for _, problem := range problems {
+		if strings.Contains(problem, want) {
+			return
+		}
+	}
+	t.Fatalf("a row that dropped its source harness and kept pi-native was not reported; got %v", problems)
 }
 
 // TestTheFullSetPinFiresOnDrift narrows the gate instead of deleting it.

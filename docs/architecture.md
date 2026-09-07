@@ -69,6 +69,7 @@ plugin per system:
 | `antigravity` | Antigravity CLI |
 | `muse` | Muse CLI |
 | `pi` | Process A: exact `agents-infra pi spawn --profile <name> --prompt <prompt> --deadline 30m --result-schema 1`, with EOF stdin; agents-infra owns the shared-runtime lease, inner Pi policy, execution and cleanup |
+| `pi-native` | The Pi coding agent itself (`pi` on the launch PATH) as an interactive session against a cloud provider: `--model <vendor>/<model>` plus `--thinking <effort>`, home `PI_CODING_AGENT_DIR` (default `~/.pi/agent`), interactive and dry-run only, no preflight, no exec grammar |
 
 An agentic-system plugin declares (this mirrors the adapter table the
 extraction source already proved out):
@@ -78,7 +79,8 @@ extraction source already proved out):
   owns), `dry-run` (its side-effect-free mirror), `managed-session` (the
   provider-args fragment an external composer splices in), and `interactive`
   (the complete argv a launcher hands to a human's terminal, curator-spec
-  Decision 0013 §5; declared today by `claude-code`, `codex` and `pi`),
+  Decision 0013 §5; declared today by `claude-code`, `codex`, `pi` and
+  `pi-native`),
 - environment filtering — what the child must and must not inherit,
 - stdin transport,
 - reasoning-effort **transport** (argv / stdin / none),
@@ -155,6 +157,23 @@ Existing IDs (`claude`, `codex`, `qwen`, `gemini`, `agy`, `muse`) remain valid
 forever — they feed admitted-pair digests, limit-state filenames and free-text
 records downstream, and renaming any of them orphans state silently. New
 runtimes are declarations, not code.
+
+The three native-Pi runtimes — `pi-anthropic`, `pi-openai`, `pi-google`, each
+(`pi-native` × that vendor) — are the one exception to "declarations, not
+code": they sit in the frozen table. `providerlimits.brokerForRuntime` walks
+`vendorplugin.FrozenRuntimes()` only, so a consumer-declared `pi-anthropic`
+would resolve to no broker there, take the unclassifiable carve-out and read
+Healthy while its managed home held a limited record. As frozen rows,
+`pi-anthropic` and `pi-openai` route to the anthropic/openai classifiers,
+resolve an identity keyed on (runtime id, home) and read state; `pi-google`
+resolves to google, which ships no classifier, and stays carve-out. Their
+checked source is the installed Pi catalog's provider data file. Model groups
+resolve to `pi-<vendor>-unmapped:<model>` singletons: no group row is added,
+because Pi's own limit output has not been captured. `LaunchRequest.Vendor`
+is set by `BuildLaunch` from the binding at the same site as `Runtime`, and is
+what `pi-native` qualifies the model identity with. Membership in
+`pi-native` is catalog-verified per row (see the vendor lineups), never
+inferred from the vendor.
 
 A declaration is a naming fact, not a dependency check: neither the system nor
 the vendor plugin has to be compiled in for one to exist, and the six frozen

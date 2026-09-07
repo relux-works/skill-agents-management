@@ -118,6 +118,16 @@ func effortNone() vendorplugin.EffortDeclaration {
 }
 
 // models is the declaration itself, most capable first.
+//
+// `pi-native` membership is CATALOG-VERIFIED, not inferred from the vendor: a
+// row names it only when the id is present in the installed Pi built-in
+// catalog (Pi 0.84.2, pi-ai providers/data/anthropic.json, api
+// anthropic-messages), because native Pi resolves `anthropic/<id>` against
+// that file and an absent id silently takes the custom-model fallback with a
+// warning — an unverified launch. claude-fable-5-1 is absent from that
+// catalog and therefore deliberately does NOT name pi-native; the launch is
+// refused as ErrModelNotDrivenBySystem rather than guessed at. Re-verify the
+// membership against the installed catalog bytes before changing it.
 var models = []vendorplugin.Model{
 	{
 		ID:          "claude-fable-5-1",
@@ -134,7 +144,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:    vendorplugin.LifecycleLegacy,
 		SupersededBy: "claude-fable-5-1",
 		Effort:       effortRequired("high", []string{"low", "medium", "high", "xhigh", "max"}),
-		Systems:      []agentic.SystemID{"claude-code"},
+		Systems:      []agentic.SystemID{"claude-code", "pi-native"},
 	},
 	{
 		ID:          "claude-opus-5",
@@ -143,7 +153,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("high", []string{"low", "medium", "high", "xhigh", "max"}),
 		Recommended: true,
-		Systems:     []agentic.SystemID{"claude-code"},
+		Systems:     []agentic.SystemID{"claude-code", "pi-native"},
 	},
 	{
 		ID:           "claude-opus-4-8",
@@ -152,7 +162,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:    vendorplugin.LifecycleLegacy,
 		SupersededBy: "claude-opus-5",
 		Effort:       effortRequired("xhigh", []string{"low", "medium", "high", "xhigh", "max"}),
-		Systems:      []agentic.SystemID{"claude-code"},
+		Systems:      []agentic.SystemID{"claude-code", "pi-native"},
 	},
 	{
 		ID:          "claude-sonnet-5",
@@ -160,7 +170,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(60, "below opus-4-8 and above opus-4-6", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("high", []string{"low", "medium", "high", "xhigh", "max"}),
-		Systems:     []agentic.SystemID{"claude-code"},
+		Systems:     []agentic.SystemID{"claude-code", "pi-native"},
 	},
 	{
 		ID:           "claude-opus-4-6",
@@ -169,7 +179,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:    vendorplugin.LifecycleLegacy,
 		SupersededBy: "claude-opus-5",
 		Effort:       effortRequired("high", []string{"low", "medium", "high", "max"}),
-		Systems:      []agentic.SystemID{"claude-code"},
+		Systems:      []agentic.SystemID{"claude-code", "pi-native"},
 	},
 	{
 		ID:           "claude-sonnet-4-6",
@@ -178,7 +188,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:    vendorplugin.LifecycleLegacy,
 		SupersededBy: "claude-sonnet-5",
 		Effort:       effortRequired("medium", []string{"low", "medium", "high", "max"}),
-		Systems:      []agentic.SystemID{"claude-code"},
+		Systems:      []agentic.SystemID{"claude-code", "pi-native"},
 	},
 	{
 		ID:          "claude-haiku-4-5",
@@ -186,7 +196,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(10, "the lowest of the nine anthropic rows, tied with its dated snapshot", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortNone(),
-		Systems:     []agentic.SystemID{"claude-code"},
+		Systems:     []agentic.SystemID{"claude-code", "pi-native"},
 	},
 	{
 		ID:           "claude-haiku-4-5-20251001",
@@ -195,6 +205,6 @@ var models = []vendorplugin.Model{
 		Lifecycle:    vendorplugin.LifecycleLegacy,
 		SupersededBy: "claude-haiku-4-5",
 		Effort:       effortNone(),
-		Systems:      []agentic.SystemID{"claude-code"},
+		Systems:      []agentic.SystemID{"claude-code", "pi-native"},
 	},
 }

@@ -367,3 +367,35 @@ was left open for the switch story to settle, and the answer it gave is that
 nothing forces the question: the consumer links the packages directly and never
 runs this binary. The empty list stays truthful and unused until something
 other than the consumer needs the binary to enumerate.
+
+### 7. Native Pi support — landed on main, tag pending (TASK-260908-ggxfte / STORY-260908-3lmnfs)
+
+Added on top of `v0.5.10`: the `pi-native` system plugin
+(`pkg/agentic/systems/pinative`), `agentic.LaunchRequest.Vendor` set by
+`BuildLaunch`, three frozen runtimes (`pi-anthropic`, `pi-openai`,
+`pi-google`) and catalog-verified `pi-native` memberships on the anthropic,
+openai and google lineups. The legacy `pi` wrapper plugin, the local-models
+broker/runtime and every existing registry admission are unchanged; the
+source-port pin now compares only the systems the extraction source knew, and
+its narrowing (`TestTheSourcePortPinStillSeesASourceSystemDropped`) shows it
+still sees a dropped source harness.
+
+What is deliberately NOT here:
+
+- **No exec/headless native Pi.** Interactive and dry-run only; the wrapper
+  owns headless Pi.
+- **No group rows for `pi-*`.** Pi's own limit output has not been captured, so
+  models resolve to `pi-<vendor>-unmapped:<model>` singletons. `pi-google` has
+  no classifier and can never be suppressed.
+- **No thinking-word clamp.** The row's vocabulary is transported verbatim;
+  what installed Pi accepts is the harness residual.
+- **No `claude-fable-5-1` on `pi-native`.** Absent from the Pi 0.84.2 catalog;
+  refused rather than routed through Pi's custom-model fallback.
+- **No v2 snapshot tiers for `pi-*`** (`V2SnapshotTiers` answers false;
+  interactive launch does not use them).
+
+**Owner: the operator.** A dependent can only adopt this through a tag. The
+operator creates the next signed annotated tag (`v0.5.11`) after the reviewed
+head is landed and verified on `main`; nothing in this change creates it, and
+the consumer launcher's `go.mod` requires it. Provider login in the managed
+`PI_CODING_AGENT_DIR` home is likewise the operator's, through Pi's `/login`.

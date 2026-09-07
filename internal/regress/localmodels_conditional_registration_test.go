@@ -43,15 +43,18 @@ func (fakeRegressSystem) Stdin(agentic.LaunchRequest) (agentic.StdinPayload, err
 func (fakeRegressSystem) ValidateComposition(agentic.Composition) error { return nil }
 
 // isolatedSystems returns a fresh agentic.Registry carrying fake
-// "claude-code" and "pi" systems, never touching agentic.Default.
+// "claude-code", "pi" and "pi-native" systems, never touching
+// agentic.Default. pi-native is here because the real anthropic vendor — the
+// "unaffected other vendor" these tests register — names it on its
+// catalog-verified rows, and a vendor naming an unregistered system is
+// refused at registration.
 func isolatedSystems(t *testing.T) *agentic.Registry {
 	t.Helper()
 	systems := agentic.NewRegistry()
-	if err := systems.Register(fakeRegressSystem{id: "claude-code"}); err != nil {
-		t.Fatalf("registering fake claude-code: %v", err)
-	}
-	if err := systems.Register(fakeRegressSystem{id: "pi"}); err != nil {
-		t.Fatalf("registering fake pi: %v", err)
+	for _, id := range []agentic.SystemID{"claude-code", "pi", "pi-native"} {
+		if err := systems.Register(fakeRegressSystem{id: id}); err != nil {
+			t.Fatalf("registering fake %s: %v", id, err)
+		}
 	}
 	return systems
 }

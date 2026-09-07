@@ -628,7 +628,7 @@ func TestEveryFrozenRuntimeWithAVendorResolvesThroughTheDefaultRegistry(t *testi
 func TestEveryFrozenRuntimeBuildsThroughTheOneLaunchEntryPoint(t *testing.T) {
 	registry := isolatedRegistry(t, nil)
 	binDir := t.TempDir()
-	for _, name := range []string{"agy", "claude", "codex", "gemini", "muse", "qwen"} {
+	for _, name := range []string{"agy", "claude", "codex", "gemini", "muse", "pi", "qwen"} {
 		writeStubBinary(t, binDir, name)
 	}
 	workDir := t.TempDir()

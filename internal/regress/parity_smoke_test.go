@@ -1,6 +1,7 @@
 package regress
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -209,10 +210,90 @@ func TestEveryLayerOneSystemHasASmokeCase(t *testing.T) {
 	if len(ids) == 0 {
 		t.Fatal("no agentic system plugin is compiled into this test binary, so this check ranged over nothing")
 	}
+	interactive := map[agentic.SystemID]bool{}
+	for name := range interactiveCases {
+		interactive[agentic.SystemID(name)] = true
+	}
 	for _, id := range ids {
-		if _, ok := covered[id]; !ok {
-			t.Errorf("agentic system %q is registered and has no smoke case in this file", id)
+		sys, ok := agentic.Default.Lookup(id)
+		if !ok {
+			t.Fatalf("Lookup(%q) failed for an id the registry listed", id)
 		}
+		if gap := smokeCoverageGap(id, sys, covered, interactive); gap != "" {
+			t.Error(gap)
+		}
+	}
+}
+
+// smokeCoverageGap is the one rule for "this registered system is driven by
+// this package": a golden smoke case, or — ONLY for a system that declares no
+// exec mode — an interactive case. A golden is a capture of the extraction
+// source's headless launch; a system with no headless launch (pi-native) has
+// nothing anywhere to capture, so its cross-cutting coverage is the
+// interactive net instead. A system WITH an exec mode is never excused by an
+// interactive case. It returns the report, or "" when covered.
+func smokeCoverageGap(id agentic.SystemID, sys agentic.System, covered map[agentic.SystemID]string, interactive map[agentic.SystemID]bool) string {
+	if _, ok := covered[id]; ok {
+		return ""
+	}
+	if !sys.Capabilities().SupportsMode(agentic.LaunchModeExec) {
+		if !interactive[id] {
+			return fmt.Sprintf("agentic system %q declares no exec mode and has no interactive case either; nothing in this package drives it", id)
+		}
+		return ""
+	}
+	return fmt.Sprintf("agentic system %q is registered and has no smoke case in this file", id)
+}
+
+// modeOnlySystem is a fake whose only fact is its declared mode set.
+type modeOnlySystem struct {
+	id    agentic.SystemID
+	modes []agentic.LaunchMode
+}
+
+func (s modeOnlySystem) ID() agentic.SystemID { return s.id }
+func (s modeOnlySystem) Capabilities() agentic.Capabilities {
+	return agentic.Capabilities{LaunchModes: s.modes}
+}
+func (modeOnlySystem) ResolveBinary(agentic.LaunchRequest) (string, error) { return "/bin/true", nil }
+func (modeOnlySystem) Argv(agentic.LaunchRequest, agentic.LaunchMode) ([]string, error) {
+	return nil, nil
+}
+func (modeOnlySystem) ChildEnv(parent []string, _ agentic.LaunchRequest) ([]string, error) {
+	return parent, nil
+}
+func (modeOnlySystem) Stdin(agentic.LaunchRequest) (agentic.StdinPayload, error) {
+	return agentic.StdinPayload{}, nil
+}
+func (modeOnlySystem) ValidateComposition(agentic.Composition) error { return nil }
+
+// TestTheSmokeExemptionIsOnlyForExecLessSystems is the narrowing for the
+// exemption: driven through the same rule the guard uses, an exec-capable
+// system with an interactive case and no golden is still reported, and an
+// exec-less system with neither is reported too. Only the exec-less system
+// WITH an interactive case is excused.
+func TestTheSmokeExemptionIsOnlyForExecLessSystems(t *testing.T) {
+	execCapable := modeOnlySystem{id: "exec-capable", modes: []agentic.LaunchMode{agentic.LaunchModeExec, agentic.LaunchModeInteractive}}
+	execLess := modeOnlySystem{id: "exec-less", modes: []agentic.LaunchMode{agentic.LaunchModeDryRun, agentic.LaunchModeInteractive}}
+	covered := map[agentic.SystemID]string{}
+	interactive := map[agentic.SystemID]bool{"exec-capable": true, "exec-less": true}
+	if gap := smokeCoverageGap(execCapable.id, execCapable, covered, interactive); gap == "" {
+		t.Error("an exec-capable system with only an interactive case was excused from the smoke; the exemption has widened past exec-less systems")
+	}
+	if gap := smokeCoverageGap(execLess.id, execLess, covered, interactive); gap != "" {
+		t.Errorf("the exec-less system with an interactive case was reported: %s", gap)
+	}
+	if gap := smokeCoverageGap(execLess.id, execLess, covered, map[agentic.SystemID]bool{}); gap == "" {
+		t.Error("an exec-less system with no interactive case was excused; nothing would drive it")
+	}
+	for name, c := range interactiveCases {
+		hasExec := c.system.Capabilities().SupportsMode(agentic.LaunchModeExec)
+		if hasExec != (c.exec != nil) {
+			t.Errorf("%s: declares exec=%v but its interactive case's exec adapter nil=%v; the two must agree", name, hasExec, c.exec == nil)
+		}
+	}
+	if c, ok := interactiveCases["pi-native"]; !ok || c.system.Capabilities().SupportsMode(agentic.LaunchModeExec) {
+		t.Fatal("fixture assumption broken: pi-native must be the exec-less interactive case")
 	}
 }
 

@@ -30,6 +30,9 @@ func TestTheSixHistoricalRuntimesAreSeededWithTheirFrozenBindings(t *testing.T) 
 		{"codex", "codex", "openai"},
 		{"gemini", "gemini-cli", "google"},
 		{"muse", "muse", VendorUnresolved},
+		{"pi-anthropic", "pi-native", "anthropic"},
+		{"pi-google", "pi-native", "google"},
+		{"pi-openai", "pi-native", "openai"},
 		{"qwen", "qwen-code", "alibaba"},
 	}
 

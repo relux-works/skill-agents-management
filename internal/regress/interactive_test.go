@@ -10,6 +10,7 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pinative"
 )
 
 // CLASS 6 — INTERACTIVE. An interactive plan (curator-spec Decision 0013 §5)
@@ -65,8 +66,14 @@ func markersOn(argv []string) []string {
 type interactiveCase struct {
 	system agentic.System
 	stub   string
-	// exec adapts the interactive request into an admissible exec one.
+	// exec adapts the interactive request into an admissible exec one. It is
+	// NIL for a system that declares no exec mode at all (pi-native): there
+	// the narrowing is the registry's refusal of exec, and the marker sweep is
+	// proven live by the other cases in the same run.
 	exec func(t *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest
+	// vendor is the LaunchRequest.Vendor a system that qualifies its model
+	// identity needs (pi-native); BuildLaunch sets it in production.
+	vendor string
 }
 
 var interactiveCases = map[string]interactiveCase{
@@ -84,6 +91,9 @@ var interactiveCases = map[string]interactiveCase{
 			return req
 		},
 	},
+	"pi-native": {
+		system: pinative.New(), stub: "pi", vendor: "anthropic",
+	},
 }
 
 func interactiveRequest(t *testing.T, c interactiveCase, workDir, binDir string) agentic.LaunchRequest {
@@ -100,6 +110,7 @@ func interactiveRequest(t *testing.T, c interactiveCase, workDir, binDir string)
 		req.Model.Effort = agentic.EffortSupportNone
 		req.Effort = ""
 	}
+	req.Vendor = c.vendor
 	return req
 }
 
@@ -120,7 +131,16 @@ func TestAnInteractivePlanCarriesNoExecMarkerForAnyMappedSystem(t *testing.T) {
 			}
 
 			// The narrowing: the same sweep on the same system's exec plan
-			// must fire, or its silence above measured nothing.
+			// must fire, or its silence above measured nothing. A system with
+			// no exec mode has no such plan; its narrowing is that the
+			// registry refuses exec outright, and the sweep's liveness is
+			// carried by the cases that do have one.
+			if c.exec == nil {
+				if _, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeExec); !errors.Is(err, agentic.ErrUnsupportedLaunchMode) {
+					t.Fatalf("%s: declares no exec mode and BuildPlan(exec) = %v, want ErrUnsupportedLaunchMode", name, err)
+				}
+				return
+			}
 			execReq := c.exec(t, req, workDir)
 			execPlan := paritycase.BuildPlan(t, c.system, execReq, agentic.LaunchModeExec)
 			if found := markersOn(execPlan.Argv); len(found) < 2 {
@@ -166,6 +186,9 @@ func TestAnInteractivePlanRefusesACompositionForEveryMappedSystem(t *testing.T) 
 func TestAPlanRefusesAnEmptyModelForEveryMappedSystemInEveryMode(t *testing.T) {
 	for name, c := range interactiveCases {
 		for _, mode := range []agentic.LaunchMode{agentic.LaunchModeInteractive, agentic.LaunchModeExec} {
+			if mode == agentic.LaunchModeExec && c.exec == nil {
+				mode = agentic.LaunchModeDryRun
+			}
 			t.Run(name+"/"+mode.String(), func(t *testing.T) {
 				workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
 				req := interactiveRequest(t, c, workDir, binDir)

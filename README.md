@@ -28,7 +28,8 @@ right now*.
 ## What the tool does
 
 - **Declares runtimes** — an agentic system (the harness that runs a turn:
-  claude-code, codex, qwen-code, gemini-cli, antigravity, muse, pi) combined with a
+  claude-code, codex, qwen-code, gemini-cli, antigravity, muse, pi, pi-native)
+  combined with a
   model vendor (who owns the models, the authentication and the quota:
   anthropic, openai, alibaba, google, local-models).
 - **Ranks and describes models** — each vendor plugin publishes its models,
@@ -117,9 +118,11 @@ The agentic-system plugin contract and its registry.
   neither miss the machine-local case nor quietly widen into ignoring real
   code.
 
-All seven concrete system plugins ship: `pkg/agentic/systems/{codex,claude,qwen,gemini,muse,agy,pi}`.
+All eight concrete system plugins ship: `pkg/agentic/systems/{codex,claude,qwen,gemini,muse,agy,pi,pinative}`.
 Every one of them is proven against the launch-surface goldens its system has,
-through the real `Registry` and `BuildPlan`. See below.
+through the real `Registry` and `BuildPlan`; `pinative` has no golden (native
+Pi never existed in the extraction source) and is pinned by exact-argv tests
+instead. See below.
 
 The contract is also proven by one test double registered through the public
 API, so the interface stays exercisable without any plugin compiled in.
@@ -289,6 +292,37 @@ plugin id and runtime id are the same spelling.
   and must NOT match the unextended one, and a mutant that emits the same pair
   at the end of argv must fail.
 
+### The pi-native plugin: `pkg/agentic/systems/pinative`
+
+The Pi coding agent run natively — the `pi` binary on the launch PATH, as a
+human's interactive session against a cloud provider — as distinct from the
+`pi` plugin above, which is the `agents-infra pi` wrapper for local models.
+Plugin id `pi-native`; the frozen runtimes that bind it are `pi-anthropic`,
+`pi-openai` and `pi-google`. Added by TASK-260908-ggxfte (accepted rev2).
+
+- **Interactive and dry-run only.** No exec grammar: headless Pi is the
+  wrapper's, and a native `-p` run would be an unsupervised child. Exec is
+  refused with `ErrUnsupportedLaunchMode`.
+- **The model identity is always `<vendor>/<launch identity>`.** Pi 0.84.2
+  resolves a bare id across every provider file and exits "ambiguous"; a
+  wrong prefix falls to its custom-model path with a warning. The vendor is
+  `LaunchRequest.Vendor`, which `BuildLaunch` sets from the runtime binding
+  after the vendor's `Spawn` and overwrites unconditionally. A request with
+  no vendor is refused (`ErrVendorMissing`), never downgraded to a bare id.
+- **Effort is `--thinking <word>`**, transported verbatim from the row's
+  vocabulary; no Pi thinking level is enumerated here.
+- **Home is `PI_CODING_AGENT_DIR`, default `~/.pi/agent`.** Provider-limit
+  identity is (runtime, home), so two managed Pi homes hold separate records.
+- **No preflight.** The plugin does not implement `Preflightable`; a plan
+  builds with no `agents-infra` on PATH.
+- **Catalog-verified membership.** A vendor row names `pi-native` only when
+  its id is in the installed Pi catalog's provider data (Pi 0.84.2). Today: 8
+  anthropic, 9 openai and 7 google rows. `claude-fable-5-1`, `gpt-6-astra`
+  (and its `astra` alias), `gpt-5.2-codex`, `gpt-5.1-codex-max` and
+  `gpt-5.1-codex-mini` are absent from that catalog and are refused with
+  `ErrModelNotDrivenBySystem`. `TestPiNativeMembershipMatchesTheInstalledCatalog`
+  re-reads the installed bytes when Pi is present.
+
 ### The agy plugin: `pkg/agentic/systems/agy`
 
 The Antigravity CLI, proven against both agy goldens. Plugin id `antigravity`,
@@ -457,7 +491,10 @@ The vendor plugin contract, its registry, and the runtime declarations.
 - **Runtimes are declared pairs.** `RuntimeDeclaration` binds a stable id to
   one agentic system and one vendor, and the six historical ids (`claude`,
   `codex`, `qwen`, `gemini`, `agy`, `muse`) are seeded from the extraction
-  source's frozen `runtimeid` table into every binary's default registry.
+  source's frozen `runtimeid` table into every binary's default registry,
+  joined by the three native-Pi rows (`pi-anthropic`, `pi-openai`,
+  `pi-google`), frozen because `providerlimits` resolves a runtime's broker
+  through the frozen slice alone.
   `muse`'s broker is recorded UNKNOWN with a checked-and-empty evidence list,
   exactly as the source records it. `ResolveRuntime` remains strict and reports
   that unresolved broker on its own terms. `BuildLaunch` additionally supports

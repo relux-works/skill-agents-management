@@ -143,7 +143,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:           vendorplugin.LifecyclePreview,
 		Effort:              effortNone(),
 		ContextWindowTokens: 1_048_576,
-		Systems:             []agentic.SystemID{"gemini-cli"},
+		Systems:             []agentic.SystemID{"gemini-cli", "pi-native"},
 	},
 	{
 		ID:                  "gemini-3.6-flash-high",
@@ -163,7 +163,7 @@ var models = []vendorplugin.Model{
 		Effort:              effortNone(),
 		Recommended:         true,
 		ContextWindowTokens: 1_048_576,
-		Systems:             []agentic.SystemID{"gemini-cli"},
+		Systems:             []agentic.SystemID{"gemini-cli", "pi-native"},
 	},
 	{
 		ID:                  "gemini-3.6-flash-medium",
@@ -181,7 +181,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:           vendorplugin.LifecyclePreview,
 		Effort:              effortNone(),
 		ContextWindowTokens: 1_048_576,
-		Systems:             []agentic.SystemID{"gemini-cli"},
+		Systems:             []agentic.SystemID{"gemini-cli", "pi-native"},
 	},
 	{
 		ID:                  "gemini-3.6-flash-low",
@@ -199,7 +199,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:           vendorplugin.LifecycleCurrent,
 		Effort:              effortNone(),
 		ContextWindowTokens: 1_048_576,
-		Systems:             []agentic.SystemID{"gemini-cli"},
+		Systems:             []agentic.SystemID{"gemini-cli", "pi-native"},
 	},
 	{
 		ID:                  "gemini-3.5-flash-high",
@@ -217,7 +217,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:           vendorplugin.LifecycleCurrent,
 		Effort:              effortNone(),
 		ContextWindowTokens: 1_048_576,
-		Systems:             []agentic.SystemID{"gemini-cli"},
+		Systems:             []agentic.SystemID{"gemini-cli", "pi-native"},
 	},
 	{
 		ID:                  "gemini-3.5-flash-medium",
@@ -244,7 +244,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:           vendorplugin.LifecycleCurrent,
 		Effort:              effortNone(),
 		ContextWindowTokens: 262_144,
-		Systems:             []agentic.SystemID{"gemini-cli"},
+		Systems:             []agentic.SystemID{"gemini-cli", "pi-native"},
 	},
 	{
 		ID:                  "gemma-4-26b-a4b-it",
@@ -253,6 +253,6 @@ var models = []vendorplugin.Model{
 		Lifecycle:           vendorplugin.LifecycleCurrent,
 		Effort:              effortNone(),
 		ContextWindowTokens: 262_144,
-		Systems:             []agentic.SystemID{"gemini-cli"},
+		Systems:             []agentic.SystemID{"gemini-cli", "pi-native"},
 	},
 }

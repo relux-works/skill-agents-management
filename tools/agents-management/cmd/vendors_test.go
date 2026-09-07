@@ -87,6 +87,9 @@ func TestRuntimesCommandListsTheFrozenDeclarations(t *testing.T) {
 		"codex\tcodex\topenai",
 		"gemini\tgemini-cli\tgoogle",
 		"muse\tmuse\tvendor unresolved",
+		"pi-anthropic\tpi-native\tanthropic",
+		"pi-google\tpi-native\tgoogle",
+		"pi-openai\tpi-native\topenai",
 		"qwen\tqwen-code\talibaba",
 	}, "\n") + "\n"
 	if stdout != want {
@@ -108,8 +111,8 @@ func TestRuntimesJSONCarriesTheUnresolvedBrokerHonestly(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
 		t.Fatalf("decoding %q: %v", stdout, err)
 	}
-	if len(decoded) != 6 {
-		t.Fatalf("decoded %d runtimes, want the six frozen ids", len(decoded))
+	if len(decoded) != 9 {
+		t.Fatalf("decoded %d runtimes, want the nine frozen ids", len(decoded))
 	}
 	for _, row := range decoded {
 		if row.ID != "muse" {

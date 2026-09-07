@@ -452,6 +452,10 @@ func TestTheAstraLaunchProofFiresOnEveryWayTheSubstitutionCouldBreak(t *testing.
 			mutate: func(m vendorplugin.Model) vendorplugin.Model {
 				if m.ID == astraAlias {
 					m.AliasOf = "gpt-5.6-sol"
+					// The alias-mirror rule (sameSystems) would refuse the
+					// mutant otherwise; the mutant is about the TARGET, so the
+					// systems follow the new target as the rule demands.
+					m.Systems = []agentic.SystemID{"codex", "pi-native"}
 				}
 				return m
 			},
@@ -508,6 +512,9 @@ func TestTheAstraLaunchProofFiresOnEveryWayTheSubstitutionCouldBreak(t *testing.
 			mutate: func(m vendorplugin.Model) vendorplugin.Model {
 				if m.ID == "gpt-5.6-sol" {
 					m.AliasOf = astraIdentity
+					// Mirror the target's systems so the mutant registers
+					// (sameSystems); the fact under test is the redirect.
+					m.Systems = []agentic.SystemID{"codex"}
 				}
 				return m
 			},

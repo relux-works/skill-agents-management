@@ -189,6 +189,12 @@ func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	// not) is overwritten: this is the one place the fact is authoritative,
 	// sourced from the SAME req.Runtime every resolution above already used.
 	launch.Runtime = string(req.Runtime)
+	// Vendor is set here for the same reason and with the same authority:
+	// binding.VendorID is what ResolveRuntime established, and a system-only
+	// binding carries VendorUnresolved (""), which is the honest value for a
+	// broker nobody established. TestBuildLaunchOverwritesAVendorSetBySpawn
+	// holds the overwrite.
+	launch.Vendor = string(binding.VendorID)
 
 	// A system may own a pure request gate that must precede every observation
 	// and preflight. Pi uses it to validate and snapshot exact prompt bytes; the

@@ -285,7 +285,7 @@ var models = []vendorplugin.Model{
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
 		Recommended: true,
-		Systems:     []agentic.SystemID{"codex"},
+		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.6-terra",
@@ -293,7 +293,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(110, "below sol and above luna", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
-		Systems:     []agentic.SystemID{"codex"},
+		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.6-luna",
@@ -301,7 +301,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(100, "below terra and above gpt-5.5", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"}),
-		Systems:     []agentic.SystemID{"codex"},
+		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.5",
@@ -309,7 +309,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(90, "below luna and above gpt-5.4", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
-		Systems:     []agentic.SystemID{"codex"},
+		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.4",
@@ -317,7 +317,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(80, "below gpt-5.5 and above gpt-5.4-mini", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
-		Systems:     []agentic.SystemID{"codex"},
+		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.4-mini",
@@ -325,7 +325,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(70, "below gpt-5.4 and above the spark row", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
-		Systems:     []agentic.SystemID{"codex"},
+		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.3-codex-spark",
@@ -333,7 +333,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(60, "the lowest of the current rows, above every legacy one", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
-		Systems:     []agentic.SystemID{"codex"},
+		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.3-codex",
@@ -341,7 +341,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(50, "the highest of the legacy rows", lineup),
 		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
-		Systems:     []agentic.SystemID{"codex"},
+		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.2-codex",
@@ -365,7 +365,7 @@ var models = []vendorplugin.Model{
 		Rank:        rank(20, "below gpt-5.1-codex-max and above gpt-5.1-codex-mini", lineup),
 		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
-		Systems:     []agentic.SystemID{"codex"},
+		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.1-codex-mini",
