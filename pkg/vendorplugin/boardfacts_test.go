@@ -11,9 +11,21 @@ import (
 )
 
 // This file is the TRANSITIONAL transcription pin for the board-owned model
-// facts this module took over in v0.2.0: the capability score with its ties,
-// the lineup state, the supersession, the display recommendation, the context
-// window, the billing contract, and the muse rows' effort axis.
+// facts this module took over in v0.2.0: the lineup state, the supersession,
+// the display recommendation, the context window, the billing contract, and
+// the muse rows' effort axis.
+//
+// # What happened to the score
+//
+// The capability score WAS a ported fact here until the Bug Hunt Bench
+// re-rank. It is now a bench point (bench.go) that bughunt_test.go holds
+// against an independent transcription of the leaderboard, and the board's
+// PolicyRank is no longer the score of anything. It is still a true fact
+// about the board's table, and every row still quotes it — as the registry's
+// number on its own scale, which is the ORDER the interpolated rows keep — so
+// what this pin holds is that quotation: a row whose basis stops naming the
+// board's number for it has lost the evidence for its place in the order,
+// and a board number that moves under a row is reported rather than absorbed.
 //
 // # Why it exists and when it dies
 //
@@ -196,6 +208,20 @@ func TestTheBoardFixtureAndTheOlderSourceCaptureAgree(t *testing.T) {
 	}
 }
 
+// quotesPolicyRank reports whether a rank's basis carries the board's own
+// number for the row, in the exact sentence the vendor files' rank
+// constructors write. The needle is the number with its label, so a basis
+// that quotes a NEIGHBOUR's number by accident is not credited with this row's.
+func quotesPolicyRank(rank vendorplugin.CapabilityRank, policyRank int) bool {
+	needle := fmt.Sprintf("PolicyRank %d ", policyRank)
+	for _, evidence := range rank.Basis {
+		if strings.Contains(evidence.Observation, needle) {
+			return true
+		}
+	}
+	return false
+}
+
 // portedRows is every row this module declares, from BOTH homes: the four
 // vendor plugins and the vendor-unresolved runtime declaration.
 //
@@ -251,8 +277,8 @@ func compareBoardFacts(fixture boardFacts, rows map[vendorplugin.ModelID]vendorp
 		}
 		delete(remaining, id)
 
-		if got.Rank.Score != want.PolicyRank {
-			report("model %q scores %d and the board scores it %d", want.ID, got.Rank.Score, want.PolicyRank)
+		if !quotesPolicyRank(got.Rank, want.PolicyRank) {
+			report("model %q quotes no board PolicyRank %d in its rank basis; the score is a bench value and the board's number is the order evidence, so a row that stops quoting it has no source for its place", want.ID, want.PolicyRank)
 		}
 		if string(got.Lifecycle) != want.Lifecycle {
 			report("model %q is %q and the board records %q", want.ID, got.Lifecycle, want.Lifecycle)
@@ -435,16 +461,23 @@ func TestTheBoardFactsPinFiresOnEveryPortedField(t *testing.T) {
 		expect string
 	}{
 		{
-			name:   "a capability score moved by one",
+			// The board's number moves under the row: the row still quotes
+			// 120, the table now says 121, and the quotation is stale.
+			name:   "a board PolicyRank moved by one",
 			mutate: func(f *boardFacts) { mutateBoardRow(f, "gpt-5.6-sol", func(m *boardModel) { m.PolicyRank = 121 }) },
-			expect: `model "gpt-5.6-sol" scores 120 and the board scores it 121`,
+			expect: `model "gpt-5.6-sol" quotes no board PolicyRank 121 in its rank basis`,
 		},
 		{
-			name: "a tie broken on the board side",
+			// The needle is the number WITH its trailing space: the snapshot
+			// row quotes "PolicyRank 10 ", and a board that moved it to 5 must
+			// not be satisfied by the "1" in "10" or by any other row's
+			// digits. 5 is also the row's bench score, which is exactly why
+			// the pin must read the quotation and not the score.
+			name: "a board PolicyRank moved onto the row's bench score",
 			mutate: func(f *boardFacts) {
 				mutateBoardRow(f, "claude-haiku-4-5-20251001", func(m *boardModel) { m.PolicyRank = 5 })
 			},
-			expect: `model "claude-haiku-4-5-20251001" scores 10 and the board scores it 5`,
+			expect: `model "claude-haiku-4-5-20251001" quotes no board PolicyRank 5 in its rank basis`,
 		},
 		{
 			name: "a lifecycle swapped",

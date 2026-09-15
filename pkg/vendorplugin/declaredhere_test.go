@@ -68,8 +68,9 @@ import (
 //
 // The two share a capability score, which is legal precisely because both are
 // named here: TestADeclaredRowMayNotTieAPortedOne forbids a declared row tying
-// a PORTED one, because that would publish an equality no capture recorded. A
-// tie between an alias and its own identity records nothing about two models.
+// a PORTED one, because that would publish an equality the leaderboard did not
+// count. A tie between an alias and its own identity records nothing about two
+// models.
 var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
 	"gpt-6-astra": "openai",
 	"astra":       "openai",
@@ -254,10 +255,12 @@ func TestTheDeclaredHereEvidenceRuleFiresOnABasisThatKeepsTheToken(t *testing.T)
 // TestADeclaredRowMayNotTieAPortedOne is a gate rather than an aesthetic rule.
 //
 // Tied is DERIVED over a vendor's whole lineup, so a row added here on a score
-// a ported row already carries flips that ported row to Tied — an equality the
-// board never recorded, published to every ranking consumer as though it had
-// been observed. The scores are spaced by ten across every vendor precisely so
-// a new row never has to land on one.
+// a ported row already carries flips that ported row to Tied — an equality
+// nobody measured, published to every ranking consumer as though it had been
+// observed. Since the bench re-rank a score is a leaderboard count or an
+// interpolation between two, so a declared row lands on a ported score only
+// when the leaderboard counted the two equal or an interpolation was placed
+// carelessly; either way it is argued in the evidence, never absorbed.
 func TestADeclaredRowMayNotTieAPortedOne(t *testing.T) {
 	if len(declaredHereRows) == 0 {
 		t.Skip("no row is declared ahead of the board's registry")

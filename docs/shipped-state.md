@@ -398,3 +398,60 @@ operator creates the next signed annotated tag (`v0.5.11`) after the reviewed
 head is landed and verified on `main`; nothing in this change creates it, and
 the consumer launcher's `go.mod` requires it. Provider login in the managed
 `PI_CODING_AGENT_DIR` home is likewise the operator's, through Pi's `/login`.
+
+### 8. Capability scores re-anchored on Bug Hunt Bench — tag pending (`v0.5.12`, STORY-260914-1m6846)
+
+Added on top of `v0.5.11`: every capability score in the four vendor lineups
+and the muse runtime is a Bug Hunt Bench point — planted bugs fixed out of 105
+on the leaderboard at <https://bughunt.productcompass.pm/>, updated 2026-09-13,
+verified blind. Measured rows carry the exact count at their best effort
+setting (`gpt-6-astra` 48, `claude-fable-5-1` 43, `gpt-5.6-sol` 42,
+`gpt-5.6-luna` 33, `muse-spark-1.3-contributor` 33, `qwen3.8-max-preview` 28
+as `qwen3.8-max`, `claude-opus-5` 27, `claude-opus-4-8` 15); every other row
+carries an interpolated value whose evidence names both anchors and the word
+*interpolated*; every row cites `vendorplugin.BugHuntBenchSource`. The
+`CapabilityRank` contract now says scores are comparable across vendors only
+through the cited benchmark; the old per-vendor-only restriction is gone from
+the type, the vendor files, the README and the docs.
+
+What moved and what did not:
+
+- **The registry's `PolicyRank` is still quoted on every ported row**, as the
+  registry's number on its own scale — it is still true of the registry and it
+  is the order interpolated rows keep. The board-facts and source-port pins now
+  hold that quotation and the source's ties rather than the score, and a new
+  order half holds every pair of UNMEASURED rows to the registry's order.
+- **One vendor-internal order changed, because the bench disagreed:**
+  `claude-sonnet-5` (interpolated 20, between the measured opus-5 and
+  opus-4-8) now stands above `claude-opus-4-8` (measured 15), where the
+  registry had it below. Anthropic's binding file says so in its own words.
+- **`gpt-5.6-luna` carries a cost observation** from the bench source: 33/105
+  at max for $1.80 equals `gpt-5.6-sol` at high (34/105, $33.92) at 1/19 of
+  the cost. It is cost evidence beside the measured claim and moves nothing —
+  sol at max (42) stays above luna.
+- **Ties survive** (haiku and its snapshot, the qwen mirror, the five google
+  pairs, astra and its alias, muse-spark and its identity), `Lineup` is
+  unchanged, and nothing admission-related reads a score.
+- **The muse `Recommended` effort stays `high`.** The re-rank note assumed the
+  row recommended `max`; the board's capture pins `high` and effort
+  vocabularies are outside this change, so the leaderboard's max/high split
+  (33 against 19) is recorded in the row's comment rather than moved into the
+  recommendation.
+
+The gate: `pkg/vendorplugin/bughunt_test.go` holds every score against an
+independent transcription of the leaderboard and fires on nineteen named
+classes — a score that differs from its cited count (the token-preserving
+mutant: the observation keeps `fixed 42/105 at max` and the score moves), an
+interpolated row naming an anchor nothing declares or measured, a measured row
+without the bench source, a measured row claiming interpolation, a
+non-best setting cited as the claim, a hand-typed observation that only looks
+like a claim, and the rest. The gate's stated bounds: `local-models` is outside
+it by name (no benchmark measures an operator's local catalog), and an anchor
+may be a leaderboard model no lineup carries, because google's whole lineup
+hangs below one.
+
+**Owner: the operator.** A dependent adopts this through the next signed
+annotated tag (`v0.5.12`), created after the reviewed head is landed and
+verified on `main`; nothing in this change creates it. The consumer's
+`modelDisplayOrder` and workload-class defaults are policy and do not move with
+the score.

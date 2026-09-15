@@ -23,24 +23,32 @@ import (
 // of them against a fixture captured from that repository's own sources, so a
 // dropped or drifted row fails rather than passes quietly.
 //
-// PORTED VERBATIM as well, since v0.2.0: the capability SCORE, the lineup
-// state, the supersession, the display recommendation, the context window and
-// the billing contract. Until v0.2.0 this file DERIVED a tie-free position from
-// the score, and that reshape asserted an ordering nobody had observed wherever
-// the source's scores tied. The score is now carried as it stands, ties and
-// all, and the total order some callers need is derived by vendorplugin.Lineup
-// from the list rather than declared per row — see lineup.go on why a position
-// is presentation and a score is evidence.
-//
+// PORTED VERBATIM as well, since v0.2.0: the lineup state, the supersession,
+// the display recommendation, the context window and the billing contract.
 // The board-owned fields are pinned row by row against a frozen capture of the
 // board's own table (pkg/vendorplugin/testdata/board-model-facts.json, read by
 // pkg/vendorplugin/boardfacts_test.go), so a slipped digit in a price or a
 // swapped lifecycle fails rather than passing quietly.
 //
-// NO TIE EXISTS HERE: the thirteen openai rows carry thirteen distinct scores,
-// so the derived presentation order is the score order with nothing invented in
-// it. That is a fact about this vendor's table rather than a property of the
-// type — the anthropic, alibaba and google files each carry real ties.
+// NOT PORTED ANY MORE: the capability SCORE. Until the Bug Hunt Bench re-rank
+// the score was the source registry's own PolicyRank — hand-ordered decades
+// 120..10 with nothing behind them but the author's placing. Every score below
+// is now a bench point (planted bugs fixed out of 105, vendorplugin.bench.go):
+// a row the leaderboard measured carries the exact count at its best effort
+// setting, and a row it did not measure carries a value explicitly marked
+// interpolated between two named anchors. The registry's PolicyRank is still
+// quoted on every ported row, because it is still true of the registry and it
+// is the ORDER the interpolated rows keep — but it is quoted as the registry's
+// number on the registry's own scale, never as the score. The score is the
+// bench value, and pkg/vendorplugin/bughunt_test.go holds each one against an
+// independent transcription of the leaderboard.
+//
+// NO TIE AMONG THE PORTED ROWS: the twelve ported openai rows carry twelve
+// distinct scores, so the derived presentation order is the score order with
+// nothing invented in it. The one tie this vendor carries is `astra` with
+// `gpt-6-astra`, an alias and its identity rather than two models. That is a
+// fact about this vendor's table rather than a property of the type — the
+// anthropic, alibaba and google files each carry real ties.
 //
 // # One row is NOT a port, and says so in its own evidence
 //
@@ -67,11 +75,11 @@ import (
 // They are the ONLY field in this file that is not a source fact, and they must
 // never be cited as one.
 
-// sourceRegistry is the table every capability score in this file was read
-// from. It names the exact commit so a reader chasing a score has a revision to
-// open rather than a moving target.
+// sourceRegistry is the table the ported rows' PolicyRank was read from — the
+// order the interpolated rows keep. It names the exact commit so a reader
+// chasing a number has a revision to open rather than a moving target.
 //
-// The board-owned facts the rows gained in v0.2.0 — the score again, the
+// The board-owned facts the rows gained in v0.2.0 — the PolicyRank again, the
 // lifecycle, the supersession, the recommendation, the context window and the
 // billing contract — were re-read from that same table at a LATER commit and
 // pinned against a capture of it; testdata/board-model-facts.json records which.
@@ -79,12 +87,14 @@ import (
 // corroboration rather than two chances to be wrong.
 const sourceRegistry = "skill-project-management tools/board-cli/internal/spawn/models.go (knownModels, commit ed4878123061b39fdae67160f6b5632117b48a2f)"
 
-// lineup is the vendor-side evidence every rank in this file also rests on.
+// lineup is the vendor-side evidence every ported rank in this file also
+// rests on.
 //
-// It is a second entry rather than a replacement for the score, because the two
-// answer different objections: the score says what this repository's own
-// registry recorded, and this says why that ordering is not merely an internal
-// convention.
+// It is a third entry beside the bench claim and the registry number rather
+// than a replacement for either: the bench says how many bugs the row fixed or
+// which two rows it was interpolated between, the registry says where the
+// board's own table ordered it, and this says why that ordering is not merely
+// an internal convention.
 var lineup = vendorplugin.RankEvidence{
 	Source:      "the OpenAI Codex model picker lineup, as the source registry's own row descriptions record it",
 	Observation: "the picker presents sol as the latest frontier model, terra as the balanced everyday one and luna as the fast affordable one, then the general-purpose 5.5 and 5.4 rows, then the renamed tiers the source marks legacy; the ordering below is that presentation",
@@ -116,20 +126,24 @@ const codexCatalog = "the OpenAI Codex CLI model catalog, read with `codex debug
 // both would be one of them invented.
 const codexCatalogAliasProbe = "the OpenAI Codex CLI model catalog, read with `codex debug models` (codex-cli 0.153.2, 2026-09-07)"
 
-// rank builds a capability rank that carries the source's own evidence.
+// rank builds a capability rank for a PORTED row: a bench-anchored score, the
+// bench claim behind it, and the source registry's own PolicyRank for the row.
 //
-// The contract refuses a rank with no observation behind it, and the
-// observation here is not a restatement of the position: it is the source's
-// PolicyRank score, the fact the position was derived FROM. A reader who
-// distrusts a position can check it against a number in another repository
-// rather than against this file's own opinion of itself.
-func rank(score int, note string, evidence vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+// The score and the bench claim are typed separately on purpose — a
+// constructor that derived the observation from the score would agree with
+// any score at all — and pkg/vendorplugin/bughunt_test.go holds the two
+// against each other. policyRank is the registry's number and is quoted as
+// such: it is still true of the registry, it is the order every interpolated
+// row keeps, and it must never be mistaken for the score, which is why the
+// sentence says whose scale it is on.
+func rank(score int, bench vendorplugin.RankEvidence, policyRank int, note string, evidence vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
 	return vendorplugin.CapabilityRank{
 		Score: score,
 		Basis: []vendorplugin.RankEvidence{
+			bench,
 			{
 				Source:      sourceRegistry,
-				Observation: fmt.Sprintf("the row carries PolicyRank %d, %s", score, note),
+				Observation: fmt.Sprintf("the row carries PolicyRank %d on the source registry's own per-vendor scale (the score is the bench value, not that number), %s", policyRank, note),
 			},
 			evidence,
 		},
@@ -138,18 +152,28 @@ func rank(score int, note string, evidence vendorplugin.RankEvidence) vendorplug
 
 // declaredRank builds a capability rank for a row NO capture of the board's
 // registry contains, and it is a separate constructor rather than a flag on
-// rank for one reason: rank's first basis entry states "the row carries
+// rank for one reason: rank's registry entry states "the row carries
 // PolicyRank N" and names the source registry file and commit. For a row the
 // source registry has never held, that sentence is a fabrication a reader
 // would only discover by opening the file. The two constructors make the
-// difference structural — a ported row cannot lose its source evidence and a
-// declared row cannot borrow it.
-func declaredRank(score int, note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
-	basis := []vendorplugin.RankEvidence{{
-		Source:      codexCatalog,
-		Observation: note,
-	}}
+// difference structural — a ported row cannot lose its registry evidence and
+// a declared row cannot borrow it. The bench claim is carried by both: the
+// leaderboard measured gpt-6-astra, and the bench is the one source a
+// declared row and a ported row share.
+func declaredRank(score int, bench vendorplugin.RankEvidence, note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	basis := []vendorplugin.RankEvidence{
+		bench,
+		{Source: codexCatalog, Observation: note},
+	}
 	return vendorplugin.CapabilityRank{Score: score, Basis: append(basis, evidence...)}
+}
+
+// withCost appends a cost observation to a rank. It is a separate step rather
+// than a parameter of rank so the capability claim stays the first bench
+// entry and a cost reading can never be the only bench evidence a row has.
+func withCost(r vendorplugin.CapabilityRank, cost vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	r.Basis = append(r.Basis, cost)
+	return r
 }
 
 // effortRequired declares a model that must be given an explicit effort, with
@@ -182,18 +206,19 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-6-astra",
 		Description: "The most capable Codex model: complex, demanding work that sol does not carry, at the highest cost per turn",
-		// 130 rather than 125: the score is spaced by ten across this whole
-		// vendor, and a gap left above sol is a gap the next generation can be
-		// ranked into without re-scoring a row that did not change.
+		// 48 is the bench count at max, the best of this row's two measured
+		// settings (xhigh fixed 43); the leaderboard's top row, and the one
+		// number in this file nothing was interpolated from.
 		//
-		// It must not equal any ported score. An added row sharing 120 would
-		// make sol report Tied — an equality the board never observed —
-		// and TestADeclaredRowMayNotTieAPortedOne fails on it.
-		Rank: declaredRank(130,
+		// It must not equal any ported score. An added row landing on a
+		// ported row's bench value would make that row report Tied — an
+		// equality the leaderboard never observed — and
+		// TestADeclaredRowMayNotTieAPortedOne fails on it.
+		Rank: declaredRank(48, vendorplugin.BughuntMeasured("max", 48),
 			"the catalog presents this row at picker priority 1, ahead of gpt-5.6-sol at 6, and describes it as \"Our most capable model for complex, demanding work.\"; its availability note calls it state-of-the-art in coding, computer use, science and professional work",
 			vendorplugin.RankEvidence{
 				Source:      sourceRegistry,
-				Observation: "the source registry's highest openai row, gpt-5.6-sol, carries PolicyRank 120, and this row is scored above it; the source registry contains NO row for gpt-6-astra and this score is therefore not a ported one",
+				Observation: "the source registry's highest openai row, gpt-5.6-sol, carries PolicyRank 120 on the registry's own scale, and this row stands above it on the bench (48 to sol's 42); the source registry contains NO row for gpt-6-astra and this score is therefore not a ported one",
 			}),
 		Lifecycle: vendorplugin.LifecycleCurrent,
 		Effort:    astraEffort(),
@@ -254,9 +279,11 @@ var models = []vendorplugin.Model{
 		// The identity's score, because this is the identity under another
 		// name. The two rows therefore TIE, and that tie is an identity rather
 		// than a judgement about two models — the same shape the muse pair
-		// carries. It ties no PORTED row: 130 belongs to the pair alone, and
-		// TestADeclaredRowMayNotTieAPortedOne is what keeps that true.
-		Rank: declaredRank(130,
+		// carries. It ties no PORTED row: 48 belongs to the pair alone, and
+		// TestADeclaredRowMayNotTieAPortedOne is what keeps that true. The
+		// bench claim names gpt-6-astra as the measured spelling, because the
+		// leaderboard has no row called `astra` either.
+		Rank: declaredRank(48, vendorplugin.BughuntMeasuredAs("gpt-6-astra", "max", 48),
 			"this row is a short spelling of gpt-6-astra and carries that row's score; the catalog presents gpt-6-astra at picker priority 1 and publishes no separate row for the spelling `astra`, so there is no second capability to score",
 			vendorplugin.RankEvidence{
 				Source:      codexCatalogAliasProbe,
@@ -281,7 +308,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.6-sol",
 		Description: "The frontier Codex model: the hardest agentic coding work, at the highest cost per turn",
-		Rank:        rank(120, "the highest of the twelve openai rows the board's registry declares, below the gpt-6-astra row this file declares from the vendor catalog", lineup),
+		Rank:        rank(42, vendorplugin.BughuntMeasured("max", 42), 120, "the highest of the twelve openai rows the board's registry declares, below the gpt-6-astra row this file declares from the vendor catalog; the bench agrees on the order (astra 48, sol 42) and its high setting fixed 34", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
 		Recommended: true,
@@ -290,7 +317,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.6-terra",
 		Description: "Balanced agentic coding for everyday work; the usual pick when sol is more than the task needs",
-		Rank:        rank(110, "below sol and above luna", lineup),
+		Rank:        rank(38, vendorplugin.BughuntInterpolated("gpt-5.6-sol", "gpt-5.6-luna", "the leaderboard has no terra run and the vendor tiers it as the balanced row between the two measured ones"), 110, "below sol and above luna", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
 		Systems:     []agentic.SystemID{"codex", "pi-native"},
@@ -298,15 +325,23 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.6-luna",
 		Description: "Fast and cheaper agentic coding, for high-volume or latency-sensitive turns",
-		Rank:        rank(100, "below terra and above gpt-5.5", lineup),
-		Lifecycle:   vendorplugin.LifecycleCurrent,
-		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"}),
-		Systems:     []agentic.SystemID{"codex", "pi-native"},
+		// The owner's observation, kept as COST evidence on this row and not as
+		// a capability claim: luna at max fixes as many bugs as sol at high
+		// for a nineteenth of the money, which makes it the best price/quality
+		// row this vendor has and changes nothing about the capability order
+		// (sol at max, 42, stands above luna at max, 33). A reader choosing a
+		// model sees both facts side by side; a caller sorting by score sees
+		// the second only.
+		Rank: withCost(rank(33, vendorplugin.BughuntMeasured("max", 33), 100, "below terra and above gpt-5.5", lineup),
+			vendorplugin.BughuntCost("at max this row fixed 33/105 for $1.80 list cost, equal to gpt-5.6-sol at high (34/105 for $33.92) at 1/19 of the cost — $0.05 per fix against sol/max's $1.66; the best price/quality row OpenAI has, and cost evidence only: the capability order is unchanged, sol at max (42) above luna at max (33)")),
+		Lifecycle: vendorplugin.LifecycleCurrent,
+		Effort:    effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"}),
+		Systems:   []agentic.SystemID{"codex", "pi-native"},
 	},
 	{
 		ID:          "gpt-5.5",
 		Description: "General frontier reasoning for complex coding and research; not coding-specialized",
-		Rank:        rank(90, "below luna and above gpt-5.4", lineup),
+		Rank:        rank(28, vendorplugin.BughuntInterpolated("gpt-5.6-luna", "gpt-5.4", "unmeasured; the registry order is kept and the value is spaced evenly below luna's measured 33"), 90, "below luna and above gpt-5.4", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex", "pi-native"},
@@ -314,7 +349,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.4",
 		Description: "Solid everyday coding one generation behind gpt-5.5",
-		Rank:        rank(80, "below gpt-5.5 and above gpt-5.4-mini", lineup),
+		Rank:        rank(24, vendorplugin.BughuntInterpolated("gpt-5.5", "gpt-5.4-mini", "unmeasured; the registry order is kept"), 80, "below gpt-5.5 and above gpt-5.4-mini", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex", "pi-native"},
@@ -322,7 +357,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.4-mini",
 		Description: "Small and cheap: simple edits, boilerplate and mechanical work",
-		Rank:        rank(70, "below gpt-5.4 and above the spark row", lineup),
+		Rank:        rank(20, vendorplugin.BughuntInterpolated("gpt-5.4", "gpt-5.3-codex-spark", "unmeasured; the registry order is kept"), 70, "below gpt-5.4 and above the spark row", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex", "pi-native"},
@@ -330,7 +365,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.3-codex-spark",
 		Description: "The lowest-latency coding row, for tight interactive loops rather than long autonomous runs",
-		Rank:        rank(60, "the lowest of the current rows, above every legacy one", lineup),
+		Rank:        rank(16, vendorplugin.BughuntInterpolated("gpt-5.4-mini", "gpt-5.3-codex", "unmeasured; the registry order is kept"), 60, "the lowest of the current rows, above every legacy one", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
 		Effort:      effortRequired("xhigh", []string{"low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex", "pi-native"},
@@ -338,7 +373,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.3-codex",
 		Description: "Legacy coding-specialized frontier model for invocations pinned to it; it still accepts the minimal effort",
-		Rank:        rank(50, "the highest of the legacy rows", lineup),
+		Rank:        rank(14, vendorplugin.BughuntInterpolated("gpt-5.3-codex-spark", "gpt-5.2-codex", "legacy and unmeasured; the registry order is kept"), 50, "the highest of the legacy rows", lineup),
 		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex", "pi-native"},
@@ -346,7 +381,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.2-codex",
 		Description: "Legacy agentic coding model for invocations pinned to it; it still accepts the minimal effort",
-		Rank:        rank(40, "below gpt-5.3-codex and above gpt-5.1-codex-max", lineup),
+		Rank:        rank(12, vendorplugin.BughuntInterpolated("gpt-5.3-codex", "gpt-5.1-codex-max", "legacy and unmeasured; the registry order is kept"), 40, "below gpt-5.3-codex and above gpt-5.1-codex-max", lineup),
 		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
@@ -354,7 +389,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.1-codex-max",
 		Description: "Legacy Codex flagship for invocations pinned to it; it still accepts the minimal effort",
-		Rank:        rank(30, "below gpt-5.2-codex and above gpt-5.2", lineup),
+		Rank:        rank(10, vendorplugin.BughuntInterpolated("gpt-5.2-codex", "gpt-5.2", "legacy and unmeasured; the registry order is kept"), 30, "below gpt-5.2-codex and above gpt-5.2", lineup),
 		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
@@ -362,7 +397,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.2",
 		Description: "Legacy general-purpose reasoning model for invocations pinned to it; it still accepts the minimal effort",
-		Rank:        rank(20, "below gpt-5.1-codex-max and above gpt-5.1-codex-mini", lineup),
+		Rank:        rank(8, vendorplugin.BughuntInterpolated("gpt-5.1-codex-max", "gpt-5.1-codex-mini", "legacy and unmeasured; the registry order is kept"), 20, "below gpt-5.1-codex-max and above gpt-5.1-codex-mini", lineup),
 		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("xhigh", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex", "pi-native"},
@@ -370,7 +405,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:          "gpt-5.1-codex-mini",
 		Description: "The cheapest row this vendor still registers, kept for invocations pinned to it",
-		Rank:        rank(10, "the lowest of the twelve openai rows the board's registry declares", lineup),
+		Rank:        rank(6, vendorplugin.BughuntInterpolated("gpt-5.2", vendorplugin.BugHuntBenchFloor, "legacy and unmeasured; the lowest row of the registry order"), 10, "the lowest of the twelve openai rows the board's registry declares", lineup),
 		Lifecycle:   vendorplugin.LifecycleLegacy,
 		Effort:      effortRequired("high", []string{"minimal", "low", "medium", "high", "xhigh"}),
 		Systems:     []agentic.SystemID{"codex"},
