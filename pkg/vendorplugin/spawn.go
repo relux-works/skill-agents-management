@@ -138,6 +138,27 @@ type SpawnRequest struct {
 // launch attempt is a different question from either of those and belongs at
 // the one place every launch already passes through.
 func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agentic.LaunchMode) (agentic.Plan, error) {
+	return buildLaunch(ctx, r, req, mode, nil)
+}
+
+// BuildLaunchResult exposes the admitted plan and its owned environment.
+type BuildLaunchResult = agentic.PlanWithEnvironment
+
+// BuildLaunchWithEnvironment performs the same admission as BuildLaunch and
+// captures sorted ChildEnv(nil, effectiveRequest) literals in the same planning
+// pass, after preparation and alias projection. Consumers must not diff the
+// snapshot against a parent. Errors return a zero result.
+func BuildLaunchWithEnvironment(ctx context.Context, r *Registry, req SpawnRequest, mode agentic.LaunchMode) (BuildLaunchResult, error) {
+	var result BuildLaunchResult
+	plan, err := buildLaunch(ctx, r, req, mode, &result)
+	if err != nil {
+		return BuildLaunchResult{}, err
+	}
+	result.Plan = plan
+	return result, nil
+}
+
+func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agentic.LaunchMode, result *BuildLaunchResult) (agentic.Plan, error) {
 	if r == nil {
 		return agentic.Plan{}, errors.New("vendorplugin: cannot build a launch without a registry")
 	}
@@ -251,7 +272,14 @@ func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 		}
 	}
 
-	plan, err := agentic.BuildPlan(r.systems, launch, mode)
+	var plan agentic.Plan
+	if result != nil {
+		captured, captureErr := agentic.BuildPlanWithEnvironment(r.systems, launch, mode)
+		plan, err = captured.Plan, captureErr
+		*result = captured
+	} else {
+		plan, err = agentic.BuildPlan(r.systems, launch, mode)
+	}
 	if err != nil {
 		return agentic.Plan{}, err
 	}

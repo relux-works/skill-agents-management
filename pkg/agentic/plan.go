@@ -3,6 +3,7 @@ package agentic
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/relux-works/skill-agents-management/pkg/plugin"
@@ -172,6 +173,27 @@ func refuseNonInteractiveParameters(id SystemID, req LaunchRequest) error {
 	return nil
 }
 
+// PlanWithEnvironment pairs a plan with its owned environment snapshot.
+type PlanWithEnvironment struct {
+	Plan Plan
+	// OwnedEnv contains sorted owned environment literals from ChildEnv(nil,
+	// effectiveRequest), after preparation and alias projection. It excludes the
+	// parent environment. Consumers must not diff it against a parent. The slice
+	// is independently owned by the result; an empty snapshot is nil.
+	OwnedEnv []string
+}
+
+// BuildPlanWithEnvironment builds once and captures the owned environment of
+// that same effective request. On error it returns a zero result.
+func BuildPlanWithEnvironment(r *Registry, req LaunchRequest, mode LaunchMode) (PlanWithEnvironment, error) {
+	var owned []string
+	plan, err := buildPlan(r, req, mode, &owned)
+	if err != nil {
+		return PlanWithEnvironment{}, err
+	}
+	return PlanWithEnvironment{Plan: plan, OwnedEnv: owned}, nil
+}
+
 // BuildPlan resolves one launch through the registry.
 //
 // It is the single dispatch site for the System contract: every surface the
@@ -185,6 +207,10 @@ func refuseNonInteractiveParameters(id SystemID, req LaunchRequest) error {
 // later layer and deliberately absent: BuildPlan answers "is this launch
 // expressible", not "is this launch allowed right now".
 func BuildPlan(r *Registry, req LaunchRequest, mode LaunchMode) (Plan, error) {
+	return buildPlan(r, req, mode, nil)
+}
+
+func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string) (Plan, error) {
 	if r == nil {
 		return Plan{}, errors.New("agentic: cannot build a plan without a registry")
 	}
@@ -295,6 +321,15 @@ func BuildPlan(r *Registry, req LaunchRequest, mode LaunchMode) (Plan, error) {
 		// found a prompt channel the mode does not have, and the plan must not
 		// carry it out to a terminal.
 		return Plan{}, fmt.Errorf("%w: %s attached %d stdin bytes to an interactive launch under effort transport %s", ErrPluginContract, id, len(stdin.Bytes), caps.EffortTransport)
+	}
+
+	if owned != nil {
+		snapshot, err := sys.ChildEnv(nil, req)
+		if err != nil {
+			return Plan{}, fmt.Errorf("agentic: %s could not build the owned environment: %w", id, err)
+		}
+		*owned = append([]string(nil), snapshot...)
+		sort.Strings(*owned)
 	}
 
 	home := strings.TrimSpace(req.Home)

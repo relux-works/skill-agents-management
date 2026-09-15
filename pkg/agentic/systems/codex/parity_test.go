@@ -3,6 +3,7 @@ package codex
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -301,6 +302,21 @@ func prepareParityCase(t *testing.T, c parityCase) (parity.Golden, parityDirs, a
 	if err != nil {
 		t.Fatalf("Load(%q): %v", c.goldenID, err)
 	}
+	// Captures retain their original Darwin ARM64 bytes. Derive only the
+	// expected platform path from the toolchain, independently of the resolver.
+	arch, npmArch := "x86_64", "x64"
+	if runtime.GOARCH == "arm64" {
+		arch, npmArch = "aarch64", "arm64"
+	}
+	osName, suffix := "darwin", "apple-darwin"
+	switch runtime.GOOS {
+	case "linux":
+		osName, suffix = "linux", "unknown-linux-musl"
+	case "windows":
+		osName, suffix = "win32", "pc-windows-msvc"
+	}
+	g.Surface.Binary = strings.ReplaceAll(g.Surface.Binary, "@openai/codex-darwin-arm64", "@openai/codex-"+osName+"-"+npmArch)
+	g.Surface.Binary = strings.ReplaceAll(g.Surface.Binary, "aarch64-apple-darwin", arch+"-"+suffix)
 	dirs := makeParityDirs(t, c)
 	req, pathDirs := c.build(t, dirs)
 	env := withPathEntry(g.Capture.ParentEnv, strings.Join(pathDirs, string(os.PathListSeparator)))
@@ -474,4 +490,29 @@ func (m mutatedStdinSystem) Stdin(req agentic.LaunchRequest) (agentic.StdinPaylo
 	mutated := append([]byte(nil), payload.Bytes...)
 	mutated[len(mutated)-1] = 'X'
 	return agentic.StdinPayload{Attached: true, Bytes: mutated}, nil
+}
+
+// A wrong architecture must still fail the exact binary-path comparison.
+func TestCodexGoldenRejectsWrongArchitecture(t *testing.T) {
+	for _, id := range []string{"codex/exec-managed-npm-path", "codex/exec-native-shim"} {
+		t.Run(id, func(t *testing.T) {
+			c := parityCaseFor(t, id)
+			g, dirs, req := prepareParityCase(t, c)
+			plan := buildParityPlan(t, New(), req, c.mode)
+			if diffs := parity.ComparePlan(g, plan, dirs.substitutions()); len(diffs) != 0 {
+				t.Fatalf("clean plan differs: %v", diffs)
+			}
+			correct, wrong := "x86_64", "aarch64"
+			if runtime.GOARCH == "arm64" {
+				correct, wrong = wrong, correct
+			}
+			plan.Binary = strings.ReplaceAll(plan.Binary, correct, wrong)
+			for _, diff := range parity.ComparePlan(g, plan, dirs.substitutions()) {
+				if diff.Field == "Binary" {
+					return
+				}
+			}
+			t.Fatal("wrong architecture escaped the binary-path comparison")
+		})
+	}
 }
