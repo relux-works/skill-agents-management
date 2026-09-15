@@ -43,12 +43,12 @@ import (
 //
 // The VALUE is passed through verbatim. This file does not know — and must not
 // learn — which words the installed muse build accepts: that is invariant 4 of
-// docs/architecture.md, and it is load-bearing right now rather than in theory.
-// The model's vocabulary is high/xhigh/max and installed muse 1.0.2 documents
-// none|minimal|low|medium|high|xhigh|ultra, so `max` is a word this plugin
-// transports and that CLI refuses. Enumerating the CLI's set here to pre-empt
-// that would put a harness build number in the argv builder and would go on
-// refusing `max` after muse ships it.
+// docs/architecture.md, and it was load-bearing in fact, not just in theory.
+// The model's vocabulary is high/xhigh/max and muse 1.0.2 documented
+// none|minimal|low|medium|high|xhigh|ultra, so `max` was a word this plugin
+// transported and that CLI refused. muse 1.3.0 accepts it. Enumerating any
+// CLI's set here to pre-empt a refusal would put a harness build number in the
+// argv builder and would keep refusing words the next build already accepts.
 
 // promptFilePlaceholder is what a dry run reports where a real launch would
 // name an assignment file that does not exist yet. It is the source's literal

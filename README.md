@@ -582,7 +582,7 @@ port accounts for them explicitly rather than dropping them. Two further rows �
   held to. A resolved runtime declaring model rows is REFUSED — that would be
   the second table. Since `muse-spark-1.3-contributor` the effort axis is no
   longer hypothetical: that row and its `muse-spark` alias declare
-  `high`/`xhigh`/`max` with `high` recommended, and `muse-spark-1.2-contributor`
+  `high`/`xhigh`/`max` with `max` recommended, and `muse-spark-1.2-contributor`
   stays effort-none as a legacy row superseded by 1.3. `muse-spark` carries
   `AliasOf: muse-spark-1.3-contributor`, so it is admitted and audited under its
   own spelling and EXECUTES under the contributor id — see *Alias identity

@@ -441,25 +441,35 @@ const boardRegistry = "skill-project-management tools/board-cli/internal/spawn/m
 // position that Lineup derives is declaration order for the tied pair and
 // carries no claim, which is what RankedModel.Tied reports.
 //
-// # The 1.3 effort axis, and the one place it outruns the installed CLI
+// # The 1.3 effort axis, and the recommendation it carries
 //
 // muse-spark-1.3-contributor and its alias declare EffortSupportRequired over
-// high/xhigh/max, recommending high. That vocabulary is the MODEL's, from the
+// high/xhigh/max, recommending max. That vocabulary is the MODEL's, from the
 // Muse Spark 1.3 API, and this package owns the model half of the effort
 // contract by design (see EffortDeclaration).
 //
-// The installed harness is behind it, and saying so here is the point.
-// `muse 1.0.2` (1.0.2-R2040.1) documents `--reasoning-effort <EFFORT>` as
-// none|minimal|low|medium|high|xhigh|ultra, default high: it has `xhigh` but no
-// `max`. So a launch configured at `max` is admitted by this declaration, is
-// transported verbatim by the muse system plugin, and is REFUSED harness-side
-// by that CLI until it ships the word. That is deliberate and it is the honest
-// shape: `max` is API truth, the transport is a pass-through by invariant 4 of
-// docs/architecture.md, and a plugin that enumerated the CLI's vocabulary to
-// pre-refuse it would be putting a harness build number in the layer that must
-// not hold one — and would silently keep refusing after the CLI catches up.
-// Narrowing the MODEL's vocabulary to what 1.0.2 accepts would be the same
-// mistake stated in this file instead.
+// The recommendation is the bench's, not a taste: the leaderboard measured
+// this model at 33/105 at max against 19 at high (see the tie note above), so
+// `max` is the setting the score was observed at and the one an operator
+// following the recommendation reproduces. It also matches the consumer's
+// policy — normal board-managed work uses `max` as its highest recommendation
+// (skill-project-management `.specs/spawn-model-selection.md`) — rather than
+// steering muse launches one step below every other runtime's head.
+//
+// The installed harness used to be behind the vocabulary, and the history is
+// worth keeping because the bound it states still holds. `muse 1.0.2`
+// (1.0.2-R2040.1) documented `--reasoning-effort <EFFORT>` as
+// none|minimal|low|medium|high|xhigh|ultra, default high: it had `xhigh` but no
+// `max`, so a launch configured at `max` was admitted by this declaration,
+// transported verbatim by the muse system plugin, and REFUSED harness-side by
+// that CLI. `muse 1.3.0` (1.3.0-R3057.1) documents
+// none|minimal|low|medium|high|xhigh|max|ultra, default high, and accepts the
+// word, so the refusal is gone on current harnesses. The shape stays deliberate
+// either way: `max` is API truth, the transport is a pass-through by invariant
+// 4 of docs/architecture.md, and a plugin that enumerated the CLI's vocabulary
+// to pre-refuse it would be putting a harness build number in the layer that
+// must not hold one. Narrowing the MODEL's vocabulary to what 1.0.2 accepted
+// would have been the same mistake stated in this file instead.
 func museModels() []Model {
 	source := RankEvidence{
 		Source:      boardRegistry,
@@ -486,15 +496,16 @@ func museModels() []Model {
 	// alias: they are one model reached by two names, so a second literal here
 	// would be a second place for the vocabulary to drift.
 	//
-	// `max` is in this vocabulary and is NOT in installed muse 1.0.2's
+	// `max` is in this vocabulary and was NOT in muse 1.0.2's
 	// `--reasoning-effort` set (none|minimal|low|medium|high|xhigh|ultra). See
 	// this function's doc comment: the word is API truth, it passes through the
-	// system plugin verbatim, and the refusal it earns today is the harness's.
+	// system plugin verbatim, and the refusal it earned on that build was the
+	// harness's. muse 1.3.0 accepts it.
 	spark13Effort := func() EffortDeclaration {
 		return EffortDeclaration{
 			Support:     agentic.EffortSupportRequired,
 			Vocabulary:  []string{"high", "xhigh", "max"},
-			Recommended: "high",
+			Recommended: "max",
 		}
 	}
 	return []Model{

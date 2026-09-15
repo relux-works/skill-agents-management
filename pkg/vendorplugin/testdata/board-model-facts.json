@@ -910,7 +910,7 @@
         ],
         "broker": "",
         "reasoning": "required",
-        "recommended_effort": "high",
+        "recommended_effort": "max",
         "supported_efforts": [
           "high",
           "xhigh",
@@ -933,7 +933,7 @@
         ],
         "broker": "",
         "reasoning": "required",
-        "recommended_effort": "high",
+        "recommended_effort": "max",
         "supported_efforts": [
           "high",
           "xhigh",

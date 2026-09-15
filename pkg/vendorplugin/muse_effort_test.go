@@ -76,11 +76,11 @@ func museArgvPair(argv []string, flag, value string) bool {
 func TestTheMuseEffortWordSurvivesTheWholeLaunchPath(t *testing.T) {
 	registry := museLaunchRegistry(t)
 	// Every word muse-spark-1.3-contributor declares, through both of its
-	// names. `max` is included deliberately: the model has it, installed muse
-	// 1.0.2's --reasoning-effort help does not, and this module's job is to
-	// transport it and let the harness refuse. Narrowing the vocabulary to the
-	// installed build would put a CLI version number in the model layer and
-	// would keep refusing after muse ships the word.
+	// names. `max` is included deliberately: the model has it, muse 1.0.2's
+	// --reasoning-effort help did not, and this module's job is to transport it
+	// and let the harness refuse. Narrowing the vocabulary to that build would
+	// have put a CLI version number in the model layer and would have kept
+	// refusing after muse shipped the word (1.3.0 accepts it).
 	//
 	// The two names do NOT put the same string in argv, and that asymmetry is
 	// the alias contract rather than an inconsistency: `muse-spark` is admitted

@@ -455,3 +455,45 @@ annotated tag (`v0.5.12`), created after the reviewed head is landed and
 verified on `main`; nothing in this change creates it. The consumer's
 `modelDisplayOrder` and workload-class defaults are policy and do not move with
 the score.
+
+### 9. Muse Spark 1.3 recommendation moves `high` → `max`
+
+`muse-spark-1.3-contributor` and its `muse-spark` alias recommend `max` instead
+of `high`. The two rows share one `EffortDeclaration`, so the move is a single
+literal and the alias still cannot drift from its identity.
+
+Why now, and why this is not a taste change:
+
+- **The bench measured the model at `max`.** 33/105 at max against 19 at high
+  (Bug Hunt Bench, leaderboard 2026-09-13). The re-rank entry above recorded
+  that split in the row's comment and left the recommendation at `high`,
+  because vocabularies were outside that change; this change moves the number
+  the score was observed at into the recommendation an operator reproduces.
+- **The consumer's policy already points there.** Normal board-managed work
+  uses `max` as its highest recommendation
+  (`skill-project-management/.specs/spawn-model-selection.md`); muse was the
+  one runtime steered a step below.
+- **The harness caught up.** `muse 1.0.2` had no `max` word and refused such
+  launches harness-side; `muse 1.3.0` (1.3.0-R3057.1) documents
+  `none|minimal|low|medium|high|xhigh|max|ultra` and accepts it. The
+  declaration, the transport and the refusal text are unchanged in shape —
+  only the recommended word moved.
+
+What moved and what did not:
+
+- **The vocabulary is untouched** — still `high`/`xhigh`/`max`, still required,
+  still shared by both spellings. A launch configured at `high` keeps working.
+- **Nothing admission-related reads the recommendation**, so admitted-pair
+  digests are byte-identical; `digeststability_test.go` and its mutants hold
+  that rather than this paragraph asserting it.
+- **The board-facts pin moved with the declaration**: the fixture's two muse
+  `recommended_effort` fields now read `max`, and the alias-drift mutant runs
+  toward the previous recommendation (`high`) so it still disagrees on purpose.
+  The board maps this column 1:1 from the declaration
+  (`tools/board-cli/internal/spawn/model_registry_build.go`), so the next
+  consumer version bump projects `max` with no other board-side change.
+- **`muse-spark-1.2-contributor` stays effort-none** as the legacy row.
+
+**Owner: the operator.** A dependent adopts this through the next signed
+annotated tag, created after the reviewed head is landed and verified on
+`main`; nothing in this change creates it.

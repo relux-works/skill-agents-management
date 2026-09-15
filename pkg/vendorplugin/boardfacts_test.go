@@ -609,10 +609,10 @@ func TestTheBoardFactsPinFiresOnEveryPortedField(t *testing.T) {
 		},
 		{
 			// Presence is not the same fact as CONTENT. A vocabulary narrowed
-			// to what the installed muse 1.0.2 CLI accepts — dropping `max`,
-			// which that build has no word for — is the most plausible edit
-			// anyone will make to this row, and it is a MODEL fact being
-			// rewritten to match a harness build number.
+			// to what the muse 1.0.2 CLI accepted — dropping `max`, which that
+			// build had no word for — is the most plausible edit anyone will
+			// make to this row, and it is a MODEL fact being rewritten to
+			// match a harness build number.
 			name: "a vendor-unresolved row's vocabulary narrowed to the installed CLI",
 			mutate: func(f *boardFacts) {
 				mutateBoardRow(f, "muse-spark-1.3-contributor", func(m *boardModel) {
@@ -625,12 +625,14 @@ func TestTheBoardFactsPinFiresOnEveryPortedField(t *testing.T) {
 			// The alias and its identity must not drift apart: they are one
 			// model reached by two names, so a recommendation moved on one
 			// side alone is a launch that costs differently depending on how
-			// it was spelled.
+			// it was spelled. The drift runs toward the PREVIOUS
+			// recommendation, `high`: moving it to `max` would now agree with
+			// the identity and prove nothing.
 			name: "the alias's recommended effort moved off its identity",
 			mutate: func(f *boardFacts) {
-				mutateBoardRow(f, "muse-spark", func(m *boardModel) { m.Joined.RecommendedEffort = "max" })
+				mutateBoardRow(f, "muse-spark", func(m *boardModel) { m.Joined.RecommendedEffort = "high" })
 			},
-			expect: `vendor-unresolved model "muse-spark" recommends "high" and the board recommends "max"`,
+			expect: `vendor-unresolved model "muse-spark" recommends "max" and the board recommends "high"`,
 		},
 		{
 			name: "a board row this module would then not cover",
