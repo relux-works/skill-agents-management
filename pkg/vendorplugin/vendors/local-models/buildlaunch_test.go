@@ -144,6 +144,31 @@ func configWithoutEngine() Config {
 // seam proof: a positively-absent broker admits, and the resulting Plan's
 // argv/env carry what this vendor's real Spawn and pi's real Argv/ChildEnv
 // build together.
+// TestBuildLaunchCarriesTheCallerDeadlineIntoThePiPlan proves the vendor
+// layer projects SpawnRequest.Deadline onto the pi argv end to end: the
+// caller's 6h fence is what Process A fences at, not the 30m the plugin used
+// to hard-code. The sibling test keeps the undeclared plan byte-identical.
+func TestBuildLaunchCarriesTheCallerDeadlineIntoThePiPlan(t *testing.T) {
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
+	req := localQwenSpawnRequest(t)
+	req.Deadline = 6 * time.Hour
+
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch: %v", err)
+	}
+	for i := 0; i+1 < len(plan.Argv); i++ {
+		if plan.Argv[i] == "--deadline" {
+			if plan.Argv[i+1] != "6h0m0s" {
+				t.Fatalf("plan.Argv %v fences at %q, want the caller's 6h", plan.Argv, plan.Argv[i+1])
+			}
+			return
+		}
+	}
+	t.Fatalf("plan.Argv %v carries no --deadline", plan.Argv)
+}
+
 func TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight(t *testing.T) {
 	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
 	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())

@@ -110,6 +110,12 @@ type SpawnRequest struct {
 	Budget      *agentic.Budget
 	ServiceTier string
 	Composition agentic.Composition
+
+	// Deadline is the hard fence the caller enforces on the child process,
+	// projected verbatim onto LaunchRequest.Deadline so a harness that fences
+	// its own turn (pi --deadline) fences at the caller's budget. Zero means
+	// none declared.
+	Deadline time.Duration
 }
 
 // BuildLaunch resolves one launch through both layers.

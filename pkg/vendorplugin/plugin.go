@@ -85,5 +85,6 @@ func passthroughLaunchRequest(system agentic.SystemID, model Model, effort strin
 		Budget:      req.Budget,
 		ServiceTier: req.ServiceTier,
 		Composition: req.Composition,
+		Deadline:    req.Deadline,
 	}
 }
