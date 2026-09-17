@@ -26,6 +26,7 @@ package agentic
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/relux-works/skill-agents-management/internal/ident"
 )
@@ -440,6 +441,14 @@ type LaunchRequest struct {
 	Budget      *Budget
 	ServiceTier string
 	Composition Composition
+
+	// Deadline is the hard fence the caller will enforce on the child
+	// process. A plugin whose harness carries a deadline of its own (pi
+	// spells `--deadline`) transports THIS value and never a constant of its
+	// own: the 30m the pi plugin used to hard-code cut every local-model run
+	// at 30:00 whatever the caller had planned. Zero means the caller declared
+	// none, and a plugin then falls back to its documented default.
+	Deadline time.Duration
 
 	// Runtime is the vendorplugin.RuntimeID string that resolved to this
 	// launch. It is opaque to this package (a plain string, exactly like

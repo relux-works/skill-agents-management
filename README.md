@@ -521,7 +521,9 @@ The vendor plugin contract, its registry, and the runtime declarations.
   calls this API from its real `buildLaunchPlan` path.
 - Pi Process-A plans are exact:
   `agents-infra pi spawn --profile <exact> --prompt <one UTF-8 argv value>
-  --deadline 30m --result-schema 1`. Stdin is detached/EOF; dry-run substitutes
+  --deadline <LaunchRequest.Deadline, 30m when none> --result-schema 1`.
+  The deadline is the caller's own hard fence spelled as a Go duration, never
+  a constant of this module's (v0.5.15). Stdin is detached/EOF; dry-run substitutes
   `<prompt>` without reading `PromptPath`; agents-management emits no inner Pi
   flags. Consumers classify bounded schema-1 stdout, actual Process-A exit,
   intervention and cleanup only through `pi.ValidateTurnResult`. The closed

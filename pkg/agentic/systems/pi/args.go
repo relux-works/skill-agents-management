@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
@@ -62,9 +63,26 @@ func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		"pi", "spawn",
 		"--profile", profile,
 		"--prompt", prompt,
-		"--deadline", "30m",
+		"--deadline", deadlineArg(req.Deadline),
 		"--result-schema", "1",
 	}, nil
+}
+
+// defaultDeadline is the Process-A deadline spelled when the caller declared
+// none. It is the historical constant, kept only as the zero-value fallback:
+// a caller with a fence of its own (task-board's hard timeout) passes it on
+// LaunchRequest.Deadline and the child gets that fence, not this one.
+const defaultDeadline = "30m"
+
+// deadlineArg spells the caller's deadline the way `agents-infra pi spawn
+// --deadline` parses it (a Go duration). A zero or negative deadline is "none
+// declared" and yields the documented default, spelled exactly as before so a
+// plan without a declared deadline stays byte-identical.
+func deadlineArg(deadline time.Duration) string {
+	if deadline <= 0 {
+		return defaultDeadline
+	}
+	return deadline.String()
 }
 
 func prepareLaunchRequest(req agentic.LaunchRequest, mode agentic.LaunchMode) (agentic.LaunchRequest, error) {

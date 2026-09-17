@@ -68,7 +68,7 @@ plugin per system:
 | `gemini-cli` | Gemini CLI |
 | `antigravity` | Antigravity CLI |
 | `muse` | Muse CLI |
-| `pi` | Process A: exact `agents-infra pi spawn --profile <name> --prompt <prompt> --deadline 30m --result-schema 1`, with EOF stdin; agents-infra owns the shared-runtime lease, inner Pi policy, execution and cleanup |
+| `pi` | Process A: exact `agents-infra pi spawn --profile <name> --prompt <prompt> --deadline <caller fence, 30m when none> --result-schema 1`, with EOF stdin; agents-infra owns the shared-runtime lease, inner Pi policy, execution and cleanup |
 | `pi-native` | The Pi coding agent itself (`pi` on the launch PATH) as an interactive session against a cloud provider: `--model <vendor>/<model>` plus `--thinking <effort>`, home `PI_CODING_AGENT_DIR` (default `~/.pi/agent`), interactive and dry-run only, no preflight, no exec grammar |
 
 An agentic-system plugin declares (this mirrors the adapter table the
@@ -422,7 +422,8 @@ part of this candidate.
 
 `pkg/agentic/systems/pi` now pins the complete outer Process-A contract:
 `["pi", "spawn", "--profile", <exact-profile>, "--prompt", <one UTF-8 value>,
-"--deadline", "30m", "--result-schema", "1"]`, resolved against
+"--deadline", <LaunchRequest.Deadline as a Go duration, "30m" when none>,
+"--result-schema", "1"]`, resolved against
 `agents-infra` on the launch environment's PATH. Stdin is detached/EOF and
 dry-run uses `<prompt>` without reading the prompt file. This module emits no
 inner Pi flags. agents-infra remains the sole owner of inner Pi policy,

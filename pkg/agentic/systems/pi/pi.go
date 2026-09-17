@@ -1,5 +1,5 @@
 // Package pi is the agentic-system plugin for Process A: `agents-infra pi
-// spawn --profile <name> --prompt <prompt> --deadline 30m --result-schema 1`,
+// spawn --profile <name> --prompt <prompt> --deadline <caller fence> --result-schema 1`,
 // the short-lived wrapper that holds the
 // shared-runtime lease connection for its own lifetime and execs the real
 // `pi` binary as its child.

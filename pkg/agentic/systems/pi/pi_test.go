@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/localruntime"
@@ -93,6 +94,33 @@ func TestArgvBuildsExactProcessAContract(t *testing.T) {
 			t.Fatalf("argv = %v, want %v", argv, want)
 		}
 	})
+	// The pi child fences its own turn at --deadline, so the value has to be
+	// the caller's hard fence: a 30m constant cut every local-model run at
+	// 30:00 whatever task-board had planned. The exec and dry-run argv both
+	// carry LaunchRequest.Deadline verbatim (Go duration spelling), and only a
+	// caller that declared none gets the historical 30m default.
+	t.Run("deadline is the caller's fence", func(t *testing.T) {
+		for _, mode := range []agentic.LaunchMode{agentic.LaunchModeExec, agentic.LaunchModeDryRun} {
+			argv, err := system.Argv(agentic.LaunchRequest{Profile: "local-qwen", Prompt: []byte("turn"), Deadline: 6 * time.Hour}, mode)
+			if err != nil {
+				t.Fatalf("Argv(%s): %v", mode, err)
+			}
+			if got := argvFlag(argv, "--deadline"); got != "6h0m0s" {
+				t.Fatalf("%s argv %v spells --deadline %q, want the caller's 6h fence", mode, argv, got)
+			}
+		}
+	})
+	t.Run("no declared deadline keeps the 30m default", func(t *testing.T) {
+		for _, deadline := range []time.Duration{0, -time.Minute} {
+			argv, err := system.Argv(agentic.LaunchRequest{Profile: "local-qwen", Prompt: []byte("turn"), Deadline: deadline}, agentic.LaunchModeExec)
+			if err != nil {
+				t.Fatalf("Argv: %v", err)
+			}
+			if got := argvFlag(argv, "--deadline"); got != "30m" {
+				t.Fatalf("deadline %v: argv %v spells --deadline %q, want the 30m default", deadline, argv, got)
+			}
+		}
+	})
 	t.Run("profile bytes are not normalized", func(t *testing.T) {
 		argv, err := system.Argv(agentic.LaunchRequest{Profile: " Exact-Profile ", Prompt: []byte("turn")}, agentic.LaunchModeExec)
 		if err != nil || argv[3] != " Exact-Profile " {
@@ -165,4 +193,14 @@ func TestValidateCompositionRefusesEveryComposition(t *testing.T) {
 	if err := system.ValidateComposition(agentic.Composition{Prefix: []string{"--x"}}); err == nil {
 		t.Fatal("a non-zero composition was accepted by a system declaring no grammar")
 	}
+}
+
+// argvFlag returns the operand that follows flag in argv, or "" when absent.
+func argvFlag(argv []string, flag string) string {
+	for i := 0; i+1 < len(argv); i++ {
+		if argv[i] == flag {
+			return argv[i+1]
+		}
+	}
+	return ""
 }
