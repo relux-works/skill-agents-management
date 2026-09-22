@@ -75,12 +75,29 @@ The agentic-system plugin contract and its registry.
   `ResolveBinary`, `Argv`, `ChildEnv`, `Stdin`, `ValidateComposition`.
 - Four launch modes: `exec`, `dry-run`, `managed-session`, and `interactive`
   (curator-spec Decision 0013 §5) — the complete argv a launcher hands to a
-  human's terminal, holding model selection and effort transport only.
+  human's terminal, holding model selection, effort transport, and the
+  optional typed permission-mode member only (`LaunchRequest.PermissionMode`,
+  curator-spec Decision 0018 — the next item).
   `BuildPlan` refuses an interactive request carrying a composition
   (`ErrCompositionNotInteractive`) or a goal, budget, service tier or prompt
   (`ErrParameterNotInteractive`), and holds every plugin to a detached stdin
   unless its effort transport is stdin. `claude-code`, `codex` and `pi` declare
   the mode; the other four refuse it with `ErrUnsupportedLaunchMode`.
+- `LaunchRequest.PermissionMode` is the interactive permission posture
+  (curator-spec Decision 0018): the zero value and `native` pass nothing — the
+  provider's stored settings decide — while `yolo` selects the single provider
+  bypass flag the system maps for its pinned tool release (`claude-code` →
+  `--dangerously-skip-permissions`, `codex` →
+  `--dangerously-bypass-approvals-and-sandbox`, emitted exactly once after
+  model and effort; `pi` and `pi-native` refuse yolo with
+  `ErrPermissionModeUnsupported` because pi 0.84.2 documents no such flag).
+  `BuildPlan` refuses an unknown value in any mode
+  (`ErrPermissionModeUnknown`) and any non-zero value outside interactive
+  launches (`ErrPermissionModeNotInteractive`). A yolo launch carrying any
+  composition never reaches the duplicate check through `BuildPlan` — the
+  composition is refused first (`ErrCompositionNotInteractive`) — so
+  `ErrPermissionModeDuplicate` is the direct plugin `Argv` path's refusal for
+  a composition prefix that already carries the flag, never de-duplicated.
 - `Registry` is the only place a system binding may live. `Register` is the
   only way one comes to exist, and it refuses a duplicate id, an id that does
   not normalize, an id that normalizes to a spelling other than itself, an id
@@ -143,11 +160,13 @@ proven against all four codex launch-surface goldens through the real
 - **One argv construction site.** `args.go`'s `Args` is the only place codex CLI
   flags are spelled, for the `codex exec` grammar (shared verbatim by the
   dry-run mirror), the managed-session provider-args fragment, and the
-  interactive session (`-m <model>` plus the effort override, nothing else).
-  `argvguard_test.go` scans every non-test Go file in the module and fails if a
-  second site appears; it narrows itself onto the real `Args` to prove it can
-  fire, holds nine mutant spellings, and demonstrates its three declared-open
-  residuals staying open.
+  interactive session (`-m <model>` plus the effort override, plus
+  `--dangerously-bypass-approvals-and-sandbox` exactly when the request carries
+  `yolo`). `argvguard_test.go` scans every non-test Go file in the module and
+  fails if a second site appears; it narrows itself onto the real `Args` to
+  prove it can fire, holds nine mutant spellings, demonstrates its three
+  declared-open residuals staying open, and counts the bypass flag's literal at
+  exactly one site — the const both branches reference.
 - **Effort transport is argv** — a `-c model_reasoning_effort="..."` override —
   and the vocabulary stays with the vendor layer. The service-tier override
   travels the same way.
@@ -206,7 +225,12 @@ frozen RUNTIME id `claude`; `parity_test.go` maps between them in one place.
   construction instead, including the `%.2f` rendering and the `> 0` guard that
   silently drops a zero ceiling.
 - **One argv construction site**, guarded the same way codex's is and by the same
-  scanner.
+  scanner. The interactive session is `--model <id>` plus the effort flag, plus
+  `--dangerously-skip-permissions` exactly when the request carries `yolo`; the
+  flag literal occurs once in the plugin (the const both branches reference);
+  the guard counts it module-wide at exactly two sites — this const and agy's
+  pre-existing exec spelling — since the AST signature must keep excluding
+  the flag agy's exec grammar shares.
 
 ### The qwen plugin: `pkg/agentic/systems/qwen`
 
@@ -302,7 +326,10 @@ Plugin id `pi-native`; the frozen runtimes that bind it are `pi-anthropic`,
 
 - **Interactive and dry-run only.** No exec grammar: headless Pi is the
   wrapper's, and a native `-p` run would be an unsupervised child. Exec is
-  refused with `ErrUnsupportedLaunchMode`.
+  refused with `ErrUnsupportedLaunchMode`. `yolo` is refused with
+  `ErrPermissionModeUnsupported`: pi 0.84.2 documents no permission-bypass
+  flag, and `--approve` trusts project-local files rather than bypassing
+  permissions.
 - **The model identity is always `<vendor>/<launch identity>`.** Pi 0.84.2
   resolves a bare id across every provider file and exits "ambiguous"; a
   wrong prefix falls to its custom-model path with a warning. The vendor is
@@ -398,7 +425,10 @@ predicted. It was in the signature until the cross-plugin bound reported the
 codex plugin's own `Args`, which is that test doing exactly what it exists for.
 Every plugin carries a cross-plugin false-positive check against all five of its
 siblings' real sources, and the residual each exclusion leaves is named on the
-signature and demonstrated staying open.
+signature and demonstrated staying open. Where a bypass flag is the yolo
+mapping, the guard additionally counts its literal module-wide — exactly one
+site for codex, exactly two for claude (its const plus agy's shared exec
+spelling).
 
 ### Model vendors: `pkg/vendorplugin`
 

@@ -49,11 +49,28 @@ var ErrVendorMissing = errors.New("pinative: launch request names no vendor; a n
 
 // Args builds the native Pi argv for one launch mode, excluding the binary. It
 // is the single construction site.
+//
+// Yolo is REFUSED here, not mapped (curator-spec Decision 0018's pi row): `pi
+// --help` at the pinned 0.84.2 documents no permission-bypass flag — only
+// `--approve`/`-a` ("Trust project-local files for this run") and
+// `--no-approve`/`-na`, which Decision 0018 records as not equivalent.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	effective, err := req.PermissionMode.Resolve()
+	if err != nil {
+		return nil, fmt.Errorf("pinative: %w", err)
+	}
+	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
+		return nil, fmt.Errorf("pinative: %w: permission mode %q is valid only for interactive launches",
+			agentic.ErrPermissionModeNotInteractive, strings.TrimSpace(string(req.PermissionMode)))
+	}
 	switch mode {
 	case agentic.LaunchModeInteractive, agentic.LaunchModeDryRun:
 	default:
 		return nil, fmt.Errorf("pinative: unsupported launch mode %s", mode)
+	}
+	if mode == agentic.LaunchModeInteractive && effective == agentic.PermissionModeYolo {
+		return nil, fmt.Errorf("pinative: refusing yolo: %w: pi 0.84.2 documents no interactive permission-bypass flag; --approve trusts project-local files for this run and is not equivalent",
+			agentic.ErrPermissionModeUnsupported)
 	}
 	vendor := strings.TrimSpace(req.Vendor)
 	if vendor == "" {

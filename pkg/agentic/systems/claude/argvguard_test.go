@@ -41,6 +41,14 @@ import (
 // none of the four below and walks through. What it cannot do is carry effort,
 // a budget or a goal, because each of those is one of the four, and a claude
 // launch this module actually makes carries at least the first.
+//
+// The excluded bypass flag is held separately: the yolo mapping spells it
+// once, at one const in args.go, and agy's exec grammar spells the same
+// literal inline in its Args — the pre-existing, golden-pinned sharing this
+// exclusion exists for. The ownership proof below counts the literal
+// MODULE-WIDE and admits exactly those two sites: the sharing justifies two
+// known locations, not an open exception, so a third spelling anywhere — a
+// new package, or a second site inside either plugin — fails it.
 var claudeArgvSignature = []string{
 	"--append-system-prompt-file",
 	"--max-budget-usd",
@@ -353,6 +361,94 @@ func minimalCopy(model string) []string {
 	}, claudeArgvConstructionAllowlist)
 	if len(violations) != 0 {
 		t.Errorf("the unconditional-flags copy is documented as a residual but the guard now reports it (%v); update the comment on claudeArgvSignature, or the comment and the code disagree", violations)
+	}
+}
+
+// agyArgsFile is the second — and only other — allowed spelling site of the
+// bypass flag: agy's exec grammar spells the same literal inline in Args
+// (golden-pinned, pre-existing). It is named here so the ownership proof
+// below holds the sharing to exactly this location rather than to "agy,
+// somewhere": a second site inside agy fails the proof the same way a third
+// package does.
+const agyArgsFile = "pkg/agentic/systems/agy/args.go"
+
+// TestTheBypassFlagIsSpelledAtExactlyTwoKnownSites is the yolo mapping's
+// ownership proof: a MODULE-WIDE LiteralSites count over the non-test
+// sources, admitting exactly the claude const and agy's Args. The agy
+// sharing justifies exactly these two locations — which is why the proof
+// names both rather than filtering to this plugin and asserting agy is
+// non-empty. Any third spelling fails it, wherever it appears.
+func TestTheBypassFlagIsSpelledAtExactlyTwoKnownSites(t *testing.T) {
+	sites, err := argvguard.LiteralSites(moduleGoSources(t), bypassPermissionsFlag)
+	if err != nil {
+		t.Fatalf("argvguard.LiteralSites: %v", err)
+	}
+	want := map[string]bool{
+		claudeArgsFile + "\x00" + "bypassPermissionsFlag": false,
+		agyArgsFile + "\x00" + "Args":                     false,
+	}
+	for _, s := range sites {
+		key := s.File + "\x00" + s.Name
+		seen, ok := want[key]
+		if !ok {
+			t.Errorf("unexpected bypass-flag spelling at %s; want only the const in %s and Args in %s", s, claudeArgsFile, agyArgsFile)
+			continue
+		}
+		if seen {
+			t.Errorf("duplicate bypass-flag spelling at %s; each known site may spell it once", s)
+		}
+		want[key] = true
+	}
+	for key, seen := range want {
+		if !seen {
+			file, name, _ := strings.Cut(key, "\x00")
+			t.Errorf("known bypass-flag site %s in %s no longer spells it (or the scan stopped reaching it); if a plugin genuinely moved its spelling, update this allowlist deliberately rather than widening it", name, file)
+		}
+	}
+}
+
+// TestTheTwoSiteProofBitesOnAThirdSpelling narrows the proof instead of
+// deleting it: the same counter run over the real sources plus one planted
+// spelling must report three sites — a count the gate above would refuse —
+// or its count of two proves nothing.
+func TestTheTwoSiteProofBitesOnAThirdSpelling(t *testing.T) {
+	mutants := []struct {
+		name   string
+		file   string
+		source string
+	}{
+		{
+			// The rev1 reviewer's reproduction, committed as the executed
+			// row: a third package spelling the flag survived every guard
+			// (exit 0) while the proof filtered to this plugin.
+			name: "a third package",
+			file: "pkg/agentic/review_third_spelling.go",
+			source: `package agentic
+func reviewThirdSpelling() []string { return []string{"--dangerously-skip-permissions"} }
+`,
+		},
+		{
+			// The "agy is non-empty" assertion this gate replaces would
+			// have admitted this one too; the closed allowlist must not.
+			name: "a second site inside agy",
+			file: "pkg/agentic/systems/agy/second.go",
+			source: `package agy
+func second() []string { return []string{"--dangerously-skip-permissions"} }
+`,
+		},
+	}
+	for _, mutant := range mutants {
+		t.Run(mutant.name, func(t *testing.T) {
+			sources := moduleGoSources(t)
+			sources[mutant.file] = mutant.source
+			sites, err := argvguard.LiteralSites(sources, bypassPermissionsFlag)
+			if err != nil {
+				t.Fatalf("argvguard.LiteralSites: %v", err)
+			}
+			if len(sites) != 3 {
+				t.Fatalf("with a third spelling planted (%s) the counter reported %v; it does not count, so the gate's count of two proves nothing", mutant.file, sites)
+			}
+		})
 	}
 }
 

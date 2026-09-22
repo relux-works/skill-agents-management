@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Add `LaunchRequest.PermissionMode` (curator-spec Decision 0018): the
+  interactive permission posture, `native` (zero value: pass nothing, the
+  provider's stored settings decide) or `yolo` (the single provider bypass
+  flag, emitted exactly once after model and effort). `claude-code` maps yolo
+  to `--dangerously-skip-permissions` and `codex` to
+  `--dangerously-bypass-approvals-and-sandbox`, each spelled once per plugin;
+  `pi` and `pi-native` refuse yolo with `ErrPermissionModeUnsupported` (pi
+  0.84.2 documents no bypass flag). `BuildPlan` refuses an unknown value
+  (`ErrPermissionModeUnknown`) and any non-zero value outside interactive
+  launches (`ErrPermissionModeNotInteractive`). Through `BuildPlan` a yolo
+  launch carrying any composition is refused earlier with
+  `ErrCompositionNotInteractive` (compositions never reach a terminal); the
+  duplicate-prefix refusal (`ErrPermissionModeDuplicate`) fires on the direct
+  plugin `Argv` path, where a composition prefix already carrying the flag is
+  refused rather than emitted twice.
+  Native/zero-value plans are byte-identical to before. The
+  (environment, tool release) capability table is a follow-up (F-M1b); no
+  release is cut here.
 - Recommend `max` instead of `high` for `muse-spark-1.3-contributor` and its
   `muse-spark` alias. The vocabulary stays `high`/`xhigh`/`max` and required;
   only the recommended word moved, to the setting the Bug Hunt Bench score

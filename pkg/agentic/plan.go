@@ -127,6 +127,30 @@ var (
 	// cannot place is refused rather than dropped — a dropped one produces a
 	// session that looks like the one that was asked for and is not.
 	ErrParameterNotInteractive = errors.New("agentic: interactive launch carries a parameter its grammar has no channel for")
+	// ErrPermissionModeUnknown is returned when the request names a permission
+	// mode that is neither empty, "native" nor "yolo", in any launch mode. A
+	// near-miss is not guessed at: the posture of a session is not the place
+	// for a closest match.
+	ErrPermissionModeUnknown = errors.New("agentic: unknown permission mode")
+	// ErrPermissionModeNotInteractive is returned when a non-interactive
+	// launch carries a non-zero permission mode — "yolo" or an explicit
+	// "native". The member is Decision 0018's interactive posture; outside
+	// LaunchModeInteractive there is no mapping for it to select, so even an
+	// explicit native is refused rather than silently accepted as "anyway".
+	ErrPermissionModeNotInteractive = errors.New("agentic: permission mode outside an interactive launch")
+	// ErrPermissionModeUnsupported is returned, by the plugin, when an
+	// interactive launch requests yolo and the system's pinned tool release
+	// documents no permission-bypass flag. It is a refusal rather than a
+	// fallback to native: a yolo that silently launched native would be a
+	// session whose posture is the opposite of what was asked for.
+	ErrPermissionModeUnsupported = errors.New("agentic: system maps no permission-mode bypass flag")
+	// ErrPermissionModeDuplicate is returned, by the plugin, when an
+	// interactive yolo launch already carries the mapped bypass flag in its
+	// composition prefix. It is refused rather than de-duplicated: a second
+	// spelling of one flag is either a caller that meant native and a yolo
+	// that should not have been set, or the reverse, and the plugin cannot
+	// tell which.
+	ErrPermissionModeDuplicate = errors.New("agentic: permission-mode bypass flag already present in the launch composition prefix")
 	// ErrPluginContract is returned when a plugin answers a dispatch surface
 	// with something the contract forbids — an empty binary reported as a
 	// success, or a stdin payload carrying bytes while claiming nothing is
@@ -226,6 +250,16 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 
 	if !mode.Valid() || !caps.SupportsMode(mode) {
 		return Plan{}, fmt.Errorf("%w: %s does not declare %s", ErrUnsupportedLaunchMode, id, mode)
+	}
+	// Permission modes are validated before the pre-plan gate runs: a refused
+	// value must not trigger even a file read, and the unknown-value refusal
+	// fires in every mode while the scope refusal fires in every mode but one.
+	if _, err := req.PermissionMode.Resolve(); err != nil {
+		return Plan{}, fmt.Errorf("agentic: building plan for %s: %w", id, err)
+	}
+	if mode != LaunchModeInteractive && !req.PermissionMode.IsZero() {
+		return Plan{}, fmt.Errorf("%w: %s carries permission mode %q in %s mode; the member is valid only for interactive launches",
+			ErrPermissionModeNotInteractive, id, strings.TrimSpace(string(req.PermissionMode)), mode)
 	}
 	req, err = PrepareLaunchRequest(sys, req, mode)
 	if err != nil {

@@ -220,3 +220,127 @@ func TestAnInteractiveLaunchRefusesWhatItsGrammarCannotCarry(t *testing.T) {
 		}
 	})
 }
+
+// TestTheYoloArgvAppendsTheBypassFlagOnce is the yolo positive golden
+// (curator-spec Decision 0018's claude_code row): the exact argv, the flag
+// exactly once, after model and effort — the exec grammar's relative order,
+// before any prompt text, which this mode never carries.
+func TestTheYoloArgvAppendsTheBypassFlagOnce(t *testing.T) {
+	t.Parallel()
+	workDir := tempSlot(t)
+	req := interactiveRequest(workDir)
+	req.PermissionMode = agentic.PermissionModeYolo
+	binDir := tempSlot(t)
+	writeStubExecutable(t, binDir, executableName)
+	req.Env = append(req.Env, "PATH="+binDir)
+
+	plan := buildParityPlan(t, New(), req, agentic.LaunchModeInteractive)
+
+	if want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag}; !reflect.DeepEqual(plan.Argv, want) {
+		t.Fatalf("Argv = %#v, want %#v", plan.Argv, want)
+	}
+	if n := countFlag(plan.Argv, bypassPermissionsFlag); n != 1 {
+		t.Errorf("the yolo argv carries the bypass flag %d time(s), want exactly once: %v", n, plan.Argv)
+	}
+	if plan.Stdin.Attached || len(plan.Stdin.Bytes) != 0 {
+		t.Errorf("Stdin = %+v, want nothing attached: yolo changes the permission posture, not the stdin rule", plan.Stdin)
+	}
+
+	t.Run("and an effortless yolo model carries model and flag alone", func(t *testing.T) {
+		r := req
+		r.Model.Effort = agentic.EffortSupportNone
+		r.Effort = ""
+		got := buildParityPlan(t, New(), r, agentic.LaunchModeInteractive).Argv
+		if want := []string{"--model", parityModel, bypassPermissionsFlag}; !reflect.DeepEqual(got, want) {
+			t.Errorf("Argv = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("and an explicit native matches the zero value byte for byte", func(t *testing.T) {
+		native := req
+		native.PermissionMode = agentic.PermissionModeNative
+		zero := req
+		zero.PermissionMode = ""
+		gotNative := buildParityPlan(t, New(), native, agentic.LaunchModeInteractive).Argv
+		gotZero := buildParityPlan(t, New(), zero, agentic.LaunchModeInteractive).Argv
+		if want := []string{"--model", parityModel, "--effort", parityEffort}; !reflect.DeepEqual(gotNative, want) || !reflect.DeepEqual(gotZero, want) {
+			t.Errorf("native = %#v, zero = %#v, want both %#v", gotNative, gotZero, want)
+		}
+	})
+}
+
+func countFlag(argv []string, flag string) int {
+	n := 0
+	for _, arg := range argv {
+		if arg == flag {
+			n++
+		}
+	}
+	return n
+}
+
+// TestTheYoloRefusalsAreNamedAndTotal covers the three yolo negatives through
+// BuildPlan and, where the plugin repeats the gate, through the plugin held
+// directly.
+func TestTheYoloRefusalsAreNamedAndTotal(t *testing.T) {
+	t.Parallel()
+	workDir := tempSlot(t)
+
+	t.Run("an unknown value is refused in interactive mode", func(t *testing.T) {
+		req := interactiveRequest(workDir)
+		req.PermissionMode = "bogus"
+		if err := planErrorFor(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnknown) {
+			t.Fatalf("BuildPlan err = %v, want ErrPermissionModeUnknown", err)
+		}
+		if _, err := New().Argv(req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnknown) {
+			t.Fatalf("Argv err = %v, want ErrPermissionModeUnknown", err)
+		}
+	})
+
+	t.Run("yolo in exec mode is refused", func(t *testing.T) {
+		req := interactiveRequest(workDir)
+		req.PermissionMode = agentic.PermissionModeYolo
+		req.PromptPath = writePromptFile(t, workDir, parityPromptBody)
+		if err := planErrorFor(t, req, agentic.LaunchModeExec); !errors.Is(err, agentic.ErrPermissionModeNotInteractive) {
+			t.Fatalf("BuildPlan err = %v, want ErrPermissionModeNotInteractive", err)
+		}
+		if _, err := New().Argv(req, agentic.LaunchModeExec); !errors.Is(err, agentic.ErrPermissionModeNotInteractive) {
+			t.Fatalf("Argv err = %v, want ErrPermissionModeNotInteractive", err)
+		}
+	})
+
+	t.Run("yolo with the bypass flag already in the composition prefix is refused, not de-duplicated", func(t *testing.T) {
+		req := interactiveRequest(workDir)
+		req.PermissionMode = agentic.PermissionModeYolo
+		// The duplicate sits at a non-zero index, so a scan narrowed to the
+		// first element admits it and this test kills that mutant.
+		req.Composition = agentic.Composition{Prefix: []string{mcpConfigFlag, bypassPermissionsFlag}}
+		if _, err := New().Argv(req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeDuplicate) {
+			t.Fatalf("Argv err = %v, want ErrPermissionModeDuplicate", err)
+		}
+		// Through BuildPlan the same request is refused earlier, by the
+		// composition gate: fail closed either way, and the composition
+		// refusal — not a de-duplicated plan — is what the production path
+		// produces.
+		if err := planErrorFor(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrCompositionNotInteractive) {
+			t.Fatalf("BuildPlan err = %v, want ErrCompositionNotInteractive", err)
+		}
+	})
+
+	t.Run("and a yolo prefix without the flag reaches the duplicate gate cleanly", func(t *testing.T) {
+		// The narrowing: the duplicate refusal is the FLAG's, not a refusal
+		// of any prefix. A direct holder's yolo request with a flagless
+		// prefix builds — the composition gate is BuildPlan's, not the
+		// plugin's.
+		req := interactiveRequest(workDir)
+		req.PermissionMode = agentic.PermissionModeYolo
+		req.Composition = agentic.Composition{Prefix: []string{mcpConfigFlag, "{}"}}
+		argv, err := New().Argv(req, agentic.LaunchModeInteractive)
+		if err != nil {
+			t.Fatalf("Argv refused a yolo prefix without the flag: %v", err)
+		}
+		if n := countFlag(argv, bypassPermissionsFlag); n != 1 {
+			t.Errorf("the yolo argv carries the bypass flag %d time(s), want exactly once: %v", n, argv)
+		}
+	})
+}

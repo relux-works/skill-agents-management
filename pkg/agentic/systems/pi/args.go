@@ -38,17 +38,36 @@ func Args(req agentic.LaunchRequest) ([]string, error) {
 // passes through verbatim. A Profile arriving on the request — local-models'
 // Spawn always contributes one — therefore reaches no flag here, which is the
 // wrapper's contract rather than a drop.
-func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
+//
+// Yolo is REFUSED here, not mapped: `pi --help` at the pinned 0.84.2 documents
+// no permission-bypass flag — only `--approve`/`-a` ("Trust project-local
+// files for this run") and `--no-approve`/`-na`, which curator-spec Decision
+// 0018 records as not equivalent — and `agents-infra pi --help` passes that
+// same help through, so the wrapper adds no approval flag either. Refusing
+// with ErrPermissionModeUnsupported is Decision 0018's pi row.
+func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode) ([]string, error) {
 	model := strings.TrimSpace(req.Model.ID)
 	if model == "" {
 		return nil, fmt.Errorf("pi: an interactive launch requires a model id")
+	}
+	if effective == agentic.PermissionModeYolo {
+		return nil, fmt.Errorf("pi: refusing yolo: %w: pi 0.84.2 documents no interactive permission-bypass flag; --approve trusts project-local files for this run and is not equivalent",
+			agentic.ErrPermissionModeUnsupported)
 	}
 	return []string{"pi", "--model", model}, nil
 }
 
 func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	effective, err := req.PermissionMode.Resolve()
+	if err != nil {
+		return nil, fmt.Errorf("pi: %w", err)
+	}
+	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
+		return nil, fmt.Errorf("pi: %w: permission mode %q is valid only for interactive launches",
+			agentic.ErrPermissionModeNotInteractive, strings.TrimSpace(string(req.PermissionMode)))
+	}
 	if mode == agentic.LaunchModeInteractive {
-		return interactiveArgs(req)
+		return interactiveArgs(req, effective)
 	}
 	prepared, err := prepareLaunchRequest(req, mode)
 	if err != nil {

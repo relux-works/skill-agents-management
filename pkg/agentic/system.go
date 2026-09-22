@@ -106,12 +106,16 @@ const (
 	// protocol. It is curator-spec Decision 0013 §5, and its grammar is a
 	// CLOSED set of constraints rather than a spelling:
 	//
-	//   - The argv contains ONLY model selection and the system's declared
-	//     effort transport for the requested effort. It carries no print or
-	//     headless mode, no output-format flag, no permission-bypass or
-	//     unrestricted-mode flag, no goal or assignment-prompt machinery, no
-	//     budget flag and no service-tier flag. What it may not contain is the
-	//     invariant; what it does contain is the system plugin's to spell.
+	//   - The argv contains ONLY model selection, the system's declared
+	//     effort transport for the requested effort, and — when the request
+	//     carries PermissionMode "yolo" — the ONE provider bypass flag that
+	//     system's plugin maps yolo to (curator-spec Decision 0018; the
+	//     launcher only resolves and passes the mode, Decision 0013 D5).
+	//     It carries no print or headless mode, no output-format flag, no
+	//     OTHER permission-bypass or unrestricted-mode flag, no goal or
+	//     assignment-prompt machinery, no budget flag and no service-tier
+	//     flag. What it may not contain is the invariant; what it does
+	//     contain is the system plugin's to spell.
 	//   - Composition is NOT part of the interactive argv. The MCP composition
 	//     prefix is the composer's plane, and BuildPlan refuses a request
 	//     carrying one with ErrCompositionNotInteractive.
@@ -378,6 +382,50 @@ type Budget struct {
 	USD float64
 }
 
+// PermissionMode is the interactive permission posture a launch runs under,
+// curator-spec Decision 0018. The launcher resolves the mode and passes it;
+// this module owns the per-tool-release provider mapping and the argv grammar
+// (Decision 0013 D5 forbids the launcher from spelling a provider flag).
+type PermissionMode string
+
+const (
+	// PermissionModeNative means pass NOTHING: the provider's stored settings
+	// decide. It is the meaning of the zero value too — an empty mode is
+	// native, never a lookup — so every request written before this member
+	// existed keeps its argv byte for byte.
+	PermissionModeNative PermissionMode = "native"
+	// PermissionModeYolo means the single provider bypass flag the system
+	// maps for its pinned tool release, emitted exactly once on the
+	// interactive argv. A system whose pinned release documents no such
+	// flag refuses with ErrPermissionModeUnsupported rather than inventing
+	// one.
+	PermissionModeYolo PermissionMode = "yolo"
+)
+
+// IsZero reports whether no permission mode was requested. Absence is native;
+// it is not a third posture.
+func (m PermissionMode) IsZero() bool { return strings.TrimSpace(string(m)) == "" }
+
+// Resolve maps the requested value onto the effective posture: the zero value
+// and "native" mean native, "yolo" means yolo. Anything else is refused with
+// ErrPermissionModeUnknown. The match is exact after trimming — a
+// security-sensitive gate does not guess what a near-miss meant.
+//
+// It is the single reader of the value rule: BuildPlan and every plugin call
+// it rather than comparing strings, so a third value is one edit here, not
+// one per plugin plus the core.
+func (m PermissionMode) Resolve() (PermissionMode, error) {
+	switch trimmed := strings.TrimSpace(string(m)); trimmed {
+	case "", string(PermissionModeNative):
+		return PermissionModeNative, nil
+	case string(PermissionModeYolo):
+		return PermissionModeYolo, nil
+	default:
+		return "", fmt.Errorf("%w: %q is not a permission mode; want %q or %q",
+			ErrPermissionModeUnknown, trimmed, PermissionModeNative, PermissionModeYolo)
+	}
+}
+
 // LaunchRequest is everything a caller supplies for one launch. It is the
 // input to every dispatch surface, so a plugin never reaches for ambient
 // state: what is not here is not available to it.
@@ -477,6 +525,14 @@ type LaunchRequest struct {
 	// the plugin refuses to build argv without this value rather than emit an
 	// identity Pi would resolve to whichever provider it likes.
 	Vendor string
+
+	// PermissionMode is the interactive permission posture, curator-spec
+	// Decision 0018. The zero value means native (pass nothing); "yolo" maps
+	// to the single provider bypass flag the system declares for its pinned
+	// tool release. It is valid ONLY for LaunchModeInteractive: any other
+	// mode carrying a non-zero value is refused, and so is an unknown value
+	// in any mode. The mapping — and only the mapping — is each plugin's.
+	PermissionMode PermissionMode
 }
 
 // RunContext is the caller's identity for one tracked run, carried to the

@@ -100,3 +100,56 @@ func single() []string { return []string{"--example-flag"} }`}, []string{"--exam
 		t.Fatal("a site spelling ONE of two signature literals was admitted; the threshold has been raised and every plugin's guard is weaker for it")
 	}
 }
+
+// TestLiteralSitesFindsEverySpellingAndNoProse pins the occurrence counter the
+// plugins' single-spelling proofs drive: a literal in a body, in a const, in a
+// var table and in a closure each count; a comment naming the flag and a
+// literal merely containing other text do not.
+func TestLiteralSitesFindsEverySpellingAndNoProse(t *testing.T) {
+	t.Parallel()
+	sites, err := LiteralSites(map[string]string{"other/sites.go": `package other
+
+// A comment mentioning --example-flag is prose, not a spelling.
+const flagConst = "--example-flag"
+
+var flagTable = []string{"--example-flag", "--other"}
+
+func inBody() []string { return []string{"--example-flag"} }
+
+func unrelated() []string { return []string{"--other"} }
+
+var table = map[string]func() []string{
+	"x": func() []string { return []string{"--example-flag"} },
+}
+`}, "--example-flag")
+	if err != nil {
+		t.Fatalf("LiteralSites: %v", err)
+	}
+	byName := map[string]int{}
+	for _, s := range sites {
+		byName[s.Name]++
+		if s.File != "other/sites.go" || s.Line <= 0 {
+			t.Errorf("site %+v does not identify its position", s)
+		}
+	}
+	for _, want := range []string{"flagConst", "flagTable", "inBody", "table"} {
+		if byName[want] == 0 {
+			t.Errorf("no site reported for %q; sites=%v", want, sites)
+		}
+	}
+	if len(sites) != 4 {
+		t.Errorf("sites = %v, want exactly the four spellings and neither the comment nor --other", sites)
+	}
+}
+
+// TestLiteralSitesRefusesAMalformedSource is the absence-versus-failure rule
+// for the counter: a file it never understood must not read as "spelled zero
+// times".
+func TestLiteralSitesRefusesAMalformedSource(t *testing.T) {
+	t.Parallel()
+	if _, err := LiteralSites(map[string]string{"broken.go": "package other\nfunc ("}, "--example-flag"); err == nil {
+		t.Fatal("a source that does not parse produced no error")
+	} else if !strings.Contains(err.Error(), "broken.go") {
+		t.Errorf("the failure was %v; it has to name the file", err)
+	}
+}

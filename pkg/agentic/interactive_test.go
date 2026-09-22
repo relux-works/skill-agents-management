@@ -243,3 +243,141 @@ func TestBuildPlanInteractiveEffortFollowsTheModelWithNoDefault(t *testing.T) {
 		t.Error("Argv was dispatched for a required-effort model with no effort")
 	}
 }
+
+// The permission-mode member (curator-spec Decision 0018) is the one optional
+// posture of this mode: the zero value and "native" pass nothing, "yolo"
+// selects the provider bypass flag the plugin maps. The core owns the value
+// and the scope; the mapping is each plugin's.
+func TestBuildPlanAdmitsNativeAndYoloPermissionModesInInteractiveLaunches(t *testing.T) {
+	for _, mode := range []PermissionMode{"", PermissionModeNative, PermissionModeYolo} {
+		t.Run("permission mode "+quotePermissionModeForTest(mode), func(t *testing.T) {
+			sys := interactivePangolin()
+			registry := registerPangolin(t, sys)
+			req := interactiveRequest()
+			req.PermissionMode = mode
+
+			if _, err := BuildPlan(registry, req, LaunchModeInteractive); err != nil {
+				t.Fatalf("BuildPlan(interactive, mode=%q): %v", mode, err)
+			}
+			if sys.calls["Argv"] != 1 {
+				t.Errorf("Argv was dispatched %d time(s); an admissible posture must reach the plugin exactly once", sys.calls["Argv"])
+			}
+		})
+	}
+}
+
+func quotePermissionModeForTest(m PermissionMode) string {
+	if m == "" {
+		return "zero"
+	}
+	return string(m)
+}
+
+// An unknown value is refused in EVERY mode, including interactive: the core
+// cannot know which posture was meant, and the plugin must never see it.
+func TestBuildPlanRefusesAnUnknownPermissionModeInEveryMode(t *testing.T) {
+	for _, mode := range []LaunchMode{LaunchModeExec, LaunchModeDryRun, LaunchModeManagedSession, LaunchModeInteractive} {
+		t.Run(mode.String(), func(t *testing.T) {
+			sys := interactivePangolin()
+			registry := registerPangolin(t, sys)
+			req := interactiveRequest()
+			if mode == LaunchModeExec {
+				req = pangolinRequest()
+			}
+			req.PermissionMode = "bogus"
+
+			_, err := BuildPlan(registry, req, mode)
+			if !errors.Is(err, ErrPermissionModeUnknown) {
+				t.Fatalf("err = %v, want ErrPermissionModeUnknown", err)
+			}
+			if !strings.Contains(err.Error(), `"bogus"`) {
+				t.Errorf("refusal %q does not quote the value the operator has to fix", err)
+			}
+			if sys.calls["Argv"] != 0 {
+				t.Error("Argv was dispatched for a request carrying an unknown permission mode")
+			}
+		})
+	}
+
+	t.Run("near-misses are refused, not guessed at", func(t *testing.T) {
+		for _, value := range []string{"YOLO", "Native", " yolo ", "auto", "never"} {
+			sys := interactivePangolin()
+			registry := registerPangolin(t, sys)
+			req := interactiveRequest()
+			req.PermissionMode = PermissionMode(value)
+
+			_, err := BuildPlan(registry, req, LaunchModeInteractive)
+			// " yolo " trims to yolo and is admitted; the rest are refused.
+			if strings.TrimSpace(value) == string(PermissionModeYolo) {
+				if err != nil {
+					t.Errorf("value %q: BuildPlan refused a trimmable yolo: %v", value, err)
+				}
+				continue
+			}
+			if !errors.Is(err, ErrPermissionModeUnknown) {
+				t.Errorf("value %q: err = %v, want ErrPermissionModeUnknown", value, err)
+			}
+		}
+	})
+}
+
+// Any non-zero value outside LaunchModeInteractive is refused — yolo AND an
+// explicit native. Outside this mode there is no mapping for the member to
+// select, so even the value that would change nothing is refused rather than
+// silently accepted.
+func TestBuildPlanRefusesANonZeroPermissionModeOutsideInteractiveLaunches(t *testing.T) {
+	modes := map[string]LaunchMode{
+		"exec":            LaunchModeExec,
+		"dry-run":         LaunchModeDryRun,
+		"managed-session": LaunchModeManagedSession,
+	}
+	for name, mode := range modes {
+		for _, value := range []PermissionMode{PermissionModeYolo, PermissionModeNative} {
+			t.Run(name+"/"+string(value), func(t *testing.T) {
+				sys := interactivePangolin()
+				registry := registerPangolin(t, sys)
+				req := pangolinRequest()
+				req.PermissionMode = value
+
+				_, err := BuildPlan(registry, req, mode)
+				if !errors.Is(err, ErrPermissionModeNotInteractive) {
+					t.Fatalf("err = %v, want ErrPermissionModeNotInteractive", err)
+				}
+				if sys.calls["Argv"] != 0 {
+					t.Error("Argv was dispatched for a non-interactive request carrying a permission mode")
+				}
+			})
+		}
+	}
+
+	t.Run("and a zero value in those modes is admitted", func(t *testing.T) {
+		// The narrowing: the refusal is the MEMBER's, not a new rule against
+		// the modes. Every request written before the member existed carries
+		// the zero value and must keep building.
+		for name, mode := range modes {
+			sys := interactivePangolin()
+			registry := registerPangolin(t, sys)
+			if _, err := BuildPlan(registry, pangolinRequest(), mode); err != nil {
+				t.Errorf("%s: the zero-value request was refused: %v", name, err)
+			}
+		}
+	})
+}
+
+// Resolve is the single reader of the value rule: the zero value and "native"
+// resolve to native, "yolo" to yolo, and anything else to the unknown
+// sentinel — the same answer BuildPlan and every plugin act on.
+func TestPermissionModeResolveMapsTheValueRule(t *testing.T) {
+	for value, want := range map[PermissionMode]PermissionMode{
+		"":                   PermissionModeNative,
+		PermissionModeNative: PermissionModeNative,
+		PermissionModeYolo:   PermissionModeYolo,
+	} {
+		if got, err := value.Resolve(); err != nil || got != want {
+			t.Errorf("(%q).Resolve() = (%q, %v), want (%q, nil)", value, got, err, want)
+		}
+	}
+	if _, err := PermissionMode("bogus").Resolve(); !errors.Is(err, ErrPermissionModeUnknown) {
+		t.Errorf("(\"bogus\").Resolve() err = %v, want ErrPermissionModeUnknown", err)
+	}
+}

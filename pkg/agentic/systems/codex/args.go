@@ -40,19 +40,43 @@ import (
 // agentic.LaunchModeInteractive (curator-spec Decision 0013 §5) is the
 // interactive `codex` session a human drives, as a COMPLETE argv the launcher
 // hands to a terminal: `-m <model>` plus the `-c model_reasoning_effort=…`
-// override when an effort was requested, and nothing else. No `exec`, no
-// `--dangerously-bypass-approvals-and-sandbox`, no sandbox or approval policy,
-// no profile, no service tier, no composition prefix, no `-` prompt marker: the
-// composer that owns the terminal spells the MCP channel and the permission
-// posture. Both spellings were checked against `codex --help` at 0.153.2:
-// `-m, --model <MODEL>` and `-c, --config <key=value>` are top-level flags of
-// the interactive invocation, not `exec` subcommand flags.
+// override when an effort was requested — and, when the request carries
+// PermissionMode "yolo", the ONE bypass flag below (curator-spec Decision
+// 0018's codex_cli row). Nothing else: no `exec`, no sandbox or approval
+// policy, no profile, no service tier, no composition prefix, no `-` prompt
+// marker. The composer that owns the terminal spells the MCP channel; the yolo
+// flag is spelled HERE, once, because Decision 0013 D5 forbids the launcher
+// from spelling a provider flag. Both spellings were checked against
+// `codex --help` at 0.153.2: `-m, --model <MODEL>` and `-c, --config
+// <key=value>` are top-level flags of the interactive invocation, not `exec`
+// subcommand flags.
+
+// bypassApprovalsAndSandboxFlag is the ONE spelling of codex's
+// permission-bypass flag in this plugin. The exec grammar emits it
+// unconditionally (the source's construction, golden-captured); the
+// interactive grammar emits it exactly when the request carries PermissionMode
+// "yolo". The spelling is the module's own exec spelling, corroborated by
+// `codex --help` at installed 0.153.4 ("Skip all confirmation prompts and
+// execute commands without sandboxing") and by Decision 0018's verification at
+// 0.153.4; the (environment, tool release) capability table that re-verifies
+// it per release is F-M1b's. Both branches reference this const rather than
+// repeating the literal, so the yolo mapping is one site and the argvguard
+// proof — whose signature carries this flag — holds it.
+const bypassApprovalsAndSandboxFlag = "--dangerously-bypass-approvals-and-sandbox"
 
 // Args builds the codex argv for one launch mode, excluding the binary.
 //
 // It is the single construction site. Every surface of this plugin that needs
 // codex flags calls it: System.Argv for all four modes, and nothing else.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	effective, err := req.PermissionMode.Resolve()
+	if err != nil {
+		return nil, fmt.Errorf("codex: %w", err)
+	}
+	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
+		return nil, fmt.Errorf("codex: %w: permission mode %q is valid only for interactive launches",
+			agentic.ErrPermissionModeNotInteractive, strings.TrimSpace(string(req.PermissionMode)))
+	}
 	model := strings.TrimSpace(req.Model.ID)
 	switch mode {
 	case agentic.LaunchModeExec, agentic.LaunchModeDryRun:
@@ -63,7 +87,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		}
 		args = append(args, "exec", "-m", model)
 		args = appendReasoningAndTier(args, req)
-		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+		args = append(args, bypassApprovalsAndSandboxFlag)
 		args = append(args, "--skip-git-repo-check")
 		args = append(args, "-C", strings.TrimSpace(req.WorkDir))
 		if boardDir := strings.TrimSpace(req.Run.BoardDir); boardDir != "" {
@@ -103,7 +127,24 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		// With the tier refused above, appendReasoningAndTier contributes the
 		// effort override alone — the same spelling the other two grammars use,
 		// from the same fragment, so the three cannot drift.
-		return appendReasoningAndTier(args, req), nil
+		args = appendReasoningAndTier(args, req)
+		if effective != agentic.PermissionModeYolo {
+			return args, nil
+		}
+		// Yolo appends the bypass flag AFTER model and effort, mirroring the
+		// exec grammar's relative order (model, effort, bypass) and landing
+		// before any prompt text — which this mode never carries. A
+		// composition prefix that already holds the flag is refused, not
+		// de-duplicated: through BuildPlan the composition is refused first
+		// anyway, so this fires for a caller holding the plugin directly,
+		// where it is the only line.
+		for _, arg := range req.Composition.Prefix {
+			if arg == bypassApprovalsAndSandboxFlag {
+				return nil, fmt.Errorf("codex: %w: the composition prefix already carries %q; refusing rather than emitting it twice",
+					agentic.ErrPermissionModeDuplicate, bypassApprovalsAndSandboxFlag)
+			}
+		}
+		return append(args, bypassApprovalsAndSandboxFlag), nil
 	default:
 		return nil, fmt.Errorf("codex: unsupported launch mode %s", mode)
 	}

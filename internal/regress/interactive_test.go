@@ -74,11 +74,16 @@ type interactiveCase struct {
 	// vendor is the LaunchRequest.Vendor a system that qualifies its model
 	// identity needs (pi-native); BuildLaunch sets it in production.
 	vendor string
+	// yoloFlag is the ONE bypass flag the system maps PermissionMode "yolo"
+	// to (curator-spec Decision 0018), empty when the system refuses yolo
+	// outright (pi-native: pi 0.84.2 documents no such flag).
+	yoloFlag string
 }
 
 var interactiveCases = map[string]interactiveCase{
 	"claude-code": {
 		system: claude.New(), stub: "claude",
+		yoloFlag: "--dangerously-skip-permissions",
 		exec: func(t *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest {
 			req.PromptPath = paritycase.WritePromptFile(t, workDir, "body")
 			return req
@@ -86,6 +91,7 @@ var interactiveCases = map[string]interactiveCase{
 	},
 	"codex": {
 		system: codex.New(), stub: "codex",
+		yoloFlag: "--dangerously-bypass-approvals-and-sandbox",
 		exec: func(_ *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest {
 			req.Prompt = []byte("body")
 			return req
@@ -145,6 +151,48 @@ func TestAnInteractivePlanCarriesNoExecMarkerForAnyMappedSystem(t *testing.T) {
 			execPlan := paritycase.BuildPlan(t, c.system, execReq, agentic.LaunchModeExec)
 			if found := markersOn(execPlan.Argv); len(found) < 2 {
 				t.Fatalf("%s: the sweep saw %v on the exec argv %v; it has to see that system's headless grammar there", name, found, execPlan.Argv)
+			}
+		})
+	}
+}
+
+// TestAYoloPlanCarriesItsOneBypassFlagAndNoOtherMarker is the Decision 0018
+// half of the sweep above: native interactive plans carry no bypass flag (that
+// test), and yolo interactive plans carry exactly one — the system's own
+// mapping, once — and no other exec-mode marker. A system with no mapping
+// (pi-native) refuses yolo outright instead of launching native under a yolo
+// name.
+func TestAYoloPlanCarriesItsOneBypassFlagAndNoOtherMarker(t *testing.T) {
+	for name, c := range interactiveCases {
+		t.Run(name, func(t *testing.T) {
+			workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
+			req := interactiveRequest(t, c, workDir, binDir)
+			req.PermissionMode = agentic.PermissionModeYolo
+
+			if c.yoloFlag == "" {
+				if _, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+					t.Fatalf("%s: err = %v, want ErrPermissionModeUnsupported", name, err)
+				}
+				return
+			}
+			plan := paritycase.BuildPlan(t, c.system, req, agentic.LaunchModeInteractive)
+			count := 0
+			var other []string
+			for _, arg := range plan.Argv {
+				if arg == c.yoloFlag {
+					count++
+					continue
+				}
+				other = append(other, markersOn([]string{arg})...)
+			}
+			if count != 1 {
+				t.Errorf("%s: the yolo argv %v carries the bypass flag %d time(s), want exactly once", name, plan.Argv, count)
+			}
+			if len(other) != 0 {
+				t.Errorf("%s: the yolo argv %v carries other exec-mode marker(s) %v", name, plan.Argv, other)
+			}
+			if plan.Stdin.Attached {
+				t.Errorf("%s: the yolo plan attached a stdin under effort transport %s", name, c.system.Capabilities().EffortTransport)
 			}
 		})
 	}

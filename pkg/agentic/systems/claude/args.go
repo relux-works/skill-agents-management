@@ -38,6 +38,18 @@ import (
 // (adapter.go, claudeDryRunArgs).
 const promptFilePlaceholder = "<assignment-prompt-file>"
 
+// bypassPermissionsFlag is the ONE spelling of claude's permission-bypass flag
+// in this plugin. The exec grammar emits it unconditionally (the source's
+// construction, golden-captured); the interactive grammar emits it exactly when
+// the request carries PermissionMode "yolo" (curator-spec Decision 0018's
+// claude_code row). The spelling is the module's own exec spelling, corroborated
+// by `claude --help` at installed 2.1.274 ("Bypass all permission checks") and
+// by Decision 0018's verification at 2.1.273; the (environment, tool release)
+// capability table that re-verifies it per release is F-M1b's. Both branches
+// reference this const rather than repeating the literal, so the yolo mapping
+// is one site and the argvguard occurrence proof can hold it.
+const bypassPermissionsFlag = "--dangerously-skip-permissions"
+
 // Args builds the claude argv for one launch mode, excluding the binary.
 //
 // It is the single construction site. Every surface of this plugin that needs
@@ -52,22 +64,32 @@ const promptFilePlaceholder = "<assignment-prompt-file>"
 //
 // LaunchModeInteractive (curator-spec Decision 0013 §5) is the terminal session
 // a human drives, and its argv is `--model <id>` plus the effort transport when
-// an effort was requested — and NOTHING else. No `-p`, no `--output-format`,
-// no `--dangerously-skip-permissions`, no budget, no composition prefix, no
-// goal pair: the composer that owns the terminal spells the MCP channel and the
-// permission posture, and a second component spelling either is the M2 defect
-// the decision names. The refusals for a goal, a budget, a prompt or a
-// composition arriving in this mode are BuildPlan's (ErrParameterNotInteractive,
-// ErrCompositionNotInteractive); the goal and budget refusals are repeated
-// here, because a caller holding the plugin directly meets this function
-// first. Both spellings were checked against `claude --help` at 2.1.261:
-// `--model <model>` and `--effort <level>` are session flags, not `--print`
-// ones.
+// an effort was requested — and, when the request carries PermissionMode
+// "yolo", the ONE bypass flag above (curator-spec Decision 0018). NOTHING else:
+// no `-p`, no `--output-format`, no budget, no composition prefix, no goal
+// pair. The composer that owns the terminal spells the MCP channel; the yolo
+// flag is spelled HERE, once, because Decision 0013 D5 forbids the launcher
+// from spelling a provider flag and a second component spelling this one is
+// the M2 defect the decision names. The refusals for a goal, a budget, a
+// prompt or a composition arriving in this mode are BuildPlan's
+// (ErrParameterNotInteractive, ErrCompositionNotInteractive); the goal and
+// budget refusals are repeated here, because a caller holding the plugin
+// directly meets this function first. Both spellings were checked against
+// `claude --help` at 2.1.261: `--model <model>` and `--effort <level>` are
+// session flags, not `--print` ones.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	effective, err := req.PermissionMode.Resolve()
+	if err != nil {
+		return nil, fmt.Errorf("claude: %w", err)
+	}
+	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
+		return nil, fmt.Errorf("claude: %w: permission mode %q is valid only for interactive launches",
+			agentic.ErrPermissionModeNotInteractive, strings.TrimSpace(string(req.PermissionMode)))
+	}
 	switch mode {
 	case agentic.LaunchModeExec, agentic.LaunchModeDryRun:
 	case agentic.LaunchModeInteractive:
-		return interactiveArgs(req)
+		return interactiveArgs(req, effective)
 	default:
 		return nil, fmt.Errorf("claude: unsupported launch mode %s", mode)
 	}
@@ -85,7 +107,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		// visible in the suite instead of only in the arithmetic.
 		args = append(args, "--max-budget-usd", fmt.Sprintf("%.2f", req.Budget.USD))
 	}
-	args = append(args, "--dangerously-skip-permissions")
+	args = append(args, bypassPermissionsFlag)
 
 	if req.Goal == nil {
 		return args, nil
@@ -110,7 +132,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 // exec grammar above reads as the source wrote it. It is NOT a second
 // construction site: it is reached from Args alone, and argvguard_test.go's
 // allowlist names it with that reason.
-func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
+func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode) ([]string, error) {
 	if req.Goal != nil {
 		return nil, fmt.Errorf("claude: an interactive launch carries no goal; the `%s` directive is exec-mode machinery", strings.TrimSpace(goalDirectivePrefix))
 	}
@@ -118,7 +140,23 @@ func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
 		return nil, fmt.Errorf("claude: an interactive launch carries no budget ceiling")
 	}
 	args := []string{"--model", strings.TrimSpace(req.Model.ID)}
-	return appendEffort(args, req), nil
+	args = appendEffort(args, req)
+	if effective != agentic.PermissionModeYolo {
+		return args, nil
+	}
+	// Yolo appends the bypass flag AFTER model and effort, mirroring the exec
+	// grammar's relative order (model, effort, bypass) and landing before any
+	// prompt text — which this mode never carries. A composition prefix that
+	// already holds the flag is refused, not de-duplicated: through BuildPlan
+	// the composition is refused first anyway, so this fires for a caller
+	// holding the plugin directly, where it is the only line.
+	for _, arg := range req.Composition.Prefix {
+		if arg == bypassPermissionsFlag {
+			return nil, fmt.Errorf("claude: %w: the composition prefix already carries %q; refusing rather than emitting it twice",
+				agentic.ErrPermissionModeDuplicate, bypassPermissionsFlag)
+		}
+	}
+	return append(args, bypassPermissionsFlag), nil
 }
 
 // appendEffort appends the effort transport when an effort was requested. Both

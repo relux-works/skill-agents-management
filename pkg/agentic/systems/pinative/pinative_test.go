@@ -103,6 +103,62 @@ func TestTheInteractiveArgvIsTheQualifiedModelAndThinking(t *testing.T) {
 	}
 }
 
+// Yolo is REFUSED for native Pi (curator-spec Decision 0018's pi row): pi
+// 0.84.2 documents no permission-bypass flag, and --approve trusts
+// project-local files rather than bypassing permissions.
+func TestAnInteractiveYoloLaunchIsRefusedAsUnsupported(t *testing.T) {
+	req, _ := request(t)
+	req.PermissionMode = agentic.PermissionModeYolo
+	if _, err := buildPlan(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+		t.Fatalf("BuildPlan err = %v, want ErrPermissionModeUnsupported", err)
+	}
+	if _, err := pinative.New().Argv(req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+		t.Fatalf("Argv err = %v, want ErrPermissionModeUnsupported", err)
+	}
+}
+
+func TestPermissionModeNegativesAreNamed(t *testing.T) {
+	t.Run("an unknown value is refused", func(t *testing.T) {
+		req, _ := request(t)
+		req.PermissionMode = "bogus"
+		if _, err := buildPlan(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnknown) {
+			t.Fatalf("BuildPlan err = %v, want ErrPermissionModeUnknown", err)
+		}
+		if _, err := pinative.New().Argv(req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnknown) {
+			t.Fatalf("Argv err = %v, want ErrPermissionModeUnknown", err)
+		}
+	})
+	t.Run("a non-zero value in dry-run mode is refused", func(t *testing.T) {
+		// The dry run mirrors the interactive argv byte for byte — but the
+		// permission member is interactive-only, so even yolo is refused
+		// here rather than mirrored.
+		req, _ := request(t)
+		req.PermissionMode = agentic.PermissionModeYolo
+		if _, err := buildPlan(t, req, agentic.LaunchModeDryRun); !errors.Is(err, agentic.ErrPermissionModeNotInteractive) {
+			t.Fatalf("BuildPlan err = %v, want ErrPermissionModeNotInteractive", err)
+		}
+		if _, err := pinative.New().Argv(req, agentic.LaunchModeDryRun); !errors.Is(err, agentic.ErrPermissionModeNotInteractive) {
+			t.Fatalf("Argv err = %v, want ErrPermissionModeNotInteractive", err)
+		}
+	})
+	t.Run("an explicit native matches the zero value byte for byte", func(t *testing.T) {
+		native, _ := request(t)
+		native.PermissionMode = agentic.PermissionModeNative
+		zero, _ := request(t)
+		planNative, err := buildPlan(t, native, agentic.LaunchModeInteractive)
+		if err != nil {
+			t.Fatalf("BuildPlan(native): %v", err)
+		}
+		planZero, err := buildPlan(t, zero, agentic.LaunchModeInteractive)
+		if err != nil {
+			t.Fatalf("BuildPlan(zero): %v", err)
+		}
+		if want := []string{"--model", "anthropic/claude-opus-5", "--thinking", "high"}; !reflect.DeepEqual(planNative.Argv, want) || !reflect.DeepEqual(planZero.Argv, want) {
+			t.Errorf("native = %#v, zero = %#v, want both %#v", planNative.Argv, planZero.Argv, want)
+		}
+	})
+}
+
 func TestTheDryRunMirrorsTheInteractiveLaunchExactly(t *testing.T) {
 	req, _ := request(t)
 	interactive, err := buildPlan(t, req, agentic.LaunchModeInteractive)

@@ -155,3 +155,59 @@ func TestAnInteractiveLaunchRefusesWhatItsGrammarCannotCarry(t *testing.T) {
 		}
 	})
 }
+
+// Yolo is REFUSED for pi (curator-spec Decision 0018's pi row): pi 0.84.2
+// documents no interactive permission-bypass flag, and --approve trusts
+// project-local files rather than bypassing permissions. The refusal must be
+// explicit — a yolo that silently launched native would be a session whose
+// posture is the opposite of what was asked for.
+func TestAnInteractiveYoloLaunchIsRefusedAsUnsupported(t *testing.T) {
+	req, _ := interactiveRequest(t)
+	req.PermissionMode = agentic.PermissionModeYolo
+	if _, err := buildPlan(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+		t.Fatalf("BuildPlan err = %v, want ErrPermissionModeUnsupported", err)
+	}
+	if _, err := New(&fakeStatusReader{}).Argv(req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+		t.Fatalf("Argv err = %v, want ErrPermissionModeUnsupported", err)
+	}
+}
+
+func TestPermissionModeNegativesAreNamed(t *testing.T) {
+	t.Run("an unknown value is refused", func(t *testing.T) {
+		req, _ := interactiveRequest(t)
+		req.PermissionMode = "bogus"
+		if _, err := buildPlan(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnknown) {
+			t.Fatalf("BuildPlan err = %v, want ErrPermissionModeUnknown", err)
+		}
+		if _, err := New(&fakeStatusReader{}).Argv(req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnknown) {
+			t.Fatalf("Argv err = %v, want ErrPermissionModeUnknown", err)
+		}
+	})
+	t.Run("yolo in exec mode is refused", func(t *testing.T) {
+		req, _ := interactiveRequest(t)
+		req.PermissionMode = agentic.PermissionModeYolo
+		req.Prompt = []byte("turn")
+		if _, err := buildPlan(t, req, agentic.LaunchModeExec); !errors.Is(err, agentic.ErrPermissionModeNotInteractive) {
+			t.Fatalf("BuildPlan err = %v, want ErrPermissionModeNotInteractive", err)
+		}
+		if _, err := New(&fakeStatusReader{}).Argv(req, agentic.LaunchModeExec); !errors.Is(err, agentic.ErrPermissionModeNotInteractive) {
+			t.Fatalf("Argv err = %v, want ErrPermissionModeNotInteractive", err)
+		}
+	})
+	t.Run("an explicit native matches the zero value byte for byte", func(t *testing.T) {
+		native, _ := interactiveRequest(t)
+		native.PermissionMode = agentic.PermissionModeNative
+		zero, _ := interactiveRequest(t)
+		planNative, err := buildPlan(t, native, agentic.LaunchModeInteractive)
+		if err != nil {
+			t.Fatalf("BuildPlan(native): %v", err)
+		}
+		planZero, err := buildPlan(t, zero, agentic.LaunchModeInteractive)
+		if err != nil {
+			t.Fatalf("BuildPlan(zero): %v", err)
+		}
+		if want := []string{"pi", "--model", "qwen-3.8-27b-mlx-8bit"}; !reflect.DeepEqual(planNative.Argv, want) || !reflect.DeepEqual(planZero.Argv, want) {
+			t.Errorf("native = %#v, zero = %#v, want both %#v", planNative.Argv, planZero.Argv, want)
+		}
+	})
+}

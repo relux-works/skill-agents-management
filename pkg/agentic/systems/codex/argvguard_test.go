@@ -72,6 +72,11 @@ var codexArgvConstructionAllowlist = map[string]string{
 	argvguard.AllowlistKey(codexArgsFile, "appendReasoningAndTier"): "the -c override fragment both of Args' grammars splice in identically",
 	argvguard.AllowlistKey(codexArgsFile, "NormalizeServiceTier"):   "maps the runtime's tier vocabulary onto the catalog id; it names the config KEY nowhere and constructs no argv",
 	argvguard.AllowlistKey(codexEnvFile, "ServiceTierEnv"):          "the environment variable a child reads its resolved tier from; a variable name, not an argv flag",
+	// The bypass flag's ONE spelling: the const both of Args' branches
+	// reference. It is a declaration, not a construction — Args is the only
+	// function the scanner may resolve it through, which is what the gate
+	// above holds: any other site spelling or referencing it is reported.
+	argvguard.AllowlistKey(codexArgsFile, "bypassApprovalsAndSandboxFlag"): "the single spelling of the bypass flag; the exec and interactive branches reference it rather than repeating the literal",
 }
 
 // moduleGoSources reads every non-test Go file this module's build compiles.
@@ -361,6 +366,37 @@ func user() []string { return stash }`,
 				t.Errorf("%q is documented as a residual gap but the guard now reports it (%v); close the gap in internal/argvguard's threat model too, or the comment and the code disagree", gap.name, violations)
 			}
 		})
+	}
+}
+
+// TestTheBypassFlagIsSpelledExactlyOnce is the yolo mapping's single-site
+// proof: the literal occurs once in the module's non-test sources, at the
+// const both of Args' branches reference. The AST gate above proves no second
+// CONSTRUCTION; this proves not even a second SPELLING — a literal waiting
+// for a caller — exists anywhere else.
+func TestTheBypassFlagIsSpelledExactlyOnce(t *testing.T) {
+	sites, err := argvguard.LiteralSites(moduleGoSources(t), bypassApprovalsAndSandboxFlag)
+	if err != nil {
+		t.Fatalf("argvguard.LiteralSites: %v", err)
+	}
+	if len(sites) != 1 || sites[0].File != codexArgsFile || sites[0].Name != "bypassApprovalsAndSandboxFlag" {
+		t.Fatalf("the bypass flag is spelled at %v; want exactly the const in %s", sites, codexArgsFile)
+	}
+}
+
+// TestTheSingleSpellingProofBitesOnASecondSite narrows the proof instead of
+// deleting it: the same counter run over the real sources plus one planted
+// second spelling must report two sites, or its count of one proves nothing.
+func TestTheSingleSpellingProofBitesOnASecondSite(t *testing.T) {
+	sources := moduleGoSources(t)
+	sources["other/second.go"] = `package other
+func second(model string) []string { return []string{"exec", "-m", model, "--dangerously-bypass-approvals-and-sandbox"} }`
+	sites, err := argvguard.LiteralSites(sources, bypassApprovalsAndSandboxFlag)
+	if err != nil {
+		t.Fatalf("argvguard.LiteralSites: %v", err)
+	}
+	if len(sites) != 2 {
+		t.Fatalf("with a second spelling planted the counter reported %v; it does not count", sites)
 	}
 }
 
