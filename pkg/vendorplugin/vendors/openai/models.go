@@ -45,12 +45,18 @@ import (
 //
 // NO TIE AMONG THE PORTED ROWS: the twelve ported openai rows carry twelve
 // distinct scores, so the derived presentation order is the score order with
-// nothing invented in it. The one tie this vendor carries is `astra` with
-// `gpt-6-astra`, an alias and its identity rather than two models. That is a
+// nothing invented in it. The ties this vendor carries are `astra` with
+// `gpt-6-astra`, `sol` with `gpt-6-sol` and `luna` with `gpt-6-luna`: each an
+// alias and its identity rather than two models. That is a
 // fact about this vendor's table rather than a property of the type — the
 // anthropic, alibaba and google files each carry real ties.
 //
-// # One row is NOT a port, and says so in its own evidence
+// # Some rows are NOT ports, and say so in their own evidence
+//
+// gpt-6-astra, gpt-6-sol, gpt-6-luna and their short spellings reached this
+// repository BEFORE the board's registry; the astra row is the first and is
+// described here, the sol and luna rows follow it on a later catalog read
+// (codexCatalogGPT6).
 //
 // gpt-6-astra reached this repository BEFORE the board's registry, so no
 // capture of that registry contains it and none can be made to. The row
@@ -126,6 +132,21 @@ const codexCatalog = "the OpenAI Codex CLI model catalog, read with `codex debug
 // both would be one of them invented.
 const codexCatalogAliasProbe = "the OpenAI Codex CLI model catalog, read with `codex debug models` (codex-cli 0.153.2, 2026-09-07)"
 
+// codexCatalogGPT6 is the THIRD read of the catalog, the one the gpt-6 sol and
+// luna rows and their short spellings rest on.
+//
+// It is recorded separately again because it is a different read on a
+// different binary: at codex-cli 0.155.1 on 2026-09-22 the catalog carries
+// gpt-6-astra (priority 1), gpt-6-sol (2), gpt-6-luna (3), gpt-reserve (3),
+// gpt-5.6-sol (4), gpt-5.6-terra (7), gpt-5.6-luna (8), gpt-5.5 (12) and
+// codex-auto-review (43). gpt-6-sol states the six-word low..ultra axis and
+// gpt-6-luna the five-word low..max one, both defaulting to `medium`, both at
+// context_window 272000 with max_context_window 872000. None of the nine slugs
+// is spelled `sol` or `luna`, which is what the two alias rows rest on. Both
+// full ids were also launched once through `codex exec -m <id> -c
+// model_reasoning_effort=low` on that date and answered.
+const codexCatalogGPT6 = "the OpenAI Codex CLI model catalog, read with `codex debug models` (codex-cli 0.155.1, 2026-09-22)"
+
 // rank builds a capability rank for a PORTED row: a bench-anchored score, the
 // bench claim behind it, and the source registry's own PolicyRank for the row.
 //
@@ -161,9 +182,17 @@ func rank(score int, bench vendorplugin.RankEvidence, policyRank int, note strin
 // leaderboard measured gpt-6-astra, and the bench is the one source a
 // declared row and a ported row share.
 func declaredRank(score int, bench vendorplugin.RankEvidence, note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	return declaredRankFrom(codexCatalog, score, bench, note, evidence...)
+}
+
+// declaredRankFrom is declaredRank against a NAMED catalog read, for a row that
+// rests on a later read than the one gpt-6-astra was declared from. Each read
+// is its own constant so a reader chasing a row's evidence lands on the binary
+// version and the date that row was actually read off.
+func declaredRankFrom(catalog string, score int, bench vendorplugin.RankEvidence, note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
 	basis := []vendorplugin.RankEvidence{
 		bench,
-		{Source: codexCatalog, Observation: note},
+		{Source: catalog, Observation: note},
 	}
 	return vendorplugin.CapabilityRank{Score: score, Basis: append(basis, evidence...)}
 }
@@ -199,6 +228,41 @@ func effortRequired(recommended string, vocabulary []string) vendorplugin.Effort
 // that edits one row's vocabulary can reach the other's.
 func astraEffort() vendorplugin.EffortDeclaration {
 	return effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"})
+}
+
+// solEffort is the gpt-6-sol effort axis, shared by the identity row and its
+// `sol` alias for the reason astraEffort gives: checkAliases refuses a pair
+// whose axes disagree, so the vocabulary is written once.
+func solEffort() vendorplugin.EffortDeclaration {
+	return effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"})
+}
+
+// lunaEffort is the gpt-6-luna effort axis, shared by the identity row and its
+// `luna` alias. The catalog stops it at max: like gpt-5.6-luna, the gpt-6 luna
+// row carries no `ultra`.
+func lunaEffort() vendorplugin.EffortDeclaration {
+	return effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"})
+}
+
+// solRank and lunaRank are the gpt-6 sol and luna ranks, each built once and
+// handed to both the identity row and its alias, because an alias is the
+// identity under another name and carries that row's score and claim.
+//
+// Neither row has a leaderboard run, so both are INTERPOLATED and say so. The
+// order is the catalog's: gpt-6-astra (priority 1) above gpt-6-sol (2) above
+// gpt-6-luna (3) above gpt-5.6-sol (4). sol takes 46 inside astra's 48 and
+// gpt-5.6-sol's 42; luna takes 44 inside sol's 46 and gpt-5.6-sol's 42. Neither
+// value lands on a ported row's score (TestADeclaredRowMayNotTieAPortedOne).
+func solRank(note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	return declaredRankFrom(codexCatalogGPT6, 46,
+		vendorplugin.BughuntInterpolated("gpt-6-astra", "gpt-5.6-sol", "unmeasured; the catalog places gpt-6-sol at priority 2, below gpt-6-astra and above gpt-5.6-sol"),
+		note, evidence...)
+}
+
+func lunaRank(note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	return declaredRankFrom(codexCatalogGPT6, 44,
+		vendorplugin.BughuntInterpolated("gpt-6-sol", "gpt-5.6-sol", "unmeasured; the catalog places gpt-6-luna at priority 3, below gpt-6-sol and above gpt-5.6-sol"),
+		note, evidence...)
 }
 
 // models is the declaration itself, most capable first.
@@ -302,6 +366,60 @@ var models = []vendorplugin.Model{
 		// The context window is the identity's, transcribed rather than
 		// derived: it is one model, so an alias declaring a different window
 		// would be describing a run nobody can have.
+		ContextWindowTokens: 272_000,
+		Systems:             []agentic.SystemID{"codex"},
+	},
+	{
+		ID:          "gpt-6-sol",
+		Description: "The gpt-6 generation's everyday frontier coding model: the hard agentic work below astra, at a fraction of astra's cost per turn",
+		Rank:        solRank("the catalog presents this row at picker priority 2, between gpt-6-astra at 1 and gpt-5.6-sol at 4; the source registry contains NO row for gpt-6-sol and this score is therefore not a ported one"),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
+		Effort:      solEffort(),
+		// NOT Recommended, for the reason gpt-6-astra gives: gpt-5.6-sol holds
+		// this vendor's display pick and at most one openai row may carry it.
+		ContextWindowTokens: 272_000,
+		Systems:             []agentic.SystemID{"codex"},
+	},
+	{
+		// The floating short spelling of the current sol head, declared with
+		// AliasOf exactly as `astra` is: the vendor publishes no `sol` slug,
+		// so the launch must execute as gpt-6-sol and never put `sol` on argv.
+		// It moved off gpt-5.6-sol by DECLARATION when gpt-6-sol shipped;
+		// nothing derives it from a version number.
+		ID:          "sol",
+		Description: "The short spelling of the current sol head, for an invocation that names the model without its generation; it executes as gpt-6-sol",
+		Rank: solRank("this row is a short spelling of gpt-6-sol and carries that row's score; the catalog publishes no separate row for the spelling `sol`, so there is no second capability to score",
+			vendorplugin.RankEvidence{
+				Source:      codexCatalogGPT6,
+				Observation: "the catalog's nine rows are gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-reserve, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5 and codex-auto-review; NONE is spelled `sol`, which is why this row declares AliasOf instead of reaching argv under its own id",
+			}),
+		AliasOf:             "gpt-6-sol",
+		Lifecycle:           vendorplugin.LifecycleCurrent,
+		Effort:              solEffort(),
+		ContextWindowTokens: 272_000,
+		Systems:             []agentic.SystemID{"codex"},
+	},
+	{
+		ID:                  "gpt-6-luna",
+		Description:         "Fast and cheap gpt-6 agentic coding, for high-volume, bounded and easily verified turns; its effort axis stops at max",
+		Rank:                lunaRank("the catalog presents this row at picker priority 3, below gpt-6-sol at 2 and above gpt-5.6-sol at 4; the source registry contains NO row for gpt-6-luna and this score is therefore not a ported one"),
+		Lifecycle:           vendorplugin.LifecycleCurrent,
+		Effort:              lunaEffort(),
+		ContextWindowTokens: 272_000,
+		Systems:             []agentic.SystemID{"codex"},
+	},
+	{
+		// The floating short spelling of the current luna head; see `sol`.
+		ID:          "luna",
+		Description: "The short spelling of the current luna head, for an invocation that names the model without its generation; it executes as gpt-6-luna",
+		Rank: lunaRank("this row is a short spelling of gpt-6-luna and carries that row's score; the catalog publishes no separate row for the spelling `luna`, so there is no second capability to score",
+			vendorplugin.RankEvidence{
+				Source:      codexCatalogGPT6,
+				Observation: "the catalog's nine rows are gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-reserve, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5 and codex-auto-review; NONE is spelled `luna`, which is why this row declares AliasOf instead of reaching argv under its own id",
+			}),
+		AliasOf:             "gpt-6-luna",
+		Lifecycle:           vendorplugin.LifecycleCurrent,
+		Effort:              lunaEffort(),
 		ContextWindowTokens: 272_000,
 		Systems:             []agentic.SystemID{"codex"},
 	},

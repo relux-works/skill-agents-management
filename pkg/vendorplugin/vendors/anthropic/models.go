@@ -61,6 +61,12 @@ import (
 // position: membership comes from the frozen snapshot
 // (pkg/vendorplugin/v2snapshot.go), and a capability rank stays evidence.
 //
+// TWO ROWS ARE NOT PORTS. claude-opus-5-5 and its `opus` spelling reached this
+// repository before the board's registry, so they rest on the Claude Code CLI
+// probe (claudeCLIProbe) through declaredRank and quote no source PolicyRank;
+// pkg/vendorplugin/declaredhere_test.go names both. They tie each other at 45,
+// an alias and its identity, and tie no ported row.
+//
 // AUTHORED HERE, not ported: every Description. The source's rows carry a
 // short display string and no what-is-this-model-best-for field at all, while
 // the vendor contract requires one and refuses a blank. The descriptions below
@@ -116,6 +122,47 @@ func rank(score int, bench vendorplugin.RankEvidence, policyRank int, note strin
 	}
 }
 
+// claudeCLIProbe is the vendor surface the rows this file declares FIRST rest
+// on — rows no capture of the board's registry contains, so there is no source
+// PolicyRank for them to quote.
+//
+// It is a MACHINE-LOCAL probe rather than a published card, and naming the
+// binary version and the date is what makes it checkable: `claude -p --model
+// <id> --output-format json` launches one turn and its modelUsage names the
+// model the CLI actually ran, so a reader can re-run the one command.
+const claudeCLIProbe = "the Claude Code CLI's own model resolution, probed with `claude -p --model <id> --output-format json` (Claude Code 2.1.280, 2026-09-22)"
+
+// declaredRank builds a capability rank for a row NO capture of the board's
+// registry contains. It is separate from rank for the reason the openai file
+// gives: rank's registry entry states "the row carries PolicyRank N" and names
+// the source registry at a commit, which for a row that registry never held is
+// a sentence a reader would open the file and not find.
+func declaredRank(score int, bench vendorplugin.RankEvidence, note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	basis := []vendorplugin.RankEvidence{
+		bench,
+		{Source: claudeCLIProbe, Observation: note},
+	}
+	return vendorplugin.CapabilityRank{Score: score, Basis: append(basis, evidence...)}
+}
+
+// opus55Effort is the claude-opus-5-5 effort axis, shared by the identity row
+// and its `opus` alias: checkAliases refuses a pair whose axes disagree, so the
+// vocabulary is written once. It is opus-5's axis unchanged.
+func opus55Effort() vendorplugin.EffortDeclaration {
+	return effortRequired("high", []string{"low", "medium", "high", "xhigh", "max"})
+}
+
+// opus55Rank is claude-opus-5-5's rank, handed to both the identity and its
+// alias. The leaderboard has no run of it, so the value is INTERPOLATED: above
+// claude-fable-5-1's measured 43, the vendor's strongest measured row, and below
+// gpt-6-astra's measured 48, the leaderboard's top row. 45 sits strictly inside
+// and lands on no ported anthropic score.
+func opus55Rank(note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	return declaredRank(45,
+		vendorplugin.BughuntInterpolated("gpt-6-astra", "claude-fable-5-1", "unmeasured; Anthropic presents opus-5-5 as its new most capable general model, above fable-5-1, and the leaderboard's top row is the only measured anchor above that"),
+		note, evidence...)
+}
+
 // effortRequired declares a model that must be given an explicit effort, with
 // the words it accepts and the one the vendor recommends. Recommended is a
 // DECLARATION and never a default: nothing substitutes it for a missing
@@ -147,6 +194,39 @@ func effortNone() vendorplugin.EffortDeclaration {
 // refused as ErrModelNotDrivenBySystem rather than guessed at. Re-verify the
 // membership against the installed catalog bytes before changing it.
 var models = []vendorplugin.Model{
+	{
+		ID:          "claude-opus-5-5",
+		Description: "The strongest Claude for complex engineering and long agentic runs: multi-file changes, design work and reviews that need the most judgement",
+		Rank:        opus55Rank("`claude -p --model claude-opus-5-5` ran one turn whose modelUsage names claude-opus-5-5; the source registry contains NO row for claude-opus-5-5 and this score is therefore not a ported one"),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
+		Effort:      opus55Effort(),
+		// NOT Recommended: claude-opus-5 keeps this vendor's display pick, and
+		// at most one anthropic row may carry it. Admitting a newer model is
+		// not a decision to move what an operator is steered to by default.
+		//
+		// NOT pi-native: the installed Pi catalog (0.84.2) carries no
+		// claude-opus-5-5, and an absent id takes Pi's unverified fallback.
+		Systems: []agentic.SystemID{"claude-code"},
+	},
+	{
+		// The floating short spelling of the current opus head, declared with
+		// AliasOf so the launch executes as claude-opus-5-5 by THIS row's say-so
+		// rather than by whatever `opus` the installed Claude Code CLI happens
+		// to float to. The CLI resolves `opus` itself today (to claude-opus-5-5
+		// on 2.1.280), but a declared alias keeps argv, the audit trail and cost
+		// attribution pinned to one id across CLI upgrades.
+		ID:          "opus",
+		Description: "The short spelling of the current opus head, for an invocation that names the model without its generation; it executes as claude-opus-5-5",
+		Rank: opus55Rank("this row is a short spelling of claude-opus-5-5 and carries that row's score; there is no second capability to score",
+			vendorplugin.RankEvidence{
+				Source:      claudeCLIProbe,
+				Observation: "`claude -p --model opus` ran one turn whose modelUsage names claude-opus-5-5, the same model the full id runs; this row declares AliasOf so argv carries the full id",
+			}),
+		AliasOf:   "claude-opus-5-5",
+		Lifecycle: vendorplugin.LifecycleCurrent,
+		Effort:    opus55Effort(),
+		Systems:   []agentic.SystemID{"claude-code"},
+	},
 	{
 		ID:          "claude-fable-5-1",
 		Description: "The hardest and longest-running work: deep refactors and multi-hour agent runs where a cheaper model stalls",

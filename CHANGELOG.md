@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Declare the 2026-09-22 heads and their floating short spellings:
+  `gpt-6-sol` (+ alias `sol`) and `gpt-6-luna` (+ alias `luna`) in `openai`,
+  `claude-opus-5-5` (+ alias `opus`) in `anthropic`. All six rows are declared
+  ahead of the board's registry (`declaredHereRows`), rest on a machine-local
+  vendor probe (`codex debug models`, codex-cli 0.155.1; `claude -p --model`,
+  Claude Code 2.1.280) and carry interpolated Bug Hunt Bench scores (sol 46,
+  luna 44 between `gpt-6-astra` 48 and `gpt-5.6-sol` 42; opus-5-5 45 between
+  `gpt-6-astra` 48 and `claude-fable-5-1` 43). Effort axes: sol
+  `low`..`ultra`, luna `low`..`max`, opus-5-5 `low`..`max` (opus-5's axis);
+  every alias shares its identity's axis. Each alias executes as its identity
+  through `AliasOf` (`Plan.ModelIdentity` keeps the requested spelling). No
+  display recommendation moved; no row is pi-native (the Pi 0.84.2 catalog
+  carries none of them).
 - Add `LaunchRequest.PermissionMode` (curator-spec Decision 0018): the
   interactive permission posture, `native` (zero value: pass nothing, the
   provider's stored settings decide) or `yolo` (the single provider bypass
@@ -19,7 +32,8 @@
   refused rather than emitted twice.
   Native/zero-value plans are byte-identical to before. The
   (environment, tool release) capability table is a follow-up (F-M1b); no
-  release is cut here.
+  release is cut here (it ships in the release carrying the gpt-6 sol/luna and
+  opus-5-5 rows).
 - Recommend `max` instead of `high` for `muse-spark-1.3-contributor` and its
   `muse-spark` alias. The vocabulary stays `high`/`xhigh`/`max` and required;
   only the recommended word moved, to the setting the Bug Hunt Bench score

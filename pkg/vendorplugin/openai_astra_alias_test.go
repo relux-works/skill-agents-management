@@ -103,6 +103,14 @@ func argvHasElement(argv []string, value string) bool {
 // already uses for its own pins (comparePortedLineup + requireReport).
 func astraLaunchProblems(t *testing.T, registry *vendorplugin.Registry, requested, wantLaunched vendorplugin.ModelID) []string {
 	t.Helper()
+	return codexLaunchProblems(t, registry, requested, wantLaunched, astraProbedEfforts)
+}
+
+// codexLaunchProblems is astraLaunchProblems over an explicit probed-effort
+// list, so the gpt-6 sol and luna pairs are held by the SAME assertions against
+// their own independently written vocabularies.
+func codexLaunchProblems(t *testing.T, registry *vendorplugin.Registry, requested, wantLaunched vendorplugin.ModelID, probedEfforts []string) []string {
+	t.Helper()
 	var problems []string
 	report := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
 
@@ -110,7 +118,7 @@ func astraLaunchProblems(t *testing.T, registry *vendorplugin.Registry, requeste
 	// before committing to a spawn, and a dry run that previewed the alias
 	// while an exec ran the identity would be a preview of a different launch.
 	for _, mode := range []agentic.LaunchMode{agentic.LaunchModeDryRun, agentic.LaunchModeExec} {
-		for _, effort := range astraProbedEfforts {
+		for _, effort := range probedEfforts {
 			plan, err := vendorplugin.BuildLaunch(context.Background(), registry, astraRequest(t, requested, effort), mode)
 			if err != nil {
 				report("BuildLaunch(codex, %s, %s, %s) refused the launch: %v", requested, effort, mode, err)
@@ -264,6 +272,22 @@ func astraNonAliasProblems(t *testing.T, registry *vendorplugin.Registry) []stri
 
 	for _, id := range ids {
 		if id == astraAlias {
+			continue
+		}
+		// The gpt-6 sol and luna short spellings are the other two DECLARED
+		// codex aliases. They are held to their own targets here rather than
+		// skipped, so a substitution that fired on the wrong row — or on a row
+		// outside this named set — still fails.
+		if target, isAlias := gpt6CodexAliases[id]; isAlias {
+			effort := rows[id].Effort.Recommended
+			plan, err := vendorplugin.BuildLaunch(context.Background(), registry, astraRequest(t, id, effort), agentic.LaunchModeExec)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("BuildLaunch(codex, %s, %s): %v", id, effort, err))
+				continue
+			}
+			if !argvPair(plan.Argv, "-m", string(target)) || plan.ModelIdentity.Launched != string(target) {
+				problems = append(problems, fmt.Sprintf("alias %q launched as %q (argv %v), want its declared target %q", id, plan.ModelIdentity.Launched, plan.Argv, target))
+			}
 			continue
 		}
 		row := rows[id]

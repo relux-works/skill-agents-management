@@ -71,14 +71,32 @@ import (
 // a PORTED one, because that would publish an equality the leaderboard did not
 // count. A tie between an alias and its own identity records nothing about two
 // models.
+//
+// The gpt-6 sol and luna heads and their `sol` / `luna` spellings followed the
+// same way on 2026-09-22, read off a later catalog (codex-cli 0.155.1), and so
+// did anthropic's claude-opus-5-5 with its `opus` spelling, read off the Claude
+// Code CLI. Each pair is one model under two names, and each pair's shared
+// score is legal for the reason the astra pair's is.
 var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
-	"gpt-6-astra": "openai",
-	"astra":       "openai",
+	"gpt-6-astra":     "openai",
+	"astra":           "openai",
+	"gpt-6-sol":       "openai",
+	"sol":             "openai",
+	"gpt-6-luna":      "openai",
+	"luna":            "openai",
+	"claude-opus-5-5": "anthropic",
+	"opus":            "anthropic",
 }
 
-// declaredHereCatalogEvidence is the substring a declared-here row's basis must
-// name: the vendor surface the row was actually read from.
-const declaredHereCatalogEvidence = "codex debug models"
+// declaredHereCatalogEvidence is, per vendor, the substring a declared-here
+// row's basis must name: the vendor surface the row was actually read from.
+// openai rows are read off the Codex CLI's catalog; anthropic rows off the
+// Claude Code CLI's own model resolution, which has no catalog dump and is
+// probed by running one turn and reading the model its usage names.
+var declaredHereCatalogEvidence = map[vendorplugin.VendorID]string{
+	"openai":    "codex debug models",
+	"anthropic": "claude -p --model",
+}
 
 // portedScoreObservation is the sentence rank() puts on a PORTED row. A
 // declared-here row carrying it is quoting a board score that does not exist.
@@ -166,9 +184,13 @@ func declaredHereEvidenceProblems(id vendorplugin.ModelID, model vendorplugin.Mo
 	if err := model.Rank.Validate(); err != nil {
 		return append(problems, fmt.Sprintf("declared-here model %q: %v", id, err))
 	}
+	token := declaredHereCatalogEvidence[declaredHereRows[id]]
+	if token == "" {
+		return append(problems, fmt.Sprintf("declared-here model %q belongs to vendor %s, which names no catalog surface a declared row can rest on", id, declaredHereRows[id]))
+	}
 	named, borrowed := false, ""
 	for _, evidence := range model.Rank.Basis {
-		if strings.Contains(evidence.Source, declaredHereCatalogEvidence) {
+		if strings.Contains(evidence.Source, token) {
 			named = true
 		}
 		if strings.Contains(evidence.Observation, portedScoreObservation) {
@@ -177,7 +199,7 @@ func declaredHereEvidenceProblems(id vendorplugin.ModelID, model vendorplugin.Mo
 	}
 	if !named {
 		problems = append(problems, fmt.Sprintf("declared-here model %q carries no basis entry naming %q; a row no capture holds and no vendor surface names is ranked on this repository's say-so",
-			id, declaredHereCatalogEvidence))
+			id, token))
 	}
 	if borrowed != "" {
 		problems = append(problems, fmt.Sprintf("declared-here model %q quotes a ported score observation (%q); the source registry has no row for it, so the number is one a reader opens that file and does not find",
