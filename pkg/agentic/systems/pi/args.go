@@ -51,10 +51,17 @@ func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode
 		return nil, fmt.Errorf("pi: an interactive launch requires a model id")
 	}
 	if effective == agentic.PermissionModeYolo {
+		// Drift fails closed before support is even asked: an unpinned
+		// or newer release, and an empty one, refuse as unverified,
+		// and only the verified release reaches the unsupported
+		// refusal below.
+		if _, err := agentic.LookupReleaseCapability(verifiedReleases, req.ToolRelease); err != nil {
+			return nil, fmt.Errorf("pi: %w", err)
+		}
 		return nil, fmt.Errorf("pi: refusing yolo: %w: pi 0.84.2 documents no interactive permission-bypass flag; --approve trusts project-local files for this run and is not equivalent",
 			agentic.ErrPermissionModeUnsupported)
 	}
-	return []string{"pi", "--model", model}, nil
+	return append([]string{"pi", "--model", model}, nativeArgsSuffix(req)...), nil
 }
 
 func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
@@ -65,6 +72,10 @@ func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
 		return nil, fmt.Errorf("pi: %w: permission mode %q is valid only for interactive launches",
 			agentic.ErrPermissionModeNotInteractive, strings.TrimSpace(string(req.PermissionMode)))
+	}
+	if mode != agentic.LaunchModeInteractive && len(req.NativeArgs) != 0 {
+		return nil, fmt.Errorf("pi: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
+			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
 	}
 	if mode == agentic.LaunchModeInteractive {
 		return interactiveArgs(req, effective)
@@ -85,6 +96,13 @@ func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		"--deadline", deadlineArg(req.Deadline),
 		"--result-schema", "1",
 	}, nil
+}
+
+// nativeArgsSuffix returns the caller's native arguments for the verbatim
+// interactive suffix, copied so the plan's argv never aliases the request's
+// backing array.
+func nativeArgsSuffix(req agentic.LaunchRequest) []string {
+	return append([]string{}, req.NativeArgs...)
 }
 
 // defaultDeadline is the Process-A deadline spelled when the caller declared

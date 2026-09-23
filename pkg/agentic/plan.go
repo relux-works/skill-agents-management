@@ -151,6 +151,35 @@ var (
 	// that should not have been set, or the reverse, and the plugin cannot
 	// tell which.
 	ErrPermissionModeDuplicate = errors.New("agentic: permission-mode bypass flag already present in the launch composition prefix")
+	// ErrPermissionModeUnverifiedRelease is returned, by the plugin, when
+	// an interactive launch requests yolo and the tool release on the
+	// request is not a verified row of that system's capability table:
+	// unpinned, newer than the verification, an empty value (detection
+	// failed or never ran), or a row naming a grammar this module does
+	// not implement. On version drift the yolo mapping fails closed
+	// first; native never reads the release and forwards verbatim.
+	ErrPermissionModeUnverifiedRelease = errors.New("agentic: tool release is not a verified permission-grammar row")
+	// ErrNativePolicyUnknown is returned, by the plugin, when an
+	// interactive yolo launch carries a native policy form the pinned
+	// release's closed grammar does not know: a new codex `-c` key, a new
+	// claude `--permission-mode` value, or a malformed value in one of
+	// those positions. It is refused as usage — the caller maps it to
+	// exit 2 — never resolved into a policy claim. Native performs no
+	// argv inspection at all, so the same arguments pass there verbatim.
+	ErrNativePolicyUnknown = errors.New("agentic: unknown native policy form")
+	// ErrNativeArgsNotInteractive is returned when a non-interactive
+	// launch carries native arguments. Only the interactive grammar has
+	// a verbatim suffix to forward them through; anywhere else they
+	// would be dropped silently, which is a launch that looks like the
+	// one that was asked for and is not.
+	ErrNativeArgsNotInteractive = errors.New("agentic: native arguments outside an interactive launch")
+	// ErrToolReleaseUndetected is returned when the running tool release
+	// cannot be established: no probe, an unresolvable binary, a
+	// non-zero exit, an unparsable answer, or a fired context. The
+	// caller answers it by passing ToolRelease "" and planning anyway —
+	// never by synthesizing a release — so yolo fails closed and native
+	// forwards verbatim.
+	ErrToolReleaseUndetected = errors.New("agentic: tool release could not be established")
 	// ErrPluginContract is returned when a plugin answers a dispatch surface
 	// with something the contract forbids — an empty binary reported as a
 	// success, or a stdin payload carrying bytes while claiming nothing is
@@ -260,6 +289,10 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	if mode != LaunchModeInteractive && !req.PermissionMode.IsZero() {
 		return Plan{}, fmt.Errorf("%w: %s carries permission mode %q in %s mode; the member is valid only for interactive launches",
 			ErrPermissionModeNotInteractive, id, strings.TrimSpace(string(req.PermissionMode)), mode)
+	}
+	if mode != LaunchModeInteractive && len(req.NativeArgs) != 0 {
+		return Plan{}, fmt.Errorf("%w: %s carries %d native argument(s) in %s mode; only the interactive grammar forwards them",
+			ErrNativeArgsNotInteractive, id, len(req.NativeArgs), mode)
 	}
 	req, err = PrepareLaunchRequest(sys, req, mode)
 	if err != nil {

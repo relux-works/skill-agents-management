@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- Add the versioned provider-capability table keyed (environment, tool
+  release) to a permission-grammar version (curator-spec Decision 0018
+  choices 3 and 6; expected release v0.5.18 (v0.5.17 carried the 2026-09-22 model declarations), tag cut by the orchestrator).
+  Each plugin holds its own environment's rows — `claude-code` 2.1.261,
+  `codex` 0.153.2, `pi`/`pi-native` 0.84.2 (unsupported) — and
+  `LookupReleaseCapability` is the single reader. The grammar version in
+  force is `permission-grammar-v1`, the token the launcher must cite; a
+  row naming a grammar this module does not implement selects no mapping.
+  The caller establishes the running release with `ProbeToolRelease`
+  (`<binary> --version` against the launch environment; `pi` has no
+  probe because its binary is the wrapper) and passes it on the new
+  `LaunchRequest.ToolRelease`. On drift — an unpinned or newer release,
+  or none established — yolo fails closed first with the named
+  `ErrPermissionModeUnverifiedRelease`, while native still forwards
+  verbatim with no claims. The new `LaunchRequest.NativeArgs` (refused
+  outside interactive launches with `ErrNativeArgsNotInteractive`) are
+  forwarded verbatim after the module-spelled argv, so the yolo bypass
+  flag lands before them; under yolo the plugin scans flag positions
+  against the looked-up release's closed grammar and refuses an unknown
+  codex `-c` key or an unknown claude `--permission-mode` value as usage
+  (`ErrNativePolicyUnknown`, which the caller maps to exit 2), never
+  resolved into a policy claim, while native performs no inspection at
+  all. Prompt text is never parsed as a flag (`internal/nativeargs` owns
+  the rule: `--` ends flag parsing, `=`-forms read as their flag).
+  Known policy selectors under yolo are forwarded verbatim — Decision
+  0018 item 4's conflict table is a later leaf.
 - Declare the 2026-09-22 heads and their floating short spellings:
   `gpt-6-sol` (+ alias `sol`) and `gpt-6-luna` (+ alias `luna`) in `openai`,
   `claude-opus-5-5` (+ alias `opus`) in `anthropic`. All six rows are declared

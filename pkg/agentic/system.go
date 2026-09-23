@@ -24,6 +24,7 @@
 package agentic
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -107,15 +108,19 @@ const (
 	// CLOSED set of constraints rather than a spelling:
 	//
 	//   - The argv contains ONLY model selection, the system's declared
-	//     effort transport for the requested effort, and — when the request
+	//     effort transport for the requested effort, — when the request
 	//     carries PermissionMode "yolo" — the ONE provider bypass flag that
 	//     system's plugin maps yolo to (curator-spec Decision 0018; the
-	//     launcher only resolves and passes the mode, Decision 0013 D5).
-	//     It carries no print or headless mode, no output-format flag, no
-	//     OTHER permission-bypass or unrestricted-mode flag, no goal or
+	//     launcher only resolves and passes the mode, Decision 0013 D5),
+	//     and the caller's NativeArgs forwarded verbatim after everything
+	//     the module spells. It carries no print or headless mode, no
+	//     output-format flag, no OTHER permission-bypass or
+	//     unrestricted-mode flag of its own spelling, no goal or
 	//     assignment-prompt machinery, no budget flag and no service-tier
-	//     flag. What it may not contain is the invariant; what it does
-	//     contain is the system plugin's to spell.
+	//     flag. What the module may not SPELL is the invariant; the
+	//     verbatim suffix is the caller's spelling, not the module's — the
+	//     module classifies its flag positions under yolo and claims no
+	//     posture over it.
 	//   - Composition is NOT part of the interactive argv. The MCP composition
 	//     prefix is the composer's plane, and BuildPlan refuses a request
 	//     carrying one with ErrCompositionNotInteractive.
@@ -426,6 +431,80 @@ func (m PermissionMode) Resolve() (PermissionMode, error) {
 	}
 }
 
+// PermissionGrammarVersion names the provider-permission grammar a
+// capability row was verified against, curator-spec Decision 0018 choices
+// 3 and 6. Each mapping is re-verified per tool release, and the version
+// is what tells a re-verified release from a merely observed one: the
+// launcher cites the token (in provenance and diagnostics), and a row
+// naming a grammar this module does not implement selects no mapping.
+type PermissionGrammarVersion string
+
+// PermissionGrammarV1 is the grammar this module implements: the closed
+// policy set Decision 0018 verified (claude's six `--permission-mode`
+// values, codex's five `-c` keys plus the `mcp_servers.` shape) over the
+// pinned releases below. A re-verification that widens or renames that
+// set ships as a new token, and rows naming it ship with the code that
+// implements it — never ahead of it.
+const PermissionGrammarV1 PermissionGrammarVersion = "permission-grammar-v1"
+
+// ReleaseCapability is one row of the versioned provider-capability table:
+// what one tool release, verified under one grammar version, admits. The
+// table is keyed by (environment, tool release); each plugin holds its
+// own environment's rows (there is no central map keyed by system id —
+// pkg/agentic's single-source guard forbids a second binding table, and
+// the mapping is each plugin's by Decision 0013 D5), and
+// LookupReleaseCapability is the single reader over them.
+type ReleaseCapability struct {
+	// Release is the exact tool release this row verifies, "2.1.261" for
+	// one claude row. Matching is exact after trimming: a near-miss is
+	// not a neighbouring release, it is an unverified one.
+	Release string
+	// Grammar is the permission-grammar version the release was verified
+	// under. Only PermissionGrammarV1 exists today; a row naming any
+	// other version is refused as unverified, because a grammar this
+	// module does not implement cannot classify the caller's arguments.
+	Grammar PermissionGrammarVersion
+	// YoloSupported reports whether the release documents a
+	// permission-bypass flag for the plugin to map yolo to. False is a
+	// verified fact, not an absence: pi 0.84.2's row carries false
+	// because that release documents no such flag, and yolo there is
+	// refused as unsupported rather than as drift.
+	YoloSupported bool
+}
+
+// LookupReleaseCapability finds the capability row for one tool release.
+//
+// An empty release (detection failed or never ran) and a release with no
+// row (unpinned or newer than the verification) both refuse with
+// ErrPermissionModeUnverifiedRelease: on version drift the yolo mapping
+// fails closed first. So does a row naming a grammar version this module
+// does not implement. The refusal names the grammar in force and the
+// verified releases, so the operator — and the launcher citing the
+// token — can see what would have to be re-verified.
+func LookupReleaseCapability(rows []ReleaseCapability, release string) (ReleaseCapability, error) {
+	trimmed := strings.TrimSpace(release)
+	if trimmed == "" {
+		return ReleaseCapability{}, fmt.Errorf("%w: no tool release was established (detection failed or never ran); yolo requires a release verified under %s, while native forwards verbatim",
+			ErrPermissionModeUnverifiedRelease, PermissionGrammarV1)
+	}
+	for _, row := range rows {
+		if strings.TrimSpace(row.Release) != trimmed {
+			continue
+		}
+		if row.Grammar != PermissionGrammarV1 {
+			return ReleaseCapability{}, fmt.Errorf("%w: tool release %q names grammar %q, which this module does not implement (in force: %s); yolo selects no mapping under an unimplemented grammar",
+				ErrPermissionModeUnverifiedRelease, trimmed, row.Grammar, PermissionGrammarV1)
+		}
+		return row, nil
+	}
+	verified := make([]string, 0, len(rows))
+	for _, row := range rows {
+		verified = append(verified, strings.TrimSpace(row.Release))
+	}
+	return ReleaseCapability{}, fmt.Errorf("%w: tool release %q is not verified under %s (verified releases: %s); yolo fails closed on drift, while native forwards verbatim",
+		ErrPermissionModeUnverifiedRelease, trimmed, PermissionGrammarV1, strings.Join(verified, ", "))
+}
+
 // LaunchRequest is everything a caller supplies for one launch. It is the
 // input to every dispatch surface, so a plugin never reaches for ambient
 // state: what is not here is not available to it.
@@ -533,6 +612,45 @@ type LaunchRequest struct {
 	// mode carrying a non-zero value is refused, and so is an unknown value
 	// in any mode. The mapping — and only the mapping — is each plugin's.
 	PermissionMode PermissionMode
+
+	// ToolRelease is the running tool's release the yolo mapping was verified
+	// against, curator-spec Decision 0018 choice 6: "2.1.261" for claude,
+	// "0.153.2" for codex, "0.84.2" for pi. The caller establishes it by
+	// probing the resolved binary (ProbeToolRelease) before planning and
+	// passes the answer here; BuildPlan never starts a process, so a dry run
+	// reports the same plan whether the binary exists or not.
+	//
+	// It is read ONLY on the interactive yolo path, where the plugin looks
+	// the release up in its verified rows (ReleaseCapability): an unpinned
+	// or newer release, and an empty value (detection failed or never ran),
+	// refuse yolo with ErrPermissionModeUnverifiedRelease. Native never
+	// reads it — the raw contract is unchanged and no claim is made — and
+	// outside interactive launches it is ignored: it is an observation, not
+	// launch content, so ignoring it cannot misdirect a launch the way
+	// dropping a parameter would.
+	ToolRelease string
+
+	// NativeArgs are the caller's own native arguments, forwarded VERBATIM
+	// into the interactive argv after everything the module spells (so the
+	// yolo bypass flag lands before them, Decision 0018 item 1). They are
+	// the launcher's `--`-separated remainder, and this module is their
+	// only validator: Decision 0013 D5 forbids the launcher from spelling
+	// provider grammar, so no other layer may classify them.
+	//
+	// Under yolo the plugin scans flag positions (internal/nativeargs owns
+	// the prompt-text-versus-flag rule) against the closed grammar of the
+	// looked-up tool release: an unknown policy form — a new codex `-c`
+	// key, a new claude `--permission-mode` value — is refused with
+	// ErrNativePolicyUnknown, which the caller maps to usage (exit 2),
+	// never resolved into a policy claim (Decision 0018 choice 3). Under
+	// native they are forwarded with no inspection at all: raw bypass may
+	// remain available untracked, and the interface stays UX rather than a
+	// perimeter (Decision 0018 item 4). Any non-empty value outside
+	// LaunchModeInteractive is refused with ErrNativeArgsNotInteractive:
+	// no other grammar has a verbatim suffix to carry it, and dropping
+	// caller arguments silently is a launch that looks like the one that
+	// was asked for and is not.
+	NativeArgs []string
 }
 
 // RunContext is the caller's identity for one tracked run, carried to the
@@ -667,6 +785,43 @@ type LaunchRequestPreparation struct {
 // the later plan on the same bytes instead of reading a mutable file twice.
 type LaunchRequestPreparer interface {
 	PrepareLaunchRequest(LaunchRequest, LaunchMode) (LaunchRequestPreparation, error)
+}
+
+// ToolReleaseProber is implemented by a system whose running tool release
+// can be established by probing the binary the system resolves: the plugin
+// runs `<binary> --version` against the launch environment and parses its
+// own release out of the output. It is a PRE-plan step — the launcher's
+// (follow-up F-L1) — never part of BuildPlan, which starts no process.
+//
+// A system whose binary cannot attest its tool release does not implement
+// it: pi's binary is the agents-infra wrapper, and the wrapper's version
+// is not pi's release, so pi has no probe and yolo there fails closed as
+// unverified unless the caller established the release another way.
+type ToolReleaseProber interface {
+	ProbeToolRelease(ctx context.Context, env []string) (string, error)
+}
+
+// ProbeToolRelease establishes the running tool release for one system,
+// for the caller to pass on LaunchRequest.ToolRelease.
+//
+// Every failure — no probe, an unresolvable binary, a non-zero exit, an
+// unparsable answer, a fired context — is ErrToolReleaseUndetected, and
+// the contract on it is total: the caller passes ToolRelease "" and
+// plans anyway. Yolo then fails closed in LookupReleaseCapability and
+// native forwards verbatim, so a detection failure is a refusal for the
+// posture that resolves policy and a pass for the one that claims
+// nothing. A probe error must never be answered by synthesizing the
+// release the table wants to see.
+func ProbeToolRelease(ctx context.Context, sys System, env []string) (string, error) {
+	if sys == nil {
+		return "", fmt.Errorf("%w: no system to probe; pass ToolRelease \"\" and plan anyway", ErrToolReleaseUndetected)
+	}
+	prober, ok := sys.(ToolReleaseProber)
+	if !ok {
+		return "", fmt.Errorf("%w: system %s establishes no tool release by probing; pass ToolRelease \"\" and plan anyway",
+			ErrToolReleaseUndetected, sys.ID())
+	}
+	return prober.ProbeToolRelease(ctx, env)
 }
 
 // PrepareLaunchRequest applies a system's optional pure pre-plan gate. Systems

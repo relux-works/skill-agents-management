@@ -27,6 +27,11 @@ import (
 // registry refuses them with ErrUnsupportedLaunchMode, and that refusal is
 // asserted below so a declaration added without a construction is noticed.
 //
+// The sweep covers module-spelled argv only: no row here sets NativeArgs,
+// and the caller's verbatim suffix may carry caller-chosen markers —
+// that is the caller's spelling under Decision 0018 item 4 (raw bypass
+// stays available untracked), not a marker this module emitted.
+//
 // pi is the third mapped system and is NOT here, for a reason this package
 // already enforces: importing its plugin registers it into the default
 // registry, and TestEveryLayerOneSystemHasASmokeCase then demands a golden pi
@@ -78,12 +83,17 @@ type interactiveCase struct {
 	// to (curator-spec Decision 0018), empty when the system refuses yolo
 	// outright (pi-native: pi 0.84.2 documents no such flag).
 	yoloFlag string
+	// toolRelease is the pinned release the yolo mapping was verified
+	// against (Decision 0018 choice 6). The yolo sweep below carries it;
+	// the drift test carries anything but.
+	toolRelease string
 }
 
 var interactiveCases = map[string]interactiveCase{
 	"claude-code": {
 		system: claude.New(), stub: "claude",
-		yoloFlag: "--dangerously-skip-permissions",
+		yoloFlag:    "--dangerously-skip-permissions",
+		toolRelease: "2.1.261",
 		exec: func(t *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest {
 			req.PromptPath = paritycase.WritePromptFile(t, workDir, "body")
 			return req
@@ -91,7 +101,8 @@ var interactiveCases = map[string]interactiveCase{
 	},
 	"codex": {
 		system: codex.New(), stub: "codex",
-		yoloFlag: "--dangerously-bypass-approvals-and-sandbox",
+		yoloFlag:    "--dangerously-bypass-approvals-and-sandbox",
+		toolRelease: "0.153.2",
 		exec: func(_ *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest {
 			req.Prompt = []byte("body")
 			return req
@@ -99,6 +110,7 @@ var interactiveCases = map[string]interactiveCase{
 	},
 	"pi-native": {
 		system: pinative.New(), stub: "pi", vendor: "anthropic",
+		toolRelease: "0.84.2",
 	},
 }
 
@@ -168,6 +180,7 @@ func TestAYoloPlanCarriesItsOneBypassFlagAndNoOtherMarker(t *testing.T) {
 			workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
 			req := interactiveRequest(t, c, workDir, binDir)
 			req.PermissionMode = agentic.PermissionModeYolo
+			req.ToolRelease = c.toolRelease
 
 			if c.yoloFlag == "" {
 				if _, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
@@ -196,6 +209,44 @@ func TestAYoloPlanCarriesItsOneBypassFlagAndNoOtherMarker(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAYoloPlanRefusesDriftForEveryMappedSystem is the Decision 0018
+// choice-6 half of the sweep above: yolo at an unverified release — a
+// newer one, or none established at all — fails closed with the drift
+// sentinel for every mapped system, while the same request at native
+// builds. Pi-native's verified release stays unsupported (the sweep
+// above); drift there refuses as unverified like everywhere else.
+func TestAYoloPlanRefusesDriftForEveryMappedSystem(t *testing.T) {
+	for name, c := range interactiveCases {
+		for _, release := range []string{"9.9.9", ""} {
+			t.Run(name+"/release-"+driftName(release), func(t *testing.T) {
+				workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
+				req := interactiveRequest(t, c, workDir, binDir)
+				req.PermissionMode = agentic.PermissionModeYolo
+				req.ToolRelease = release
+				if _, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
+					t.Fatalf("%s: err = %v, want ErrPermissionModeUnverifiedRelease", name, err)
+				}
+			})
+		}
+		t.Run(name+"/native-builds-unverified", func(t *testing.T) {
+			workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
+			req := interactiveRequest(t, c, workDir, binDir)
+			req.PermissionMode = agentic.PermissionModeNative
+			req.ToolRelease = "9.9.9"
+			if _, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeInteractive); err != nil {
+				t.Fatalf("%s: native at an unverified release was refused: %v", name, err)
+			}
+		})
+	}
+}
+
+func driftName(release string) string {
+	if release == "" {
+		return "unestablished"
+	}
+	return release
 }
 
 // TestAnInteractivePlanRefusesACompositionForEveryMappedSystem is the

@@ -63,12 +63,23 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return nil, fmt.Errorf("pinative: %w: permission mode %q is valid only for interactive launches",
 			agentic.ErrPermissionModeNotInteractive, strings.TrimSpace(string(req.PermissionMode)))
 	}
+	if mode != agentic.LaunchModeInteractive && len(req.NativeArgs) != 0 {
+		return nil, fmt.Errorf("pinative: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
+			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
+	}
 	switch mode {
 	case agentic.LaunchModeInteractive, agentic.LaunchModeDryRun:
 	default:
 		return nil, fmt.Errorf("pinative: unsupported launch mode %s", mode)
 	}
 	if mode == agentic.LaunchModeInteractive && effective == agentic.PermissionModeYolo {
+		// Drift fails closed before support is even asked: an unpinned
+		// or newer release, and an empty one, refuse as unverified,
+		// and only the verified release reaches the unsupported
+		// refusal below.
+		if _, err := agentic.LookupReleaseCapability(verifiedReleases, req.ToolRelease); err != nil {
+			return nil, fmt.Errorf("pinative: %w", err)
+		}
 		return nil, fmt.Errorf("pinative: refusing yolo: %w: pi 0.84.2 documents no interactive permission-bypass flag; --approve trusts project-local files for this run and is not equivalent",
 			agentic.ErrPermissionModeUnsupported)
 	}
@@ -96,5 +107,15 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		}
 		args = append(args, "--thinking", effort)
 	}
-	return args, nil
+	// The verbatim suffix: native forwards the caller's arguments with no
+	// inspection (Decision 0018 item 4). Yolo never reaches here — refused
+	// above — and dry-run carries none (the scope gate refused them).
+	return append(args, nativeArgsSuffix(req)...), nil
+}
+
+// nativeArgsSuffix returns the caller's native arguments for the verbatim
+// interactive suffix, copied so the plan's argv never aliases the request's
+// backing array.
+func nativeArgsSuffix(req agentic.LaunchRequest) []string {
+	return append([]string{}, req.NativeArgs...)
 }

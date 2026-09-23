@@ -75,9 +75,11 @@ The agentic-system plugin contract and its registry.
   `ResolveBinary`, `Argv`, `ChildEnv`, `Stdin`, `ValidateComposition`.
 - Four launch modes: `exec`, `dry-run`, `managed-session`, and `interactive`
   (curator-spec Decision 0013 §5) — the complete argv a launcher hands to a
-  human's terminal, holding model selection, effort transport, and the
-  optional typed permission-mode member only (`LaunchRequest.PermissionMode`,
-  curator-spec Decision 0018 — the next item).
+  human's terminal, holding model selection, effort transport, the
+  optional typed permission-mode member (`LaunchRequest.PermissionMode`,
+  curator-spec Decision 0018 — the next item), and the caller's native
+  arguments forwarded verbatim after everything the module spells
+  (`LaunchRequest.NativeArgs` — the item after that).
   `BuildPlan` refuses an interactive request carrying a composition
   (`ErrCompositionNotInteractive`) or a goal, budget, service tier or prompt
   (`ErrParameterNotInteractive`), and holds every plugin to a detached stdin
@@ -98,6 +100,41 @@ The agentic-system plugin contract and its registry.
   composition is refused first (`ErrCompositionNotInteractive`) — so
   `ErrPermissionModeDuplicate` is the direct plugin `Argv` path's refusal for
   a composition prefix that already carries the flag, never de-duplicated.
+- The versioned provider-capability table (curator-spec Decision 0018
+  choices 3 and 6) keys (environment, tool release) to a permission-grammar
+  version. Each plugin holds its own environment's rows and
+  `LookupReleaseCapability` is the single reader; there is no central map
+  keyed by system id (the single-source guard forbids a second binding
+  table). The grammar version in force is `permission-grammar-v1`, the
+  token the launcher cites:
+
+  | environment | verified tool release | grammar | yolo |
+  |---|---|---|---|
+  | `claude-code` | 2.1.261 | `permission-grammar-v1` | `--dangerously-skip-permissions` |
+  | `codex` | 0.153.2 | `permission-grammar-v1` | `--dangerously-bypass-approvals-and-sandbox` |
+  | `pi` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
+  | `pi-native` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
+
+  The caller establishes the running release by probing the resolved binary
+  (`ProbeToolRelease`: `<binary> --version` against the launch environment —
+  fake binaries in tests, never a real provider) and passes it on
+  `LaunchRequest.ToolRelease`. On drift — an unpinned or newer release, or
+  none established at all — yolo fails closed first with
+  `ErrPermissionModeUnverifiedRelease`, while native still forwards verbatim
+  with no claims. `pi` has no probe (its binary is the agents-infra wrapper,
+  whose version is not pi's release), so yolo there without an explicitly
+  passed release refuses as unverified. Under yolo the plugin scans the
+  caller's `NativeArgs` against the looked-up release's closed grammar: an
+  unknown codex `-c` key or an unknown claude `--permission-mode` value is
+  refused as usage (`ErrNativePolicyUnknown`, which the caller maps to exit
+  2), never resolved into a policy claim; the mapped bypass flag in flag
+  position is refused as a duplicate. Native performs no inspection at all.
+  Prompt text is never parsed as a flag (`internal/nativeargs` owns the
+  rule): `--` ends flag parsing, a lone `-` and anything never dash-leading
+  are positional, and `=`-forms read as their flag. Known policy selectors
+  under yolo are classified but forwarded verbatim — Decision 0018 item 4's
+  conflict table is a later leaf, as is the launcher's headless detection
+  over the same arguments (F-L1).
 - `Registry` is the only place a system binding may live. `Register` is the
   only way one comes to exist, and it refuses a duplicate id, an id that does
   not normalize, an id that normalizes to a spelling other than itself, an id
@@ -162,7 +199,8 @@ proven against all four codex launch-surface goldens through the real
   dry-run mirror), the managed-session provider-args fragment, and the
   interactive session (`-m <model>` plus the effort override, plus
   `--dangerously-bypass-approvals-and-sandbox` exactly when the request carries
-  `yolo`). `argvguard_test.go` scans every non-test Go file in the module and
+  `yolo` at a verified tool release, plus the caller's verbatim native
+  suffix). `argvguard_test.go` scans every non-test Go file in the module and
   fails if a second site appears; it narrows itself onto the real `Args` to
   prove it can fire, holds nine mutant spellings, demonstrates its three
   declared-open residuals staying open, and counts the bypass flag's literal at
@@ -226,7 +264,8 @@ frozen RUNTIME id `claude`; `parity_test.go` maps between them in one place.
   silently drops a zero ceiling.
 - **One argv construction site**, guarded the same way codex's is and by the same
   scanner. The interactive session is `--model <id>` plus the effort flag, plus
-  `--dangerously-skip-permissions` exactly when the request carries `yolo`; the
+  `--dangerously-skip-permissions` exactly when the request carries `yolo` at a
+  verified tool release, plus the caller's verbatim native suffix; the
   flag literal occurs once in the plugin (the const both branches reference);
   the guard counts it module-wide at exactly two sites — this const and agy's
   pre-existing exec spelling — since the AST signature must keep excluding
@@ -326,10 +365,11 @@ Plugin id `pi-native`; the frozen runtimes that bind it are `pi-anthropic`,
 
 - **Interactive and dry-run only.** No exec grammar: headless Pi is the
   wrapper's, and a native `-p` run would be an unsupervised child. Exec is
-  refused with `ErrUnsupportedLaunchMode`. `yolo` is refused with
-  `ErrPermissionModeUnsupported`: pi 0.84.2 documents no permission-bypass
-  flag, and `--approve` trusts project-local files rather than bypassing
-  permissions.
+  refused with `ErrUnsupportedLaunchMode`. `yolo` at the verified pi 0.84.2 is
+  refused with `ErrPermissionModeUnsupported` — that release documents no
+  permission-bypass flag, and `--approve` trusts project-local files rather
+  than bypassing permissions — and yolo at any other release fails closed
+  earlier, as drift (`ErrPermissionModeUnverifiedRelease`).
 - **The model identity is always `<vendor>/<launch identity>`.** Pi 0.84.2
   resolves a bare id across every provider file and exits "ambiguous"; a
   wrong prefix falls to its custom-model path with a warning. The vendor is

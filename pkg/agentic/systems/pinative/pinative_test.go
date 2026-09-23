@@ -109,6 +109,7 @@ func TestTheInteractiveArgvIsTheQualifiedModelAndThinking(t *testing.T) {
 func TestAnInteractiveYoloLaunchIsRefusedAsUnsupported(t *testing.T) {
 	req, _ := request(t)
 	req.PermissionMode = agentic.PermissionModeYolo
+	req.ToolRelease = "0.84.2"
 	if _, err := buildPlan(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
 		t.Fatalf("BuildPlan err = %v, want ErrPermissionModeUnsupported", err)
 	}

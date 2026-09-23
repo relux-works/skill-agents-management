@@ -46,8 +46,9 @@ var codexArgvSignature = []string{
 }
 
 const (
-	codexArgsFile = "pkg/agentic/systems/codex/args.go"
-	codexEnvFile  = "pkg/agentic/systems/codex/env.go"
+	codexArgsFile   = "pkg/agentic/systems/codex/args.go"
+	codexEnvFile    = "pkg/agentic/systems/codex/env.go"
+	codexPolicyFile = "pkg/agentic/systems/codex/policy.go"
 )
 
 // codexArgvConstructionAllowlist names the only sites permitted to spell a
@@ -77,6 +78,19 @@ var codexArgvConstructionAllowlist = map[string]string{
 	// function the scanner may resolve it through, which is what the gate
 	// above holds: any other site spelling or referencing it is reported.
 	argvguard.AllowlistKey(codexArgsFile, "bypassApprovalsAndSandboxFlag"): "the single spelling of the bypass flag; the exec and interactive branches reference it rather than repeating the literal",
+	// The yolo scan's closed `-c` key set (curator-spec Decision 0018
+	// choice 3): data the scan classifies the caller's arguments
+	// against, never argv this plugin emits. It names the two keys Args
+	// itself spells because the closed set must recognize the module's
+	// own transports as known.
+	argvguard.AllowlistKey(codexPolicyFile, "knownConfigKeys"): "the closed -c/--config key set the yolo scan classifies against; classification data, not a construction",
+	// The yolo scan over caller native arguments: it reads the key set
+	// and the bypass const to COMPARE, and refuses or forwards — it
+	// appends no flag of its own, so a second construction hiding behind
+	// this exemption would have to spell a signature literal this
+	// function never emits.
+	argvguard.AllowlistKey(codexPolicyFile, "scanNativePolicy"):    "classifies caller native args against the closed key set under yolo; it references the table and the bypass const to compare, and constructs no argv",
+	argvguard.AllowlistKey(codexPolicyFile, "checkConfigOverride"): "the one-override half of the scan, split out so the separate, `=`, and attached-short forms share one classifier",
 }
 
 // moduleGoSources reads every non-test Go file this module's build compiles.

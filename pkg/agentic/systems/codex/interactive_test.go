@@ -265,6 +265,7 @@ func TestTheYoloArgvAppendsTheBypassFlagOnce(t *testing.T) {
 	workDir := tempSlot(t)
 	req := interactiveRequest(workDir)
 	req.PermissionMode = agentic.PermissionModeYolo
+	req.ToolRelease = "0.153.2"
 	plan, _ := interactivePlan(t, req, agentic.LaunchModeInteractive)
 
 	if want := []string{"-m", parityModel, "-c", `model_reasoning_effort="high"`, bypassApprovalsAndSandboxFlag}; !reflect.DeepEqual(plan.Argv, want) {
@@ -385,6 +386,7 @@ func TestTheYoloRefusalsAreNamedAndTotal(t *testing.T) {
 		// plugin's.
 		req := interactiveRequest(workDir)
 		req.PermissionMode = agentic.PermissionModeYolo
+		req.ToolRelease = "0.153.2"
 		req.Composition = agentic.Composition{Prefix: []string{"-c", `mcp_servers.board.url="http://127.0.0.1:9/mcp"`}}
 		argv, err := New().Argv(req, agentic.LaunchModeInteractive)
 		if err != nil {

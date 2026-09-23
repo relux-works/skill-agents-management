@@ -86,6 +86,10 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return nil, fmt.Errorf("claude: %w: permission mode %q is valid only for interactive launches",
 			agentic.ErrPermissionModeNotInteractive, strings.TrimSpace(string(req.PermissionMode)))
 	}
+	if mode != agentic.LaunchModeInteractive && len(req.NativeArgs) != 0 {
+		return nil, fmt.Errorf("claude: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
+			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
+	}
 	switch mode {
 	case agentic.LaunchModeExec, agentic.LaunchModeDryRun:
 	case agentic.LaunchModeInteractive:
@@ -142,21 +146,42 @@ func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode
 	args := []string{"--model", strings.TrimSpace(req.Model.ID)}
 	args = appendEffort(args, req)
 	if effective != agentic.PermissionModeYolo {
-		return args, nil
+		// Native forwards the caller's arguments with no inspection at
+		// all: the raw contract is unchanged and no claim is made over
+		// them (curator-spec Decision 0018 item 4).
+		return append(args, nativeArgsSuffix(req)...), nil
 	}
 	// Yolo appends the bypass flag AFTER model and effort, mirroring the exec
-	// grammar's relative order (model, effort, bypass) and landing before any
-	// prompt text — which this mode never carries. A composition prefix that
-	// already holds the flag is refused, not de-duplicated: through BuildPlan
-	// the composition is refused first anyway, so this fires for a caller
-	// holding the plugin directly, where it is the only line.
+	// grammar's relative order (model, effort, bypass) and landing before the
+	// caller's verbatim suffix (curator-spec Decision 0018 item 1). A
+	// composition prefix that already holds the flag is refused, not
+	// de-duplicated: through BuildPlan the composition is refused first
+	// anyway, so this fires for a caller holding the plugin directly,
+	// where it is the only line. It stays the first yolo check — an exact,
+	// release-independent match — so the capability lookup below only ever
+	// classifies requests this one admitted.
 	for _, arg := range req.Composition.Prefix {
 		if arg == bypassPermissionsFlag {
 			return nil, fmt.Errorf("claude: %w: the composition prefix already carries %q; refusing rather than emitting it twice",
 				agentic.ErrPermissionModeDuplicate, bypassPermissionsFlag)
 		}
 	}
-	return append(args, bypassPermissionsFlag), nil
+	// The capability lookup establishes the verified grammar before the
+	// scan classifies against it: an unpinned or newer release, and an
+	// empty one, fail closed here, and the scan below never reasons
+	// under a grammar no release verified.
+	row, err := agentic.LookupReleaseCapability(verifiedReleases, req.ToolRelease)
+	if err != nil {
+		return nil, fmt.Errorf("claude: %w", err)
+	}
+	if !row.YoloSupported {
+		return nil, fmt.Errorf("claude: refusing yolo: %w: tool release %q documents no bypass flag",
+			agentic.ErrPermissionModeUnsupported, row.Release)
+	}
+	if err := scanNativePolicy(req.NativeArgs); err != nil {
+		return nil, fmt.Errorf("claude: %w", err)
+	}
+	return append(append(args, bypassPermissionsFlag), nativeArgsSuffix(req)...), nil
 }
 
 // appendEffort appends the effort transport when an effort was requested. Both
@@ -181,4 +206,11 @@ func appendEffort(args []string, req agentic.LaunchRequest) []string {
 // launcher that appends to it.
 func compositionArgvPrefix(req agentic.LaunchRequest) []string {
 	return append([]string{}, req.Composition.Prefix...)
+}
+
+// nativeArgsSuffix returns the caller's native arguments for the verbatim
+// interactive suffix, copied for the same reason: the plan's argv must not
+// alias the request's backing array.
+func nativeArgsSuffix(req agentic.LaunchRequest) []string {
+	return append([]string{}, req.NativeArgs...)
 }
