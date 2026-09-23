@@ -97,7 +97,7 @@ func TestYoloRefusesDriftWithANamedDiagnostic(t *testing.T) {
 		if !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
 			t.Fatalf("err = %v, want ErrPermissionModeUnverifiedRelease", err)
 		}
-		for _, want := range []string{string(agentic.PermissionGrammarV1), "2.1.274", "2.1.261"} {
+		for _, want := range []string{string(agentic.PermissionGrammarV2), "2.1.274", "2.1.261"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("refusal %q does not name %q", err, want)
 			}
@@ -149,36 +149,116 @@ func TestYoloRefusesUnknownPermissionModes(t *testing.T) {
 	}
 }
 
-// The narrowing the closed set buys: every one of the six verified
-// values builds and forwards verbatim. The refusal above is the
-// UNKNOWN's, not a refusal of the flag.
-func TestYoloAdmitsTheSixVerifiedPermissionModes(t *testing.T) {
+// Every known permission mode conflicts with yolo in both argv forms.
+// Each row drives BuildPlan, and its native twin proves inspection is
+// mode-gated rather than shared with the forwarding path.
+func TestPermissionModeConflictMatrix(t *testing.T) {
 	t.Parallel()
 	workDir := tempSlot(t)
-	for _, mode := range []string{"acceptEdits", "auto", "bypassPermissions", "manual", "dontAsk", "plan"} {
-		t.Run(mode, func(t *testing.T) {
+	for _, value := range []string{"acceptEdits", "auto", "bypassPermissions", "manual", "dontAsk", "plan"} {
+		for _, form := range []struct {
+			name      string
+			args      []string
+			placement agentic.NativePolicyPlacement
+		}{
+			{"separate-token", []string{"--permission-mode", value}, agentic.NativePolicyPlacementSeparateToken},
+			{"equals", []string{"--permission-mode=" + value}, agentic.NativePolicyPlacementEquals},
+		} {
+			t.Run(value+"/"+form.name, func(t *testing.T) {
+				req := interactiveRequest(workDir)
+				req.PermissionMode = agentic.PermissionModeYolo
+				req.ToolRelease = "2.1.261"
+				req.NativeArgs = form.args
+				err := planErrorFor(t, req, agentic.LaunchModeInteractive)
+				assertNativePolicyConflict(t, err, "--permission-mode", form.placement)
+			})
+			t.Run("native/"+value+"/"+form.name, func(t *testing.T) {
+				req := interactiveRequest(workDir)
+				req.PermissionMode = agentic.PermissionModeNative
+				req.ToolRelease = "2.1.261"
+				req.NativeArgs = form.args
+				got := argvFor(t, req, agentic.LaunchModeInteractive)
+				want := append([]string{"--model", parityModel, "--effort", parityEffort}, form.args...)
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("Argv = %#v, want %#v", got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestOtherKnownClaudePolicyConflicts(t *testing.T) {
+	t.Parallel()
+	workDir := tempSlot(t)
+	rows := []struct {
+		name      string
+		selector  string
+		placement agentic.NativePolicyPlacement
+		args      []string
+		duplicate bool
+	}{
+		{"allow-bypass flag", allowDangerouslySkipPermissionsFlag, agentic.NativePolicyPlacementFlag, []string{allowDangerouslySkipPermissionsFlag}, false},
+		{"allow-bypass equals", allowDangerouslySkipPermissionsFlag, agentic.NativePolicyPlacementEquals, []string{allowDangerouslySkipPermissionsFlag + "=true"}, false},
+		{"restricted flag", restrictedFlag, agentic.NativePolicyPlacementFlag, []string{restrictedFlag}, false},
+		{"restricted equals", restrictedFlag, agentic.NativePolicyPlacementEquals, []string{restrictedFlag + "=true"}, false},
+		{"mapped bypass flag", bypassPermissionsFlag, agentic.NativePolicyPlacementFlag, []string{bypassPermissionsFlag}, true},
+		{"mapped bypass equals", bypassPermissionsFlag, agentic.NativePolicyPlacementEquals, []string{bypassPermissionsFlag + "=true"}, true},
+	}
+	for _, row := range rows {
+		t.Run("yolo/"+row.name, func(t *testing.T) {
 			req := interactiveRequest(workDir)
 			req.PermissionMode = agentic.PermissionModeYolo
 			req.ToolRelease = "2.1.261"
-			req.NativeArgs = []string{"--permission-mode", mode}
+			req.NativeArgs = row.args
+			err := planErrorFor(t, req, agentic.LaunchModeInteractive)
+			if row.duplicate {
+				if !errors.Is(err, agentic.ErrPermissionModeDuplicate) {
+					t.Fatalf("BuildPlan err = %v, want ErrPermissionModeDuplicate", err)
+				}
+				return
+			}
+			assertNativePolicyConflict(t, err, row.selector, row.placement)
+		})
+		t.Run("native/"+row.name, func(t *testing.T) {
+			req := interactiveRequest(workDir)
+			req.PermissionMode = agentic.PermissionModeNative
+			req.ToolRelease = "2.1.261"
+			req.NativeArgs = row.args
 			got := argvFor(t, req, agentic.LaunchModeInteractive)
-			want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag, "--permission-mode", mode}
+			want := append([]string{"--model", parityModel, "--effort", parityEffort}, row.args...)
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("Argv = %#v, want %#v", got, want)
 			}
 		})
 	}
-	t.Run("and in equals form", func(t *testing.T) {
-		req := interactiveRequest(workDir)
-		req.PermissionMode = agentic.PermissionModeYolo
-		req.ToolRelease = "2.1.261"
-		req.NativeArgs = []string{"--permission-mode=manual"}
-		got := argvFor(t, req, agentic.LaunchModeInteractive)
-		want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag, "--permission-mode=manual"}
-		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("Argv = %#v, want %#v", got, want)
-		}
-	})
+}
+
+func TestYoloForwardsKnownNonConflictingClaudeSelectors(t *testing.T) {
+	t.Parallel()
+	workDir := tempSlot(t)
+	req := interactiveRequest(workDir)
+	req.PermissionMode = agentic.PermissionModeYolo
+	req.ToolRelease = "2.1.261"
+	req.NativeArgs = []string{"--debug", "--verbose", "-d"}
+	got := argvFor(t, req, agentic.LaunchModeInteractive)
+	want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag, "--debug", "--verbose", "-d"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Argv = %#v, want %#v", got, want)
+	}
+}
+
+func assertNativePolicyConflict(t *testing.T, err error, selector string, placement agentic.NativePolicyPlacement) {
+	t.Helper()
+	if !errors.Is(err, agentic.ErrNativePolicyConflict) {
+		t.Fatalf("BuildPlan err = %v, want ErrNativePolicyConflict", err)
+	}
+	var conflict *agentic.NativePolicyConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("BuildPlan err %T does not contain NativePolicyConflictError", err)
+	}
+	if conflict.Selector != selector || conflict.Placement != placement {
+		t.Fatalf("conflict = %+v, want selector %q placement %q", conflict, selector, placement)
+	}
 }
 
 // The parsing rule, both directions: the same flag-looking text is

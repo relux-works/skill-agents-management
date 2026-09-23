@@ -103,6 +103,16 @@ func TestLookupReleaseCapabilityReadsOneRowPerRelease(t *testing.T) {
 			t.Errorf("row = %+v, want the 2.1.261 row with grammar v1 and yolo supported", row)
 		}
 	})
+	t.Run("the expanded refusal grammar is implemented", func(t *testing.T) {
+		v2 := []ReleaseCapability{{Release: "2.1.273", Grammar: PermissionGrammarV2, YoloSupported: true}}
+		row, err := LookupReleaseCapability(v2, "2.1.273")
+		if err != nil {
+			t.Fatalf("LookupReleaseCapability: %v", err)
+		}
+		if row.Grammar != PermissionGrammarV2 || !row.YoloSupported {
+			t.Errorf("row = %+v, want grammar v2 with yolo supported", row)
+		}
+	})
 	t.Run("surrounding whitespace trims, near-misses refuse", func(t *testing.T) {
 		if _, err := LookupReleaseCapability(rows, "  2.1.261\t"); err != nil {
 			t.Errorf("a trimmable release was refused: %v", err)
@@ -134,13 +144,9 @@ func TestLookupReleaseCapabilityReadsOneRowPerRelease(t *testing.T) {
 		}
 	})
 	t.Run("a row naming an unimplemented grammar selects no mapping", func(t *testing.T) {
-		// Helper-direct and disclosed as a bound: every production row
-		// names PermissionGrammarV1, so no BuildPlan input reaches this
-		// branch today. It is the fail-closed half of "rows naming a new
-		// grammar ship with the code that implements it" — a v2 row
-		// meeting v1 code refuses rather than classifying under a
-		// grammar the scan does not know.
-		future := []ReleaseCapability{{Release: "3.0.0", Grammar: "permission-grammar-v2", YoloSupported: true}}
+		// Helper-direct and disclosed as a bound: this synthetic row names
+		// a future grammar that the current scanners do not implement.
+		future := []ReleaseCapability{{Release: "3.0.0", Grammar: "permission-grammar-v3", YoloSupported: true}}
 		_, err := LookupReleaseCapability(future, "3.0.0")
 		if !errors.Is(err, ErrPermissionModeUnverifiedRelease) {
 			t.Fatalf("err = %v, want ErrPermissionModeUnverifiedRelease", err)

@@ -20,7 +20,7 @@ import (
 // until it is re-verified, and yolo there fails closed while native
 // forwards verbatim.
 var verifiedReleases = []agentic.ReleaseCapability{
-	{Release: "0.153.2", Grammar: agentic.PermissionGrammarV1, YoloSupported: true},
+	{Release: "0.153.2", Grammar: agentic.PermissionGrammarV2, YoloSupported: true},
 }
 
 // configFlag and configFlagLong are the two spellings of the config
@@ -33,7 +33,7 @@ const (
 
 // knownConfigKeys is the closed `-c`/`--config` key set at the pinned
 // release. Two keys are this module's own transports (args.go spells
-// both); three are Decision 0018 item 4's policy keys; the
+// both); three are Decision 0018 item 4's conflicting policy keys; the
 // `mcp_servers.` shape below is the composition grammar's
 // (composition.go), which a caller may also override directly. Any
 // other key is an unknown native policy form: a `-c` override reaches
@@ -47,6 +47,11 @@ var knownConfigKeys = map[string]bool{
 	"sandbox_permissions":    true,
 }
 
+var knownApprovalValues = map[string]bool{"on-request": true, "never": true}
+var knownSandboxValues = map[string]bool{"read-only": true, "workspace-write": true, "danger-full-access": true}
+
+const approveForMeFlag = "--approve-for-me"
+
 // mcpServersKeyPrefix admits the composition-evidenced config shape:
 // `mcp_servers.<server>.<field>` overrides name MCP servers the same
 // way the composition prefix does, so they are known — and forwarded
@@ -59,50 +64,113 @@ const mcpServersKeyPrefix = "mcp_servers."
 // after `--`, or never dash-leading — is never classified, however
 // flag-like it reads.
 //
-// A `-c`/`--config` key outside the known set, in separate, `=`, or
-// attached-short (`-ckey=value`) form, is an unknown policy form
-// (ErrNativePolicyUnknown, which the caller maps to usage exit 2): the
-// module cannot vouch for a bypass flag beside a config override it
-// cannot name. So is a malformed override — a missing value, or a value
-// without `key=`: unclassifiable fails closed. The mapped bypass flag
-// in a flag position is a duplicate (ErrPermissionModeDuplicate), in
-// exact or `=` form: the plan would otherwise emit it twice.
+// Decision 0018 conflicts are refused with NativePolicyConflictError:
+// `-a`/`--ask-for-approval`, `-s`/`--sandbox`, `--approve-for-me`, every
+// `--dangerously-bypass-*` selector, and the three policy config keys.
+// Option values are checked against the pinned closed values before a
+// conflict is returned. Unknown values, malformed config overrides and
+// unknown config keys fail closed with ErrNativePolicyUnknown. The
+// module-mapped bypass flag retains ErrPermissionModeDuplicate.
 //
-// Everything else is forwarded verbatim with no claim: known keys
-// (whose conflicts with yolo are Decision 0018 item 4's table, a later
-// leaf — this scan classifies, it does not refuse them), and unknown
-// top-level flags, which the provider refuses itself (`error:
-// unexpected argument`) and which would break benign forward
-// compatibility if this layer refused them.
+// Everything else is forwarded verbatim with no claim, including known
+// non-conflicting config keys and unknown top-level flags. The scan only
+// reads flag positions supplied by nativeargs.FlagIndexes, so `exec`
+// placement is visible while text after `--` remains prompt.
 func scanNativePolicy(args []string) error {
 	for _, i := range nativeargs.FlagIndexes(args) {
 		el := args[i]
 		name, value, hasValue := nativeargs.SplitFlagValue(el)
 		if name == configFlagLong || name == configFlag {
 			override := value
+			placement := agentic.NativePolicyPlacementEquals
 			if !hasValue {
-				if i+1 >= len(args) {
+				if i+1 >= len(args) || args[i+1] == "--" {
 					return fmt.Errorf("%w: %s expects a key=value override and the arguments end there", agentic.ErrNativePolicyUnknown, name)
 				}
 				override = args[i+1]
+				placement = agentic.NativePolicyPlacementSeparateToken
 			}
 			if err := checkConfigOverride(override); err != nil {
 				return err
 			}
-			continue
-		}
-		if isAttachedConfigValue(el) {
-			if err := checkConfigOverride(strings.TrimPrefix(el, configFlag)); err != nil {
-				return err
+			key, _, _ := strings.Cut(override, "=")
+			if isConflictingConfigKey(key) {
+				return &agentic.NativePolicyConflictError{Selector: key, Placement: placement}
 			}
 			continue
 		}
-		if el == bypassApprovalsAndSandboxFlag || strings.HasPrefix(el, bypassApprovalsAndSandboxFlag+"=") {
+		if isAttachedConfigValue(el) {
+			override := strings.TrimPrefix(el, configFlag)
+			if err := checkConfigOverride(override); err != nil {
+				return err
+			}
+			key, _, _ := strings.Cut(override, "=")
+			if isConflictingConfigKey(key) {
+				return &agentic.NativePolicyConflictError{Selector: key, Placement: agentic.NativePolicyPlacementAttachedShort}
+			}
+			continue
+		}
+		if name == "-a" || name == "--ask-for-approval" {
+			optionValue, placement, err := nativePolicyOptionValue(args, i, value, hasValue, name)
+			if err != nil {
+				return err
+			}
+			if !knownApprovalValues[optionValue] {
+				return fmt.Errorf("%w: %s value %q is not one of the values verified under %s", agentic.ErrNativePolicyUnknown, name, optionValue, agentic.PermissionGrammarV2)
+			}
+			return &agentic.NativePolicyConflictError{Selector: name, Placement: placement}
+		}
+		if name == "-s" || name == "--sandbox" {
+			optionValue, placement, err := nativePolicyOptionValue(args, i, value, hasValue, name)
+			if err != nil {
+				return err
+			}
+			if !knownSandboxValues[optionValue] {
+				return fmt.Errorf("%w: %s value %q is not one of the values verified under %s", agentic.ErrNativePolicyUnknown, name, optionValue, agentic.PermissionGrammarV2)
+			}
+			return &agentic.NativePolicyConflictError{Selector: name, Placement: placement}
+		}
+		if name == approveForMeFlag {
+			return &agentic.NativePolicyConflictError{Selector: name, Placement: nativePolicyFlagPlacement(hasValue)}
+		}
+		if name == bypassApprovalsAndSandboxFlag {
 			return fmt.Errorf("%w: the native arguments already carry %q; refusing rather than emitting it twice",
 				agentic.ErrPermissionModeDuplicate, bypassApprovalsAndSandboxFlag)
 		}
+		if strings.HasPrefix(name, "--dangerously-bypass-") {
+			return &agentic.NativePolicyConflictError{Selector: name, Placement: nativePolicyFlagPlacement(hasValue)}
+		}
 	}
 	return nil
+}
+
+func nativePolicyOptionValue(args []string, index int, value string, hasValue bool, selector string) (string, agentic.NativePolicyPlacement, error) {
+	if hasValue {
+		if value == "" {
+			return "", "", fmt.Errorf("%w: %s requires a value", agentic.ErrNativePolicyUnknown, selector)
+		}
+		return value, agentic.NativePolicyPlacementEquals, nil
+	}
+	if index+1 >= len(args) || args[index+1] == "--" || nativeargs.IsFlagElement(args[index+1]) {
+		return "", "", fmt.Errorf("%w: %s expects a value and the arguments end there", agentic.ErrNativePolicyUnknown, selector)
+	}
+	return args[index+1], agentic.NativePolicyPlacementSeparateToken, nil
+}
+
+func nativePolicyFlagPlacement(hasValue bool) agentic.NativePolicyPlacement {
+	if hasValue {
+		return agentic.NativePolicyPlacementEquals
+	}
+	return agentic.NativePolicyPlacementFlag
+}
+
+func isConflictingConfigKey(key string) bool {
+	switch key {
+	case "approval_policy", "sandbox_mode", "sandbox_permissions":
+		return true
+	default:
+		return false
+	}
 }
 
 // isAttachedConfigValue reports whether el is `-c` with its override
@@ -128,7 +196,7 @@ func checkConfigOverride(override string) error {
 		return fmt.Errorf("%w: malformed codex -c key %q", agentic.ErrNativePolicyUnknown, key)
 	}
 	if !knownConfigKeys[key] && !strings.HasPrefix(key, mcpServersKeyPrefix) {
-		return fmt.Errorf("%w: codex -c key %q is not one of the keys verified under %s", agentic.ErrNativePolicyUnknown, key, agentic.PermissionGrammarV1)
+		return fmt.Errorf("%w: codex -c key %q is not one of the keys verified under %s", agentic.ErrNativePolicyUnknown, key, agentic.PermissionGrammarV2)
 	}
 	return nil
 }

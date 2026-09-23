@@ -83,7 +83,8 @@ var codexArgvConstructionAllowlist = map[string]string{
 	// against, never argv this plugin emits. It names the two keys Args
 	// itself spells because the closed set must recognize the module's
 	// own transports as known.
-	argvguard.AllowlistKey(codexPolicyFile, "knownConfigKeys"): "the closed -c/--config key set the yolo scan classifies against; classification data, not a construction",
+	argvguard.AllowlistKey(codexPolicyFile, "knownConfigKeys"):    "the closed -c/--config key set the yolo scan classifies against; classification data, not a construction",
+	argvguard.AllowlistKey(codexPolicyFile, "knownSandboxValues"): "the pinned -s/--sandbox value set the yolo scan classifies against; classification data, not a construction",
 	// The yolo scan over caller native arguments: it reads the key set
 	// and the bypass const to COMPARE, and refuses or forwards — it
 	// appends no flag of its own, so a second construction hiding behind

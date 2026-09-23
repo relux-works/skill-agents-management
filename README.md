@@ -77,7 +77,7 @@ The agentic-system plugin contract and its registry.
   (curator-spec Decision 0013 §5) — the complete argv a launcher hands to a
   human's terminal, holding model selection, effort transport, the
   optional typed permission-mode member (`LaunchRequest.PermissionMode`,
-  curator-spec Decision 0018 — the next item), and the caller's native
+  curator-spec Decision 0018), and the caller's native
   arguments forwarded verbatim after everything the module spells
   (`LaunchRequest.NativeArgs` — the item after that).
   `BuildPlan` refuses an interactive request carrying a composition
@@ -98,20 +98,32 @@ The agentic-system plugin contract and its registry.
   launches (`ErrPermissionModeNotInteractive`). A yolo launch carrying any
   composition never reaches the duplicate check through `BuildPlan` — the
   composition is refused first (`ErrCompositionNotInteractive`) — so
-  `ErrPermissionModeDuplicate` is the direct plugin `Argv` path's refusal for
-  a composition prefix that already carries the flag, never de-duplicated.
+  `ErrPermissionModeDuplicate` catches a duplicated native bypass flag in
+  `BuildPlan` and a duplicated composition prefix through direct plugin
+  `Argv`, never de-duplicating either. Claude and Codex refuse known conflicting
+  native policy selectors under yolo with `ErrNativePolicyConflict`; callers
+  can use `errors.As` to read `NativePolicyConflictError.Selector` and
+  `.Placement`. This includes Claude `--permission-mode` (all six verified
+  values), `--allow-dangerously-skip-permissions`, and `--restricted`, plus
+  Codex `-a`/`--ask-for-approval`, `-s`/`--sandbox`, `--approve-for-me`, every
+  `--dangerously-bypass-*` flag, and `-c`/`--config` keys `approval_policy`,
+  `sandbox_mode`, and `sandbox_permissions`. Codex selectors are checked both
+  at top level and after `exec`. Native mode performs no argv inspection and
+  forwards the raw arguments unchanged; known non-conflicting selectors keep
+  forwarding under yolo.
 - The versioned provider-capability table (curator-spec Decision 0018
   choices 3 and 6) keys (environment, tool release) to a permission-grammar
   version. Each plugin holds its own environment's rows and
   `LookupReleaseCapability` is the single reader; there is no central map
   keyed by system id (the single-source guard forbids a second binding
-  table). The grammar version in force is `permission-grammar-v1`, the
-  token the launcher cites:
+  table). Claude and Codex use `permission-grammar-v2`, which adds the known
+  conflict selectors above; Pi keeps `permission-grammar-v1`. The token is
+  passed through the capability row for the launcher to cite:
 
   | environment | verified tool release | grammar | yolo |
   |---|---|---|---|
-  | `claude-code` | 2.1.261 | `permission-grammar-v1` | `--dangerously-skip-permissions` |
-  | `codex` | 0.153.2 | `permission-grammar-v1` | `--dangerously-bypass-approvals-and-sandbox` |
+  | `claude-code` | 2.1.261 | `permission-grammar-v2` | `--dangerously-skip-permissions` |
+  | `codex` | 0.153.2 | `permission-grammar-v2` | `--dangerously-bypass-approvals-and-sandbox` |
   | `pi` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
   | `pi-native` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
 
@@ -128,13 +140,15 @@ The agentic-system plugin contract and its registry.
   unknown codex `-c` key or an unknown claude `--permission-mode` value is
   refused as usage (`ErrNativePolicyUnknown`, which the caller maps to exit
   2), never resolved into a policy claim; the mapped bypass flag in flag
-  position is refused as a duplicate. Native performs no inspection at all.
+  position is refused as a duplicate. A known conflicting selector is refused
+  with `ErrNativePolicyConflict`; invalid values and unknown selectors remain
+  fail-closed through `ErrNativePolicyUnknown`. Native performs no inspection
+  at all.
   Prompt text is never parsed as a flag (`internal/nativeargs` owns the
   rule): `--` ends flag parsing, a lone `-` and anything never dash-leading
-  are positional, and `=`-forms read as their flag. Known policy selectors
-  under yolo are classified but forwarded verbatim — Decision 0018 item 4's
-  conflict table is a later leaf, as is the launcher's headless detection
-  over the same arguments (F-L1).
+  are positional, and `=`-forms read as their flag. Known non-conflicting
+  policy selectors are still forwarded. Launcher headless detection over the
+  same arguments remains F-L1.
 - `Registry` is the only place a system binding may live. `Register` is the
   only way one comes to exist, and it refuses a duplicate id, an id that does
   not normalize, an id that normalizes to a spelling other than itself, an id

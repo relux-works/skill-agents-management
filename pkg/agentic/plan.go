@@ -146,11 +146,16 @@ var (
 	ErrPermissionModeUnsupported = errors.New("agentic: system maps no permission-mode bypass flag")
 	// ErrPermissionModeDuplicate is returned, by the plugin, when an
 	// interactive yolo launch already carries the mapped bypass flag in its
-	// composition prefix. It is refused rather than de-duplicated: a second
+	// composition prefix or native arguments. It is refused rather than de-duplicated: a second
 	// spelling of one flag is either a caller that meant native and a yolo
 	// that should not have been set, or the reverse, and the plugin cannot
 	// tell which.
-	ErrPermissionModeDuplicate = errors.New("agentic: permission-mode bypass flag already present in the launch composition prefix")
+	ErrPermissionModeDuplicate = errors.New("agentic: permission-mode bypass flag already present in launch arguments")
+	// ErrNativePolicyConflict is returned when yolo is paired with a native
+	// selector that changes or constrains the same permission posture. Callers
+	// can use errors.Is for stable classification and errors.As to recover the
+	// selector and argv placement from NativePolicyConflictError.
+	ErrNativePolicyConflict = errors.New("agentic: native policy selector conflicts with yolo permission mode")
 	// ErrPermissionModeUnverifiedRelease is returned, by the plugin, when
 	// an interactive launch requests yolo and the tool release on the
 	// request is not a verified row of that system's capability table:
@@ -187,6 +192,35 @@ var (
 	// half-formed launch downstream.
 	ErrPluginContract = errors.New("agentic: system violated the plugin contract")
 )
+
+// NativePolicyPlacement identifies how a native policy selector reached the
+// provider grammar. These values are stable so launchers can report the
+// offending spelling without parsing an error string.
+type NativePolicyPlacement string
+
+const (
+	NativePolicyPlacementFlag          NativePolicyPlacement = "flag"
+	NativePolicyPlacementEquals        NativePolicyPlacement = "equals"
+	NativePolicyPlacementSeparateToken NativePolicyPlacement = "separate-token"
+	NativePolicyPlacementAttachedShort NativePolicyPlacement = "attached-short"
+)
+
+// NativePolicyConflictError carries the native selector and the argv form
+// that conflicted with yolo. It unwraps to ErrNativePolicyConflict, so callers
+// may use errors.Is for stable classification and errors.As for details.
+type NativePolicyConflictError struct {
+	Selector  string
+	Placement NativePolicyPlacement
+}
+
+func (e *NativePolicyConflictError) Error() string {
+	if e == nil {
+		return ErrNativePolicyConflict.Error()
+	}
+	return fmt.Sprintf("%s: selector %q in %s form", ErrNativePolicyConflict, e.Selector, e.Placement)
+}
+
+func (e *NativePolicyConflictError) Unwrap() error { return ErrNativePolicyConflict }
 
 // refuseNonInteractiveParameters is the interactive grammar's request-side
 // half, applied once here so that no plugin has to carry its own copy of the

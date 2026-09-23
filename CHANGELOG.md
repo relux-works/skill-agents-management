@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## Unreleased — v0.5.20
 
 - Retire the `ultra` effort word everywhere. No row declares it any more
   (gpt-6-astra/astra, gpt-6-sol/sol, gpt-5.6-sol, gpt-5.6-terra and
@@ -20,12 +20,14 @@
 
 - Add the versioned provider-capability table keyed (environment, tool
   release) to a permission-grammar version (curator-spec Decision 0018
-  choices 3 and 6; expected release v0.5.18 (v0.5.17 carried the 2026-09-22 model declarations), tag cut by the orchestrator).
+  choices 3 and 6; expected release v0.5.20, tag cut by the orchestrator).
   Each plugin holds its own environment's rows — `claude-code` 2.1.261,
   `codex` 0.153.2, `pi`/`pi-native` 0.84.2 (unsupported) — and
   `LookupReleaseCapability` is the single reader. The grammar version in
-  force is `permission-grammar-v1`, the token the launcher must cite; a
-  row naming a grammar this module does not implement selects no mapping.
+  force is `permission-grammar-v2` for Claude and Codex (it adds Decision
+  0018's known conflict selectors) and `permission-grammar-v1` for Pi, the
+  token the launcher must cite; a row naming an unsupported grammar selects
+  no mapping.
   The caller establishes the running release with `ProbeToolRelease`
   (`<binary> --version` against the launch environment; `pi` has no
   probe because its binary is the wrapper) and passes it on the new
@@ -36,14 +38,22 @@
   outside interactive launches with `ErrNativeArgsNotInteractive`) are
   forwarded verbatim after the module-spelled argv, so the yolo bypass
   flag lands before them; under yolo the plugin scans flag positions
-  against the looked-up release's closed grammar and refuses an unknown
-  codex `-c` key or an unknown claude `--permission-mode` value as usage
-  (`ErrNativePolicyUnknown`, which the caller maps to exit 2), never
-  resolved into a policy claim, while native performs no inspection at
-  all. Prompt text is never parsed as a flag (`internal/nativeargs` owns
-  the rule: `--` ends flag parsing, `=`-forms read as their flag).
-  Known policy selectors under yolo are forwarded verbatim — Decision
-  0018 item 4's conflict table is a later leaf.
+  against the looked-up release's closed grammar and refuses unknown or
+  malformed policy forms with `ErrNativePolicyUnknown`. It refuses known
+  conflicting selectors with `ErrNativePolicyConflict` and an exported
+  `NativePolicyConflictError` carrying the selector and placement: Claude
+  `--permission-mode`, `--allow-dangerously-skip-permissions`,
+  `--restricted`; Codex
+  `-a`/`--ask-for-approval`, `-s`/`--sandbox`, `--approve-for-me`, every
+  `--dangerously-bypass-*` selector except the module-mapped bypass flag,
+  which retains `ErrPermissionModeDuplicate`, and `-c`/`--config` keys
+  `approval_policy`, `sandbox_mode`, and `sandbox_permissions`. The rows
+  test equals and separate-token forms for value-taking selectors and bare
+  and equals forms for boolean flags, plus Codex's `exec` placement.
+  Native performs no argv inspection, and known non-conflicting selectors
+  remain forwarded. Prompt text is never parsed as a flag
+  (`internal/nativeargs` owns the rule: `--` ends flag parsing, `=`-forms
+  read as their flag).
 - Declare the 2026-09-22 heads and their floating short spellings:
   `gpt-6-sol` (+ alias `sol`) and `gpt-6-luna` (+ alias `luna`) in `openai`,
   `claude-opus-5-5` (+ alias `opus`) in `anthropic`. All six rows are declared

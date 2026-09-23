@@ -2,7 +2,6 @@ package claude
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/relux-works/skill-agents-management/internal/nativeargs"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
@@ -20,13 +19,18 @@ import (
 // included — has no row until it is re-verified, and yolo there fails
 // closed while native forwards verbatim.
 var verifiedReleases = []agentic.ReleaseCapability{
-	{Release: "2.1.261", Grammar: agentic.PermissionGrammarV1, YoloSupported: true},
+	{Release: "2.1.261", Grammar: agentic.PermissionGrammarV2, YoloSupported: true},
 }
 
 // permissionModeFlag is the session policy selector whose VALUES are
 // closed under the pinned grammar. The flag itself is spelled here once,
 // for the scan to recognize in either value form.
 const permissionModeFlag = "--permission-mode"
+
+const (
+	allowDangerouslySkipPermissionsFlag = "--allow-dangerously-skip-permissions"
+	restrictedFlag                      = "--restricted"
+)
 
 // knownPermissionModes is the closed `--permission-mode` value set at
 // the pinned release: the six choices `claude --help` lists
@@ -49,40 +53,45 @@ var knownPermissionModes = map[string]bool{
 // after `--`, or never dash-leading — is never classified, however
 // flag-like it reads.
 //
-// Two forms refuse. A `--permission-mode` value outside the known six,
-// in separate or `=` form, is an unknown policy form
-// (ErrNativePolicyUnknown, which the caller maps to usage exit 2): the
-// module cannot vouch for a bypass flag beside a mode it cannot name.
-// The mapped bypass flag in a flag position is a duplicate
-// (ErrPermissionModeDuplicate), in exact or `=` form: the plan would
-// otherwise emit it twice, once mapped and once forwarded.
+// Known `--permission-mode` values, `--allow-dangerously-skip-permissions`,
+// and `--restricted` conflict with yolo and are refused with a typed error.
+// A value outside the six known permission modes remains an unknown policy
+// form: the module cannot vouch for a bypass flag beside a mode it cannot
+// name. The mapped bypass flag remains the duplicate refusal, in exact or
+// `=` form, because the plan would otherwise emit it twice.
 //
-// Everything else is forwarded verbatim with no claim: known modes
-// (whose conflicts with yolo are Decision 0018 item 4's table, a later
-// leaf — this scan classifies, it does not refuse them), and unknown
-// top-level flags, which the provider refuses or ignores itself and
-// which would break benign forward compatibility if this layer refused
-// them.
+// Everything else is forwarded verbatim with no claim, including unknown
+// top-level flags. Flag positions come only from nativeargs.FlagIndexes, so
+// prompt text after `--` is not inspected.
 func scanNativePolicy(args []string) error {
 	for _, i := range nativeargs.FlagIndexes(args) {
 		el := args[i]
 		name, value, hasValue := nativeargs.SplitFlagValue(el)
 		if name == permissionModeFlag {
 			mode := value
+			placement := agentic.NativePolicyPlacementEquals
 			if !hasValue {
-				if i+1 >= len(args) {
+				if i+1 >= len(args) || args[i+1] == "--" {
 					return fmt.Errorf("%w: %s expects a mode value and the arguments end there", agentic.ErrNativePolicyUnknown, permissionModeFlag)
 				}
 				mode = args[i+1]
+				placement = agentic.NativePolicyPlacementSeparateToken
 			}
 			if !knownPermissionModes[mode] {
-				return fmt.Errorf("%w: %s mode %q is not one of the six verified under %s", agentic.ErrNativePolicyUnknown, permissionModeFlag, mode, agentic.PermissionGrammarV1)
+				return fmt.Errorf("%w: %s mode %q is not one of the six verified under %s", agentic.ErrNativePolicyUnknown, permissionModeFlag, mode, agentic.PermissionGrammarV2)
 			}
-			continue
+			return &agentic.NativePolicyConflictError{Selector: name, Placement: placement}
 		}
-		if el == bypassPermissionsFlag || strings.HasPrefix(el, bypassPermissionsFlag+"=") {
+		if name == bypassPermissionsFlag {
 			return fmt.Errorf("%w: the native arguments already carry %q; refusing rather than emitting it twice",
 				agentic.ErrPermissionModeDuplicate, bypassPermissionsFlag)
+		}
+		if name == allowDangerouslySkipPermissionsFlag || name == restrictedFlag {
+			placement := agentic.NativePolicyPlacementFlag
+			if hasValue {
+				placement = agentic.NativePolicyPlacementEquals
+			}
+			return &agentic.NativePolicyConflictError{Selector: name, Placement: placement}
 		}
 	}
 	return nil
