@@ -149,6 +149,41 @@ The agentic-system plugin contract and its registry.
   are positional, and `=`-forms read as their flag. Known non-conflicting
   policy selectors are still forwarded. Launcher headless detection over the
   same arguments remains F-L1.
+
+#### Permission-mode: stored-policy inspection
+
+`agentic.InspectStoredPolicy(system, plan)` returns known relaxations with
+their selector and source path, every source it fully inspected, and every
+candidate source it could not inspect. It uses only `plan.Env`, `plan.Home`
+and `plan.WorkDir`; relative config roots resolve against `plan.WorkDir`. It
+does not read ambient environment or the current directory. A reported
+relaxation is a stored value, not a claim that precedence made it active. The
+result does not resolve precedence between files or include policy the process
+did not expose.
+
+- **Claude Code** reads `$CLAUDE_CONFIG_DIR/settings.json` when
+  `CLAUDE_CONFIG_DIR` is present; otherwise it reads `plan.Home/settings.json`,
+  falling back to `$HOME/.claude/settings.json`. It also reads
+  `plan.WorkDir/.claude/settings.json` and
+  `plan.WorkDir/.claude/settings.local.json`. It reports
+  `permissions.defaultMode` values `acceptEdits`, `auto` and
+  `bypassPermissions`, each non-empty `permissions.allow` rule, and each
+  non-empty `permissions.additionalDirectories` entry. System, MDM, server and
+  embedding-host managed settings have no source path in the launch plan, so
+  the result marks them not provided.
+- **Codex** reads `$CODEX_HOME/config.toml` when `CODEX_HOME` is present;
+  otherwise it reads `plan.Home/config.toml`, falling back to
+  `$HOME/.codex/config.toml`. It also reads
+  `plan.WorkDir/.codex/config.toml`. When the user config selects a `profile`,
+  it reads `<profile>.config.toml` under the Codex config root. It reports
+  `approval_policy = "never"`, `sandbox_mode = "workspace-write"` or
+  `"danger-full-access"`, and non-empty `sandbox_permissions`.
+  System-managed settings and requirements are not provided through the plan
+  and remain visible as not inspected.
+- **Pi** reports stored-policy inspection as unsupported.
+
+An absent file, unreadable file, malformed file, unavailable root or unavailable selected profile is listed under `sources_not_inspected` with its reason. Such a source never counts as clean; callers must read the result as bounded to the sources listed under `sources_inspected`.
+
 - `Registry` is the only place a system binding may live. `Register` is the
   only way one comes to exist, and it refuses a duplicate id, an id that does
   not normalize, an id that normalizes to a spelling other than itself, an id

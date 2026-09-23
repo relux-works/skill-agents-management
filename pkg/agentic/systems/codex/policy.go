@@ -50,6 +50,14 @@ var knownConfigKeys = map[string]bool{
 var knownApprovalValues = map[string]bool{"on-request": true, "never": true}
 var knownSandboxValues = map[string]bool{"read-only": true, "workspace-write": true, "danger-full-access": true}
 
+// classifyStoredSandboxMode separates the recognized stored values from the
+// ones that relax the sandbox. Keeping the provider's closed value set here
+// avoids a second spelling in the settings inspector.
+func classifyStoredSandboxMode(mode string) (known, relaxing bool) {
+	known = knownSandboxValues[mode]
+	return known, known && mode != "read-only"
+}
+
 const approveForMeFlag = "--approve-for-me"
 
 // mcpServersKeyPrefix admits the composition-evidenced config shape:

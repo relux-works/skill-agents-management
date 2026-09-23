@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Carry interactive permission mode, verified tool release and caller native
+  arguments through vendor admission into the launch plan; add best-effort
+  Claude and Codex stored-policy inspection with explicit inspected and
+  not-inspected sources. Expected release v0.5.21; the orchestrator cuts the
+  tag.
+
 - Retire the `ultra` effort word everywhere. No row declares it any more
   (gpt-6-astra/astra, gpt-6-sol/sol, gpt-5.6-sol, gpt-5.6-terra and
   qwen3.7-plus-via-codex now stop at `max`), and the admission scale

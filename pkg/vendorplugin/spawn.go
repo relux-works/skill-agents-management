@@ -111,6 +111,17 @@ type SpawnRequest struct {
 	ServiceTier string
 	Composition agentic.Composition
 
+	// PermissionMode is the interactive permission posture admitted by the
+	// agentic system plugin. The vendor layer carries it without interpreting
+	// provider policy.
+	PermissionMode agentic.PermissionMode
+	// ToolRelease is the running harness release established by the caller.
+	// The agentic plugin uses it to select its verified permission grammar.
+	ToolRelease string
+	// NativeArgs are caller-supplied harness arguments, forwarded unchanged to
+	// the agentic plugin for interactive planning.
+	NativeArgs []string
+
 	// Deadline is the hard fence the caller enforces on the child process,
 	// projected verbatim onto LaunchRequest.Deadline so a harness that fences
 	// its own turn (pi --deadline) fences at the caller's budget. Zero means
@@ -168,6 +179,10 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	if r == nil {
 		return agentic.Plan{}, errors.New("vendorplugin: cannot build a launch without a registry")
 	}
+	// Keep an admission-owned snapshot. Vendor.Spawn receives its own copy so
+	// it cannot mutate the caller's permission arguments before fidelity checks
+	// and the agentic plugin see them.
+	req.NativeArgs = append([]string(nil), req.NativeArgs...)
 	binding, err := resolveLaunchBinding(r, req.Runtime)
 	if err != nil {
 		return agentic.Plan{}, err
@@ -214,11 +229,13 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 		launch = passthroughLaunchRequest(binding.SystemID, model, effort, req)
 	} else {
 		runtime := binding.Runtime()
+		vendorRequest := req
+		vendorRequest.NativeArgs = append([]string(nil), req.NativeArgs...)
 		launch, err = binding.Vendor.Spawn(SpawnContext{
 			Runtime: runtime,
 			Model:   model,
 			Effort:  effort,
-			Request: req,
+			Request: vendorRequest,
 		})
 		if err != nil {
 			return agentic.Plan{}, fmt.Errorf("vendorplugin: vendor %s could not build the launch request for model %q: %w", binding.VendorID, model.ID, err)
@@ -452,6 +469,15 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 	}
 	if !reflect.DeepEqual(launch.Composition, req.Composition) {
 		return fmt.Errorf("%w: vendor %s changed the launch composition; the MCP servers a child can reach are the caller's decision", ErrVendorContract, runtime.VendorID)
+	}
+	if launch.PermissionMode != req.PermissionMode {
+		return fmt.Errorf("%w: vendor %s changed the caller's permission mode", ErrVendorContract, runtime.VendorID)
+	}
+	if launch.ToolRelease != req.ToolRelease {
+		return fmt.Errorf("%w: vendor %s changed the caller's verified tool release", ErrVendorContract, runtime.VendorID)
+	}
+	if !reflect.DeepEqual(launch.NativeArgs, req.NativeArgs) {
+		return fmt.Errorf("%w: vendor %s changed the caller's native arguments", ErrVendorContract, runtime.VendorID)
 	}
 	return nil
 }
