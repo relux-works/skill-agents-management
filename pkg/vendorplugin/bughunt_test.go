@@ -76,6 +76,9 @@ var bughuntLeaderboard = map[string]map[string]int{
 var bughuntSpellings = map[vendorplugin.ModelID]string{
 	"qwen3.8-max-preview":        "qwen3.8-max",
 	"muse-spark-1.3-contributor": "muse-spark-1.3",
+	// The agy row for the one google model the leaderboard measured, declared
+	// on 2026-09-23; `gemini-flash` resolves here through its AliasOf.
+	"gemini-3.8-flash-high": "gemini-3.8-flash",
 }
 
 // benchRow is one row in scope with the home that declares it.
@@ -269,7 +272,7 @@ func TestEveryScoreInScopeIsABenchClaim(t *testing.T) {
 	// The count is stated independently so the gate cannot pass on a scope
 	// that quietly lost a home: 45 source rows plus the two declared-here
 	// openai rows.
-	if want := sourceModelCount + len(declaredHereRows); rows != want {
+	if want := sourceModelCount + len(declaredHereRows) - len(retiredHereRows); rows != want {
 		t.Errorf("the gate walked %d rows and the module declares %d in scope", rows, want)
 	}
 }

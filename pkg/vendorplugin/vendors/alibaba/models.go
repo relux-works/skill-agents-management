@@ -210,7 +210,7 @@ var models = []vendorplugin.Model{
 		Description:         "Evidence that a cross-runtime pair wires up, not a model to choose for real work: it mirrors qwen3.7-plus's profile under the codex harness and no vendor-captured Alibaba-via-codex model id has ever been observed",
 		Rank:                rank(18, vendorplugin.BughuntInterpolated("qwen3.7-max", "qwen3.6-plus", "unmeasured; tied with qwen3.7-plus, whose profile it mirrors"), 30, "tied with qwen3.7-plus, whose profile it mirrors under the codex harness", lineup),
 		Lifecycle:           vendorplugin.LifecyclePreview,
-		Effort:              effortRequired("xhigh", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
+		Effort:              effortRequired("xhigh", []string{"low", "medium", "high", "xhigh", "max"}),
 		ContextWindowTokens: 1_000_000,
 		Systems:             []agentic.SystemID{"codex"},
 	},

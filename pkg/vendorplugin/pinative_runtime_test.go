@@ -241,7 +241,7 @@ func TestBuildLaunchRefusalsOnPiRuntimes(t *testing.T) {
 		{"a row absent from the Pi catalog", "pi-anthropic", "claude-fable-5-1", "high", agentic.LaunchModeInteractive, nil, vendorplugin.ErrModelNotDrivenBySystem},
 		{"an openai head absent from the catalog", "pi-openai", "gpt-6-astra", "high", agentic.LaunchModeInteractive, nil, vendorplugin.ErrModelNotDrivenBySystem},
 		{"the alias mirrors its absent target", "pi-openai", "astra", "high", agentic.LaunchModeInteractive, nil, vendorplugin.ErrModelNotDrivenBySystem},
-		{"an antigravity-only google row", "pi-google", "gemini-3.1-pro-high", "", agentic.LaunchModeInteractive, nil, vendorplugin.ErrModelNotDrivenBySystem},
+		{"an antigravity-only google row", "pi-google", "gemini-3.6-flash-high", "", agentic.LaunchModeInteractive, nil, vendorplugin.ErrModelNotDrivenBySystem},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			req := piRequest(t, tt.runtime, tt.model, tt.effort)
@@ -385,8 +385,9 @@ func TestBuildLaunchRefusesAnEffortInstalledPiWouldDropOrClamp(t *testing.T) {
 		model, effort   string
 		accepted, recom string
 	}{
-		{"pi-openai", "gpt-5.6-sol", "ultra", "[low medium high xhigh max]", `"max"`},
-		{"pi-openai", "gpt-5.6-terra", "ultra", "[low medium high xhigh max]", `"max"`},
+		// The `ultra` cases retired with the word: no row's vocabulary admits
+		// it any more, so it is refused as ErrEffortNotInVocabulary before Pi's
+		// own thinking contract is consulted (TestTheRetiredUltraIsRefusedEverywhere).
 		{"pi-openai", "gpt-5.3-codex", "minimal", "[low medium high xhigh]", `"xhigh"`},
 		{"pi-openai", "gpt-5.2", "minimal", "[low medium high xhigh]", `"xhigh"`},
 	} {

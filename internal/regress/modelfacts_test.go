@@ -52,7 +52,13 @@ var declaredHereRows = []vendorplugin.ModelID{
 	"gpt-6-sol", "sol",
 	"gpt-6-luna", "luna",
 	"claude-opus-5-5", "opus",
+	"gemini-3.8-flash-high", "gemini-flash", "gemini-3.7-flash-high",
 }
+
+// retiredHereRows are board-table rows this binary deliberately no longer
+// carries: the agy lineup went Flash-only on 2026-09-23. Named for the same
+// reason declaredHereRows is — an accidental drop must still fail the sum.
+var retiredHereRows = []vendorplugin.ModelID{"gemini-3.1-pro-high", "gemini-3.1-pro-low"}
 
 // carriedRows collects every model row this binary carries, from both homes,
 // and reports which home each came from.
@@ -83,9 +89,9 @@ func TestEveryModelRowThisBinaryCarriesIsWholeAndAccountedFor(t *testing.T) {
 	if len(fromUnresolved) == 0 {
 		t.Fatal("no vendor-unresolved runtime carries a model row, so the second home is untested; muse's two rows have no vendor plugin and are exactly what a vendors-only check would miss")
 	}
-	if total := len(fromVendors) + len(fromUnresolved); total != boardModelCount+len(declaredHereRows) {
-		t.Errorf("this binary carries %d model rows (%d from vendor plugins, %d from vendor-unresolved runtimes) and the board table has %d plus %d rows declared ahead of it (%v); a changed count is a divergence between two repositories and has to be argued",
-			total, len(fromVendors), len(fromUnresolved), boardModelCount, len(declaredHereRows), declaredHereRows)
+	if total := len(fromVendors) + len(fromUnresolved); total != boardModelCount+len(declaredHereRows)-len(retiredHereRows) {
+		t.Errorf("this binary carries %d model rows (%d from vendor plugins, %d from vendor-unresolved runtimes) and the board table has %d plus %d rows declared ahead of it (%v) minus %d retired here (%v); a changed count is a divergence between two repositories and has to be argued",
+			total, len(fromVendors), len(fromUnresolved), boardModelCount, len(declaredHereRows), declaredHereRows, len(retiredHereRows), retiredHereRows)
 	}
 
 	// Named, not merely counted: an allowance of n rows that never says WHICH

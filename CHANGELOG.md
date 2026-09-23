@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Retire the `ultra` effort word everywhere. No row declares it any more
+  (gpt-6-astra/astra, gpt-6-sol/sol, gpt-5.6-sol, gpt-5.6-terra and
+  qwen3.7-plus-via-codex now stop at `max`), and the admission scale
+  (`EffortOrder`) no longer places it, so a ceiling bound at `ultra` is
+  unorderable. In Codex, Ultra is a sub-agent mode rather than a reasoning
+  depth of one model. The port pins compare vocabularies with retired words
+  taken out (`retiredEffortWords`).
+- The agy (antigravity) lineup is Flash-only: `gemini-3.1-pro-high` and
+  `gemini-3.1-pro-low` are retired (`retiredHereRows`), and
+  `gemini-3.8-flash-high` (measured: 20/105 at high as `gemini-3.8-flash`),
+  `gemini-3.7-flash-high` (interpolated 18) and the floating alias
+  `gemini-flash` → `gemini-3.8-flash-high` are declared ahead of the board's
+  registry. The ids come from the operator; `agy models` was not re-read
+  because agy is not installed on the declaring machine. The agy display
+  pick stays `gemini-3.6-flash-high`.
+
 - Add the versioned provider-capability table keyed (environment, tool
   release) to a permission-grammar version (curator-spec Decision 0018
   choices 3 and 6; expected release v0.5.18 (v0.5.17 carried the 2026-09-22 model declarations), tag cut by the orchestrator).

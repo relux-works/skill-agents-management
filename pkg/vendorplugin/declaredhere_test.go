@@ -86,6 +86,50 @@ var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
 	"luna":            "openai",
 	"claude-opus-5-5": "anthropic",
 	"opus":            "anthropic",
+	// The agy Flash heads of 2026-09-23 and their `gemini-flash` spelling,
+	// declared from the operator's instruction (agy was not installed on the
+	// declaring machine, so no catalogue read backs them — the evidence says so).
+	"gemini-3.8-flash-high": "google",
+	"gemini-flash":          "google",
+	"gemini-3.7-flash-high": "google",
+}
+
+// retiredHereRows maps a row the board's registry DOES carry, and this module
+// deliberately no longer declares, to the vendor that dropped it. It is the
+// mirror of declaredHereRows: both full-set pins would otherwise report the
+// absence, and naming the row keeps an ACCIDENTAL drop failing exactly as
+// before. A retired row that is declared again is reported, not absorbed.
+//
+// The agy lineup is Flash-only since 2026-09-23: the two 3.1 Pro rows left it.
+var retiredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
+	"gemini-3.1-pro-high": "google",
+	"gemini-3.1-pro-low":  "google",
+}
+
+// retiredEffortWords are effort words this module removed from EVERY row on
+// purpose. The captures still list them for the rows they were read from, so
+// the port pins compare a row's vocabulary against the source's with these
+// words taken out — and separately refuse any row that declares one again.
+//
+// "ultra" since 2026-09-23: in Codex it is a sub-agent mode rather than a
+// reasoning depth of one model, and the operator retired it everywhere.
+var retiredEffortWords = []string{"ultra"}
+
+// withoutRetiredEfforts returns a vocabulary with every retired word removed.
+func withoutRetiredEfforts(vocabulary []string) []string {
+	out := make([]string, 0, len(vocabulary))
+	for _, word := range vocabulary {
+		retired := false
+		for _, r := range retiredEffortWords {
+			if word == r {
+				retired = true
+			}
+		}
+		if !retired {
+			out = append(out, word)
+		}
+	}
+	return out
 }
 
 // declaredHereCatalogEvidence is, per vendor, the substring a declared-here
@@ -96,6 +140,7 @@ var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
 var declaredHereCatalogEvidence = map[vendorplugin.VendorID]string{
 	"openai":    "codex debug models",
 	"anthropic": "claude -p --model",
+	"google":    "operator declaration",
 }
 
 // portedScoreObservation is the sentence rank() puts on a PORTED row. A
@@ -497,7 +542,7 @@ func TestGPT6AstraLaunchesThroughTheRealEntryPointAtEveryProbedEffort(t *testing
 	// is exactly the mutant whose damage those subtests exist to show: the
 	// count would fail, the negative would never run, and the report would say
 	// nothing about `minimal` having become launchable.
-	probedVocabulary := []string{"low", "medium", "high", "xhigh", "max", "ultra"}
+	probedVocabulary := withoutRetiredEfforts([]string{"low", "medium", "high", "xhigh", "max", "ultra"})
 	if !equalStrings(row.Effort.Vocabulary, probedVocabulary) {
 		t.Errorf("%q accepts %v and the catalog probe recorded %v; the vocabulary is what the vendor published for THIS row",
 			model, row.Effort.Vocabulary, probedVocabulary)

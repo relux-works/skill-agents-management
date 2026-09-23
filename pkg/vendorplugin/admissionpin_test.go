@@ -564,7 +564,7 @@ func TestDeclaredCrossRuntimeResolvesAndLaunches(t *testing.T) {
 	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, vendorplugin.SpawnRequest{
 		Runtime:    "qwen-codex",
 		Model:      "qwen3.7-plus-via-codex",
-		Effort:     "ultra",
+		Effort:     "max",
 		PromptPath: promptPath,
 		WorkDir:    workDir,
 		Env:        []string{"PATH=" + binDir},
@@ -579,19 +579,12 @@ func TestDeclaredCrossRuntimeResolvesAndLaunches(t *testing.T) {
 		t.Errorf("the model never reached argv: %v", plan.Argv)
 	}
 
-	// `ultra` is the proof that the vocabulary followed the HARNESS and not the
-	// vendor's other rows: qwen-code's own models stop at max, and this row
-	// accepts ultra because it launches through the codex adapter's flag.
-	if !strings.Contains(strings.Join(plan.Argv, " "), "ultra") {
+	// The effort reaches the codex adapter's flag. Until 2026-09-23 this was
+	// `ultra`, the word that proved the vocabulary followed the harness; the
+	// word is retired everywhere, so the proof is now only that the codex
+	// transport carries the effort at all.
+	if !strings.Contains(strings.Join(plan.Argv, " "), `model_reasoning_effort="max"`) {
 		t.Errorf("the effort never reached argv: %v", plan.Argv)
-	}
-	for _, model := range mustModels(t, registry, "alibaba") {
-		if model.ID != "qwen3.7-plus" {
-			continue
-		}
-		if model.Effort.Accepts("ultra") {
-			t.Errorf("the qwen-code row accepts %q too, so the cross-runtime row's vocabulary proves nothing about which layer it came from", "ultra")
-		}
 	}
 }
 
@@ -714,7 +707,9 @@ func TestRuntimeModelsScopeToTheHarnessThatDrivesThem(t *testing.T) {
 		{runtime: "qwen", system: "qwen-code", count: 5, holds: "qwen3.7-plus", excedes: "qwen3.7-plus-via-codex"},
 		{runtime: "qwen-codex", system: "codex", count: 1, holds: "qwen3.7-plus-via-codex", excedes: "qwen3.7-plus"},
 		{runtime: "gemini", system: "gemini-cli", count: 7, holds: "gemini-2.5-pro", excedes: "gemini-3.6-flash-high"},
-		{runtime: "agy", system: "antigravity", count: 8, holds: "gemini-3.6-flash-high", excedes: "gemini-2.5-pro"},
+		// 9: the two 3.1 Pro rows retired, the 3.8/3.7 Flash heads and the
+		// gemini-flash alias declared (declaredhere_test.go).
+		{runtime: "agy", system: "antigravity", count: 9, holds: "gemini-3.6-flash-high", excedes: "gemini-2.5-pro"},
 		// 14, not the source table's 12: gpt-6-astra and its `astra` alias are
 		// both declared ahead of the board's registry and are both real openai
 		// rows the codex harness drives. An alias is INDEXED like any other

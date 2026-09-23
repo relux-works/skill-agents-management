@@ -30,7 +30,7 @@ var gpt6CodexAliases = map[vendorplugin.ModelID]vendorplugin.ModelID{
 // 0.155.1, 2026-09-22) rather than read off the rows under test, so a word
 // dropped from a declaration fails here instead of shrinking the loop.
 var (
-	gpt6SolProbedEfforts  = []string{"low", "medium", "high", "xhigh", "max", "ultra"}
+	gpt6SolProbedEfforts  = withoutRetiredEfforts([]string{"low", "medium", "high", "xhigh", "max", "ultra"})
 	gpt6LunaProbedEfforts = []string{"low", "medium", "high", "xhigh", "max"}
 	opus55ProbedEfforts   = []string{"low", "medium", "high", "xhigh", "max"}
 )
@@ -66,6 +66,7 @@ func TestTheGPT6LunaAxisRefusesUltraAndMinimal(t *testing.T) {
 		{"luna", "ultra"}, {"gpt-6-luna", "ultra"},
 		{"luna", "minimal"}, {"gpt-6-luna", "minimal"},
 		{"sol", "minimal"}, {"gpt-6-sol", "minimal"},
+		{"sol", "ultra"}, {"gpt-6-sol", "ultra"},
 		{"sol", ""}, {"luna", ""},
 	} {
 		if _, err := vendorplugin.BuildLaunch(context.Background(), registry, astraRequest(t, tc.model, tc.effort), agentic.LaunchModeExec); err == nil {

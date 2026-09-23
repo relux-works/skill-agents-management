@@ -139,7 +139,8 @@ const codexCatalogAliasProbe = "the OpenAI Codex CLI model catalog, read with `c
 // different binary: at codex-cli 0.155.1 on 2026-09-22 the catalog carries
 // gpt-6-astra (priority 1), gpt-6-sol (2), gpt-6-luna (3), gpt-reserve (3),
 // gpt-5.6-sol (4), gpt-5.6-terra (7), gpt-5.6-luna (8), gpt-5.5 (12) and
-// codex-auto-review (43). gpt-6-sol states the six-word low..ultra axis and
+// codex-auto-review (43). gpt-6-sol states the six-word low..ultra axis (declared here without `ultra`
+// since 2026-09-23, see astraEffort) and
 // gpt-6-luna the five-word low..max one, both defaulting to `medium`, both at
 // context_window 272000 with max_context_window 872000. None of the nine slugs
 // is spelled `sol` or `luna`, which is what the two alias rows rest on. Both
@@ -226,15 +227,19 @@ func effortRequired(recommended string, vocabulary []string) vendorplugin.Effort
 // literal here would be a second place for the vocabulary to drift into that
 // refusal. A function also hands each row its own backing array, so nothing
 // that edits one row's vocabulary can reach the other's.
+//
+// NO `ultra`, since 2026-09-23. The catalog lists it, but in Codex Ultra is a
+// sub-agent mode rather than a reasoning depth of this model, and the operator
+// retired the word from every row of this module; the axis stops at max.
 func astraEffort() vendorplugin.EffortDeclaration {
-	return effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"})
+	return effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"})
 }
 
 // solEffort is the gpt-6-sol effort axis, shared by the identity row and its
 // `sol` alias for the reason astraEffort gives: checkAliases refuses a pair
 // whose axes disagree, so the vocabulary is written once.
 func solEffort() vendorplugin.EffortDeclaration {
-	return effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"})
+	return effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"})
 }
 
 // lunaEffort is the gpt-6-luna effort axis, shared by the identity row and its
@@ -428,7 +433,7 @@ var models = []vendorplugin.Model{
 		Description: "The frontier Codex model: the hardest agentic coding work, at the highest cost per turn",
 		Rank:        rank(42, vendorplugin.BughuntMeasured("max", 42), 120, "the highest of the twelve openai rows the board's registry declares, below the gpt-6-astra row this file declares from the vendor catalog; the bench agrees on the order (astra 48, sol 42) and its high setting fixed 34", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
-		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
+		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"}),
 		Recommended: true,
 		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
@@ -437,7 +442,7 @@ var models = []vendorplugin.Model{
 		Description: "Balanced agentic coding for everyday work; the usual pick when sol is more than the task needs",
 		Rank:        rank(38, vendorplugin.BughuntInterpolated("gpt-5.6-sol", "gpt-5.6-luna", "the leaderboard has no terra run and the vendor tiers it as the balanced row between the two measured ones"), 110, "below sol and above luna", lineup),
 		Lifecycle:   vendorplugin.LifecycleCurrent,
-		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
+		Effort:      effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"}),
 		Systems:     []agentic.SystemID{"codex", "pi-native"},
 	},
 	{

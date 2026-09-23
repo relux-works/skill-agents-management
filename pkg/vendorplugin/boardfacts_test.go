@@ -271,6 +271,13 @@ func compareBoardFacts(fixture boardFacts, rows map[vendorplugin.ModelID]vendorp
 	for _, want := range fixture.Models {
 		id := vendorplugin.ModelID(want.ID)
 		got, declared := rows[id]
+		if _, retired := retiredHereRows[id]; retired {
+			if declared {
+				report("the board table holds row %q, which this module records as retired here, and it is declared again", want.ID)
+				delete(remaining, id)
+			}
+			continue
+		}
 		if !declared {
 			report("the board table holds row %q and this module declares no such model", want.ID)
 			continue

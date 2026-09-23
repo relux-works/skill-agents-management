@@ -20,7 +20,7 @@
 //
 // This vendor is the one whose rows genuinely disagree with each other about
 // effort: the five legacy ids accept `minimal` and the thirteen current ones do
-// not, and the current top rows accept `ultra` while the older current rows
+// not, and the current top rows accept `max` while the older current rows
 // stop at `xhigh`. (Thirteen, counting the `astra`, `sol` and `luna` aliases as
 // current rows of their own: an alias's effort word is validated against ITS
 // vocabulary before the launch substitutes the identity in.) That is why invariant 4 of docs/architecture.md makes effort

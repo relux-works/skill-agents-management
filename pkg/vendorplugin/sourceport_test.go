@@ -317,6 +317,13 @@ func comparePort(fixture sourceRegistry, declarations []vendorplugin.RuntimeDecl
 			continue
 		}
 		model, declared := rows[vendorplugin.ModelID(source.ID)]
+		if retiredBy, retired := retiredHereRows[vendorplugin.ModelID(source.ID)]; retired && retiredBy == vendor {
+			if declared {
+				report("vendor %s declares source row %q, which this port records as retired here; a retired row that is declared again must leave retiredHereRows", vendor, source.ID)
+				delete(rows, model.ID)
+			}
+			continue
+		}
 		if !declared {
 			report("vendor %s does not declare source row %q", vendor, source.ID)
 			continue
@@ -357,8 +364,13 @@ func comparePort(fixture sourceRegistry, declarations []vendorplugin.RuntimeDecl
 		if model.Effort.Support != wantSupport {
 			report("model %q declares effort support %s and the source records %s", source.ID, model.Effort.Support, source.Reasoning)
 		}
-		if !equalStrings(model.Effort.Vocabulary, source.SupportedEfforts) {
-			report("model %q accepts %v and the source accepts %v", source.ID, model.Effort.Vocabulary, source.SupportedEfforts)
+		if !equalStrings(model.Effort.Vocabulary, withoutRetiredEfforts(source.SupportedEfforts)) {
+			report("model %q accepts %v and the source accepts %v (retired words %v excepted)", source.ID, model.Effort.Vocabulary, source.SupportedEfforts, retiredEffortWords)
+		}
+		for _, word := range retiredEffortWords {
+			if model.Effort.Accepts(word) {
+				report("model %q accepts the retired effort word %q", source.ID, word)
+			}
 		}
 		if model.Effort.Recommended != source.RecommendedEffort {
 			report("model %q recommends %q and the source recommends %q", source.ID, model.Effort.Recommended, source.RecommendedEffort)
@@ -502,7 +514,10 @@ func TestTheFullSetPinFiresOnDrift(t *testing.T) {
 			name: "an effort vocabulary narrowed by exactly one word",
 			mutate: func(f *sourceRegistry) {
 				mutateSourceRow(f.Models, "gpt-5.6-sol", func(m *sourceModel) {
-					m.SupportedEfforts = m.SupportedEfforts[:len(m.SupportedEfforts)-1]
+					// Drop "max", not the trailing "ultra": the retired word is
+					// taken out before the comparison, so narrowing by it would
+					// be no drift at all.
+					m.SupportedEfforts = dropWord(m.SupportedEfforts, "max")
 				})
 			},
 			expect: `model "gpt-5.6-sol" accepts`,
@@ -645,7 +660,7 @@ func comparePortedLineup(fixture sourceRegistry, vendor vendorplugin.VendorID, p
 
 	want := map[string]sourceModel{}
 	for _, model := range fixture.Models {
-		if model.Broker == string(vendor) {
+		if model.Broker == string(vendor) && retiredHereRows[vendorplugin.ModelID(model.ID)] != vendor {
 			want[model.ID] = model
 		}
 	}

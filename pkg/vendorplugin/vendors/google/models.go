@@ -123,9 +123,31 @@ func rank(score int, bench vendorplugin.RankEvidence, policyRank int, note strin
 }
 
 // benchTop is the measured leaderboard row every google score hangs below. It
-// is NOT a lineup row: neither harness's catalogue carries gemini-3.8-flash,
-// so it is an anchor and nothing more.
+// is the leaderboard SPELLING of gemini-3.8-flash-high, the agy row declared on
+// 2026-09-23; until then no harness catalogued it and it was an anchor only.
 const benchTop = "gemini-3.8-flash"
+
+// operatorDeclaration is the evidence the rows declared ahead of the board's
+// registry rest on. It says exactly what was and was not read: the ids come
+// from the operator's instruction, and `agy models` was NOT re-read, because
+// agy is not installed on the machine the rows were declared from. A reader
+// who can run agy should check the two ids against its catalogue.
+const operatorDeclaration = "operator declaration of 2026-09-23 naming gemini-3.8-flash-high and gemini-3.7-flash-high for the agy runtime (`agy models` not re-read: agy was not installed on the declaring machine)"
+
+// declaredRank builds a capability rank for a row NO capture of the board's
+// registry contains. It never quotes a source PolicyRank, because the source
+// registry holds no row for it.
+func declaredRank(score int, bench vendorplugin.RankEvidence, note string) vendorplugin.CapabilityRank {
+	return vendorplugin.CapabilityRank{Score: score, Basis: []vendorplugin.RankEvidence{
+		bench,
+		{Source: operatorDeclaration, Observation: note},
+	}}
+}
+
+// The agy lineup is Flash-only since 2026-09-23: gemini-3.1-pro-high and
+// gemini-3.1-pro-low were RETIRED from this vendor (they were ported from the
+// board's registry, and pkg/vendorplugin/declaredhere_test.go names them in
+// retiredHereRows so the port pins account for their absence).
 
 // effortNone declares a model with no reasoning-effort axis at all. Handing one
 // an effort is refused rather than dropped, so a caller learns the parameter
@@ -137,18 +159,36 @@ func effortNone() vendorplugin.EffortDeclaration {
 // models is the declaration itself, most capable first.
 var models = []vendorplugin.Model{
 	{
-		ID:                  "gemini-3.1-pro-high",
-		Description:         "The most capable Antigravity row: Gemini 3.1 Pro with the harness pinned to high effort",
-		Rank:                rank(19, vendorplugin.BughuntInterpolated(benchTop, "gemini-3.1-pro-low", "unmeasured; the whole lineup is anchored below the one measured google row, gemini-3.8-flash at high (20/105), which neither harness catalogues"), 60, "the highest of the fifteen google rows", agyCatalogue),
+		ID:          "gemini-3.8-flash-high",
+		Description: "The strongest Antigravity row: Gemini 3.8 Flash pinned to high effort",
+		// The one google row the leaderboard measured: gemini-3.8-flash at
+		// high fixed 20/105. It was the anchor every google score hung below
+		// while no harness catalogued it; it is now a lineup row of its own.
+		Rank:                declaredRank(20, vendorplugin.BughuntMeasuredAs(benchTop, "high", 20), "declared for the antigravity harness as the newest Flash generation, one (base model, effort) id like every agy row"),
 		Lifecycle:           vendorplugin.LifecycleCurrent,
 		Effort:              effortNone(),
 		ContextWindowTokens: 1_048_576,
 		Systems:             []agentic.SystemID{"antigravity"},
 	},
 	{
-		ID:                  "gemini-3.1-pro-low",
-		Description:         "Pro-class quality when the turn does not need deep thinking: Gemini 3.1 Pro pinned to low effort",
-		Rank:                rank(17, vendorplugin.BughuntInterpolated("gemini-3.1-pro-high", "gemini-3.1-pro-preview", "unmeasured; the registry order is kept"), 55, "below gemini-3.1-pro-high and above the rows tied at 50", agyCatalogue),
+		// The floating short spelling of the current agy Flash head. The
+		// catalogue publishes no such id — every agy id names a generation and
+		// an effort — so the row declares AliasOf and the launch executes as
+		// gemini-3.8-flash-high. Moving it to a newer generation is an edit to
+		// this line, never a derivation from a version number.
+		ID:                  "gemini-flash",
+		Description:         "The short spelling of the current Antigravity Flash head; it executes as gemini-3.8-flash-high",
+		Rank:                declaredRank(20, vendorplugin.BughuntMeasuredAs(benchTop, "high", 20), "this row is a short spelling of gemini-3.8-flash-high and carries that row's score; there is no second capability to score"),
+		AliasOf:             "gemini-3.8-flash-high",
+		Lifecycle:           vendorplugin.LifecycleCurrent,
+		Effort:              effortNone(),
+		ContextWindowTokens: 1_048_576,
+		Systems:             []agentic.SystemID{"antigravity"},
+	},
+	{
+		ID:                  "gemini-3.7-flash-high",
+		Description:         "Gemini 3.7 Flash pinned to high effort, one generation behind the 3.8 head",
+		Rank:                declaredRank(18, vendorplugin.BughuntInterpolated("gemini-3.8-flash-high", "gemini-3.6-flash-high", "unmeasured; the generation between the measured 3.8 Flash and the 3.6 rows"), "declared for the antigravity harness between the 3.8 and 3.6 Flash generations"),
 		Lifecycle:           vendorplugin.LifecycleCurrent,
 		Effort:              effortNone(),
 		ContextWindowTokens: 1_048_576,
@@ -157,7 +197,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:                  "gemini-3.1-pro-preview",
 		Description:         "Preview Pro for complex reasoning and agentic work, on preview terms",
-		Rank:                rank(16, vendorplugin.BughuntInterpolated("gemini-3.1-pro-low", "gemini-3.5-flash", "unmeasured; the registry order and its tie with gemini-3.6-flash-high are kept"), 50, "tied with gemini-3.6-flash-high, which the antigravity catalogue contributes", geminiLineup),
+		Rank:                rank(16, vendorplugin.BughuntInterpolated("gemini-3.7-flash-high", "gemini-3.5-flash", "unmeasured; the registry order and its tie with gemini-3.6-flash-high are kept, re-anchored under 3.7 Flash since the 3.1 Pro agy rows were retired"), 50, "tied with gemini-3.6-flash-high, which the antigravity catalogue contributes", geminiLineup),
 		Lifecycle:           vendorplugin.LifecyclePreview,
 		Effort:              effortNone(),
 		ContextWindowTokens: 1_048_576,
@@ -166,7 +206,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:                  "gemini-3.6-flash-high",
 		Description:         "The everyday Antigravity pick: Gemini 3.6 Flash pinned to high effort",
-		Rank:                rank(16, vendorplugin.BughuntInterpolated("gemini-3.1-pro-low", "gemini-3.5-flash", "unmeasured; the registry order and its tie with gemini-3.1-pro-preview are kept"), 50, "tied with gemini-3.1-pro-preview, which the gemini-cli lineup contributes", agyCatalogue),
+		Rank:                rank(16, vendorplugin.BughuntInterpolated("gemini-3.7-flash-high", "gemini-3.5-flash", "unmeasured; the registry order and its tie with gemini-3.1-pro-preview are kept, re-anchored under 3.7 Flash since the 3.1 Pro agy rows were retired"), 50, "tied with gemini-3.1-pro-preview, which the gemini-cli lineup contributes", agyCatalogue),
 		Lifecycle:           vendorplugin.LifecycleCurrent,
 		Effort:              effortNone(),
 		Recommended:         true,

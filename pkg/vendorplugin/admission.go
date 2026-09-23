@@ -38,7 +38,11 @@ import (
 // two different bounds. A word outside this list can therefore be a legal
 // vendor vocabulary entry and still be unorderable as a BOUND, which is
 // exactly what EffortRank's second return value says.
-var effortOrder = []string{"minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
+//
+// "ultra" is NOT on it since 2026-09-23. Codex's Ultra is a sub-agent mode rather
+// than a reasoning depth of one model, no row declares the word any more, and a
+// ceiling naming it is refused as unorderable instead of admitting a mode.
+var effortOrder = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
 
 // EffortOrder returns the ascending ordering, freshly copied so a caller
 // cannot reorder admission through the answer.

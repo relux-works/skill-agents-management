@@ -37,12 +37,17 @@ const (
 // down here rather than read off the row under test.
 //
 // That is the whole point of the list. A test that iterated the row's own
-// Effort.Vocabulary would silently shrink with it: drop `ultra` from the
+// Effort.Vocabulary would silently shrink with it: drop `xhigh` from the
 // declaration and such a test would launch five words, pass, and report
 // nothing about the sixth having stopped working. The list is therefore an
 // independent statement, and TestTheAstraAliasStaysAdmissibleUnderItsOwnSpelling
 // is what holds the declaration to it.
-var astraProbedEfforts = []string{"low", "medium", "high", "xhigh", "max", "ultra"}
+//
+// The catalog still lists `ultra`; this module retired the word from every row
+// (retiredEffortWords), so the list the rows are held to is the probe with the
+// retired words taken out — and TestTheRetiredUltraIsRefusedEverywhere is what
+// holds the other half.
+var astraProbedEfforts = withoutRetiredEfforts([]string{"low", "medium", "high", "xhigh", "max", "ultra"})
 
 // astraRequest is a real codex launch with a stub `codex` on PATH, so binary
 // resolution succeeds for a reason that is not the operator's machine.
@@ -493,14 +498,14 @@ func TestTheAstraLaunchProofFiresOnEveryWayTheSubstitutionCouldBreak(t *testing.
 			// hard-coded astraProbedEfforts list buys: a test that iterated the
 			// row's own vocabulary would shrink with the mutant and pass.
 			name:    "one effort word dropped from the pair",
-			narrows: "five of the six probed efforts still launch and `ultra` does not",
+			narrows: "four of the five declared efforts still launch and `xhigh` does not",
 			mutate: astraPair(func(m vendorplugin.Model) vendorplugin.Model {
-				return withVocabulary(m, dropWord(m.Effort.Vocabulary, "ultra"))
+				return withVocabulary(m, dropWord(m.Effort.Vocabulary, "xhigh"))
 			}),
 			drive: func(t *testing.T, r *vendorplugin.Registry) []string {
 				return astraLaunchProblems(t, r, astraAlias, astraIdentity)
 			},
-			expect: "BuildLaunch(codex, astra, ultra",
+			expect: "BuildLaunch(codex, astra, xhigh",
 		},
 		{
 			// The vocabulary gate stays and admits exactly one more word.
@@ -592,7 +597,7 @@ func TestTheAstraAliasAxisMayNotDriftFromTheHead(t *testing.T) {
 			name: "the head accepts one word the alias does not",
 			mutate: func(m vendorplugin.Model) vendorplugin.Model {
 				if m.ID == astraAlias {
-					return withVocabulary(m, dropWord(m.Effort.Vocabulary, "ultra"))
+					return withVocabulary(m, dropWord(m.Effort.Vocabulary, "low"))
 				}
 				return m
 			},
