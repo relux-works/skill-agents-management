@@ -170,18 +170,14 @@ func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode
 	// scan classifies against it: an unpinned or newer release, and an
 	// empty one, fail closed here, and the scan below never reasons
 	// under a grammar no release verified.
-	row, err := agentic.LookupReleaseCapability(verifiedReleases, req.ToolRelease)
+	mapping, err := permissionMapping(req.ToolRelease, effective)
 	if err != nil {
-		return nil, fmt.Errorf("claude: %w", err)
-	}
-	if !row.YoloSupported {
-		return nil, fmt.Errorf("claude: refusing yolo: %w: tool release %q documents no bypass flag",
-			agentic.ErrPermissionModeUnsupported, row.Release)
+		return nil, err
 	}
 	if err := scanNativePolicy(req.NativeArgs); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
-	return append(append(args, bypassPermissionsFlag), nativeArgsSuffix(req)...), nil
+	return append(append(args, mapping.Flag), nativeArgsSuffix(req)...), nil
 }
 
 // appendEffort appends the effort transport when an effort was requested. Both

@@ -147,8 +147,64 @@ The agentic-system plugin contract and its registry.
   Prompt text is never parsed as a flag (`internal/nativeargs` owns the
   rule): `--` ends flag parsing, a lone `-` and anything never dash-leading
   are positional, and `=`-forms read as their flag. Known non-conflicting
-  policy selectors are still forwarded. Launcher headless detection over the
-  same arguments remains F-L1.
+  policy selectors are still forwarded.
+
+#### Permission-mode: non-interactive form classification
+
+`agentic.Registry.ClassifyNonInteractiveArgs(system, toolRelease, suffix)` is
+the launcher's versioned headless-argument classifier. It returns
+`NativeArgsClassification{Form, Grammar}`; `IsNonInteractive` is false when
+`Form` is empty. Every plugin verifies the exact release with its own
+`ReleaseCapability` rows and returns the same permission-grammar version used
+by the native-policy scanner. Unknown systems return `ErrUnknownSystem`, an
+unsupported system classifier returns `ErrNativeArgsClassifierUnsupported`,
+and an absent or unverified release returns
+`ErrPermissionModeUnverifiedRelease`. If a plugin cannot establish an option's
+arity under its pinned grammar, it returns
+`ErrNativeArgsClassificationIndeterminate`; callers must not treat that as an
+interactive result.
+
+| Launcher env-id | System | Verified release | Form | Tested placement |
+|---|---|---|---|---|
+| `claude_code` | `claude-code` | `2.1.261` | print | short flag `-p` |
+| `claude_code` | `claude-code` | `2.1.261` | print | equals value `--print=true` |
+| `claude_code` | `claude-code` | `2.1.261` | print | flag followed by a separate prompt |
+| `codex_cli` | `codex` | `0.153.2` | exec (`exec` or `e`) | first command token |
+| `codex_cli` | `codex` | `0.153.2` | exec (`exec` or `e`) | after an equals-form root option |
+| `codex_cli` | `codex` | `0.153.2` | exec (`exec` or `e`) | after a separate-value root option |
+| `pi` | `pi-native` | `0.84.2` | print | short flag `-p` |
+| `pi` | `pi-native` | `0.84.2` | print | equals value `--print=true` |
+| `pi` | `pi-native` | `0.84.2` | print | flag followed by a separate prompt |
+
+For print forms, the classifier accepts flag, `=` and separate-prompt
+placements. Codex recognizes `exec` (and its `e` alias) after the root options
+whose arity is declared in the pinned plugin grammar. A root flag whose arity
+the classifier does not model returns an indeterminate-classification error
+because its next token could be a value rather than a command. All three stop
+at `--`, so a prompt that looks like a flag or command is not classified. The
+`pi` system is the local-runtime wrapper, not the native Pi CLI, and does not
+declare this classifier; the launcher maps Pi to `pi-native`.
+
+#### Permission-mode: release mapping
+
+`agentic.Registry.PermissionMapping(system, toolRelease, mode)` returns
+`PermissionMapping{Flag, Grammar}` before launch-plan admission. The plugin
+owns the flag spelling and uses the same verified release row as its
+permission-policy grammar. `native` returns an empty `Flag`; `yolo` returns
+the plugin mapping when the verified release supports it. Unknown systems,
+unknown modes, systems without this capability, unsupported yolo mappings,
+and absent or unverified releases return typed errors. In particular, a
+verified `pi-native` release has no yolo mapping, and an unverified release
+fails closed even for this reporting API.
+
+| System | Verified release | Mode | Result | Grammar |
+|---|---|---|---|---|
+| `claude-code` | `2.1.261` | `native` | no module-owned flag | `permission-grammar-v2` |
+| `claude-code` | `2.1.261` | `yolo` | plugin-owned mapping | `permission-grammar-v2` |
+| `codex` | `0.153.2` | `native` | no module-owned flag | `permission-grammar-v2` |
+| `codex` | `0.153.2` | `yolo` | plugin-owned mapping | `permission-grammar-v2` |
+| `pi-native` | `0.84.2` | `native` | no module-owned flag | `permission-grammar-v1` |
+| `pi-native` | `0.84.2` | `yolo` | `ErrPermissionModeUnsupported` | — |
 
 #### Permission-mode: stored-policy inspection
 

@@ -91,8 +91,11 @@ var codexArgvConstructionAllowlist = map[string]string{
 	// appends no flag of its own, so a second construction hiding behind
 	// this exemption would have to spell a signature literal this
 	// function never emits.
-	argvguard.AllowlistKey(codexPolicyFile, "scanNativePolicy"):    "classifies caller native args against the closed key set under yolo; it references the table and the bypass const to compare, and constructs no argv",
-	argvguard.AllowlistKey(codexPolicyFile, "checkConfigOverride"): "the one-override half of the scan, split out so the separate, `=`, and attached-short forms share one classifier",
+	argvguard.AllowlistKey(codexPolicyFile, "scanNativePolicy"):          "classifies caller native args against the closed key set under yolo; it references the table and the bypass const to compare, and constructs no argv",
+	argvguard.AllowlistKey(codexPolicyFile, "checkConfigOverride"):       "the one-override half of the scan, split out so the separate, `=`, and attached-short forms share one classifier",
+	argvguard.AllowlistKey(codexPolicyFile, "codexRootOptionTakesValue"): "classifies caller-owned suffix positions so the registered command classifier does not mistake an option value for the exec subcommand; emits no argv",
+	argvguard.AllowlistKey(codexPolicyFile, "codexRootOptionIsBoolean"):  "recognizes pinned root flags while classifying caller-owned suffix positions; emits no argv",
+	argvguard.AllowlistKey(codexPolicyFile, "permissionMapping"):         "returns the verified plugin-owned mapping for pre-admission reporting; reads the centralized flag constant and constructs no argv",
 }
 
 // moduleGoSources reads every non-test Go file this module's build compiles.

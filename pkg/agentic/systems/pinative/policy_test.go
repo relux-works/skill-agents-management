@@ -10,6 +10,20 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pinative"
 )
 
+func TestPermissionMappingKeepsVerifiedPiNativeEmptyAndYoloUnsupported(t *testing.T) {
+	system := pinative.New()
+	got, err := system.PermissionMapping("0.84.2", agentic.PermissionModeNative)
+	if err != nil {
+		t.Fatalf("PermissionMapping(native): %v", err)
+	}
+	if got.Flag != "" || got.Grammar != agentic.PermissionGrammarV1 {
+		t.Fatalf("native mapping = %#v, want no flag under %q", got, agentic.PermissionGrammarV1)
+	}
+	if _, err := system.PermissionMapping("0.84.2", agentic.PermissionModeYolo); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+		t.Fatalf("PermissionMapping(yolo) error = %v, want ErrPermissionModeUnsupported", err)
+	}
+}
+
 // This file is the pi-native half of the versioned
 // provider-capability table (curator-spec Decision 0018 choice 6):
 // drift fails closed before support is even asked, the verified

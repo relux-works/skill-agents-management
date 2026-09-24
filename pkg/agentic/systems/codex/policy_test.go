@@ -9,6 +9,25 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
+func TestPermissionMappingUsesTheCodexArgvFlagOnlyForVerifiedYolo(t *testing.T) {
+	system := New()
+	got, err := system.PermissionMapping("0.153.2", agentic.PermissionModeYolo)
+	if err != nil {
+		t.Fatalf("PermissionMapping(yolo): %v", err)
+	}
+	if got.Flag != bypassApprovalsAndSandboxFlag || got.Grammar != agentic.PermissionGrammarV2 {
+		t.Fatalf("yolo mapping = %#v, want plugin argv flag under %q", got, agentic.PermissionGrammarV2)
+	}
+
+	got, err = system.PermissionMapping("0.153.2", agentic.PermissionModeNative)
+	if err != nil {
+		t.Fatalf("PermissionMapping(native): %v", err)
+	}
+	if got.Flag != "" || got.Grammar != agentic.PermissionGrammarV2 {
+		t.Fatalf("native mapping = %#v, want no flag under %q", got, agentic.PermissionGrammarV2)
+	}
+}
+
 // This file is the codex half of the versioned provider-capability table
 // (curator-spec Decision 0018 choices 3 and 6): the verified release the
 // yolo mapping holds for, the drift it fails closed on, the closed `-c`

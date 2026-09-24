@@ -66,6 +66,103 @@ const approveForMeFlag = "--approve-for-me"
 // verbatim with no claim, like every other known key.
 const mcpServersKeyPrefix = "mcp_servers."
 
+// ClassifyNonInteractiveArgs reports the Codex exec subcommand (or its `e`
+// alias) when it is the first positional command in the caller suffix. Known
+// root options are parsed using this release's command grammar; an unknown
+// or unmodeled root flag returns ErrNativeArgsClassificationIndeterminate
+// because its value arity is not established by this classifier. The scan
+// also stops at `--`, so prompt text can never become a subcommand.
+func (*System) ClassifyNonInteractiveArgs(toolRelease string, suffix []string) (agentic.NativeArgsClassification, error) {
+	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
+	if err != nil {
+		return agentic.NativeArgsClassification{}, fmt.Errorf("codex: %w", err)
+	}
+	form, err := classifyCodexNonInteractiveForm(suffix)
+	if err != nil {
+		return agentic.NativeArgsClassification{}, fmt.Errorf("codex: %w", err)
+	}
+	return agentic.NativeArgsClassification{Form: form, Grammar: capability.Grammar}, nil
+}
+
+// PermissionMapping exposes Codex's provider mapping before launch-plan
+// admission. Native maps to no module-owned argument; yolo returns the same
+// spelling used by Args, under the grammar verified for this exact release.
+func (*System) PermissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
+	return permissionMapping(toolRelease, mode)
+}
+
+func permissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
+	effective, err := mode.Resolve()
+	if err != nil {
+		return agentic.PermissionMapping{}, fmt.Errorf("codex: %w", err)
+	}
+	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
+	if err != nil {
+		return agentic.PermissionMapping{}, fmt.Errorf("codex: %w", err)
+	}
+	mapping := agentic.PermissionMapping{Grammar: capability.Grammar}
+	if effective == agentic.PermissionModeNative {
+		return mapping, nil
+	}
+	if !capability.YoloSupported {
+		return agentic.PermissionMapping{}, fmt.Errorf("codex: refusing yolo: %w: tool release %q documents no bypass flag",
+			agentic.ErrPermissionModeUnsupported, capability.Release)
+	}
+	mapping.Flag = bypassApprovalsAndSandboxFlag
+	return mapping, nil
+}
+
+func classifyCodexNonInteractiveForm(suffix []string) (agentic.NonInteractiveForm, error) {
+	for i := 0; i < len(suffix); i++ {
+		el := suffix[i]
+		if nativeargs.IsSeparator(el) {
+			return agentic.NonInteractiveFormNone, nil
+		}
+		if !nativeargs.IsFlagElement(el) {
+			if el == "exec" || el == "e" {
+				return agentic.NonInteractiveFormExec, nil
+			}
+			return agentic.NonInteractiveFormNone, nil
+		}
+		name, _, hasValue := nativeargs.SplitFlagValue(el)
+		if codexRootOptionTakesValue(name) {
+			if !hasValue {
+				if i+1 >= len(suffix) || nativeargs.IsSeparator(suffix[i+1]) {
+					return agentic.NonInteractiveFormNone, nil
+				}
+				i++
+			}
+			continue
+		}
+		if !codexRootOptionIsBoolean(name) {
+			// An unknown or unmodeled root flag may take a value. Without its
+			// release-pinned arity, a following "exec" could be an option value
+			// rather than a subcommand, so this suffix does not establish a known
+			// form.
+			return agentic.NonInteractiveFormNone, fmt.Errorf("%w: codex root flag %q", agentic.ErrNativeArgsClassificationIndeterminate, name)
+		}
+	}
+	return agentic.NonInteractiveFormNone, nil
+}
+
+func codexRootOptionTakesValue(name string) bool {
+	switch name {
+	case "-C", "--cd", "--add-dir", "-m", "--model", "--local-provider", "-p", "--profile", "-c", "--config", "-a", "--ask-for-approval", "-s", "--sandbox", "--enable", "--disable", "--remote", "--remote-auth-token":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexRootOptionIsBoolean(name string) bool {
+	switch name {
+	case "--oss", "--approve-for-me", "--not-so-yolo", bypassApprovalsAndSandboxFlag, yoloAliasFlag, "--dangerously-bypass-hook-trust", "--strict-config", "--search", "--no-alt-screen":
+		return true
+	default:
+		return false
+	}
+}
+
 // scanNativePolicy classifies the flag positions of the caller's native
 // arguments under yolo, against the pinned release's closed grammar.
 // nativeargs.FlagIndexes is the only positions reader: prompt text —

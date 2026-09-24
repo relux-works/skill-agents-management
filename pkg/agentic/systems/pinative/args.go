@@ -73,15 +73,11 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return nil, fmt.Errorf("pinative: unsupported launch mode %s", mode)
 	}
 	if mode == agentic.LaunchModeInteractive && effective == agentic.PermissionModeYolo {
-		// Drift fails closed before support is even asked: an unpinned
-		// or newer release, and an empty one, refuse as unverified,
-		// and only the verified release reaches the unsupported
-		// refusal below.
-		if _, err := agentic.LookupReleaseCapability(verifiedReleases, req.ToolRelease); err != nil {
-			return nil, fmt.Errorf("pinative: %w", err)
+		// The same public mapping capability establishes the release row
+		// and reports Pi's verified lack of a bypass flag.
+		if _, err := permissionMapping(req.ToolRelease, effective); err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("pinative: refusing yolo: %w: pi 0.84.2 documents no interactive permission-bypass flag; --approve trusts project-local files for this run and is not equivalent",
-			agentic.ErrPermissionModeUnsupported)
 	}
 	vendor := strings.TrimSpace(req.Vendor)
 	if vendor == "" {

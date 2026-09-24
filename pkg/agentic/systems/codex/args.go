@@ -64,6 +64,11 @@ import (
 // proof — whose signature carries this flag — holds it.
 const bypassApprovalsAndSandboxFlag = "--dangerously-bypass-approvals-and-sandbox"
 
+// yoloAliasFlag is a provider-owned alias accepted by Codex for the same
+// native option. It is recognized when classifying caller args but is never
+// emitted by this module.
+const yoloAliasFlag = "--yolo"
+
 // Args builds the codex argv for one launch mode, excluding the binary.
 //
 // It is the single construction site. Every surface of this plugin that needs
@@ -158,18 +163,14 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		// scan classifies against it: an unpinned or newer release, and an
 		// empty one, fail closed here, and the scan below never reasons
 		// under a grammar no release verified.
-		row, err := agentic.LookupReleaseCapability(verifiedReleases, req.ToolRelease)
+		mapping, err := permissionMapping(req.ToolRelease, effective)
 		if err != nil {
-			return nil, fmt.Errorf("codex: %w", err)
-		}
-		if !row.YoloSupported {
-			return nil, fmt.Errorf("codex: refusing yolo: %w: tool release %q documents no bypass flag",
-				agentic.ErrPermissionModeUnsupported, row.Release)
+			return nil, err
 		}
 		if err := scanNativePolicy(req.NativeArgs); err != nil {
 			return nil, fmt.Errorf("codex: %w", err)
 		}
-		return append(append(args, bypassApprovalsAndSandboxFlag), nativeArgsSuffix(req)...), nil
+		return append(append(args, mapping.Flag), nativeArgsSuffix(req)...), nil
 	default:
 		return nil, fmt.Errorf("codex: unsupported launch mode %s", mode)
 	}

@@ -30,7 +30,55 @@ const permissionModeFlag = "--permission-mode"
 const (
 	allowDangerouslySkipPermissionsFlag = "--allow-dangerously-skip-permissions"
 	restrictedFlag                      = "--restricted"
+	printShortFlag                      = "-p"
+	printLongFlag                       = "--print"
 )
+
+// ClassifyNonInteractiveArgs reports whether the caller suffix selects
+// Claude's print form. It uses the same exact release row and permission
+// grammar as the yolo conflict scanner; prompt text after `--` is excluded by
+// the shared nativeargs flag-position parser.
+func (*System) ClassifyNonInteractiveArgs(toolRelease string, suffix []string) (agentic.NativeArgsClassification, error) {
+	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
+	if err != nil {
+		return agentic.NativeArgsClassification{}, fmt.Errorf("claude: %w", err)
+	}
+	for _, index := range nativeargs.FlagIndexes(suffix) {
+		name, _, _ := nativeargs.SplitFlagValue(suffix[index])
+		if name == printShortFlag || name == printLongFlag {
+			return agentic.NativeArgsClassification{Form: agentic.NonInteractiveFormPrint, Grammar: capability.Grammar}, nil
+		}
+	}
+	return agentic.NativeArgsClassification{Grammar: capability.Grammar}, nil
+}
+
+// PermissionMapping exposes Claude's provider mapping before launch-plan
+// admission. Native maps to no module-owned argument; yolo returns the same
+// spelling used by Args, under the grammar verified for this exact release.
+func (*System) PermissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
+	return permissionMapping(toolRelease, mode)
+}
+
+func permissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
+	effective, err := mode.Resolve()
+	if err != nil {
+		return agentic.PermissionMapping{}, fmt.Errorf("claude: %w", err)
+	}
+	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
+	if err != nil {
+		return agentic.PermissionMapping{}, fmt.Errorf("claude: %w", err)
+	}
+	mapping := agentic.PermissionMapping{Grammar: capability.Grammar}
+	if effective == agentic.PermissionModeNative {
+		return mapping, nil
+	}
+	if !capability.YoloSupported {
+		return agentic.PermissionMapping{}, fmt.Errorf("claude: refusing yolo: %w: tool release %q documents no bypass flag",
+			agentic.ErrPermissionModeUnsupported, capability.Release)
+	}
+	mapping.Flag = bypassPermissionsFlag
+	return mapping, nil
+}
 
 // knownPermissionModes is the closed `--permission-mode` value set at
 // the pinned release: the six choices `claude --help` lists

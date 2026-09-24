@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a public release-versioned native-argument classifier for interactive
+  launchers. It identifies Claude and Pi print forms and Codex `exec` through
+  the plugin-owned grammar, returns that grammar version, stops at `--`, and
+  fails closed for unknown systems or unverified releases. Add the
+  pre-admission `Registry.PermissionMapping` API so launchers can obtain the
+  plugin-owned mapping and grammar for a verified system, release and
+  permission mode. Expected release v0.5.22; the orchestrator cuts the tag.
+
 - Carry interactive permission mode, verified tool release and caller native
   arguments through vendor admission into the launch plan; add best-effort
   Claude and Codex stored-policy inspection with explicit inspected and
