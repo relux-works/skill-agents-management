@@ -192,6 +192,11 @@ var homeLoader = newConfigLoader(readHomeConfigFile)
 // read total, however many callers ask.
 func Peek() ConfigResult { return homeLoader.load() }
 
+// ParseConfig exposes the same validated legacy local-models.toml parser to
+// the operator runtime-catalog importer. It does not read machine files or
+// consult the process-wide loader.
+func ParseConfig(data []byte) (Config, error) { return parseConfig(data) }
+
 // --- TOML schema and parsing/validation ---
 
 type wireFile struct {
