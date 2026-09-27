@@ -271,6 +271,17 @@ digests, and a rebind orphans that state with no error anywhere.
 | Observed engine contract | at trusted assembly call `vendorplugin.NewRegistryWithEngineObservationAdapters`, then call `BuildLaunch`; it resolves the vendor-owned launch/profile first and validates the registered adapter's exact version, identity, freshness and readings before `Preflight` or plan materialization | pass an adapter or observation through `SpawnRequest`; mutate adapter identity after construction; treat schema validation as authorization; treat absence as read failure; run process, SSH, pressure, or supervision actions in this module |
 | Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |
 
+**Curator launch context (planned, not shipped).** The
+[Launch Context Bridge Contract v1.0.0](launch-context-contract.md) specifies
+how a consumer validates a Curator fragment and passes typed descriptors
+through the launch request, then records the profile, lock, managed home and
+fragment identity for child or session reuse. It requires refusal for a missing
+profile, unknown descriptor, malformed fragment, stale identity or incompatible
+capability. The current LaunchRequest has no typed Curator context, and its
+harness-side Profile is a separate value. Tracked-child wiring and primary
+session provenance remain next-slice work; the Claude PTY and Codex app-server
+entry mapping belongs to the session-host stream.
+
 **Interactive sessions.** A launcher that starts a terminal session for a human
 — the curator launcher at `0.2.0-draft` §4.1 is the named consumer — requests
 `agentic.LaunchModeInteractive` by name and never spells a provider flag

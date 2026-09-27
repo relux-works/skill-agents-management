@@ -21,6 +21,14 @@ owns a row in this table, and both call sites below run it before
 `checkAliases`, which is why narrowing `checkAliases` alone still leaves them
 refused.
 
+## Planned Curator launch-context refusals
+
+The [Launch Context Bridge Contract v1.0.0](launch-context-contract.md)
+specifies refusals for missing profiles, unknown descriptors, malformed
+fragments, stale identity and incompatible capabilities. These are planned
+requirements, not implemented gates: the current LaunchRequest has no typed
+Curator context, and the 41 mutants in this matrix do not measure those cases.
+
 ## Raw plugin graph
 
 | Error value | Production call site | Owning negative | Strictly narrower mutant |

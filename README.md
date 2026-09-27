@@ -55,6 +55,9 @@ mismatches and cycles atomically; it never assigns layer numbers or assumes an
 edge direction. The existing `pkg/agentic` and `pkg/vendorplugin` registries are
 source-compatible adapters, so their shipped vendor→system semantics and launch
 surfaces remain unchanged. See [docs/architecture.md](docs/architecture.md).
+The planned Curator launch-context contract is documented in
+[docs/launch-context-contract.md](docs/launch-context-contract.md) (v1.0.0,
+not shipped); LaunchRequest does not yet carry typed Curator context.
 
 ### General graph: `pkg/plugin`
 

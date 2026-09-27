@@ -560,8 +560,8 @@ func TestPiNativeThinkingRestrictionsMatchTheInstalledCatalog(t *testing.T) {
 	if len(mismatches) != 0 {
 		t.Errorf("%s", strings.Join(mismatches, "; "))
 	}
-	if checked != 71 {
-		t.Fatalf("checked %d (row × word) pairs, want the 71 catalog-verified pairs", checked)
+	if checked != 69 {
+		t.Fatalf("checked %d (row × word) pairs, want 69 catalog-verified pairs after ultra was retired in 4e229cc", checked)
 	}
 	t.Logf("checked %d (pi-native row × vocabulary word) pairs against the installed catalog", checked)
 }

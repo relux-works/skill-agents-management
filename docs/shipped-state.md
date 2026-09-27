@@ -32,6 +32,18 @@ published dependency only after independent review, Story integration, and an
 immutable signed tag; this document does not treat the candidate branch as a
 release.
 
+## Planned Launch Context Bridge Contract v1.0.0 (not shipped)
+
+The [versioned contract](launch-context-contract.md) defines how validated
+Curator fragment descriptors cross into the module's typed launch request, how
+child and session provenance is retained, and when a launch must refuse. This
+is a documentation contract for the next consumer slices: the current
+LaunchRequest has no typed Curator context. Tracked children must pass context
+through the module; primary sessions carry provenance in Curator's composed
+plan for the session host to persist. Claude PTY and Codex app-server entry
+mapping remains with the session-host stream. Curator-spec follow-ups are
+listed as plain issue references in the contract.
+
 ## General graph baseline: v0.4.3
 
 The historical extraction ledger below remains intact. v0.4.3 re-derives the

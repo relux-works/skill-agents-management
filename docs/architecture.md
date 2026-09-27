@@ -11,6 +11,11 @@ how a program depends on the module is
 [consuming-the-module.md](consuming-the-module.md). Where the two disagree with
 this file, they are describing reality and this file is describing the rule.
 
+The planned Curator fragment-to-launch-context boundary is versioned separately
+in [launch-context-contract.md](launch-context-contract.md). It defines the
+next-slice descriptor, provenance and refusal requirements; the current
+LaunchRequest does not yet carry typed Curator context.
+
 ## The plugin graph
 
 `pkg/plugin.Registry` stores `plugin.Declaration{ID, Kind, Dependencies}`.
