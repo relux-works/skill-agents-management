@@ -113,13 +113,9 @@ var (
 	// a system declaring GrammarNone.
 	ErrCompositionUnsupported = errors.New("agentic: system declares no launch composition grammar")
 	// ErrCompositionNotInteractive is returned when an interactive launch
-	// carries a composition — a prefix, a server list, or both. It is a
-	// different refusal from ErrCompositionUnsupported on purpose: the system
-	// may well declare a grammar, but in LaunchModeInteractive the MCP channel
-	// belongs to the composer that owns the terminal session (Decision 0013
-	// §6.5), and a second component spelling MCP flags is the defect class the
-	// decision names M2.
-	ErrCompositionNotInteractive = errors.New("agentic: interactive launch carries no composition; the MCP prefix is the composer's")
+	// carries a legacy raw Composition. A typed ContextDescriptor is the
+	// supported value path for plugins that declare a context renderer.
+	ErrCompositionNotInteractive = errors.New("agentic: interactive launch carries a legacy raw composition")
 	// ErrParameterNotInteractive is returned when an interactive launch
 	// carries a parameter its grammar has no channel for: a goal, a budget, a
 	// service tier, or an assignment prompt. Decision 0013 §5 forbids each of
@@ -223,20 +219,15 @@ func (e *NativePolicyConflictError) Error() string {
 func (e *NativePolicyConflictError) Unwrap() error { return ErrNativePolicyConflict }
 
 // refuseNonInteractiveParameters is the interactive grammar's request-side
-// half, applied once here so that no plugin has to carry its own copy of the
-// rule and no plugin can forget one.
+// gate, applied once here so no plugin can forget the shared exclusions.
 //
-// The composition refusal is the decision's own sentinel. The parameter
-// refusal is the same constraint read from the other side: a goal, a budget, a
-// service tier or a prompt would each have to reach the child through a flag
-// or a stdin the mode forbids, so admitting one and building an argv without
-// it is a launch parameter silently dropped — the refusal-over-drop rule every
-// other sentinel in this file already follows.
+// The legacy raw Composition is refused; semantic ContextDescriptors are
+// checked by the optional plugin validator before request preparation. A
+// goal, budget, service tier or assignment prompt still has no channel in this
+// grammar and is refused rather than silently dropped.
 //
-// It sits BEFORE the composition-grammar checks below, so an interactive
-// request carrying a composition is refused for being interactive rather than
-// for its grammar: the operator fixing it needs to know the prefix does not
-// belong here at all, not that it is malformed.
+// The composition refusal sits before composition-grammar checks so the
+// caller learns that raw launch composition does not belong in this mode.
 func refuseNonInteractiveParameters(id SystemID, req LaunchRequest) error {
 	if !req.Composition.IsZero() {
 		return fmt.Errorf("%w: %s was handed %d prefix argument(s) and %d server(s)", ErrCompositionNotInteractive, id, len(req.Composition.Prefix), len(req.Composition.Servers))
@@ -327,6 +318,15 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	if mode != LaunchModeInteractive && len(req.NativeArgs) != 0 {
 		return Plan{}, fmt.Errorf("%w: %s carries %d native argument(s) in %s mode; only the interactive grammar forwards them",
 			ErrNativeArgsNotInteractive, id, len(req.NativeArgs), mode)
+	}
+	if len(req.ContextDescriptors) > 0 {
+		validator, supported := sys.(ContextDescriptorValidator)
+		if !supported {
+			return Plan{}, fmt.Errorf("agentic: building plan for %s: %w", id, &ContextDescriptorsUnsupportedError{System: id})
+		}
+		if err := validator.ValidateContextDescriptors(req, mode); err != nil {
+			return Plan{}, fmt.Errorf("agentic: %s rejected launch context before planning: %w", id, err)
+		}
 	}
 	req, err = PrepareLaunchRequest(sys, req, mode)
 	if err != nil {

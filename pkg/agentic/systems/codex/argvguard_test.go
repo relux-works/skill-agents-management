@@ -69,10 +69,11 @@ const (
 // allowlist carries six such names — display mirrors, config readers, a flag
 // classifier — each audited and each explained where it is listed.
 var codexArgvConstructionAllowlist = map[string]string{
-	argvguard.AllowlistKey(codexArgsFile, "Args"):                   "the single construction site",
-	argvguard.AllowlistKey(codexArgsFile, "appendReasoningAndTier"): "the -c override fragment both of Args' grammars splice in identically",
-	argvguard.AllowlistKey(codexArgsFile, "NormalizeServiceTier"):   "maps the runtime's tier vocabulary onto the catalog id; it names the config KEY nowhere and constructs no argv",
-	argvguard.AllowlistKey(codexEnvFile, "ServiceTierEnv"):          "the environment variable a child reads its resolved tier from; a variable name, not an argv flag",
+	argvguard.AllowlistKey(codexArgsFile, "Args"):                                               "the single construction site",
+	argvguard.AllowlistKey(codexArgsFile, "appendReasoningAndTier"):                             "the -c override fragment both of Args' grammars splice in identically",
+	argvguard.AllowlistKey("pkg/agentic/systems/codex/context.go", "isCodexPermissionSelector"): "classifies caller-owned policy selectors and emits no argv",
+	argvguard.AllowlistKey(codexArgsFile, "NormalizeServiceTier"):                               "maps the runtime's tier vocabulary onto the catalog id; it names the config KEY nowhere and constructs no argv",
+	argvguard.AllowlistKey(codexEnvFile, "ServiceTierEnv"):                                      "the environment variable a child reads its resolved tier from; a variable name, not an argv flag",
 	// The bypass flag's ONE spelling: the const both of Args' branches
 	// reference. It is a declaration, not a construction — Args is the only
 	// function the scanner may resolve it through, which is what the gate

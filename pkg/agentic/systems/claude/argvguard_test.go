@@ -74,11 +74,13 @@ const (
 // exactly one place, and inlining it into Args is what would put the `/goal `
 // literal next to a refusal that is easier to read on its own.
 var claudeArgvConstructionAllowlist = map[string]string{
-	argvguard.AllowlistKey(claudeArgsFile, "Args"):                "the single construction site",
-	argvguard.AllowlistKey(claudeArgsFile, "interactiveArgs"):     "the interactive branch of Args, reached from Args alone; split out so the exec grammar reads as the source wrote it",
-	argvguard.AllowlistKey(claudeArgsFile, "appendEffort"):        "the effort-transport fragment both of Args' grammars splice in identically",
-	argvguard.AllowlistKey(claudeGoalFile, "goalDirective"):       "renders the goal branch's one positional argument and refuses a goal that carries no predicate; it spells no flag",
-	argvguard.AllowlistKey(claudeGoalFile, "goalDirectivePrefix"): "the directive literal itself, declared once so the guard's signature and the construction cannot drift apart",
+	argvguard.AllowlistKey(claudeArgsFile, "Args"):                                                  "the single construction site",
+	argvguard.AllowlistKey(claudeArgsFile, "appendSystemPromptFileFlag"):                            "the one stored spelling for the appended system-prompt file pair",
+	argvguard.AllowlistKey("pkg/agentic/systems/claude/context.go", "rejectNativeContextConflicts"): "classifies caller-owned context selectors and emits no argv",
+	argvguard.AllowlistKey(claudeArgsFile, "interactiveArgs"):                                       "the interactive branch of Args, reached from Args alone; split out so the exec grammar reads as the source wrote it",
+	argvguard.AllowlistKey(claudeArgsFile, "appendEffort"):                                          "the effort-transport fragment both of Args' grammars splice in identically",
+	argvguard.AllowlistKey(claudeGoalFile, "goalDirective"):                                         "renders the goal branch's one positional argument and refuses a goal that carries no predicate; it spells no flag",
+	argvguard.AllowlistKey(claudeGoalFile, "goalDirectivePrefix"):                                   "the directive literal itself, declared once so the guard's signature and the construction cannot drift apart",
 }
 
 // moduleGoSources reads every non-test Go file this module's build compiles,

@@ -31,9 +31,9 @@ import (
 //     deletes.
 //
 // "--yolo" is Muse's approval flag. Codex also accepts that spelling as an
-// alias for its bypass flag; its only occurrences are the centralized Codex
-// grammar constant and the read-only native-argument classifier. Those two
-// exact sites are allowlisted below and remain covered by Codex's argv guard.
+// alias for its bypass flag; its code references are the centralized Codex
+// grammar constant and two read-only native-argument classifiers. Those exact
+// sites are allowlisted below and remain covered by Codex's argv guard.
 //
 // "--reasoning-effort" passes the same test and is muse's alone for the same
 // reason exact matching gives: codex carries effort as the config override
@@ -49,6 +49,7 @@ var museArgvSignature = []string{
 const museArgsFile = "pkg/agentic/systems/muse/args.go"
 const codexArgsFile = "pkg/agentic/systems/codex/args.go"
 const codexPolicyFile = "pkg/agentic/systems/codex/policy.go"
+const codexContextFile = "pkg/agentic/systems/codex/context.go"
 
 // museArgvConstructionAllowlist names the only sites permitted to spell a
 // signature literal, each with the reason it is not a second construction.
@@ -57,9 +58,10 @@ const codexPolicyFile = "pkg/agentic/systems/codex/policy.go"
 // this module name their construction site Args, so a bare-name allowlist would
 // exempt every Args in the module from every plugin's guard.
 var museArgvConstructionAllowlist = map[string]string{
-	argvguard.AllowlistKey(museArgsFile, "Args"):                        "the single construction site",
-	argvguard.AllowlistKey(codexArgsFile, "yoloAliasFlag"):              "Codex's native alias has the same spelling as Muse's flag; this constant is read by the Codex classifier and is never emitted",
-	argvguard.AllowlistKey(codexPolicyFile, "codexRootOptionIsBoolean"): "the Codex classifier recognizes the overlapping native alias while reading caller args; it emits no argv",
+	argvguard.AllowlistKey(museArgsFile, "Args"):                          "the single construction site",
+	argvguard.AllowlistKey(codexArgsFile, "yoloAliasFlag"):                "Codex's native alias has the same spelling as Muse's flag; this constant is read by the Codex classifier and is never emitted",
+	argvguard.AllowlistKey(codexPolicyFile, "codexRootOptionIsBoolean"):   "the Codex classifier recognizes the overlapping native alias while reading caller args; it emits no argv",
+	argvguard.AllowlistKey(codexContextFile, "isCodexPermissionSelector"): "the typed-context conflict classifier recognizes the overlapping native alias while reading caller args; it emits no argv",
 }
 
 // moduleGoSources reads every non-test Go file this module's build compiles,
@@ -141,9 +143,9 @@ func TestTheMuseArgvGuardFiresOnTheRealConstructionSite(t *testing.T) {
 // false-positive bound, measured against real neighbouring code.
 //
 // Codex is the intentional overlap: its native CLI alias has the same spelling
-// as Muse's flag, so only the two exact, parser-only sites listed in the
-// allowlist above are accepted. Other plugins still have to avoid the
-// signature, including qwen's separate "yolo" value spelling.
+// as Muse's flag, so only the alias definition and two exact, parser-only sites
+// listed in the allowlist above are accepted. Other plugins still have to avoid
+// the signature, including qwen's separate "yolo" value spelling.
 func TestTheMuseGuardDoesNotFireOnTheOtherPlugins(t *testing.T) {
 	sources := moduleGoSources(t)
 	for _, plugin := range []string{"codex", "claude", "qwen", "gemini", "agy"} {

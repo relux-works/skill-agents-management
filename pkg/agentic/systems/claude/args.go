@@ -48,7 +48,11 @@ const promptFilePlaceholder = "<assignment-prompt-file>"
 // capability table that re-verifies it per release is F-M1b's. Both branches
 // reference this const rather than repeating the literal, so the yolo mapping
 // is one site and the argvguard occurrence proof can hold it.
-const bypassPermissionsFlag = "--dangerously-skip-permissions"
+const (
+	bypassPermissionsFlag      = "--dangerously-skip-permissions"
+	appendSystemPromptFlag     = "--append-system-prompt"
+	appendSystemPromptFileFlag = "--append-system-prompt-file"
+)
 
 // Args builds the claude argv for one launch mode, excluding the binary.
 //
@@ -67,10 +71,11 @@ const bypassPermissionsFlag = "--dangerously-skip-permissions"
 // an effort was requested — and, when the request carries PermissionMode
 // "yolo", the ONE bypass flag above (curator-spec Decision 0018). NOTHING else:
 // no `-p`, no `--output-format`, no budget, no composition prefix, no goal
-// pair. The composer that owns the terminal spells the MCP channel; the yolo
-// flag is spelled HERE, once, because Decision 0013 D5 forbids the launcher
-// from spelling a provider flag and a second component spelling this one is
-// the M2 defect the decision names. The refusals for a goal, a budget, a
+// pair. Typed context descriptors are resolved and rendered here by the
+// plugin; callers pass semantic values and do not spell provider arguments.
+// The yolo flag is spelled HERE, once, because Decision 0013 D5 forbids the
+// launcher from spelling a provider flag and a second component spelling this
+// one is the M2 defect the decision names. The refusals for a goal, a budget, a
 // prompt or a composition arriving in this mode are BuildPlan's
 // (ErrParameterNotInteractive, ErrCompositionNotInteractive); the goal and
 // budget refusals are repeated here, because a caller holding the plugin
@@ -78,8 +83,7 @@ const bypassPermissionsFlag = "--dangerously-skip-permissions"
 // `claude --help` at 2.1.261: `--model <model>` and `--effort <level>` are
 // session flags, not `--print` ones.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
-	effective, err := req.PermissionMode.Resolve()
-	if err != nil {
+	if _, err := req.PermissionMode.Resolve(); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
 	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
@@ -90,17 +94,27 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return nil, fmt.Errorf("claude: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
 			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
 	}
+	context, err := buildContextValues(req, mode)
+	if err != nil {
+		return nil, err
+	}
 	switch mode {
 	case agentic.LaunchModeExec, agentic.LaunchModeDryRun:
 	case agentic.LaunchModeInteractive:
-		return interactiveArgs(req, effective)
+		return interactiveArgs(req, context)
 	default:
 		return nil, fmt.Errorf("claude: unsupported launch mode %s", mode)
 	}
 
 	args := compositionArgvPrefix(req)
+	if context.hasMCP {
+		args = append(args, mcpConfigFlag, context.mcpConfig)
+	}
 	args = append(args, "-p", "--output-format", "json", "--model", strings.TrimSpace(req.Model.ID))
 	args = appendEffort(args, req)
+	if context.hasSystemPrompt {
+		args = append(args, appendSystemPromptFlag, context.systemPrompt)
+	}
 	if req.Budget != nil && req.Budget.USD > 0 {
 		// The source's `%.2f` and its `> 0` guard, both kept rather than
 		// improved. The guard means a Budget carrying zero or a negative figure
@@ -128,7 +142,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	args = append(args, "--append-system-prompt-file", assignmentPath, directive)
+	args = append(args, appendSystemPromptFileFlag, assignmentPath, directive)
 	return args, nil
 }
 
@@ -136,7 +150,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 // exec grammar above reads as the source wrote it. It is NOT a second
 // construction site: it is reached from Args alone, and argvguard_test.go's
 // allowlist names it with that reason.
-func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode) ([]string, error) {
+func interactiveArgs(req agentic.LaunchRequest, context contextValues) ([]string, error) {
 	if req.Goal != nil {
 		return nil, fmt.Errorf("claude: an interactive launch carries no goal; the `%s` directive is exec-mode machinery", strings.TrimSpace(goalDirectivePrefix))
 	}
@@ -145,7 +159,13 @@ func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode
 	}
 	args := []string{"--model", strings.TrimSpace(req.Model.ID)}
 	args = appendEffort(args, req)
-	if effective != agentic.PermissionModeYolo {
+	if context.hasMCP {
+		args = append(args, mcpConfigFlag, context.mcpConfig)
+	}
+	if context.hasSystemPrompt {
+		args = append(args, appendSystemPromptFlag, context.systemPrompt)
+	}
+	if context.permission != agentic.PermissionModeYolo {
 		// Native forwards the caller's arguments with no inspection at
 		// all: the raw contract is unchanged and no claim is made over
 		// them (curator-spec Decision 0018 item 4).
@@ -170,7 +190,7 @@ func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode
 	// scan classifies against it: an unpinned or newer release, and an
 	// empty one, fail closed here, and the scan below never reasons
 	// under a grammar no release verified.
-	mapping, err := permissionMapping(req.ToolRelease, effective)
+	mapping, err := permissionMapping(req.ToolRelease, context.permission)
 	if err != nil {
 		return nil, err
 	}

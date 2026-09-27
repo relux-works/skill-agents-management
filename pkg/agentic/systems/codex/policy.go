@@ -40,11 +40,12 @@ const (
 // the provider's config surface directly, so an unlisted key is refused
 // rather than resolved into a claim about the session's posture.
 var knownConfigKeys = map[string]bool{
-	"model_reasoning_effort": true,
-	"service_tier":           true,
-	"approval_policy":        true,
-	"sandbox_mode":           true,
-	"sandbox_permissions":    true,
+	"model_reasoning_effort":       true,
+	"service_tier":                 true,
+	developerInstructionsConfigKey: true,
+	"approval_policy":              true,
+	"sandbox_mode":                 true,
+	"sandbox_permissions":          true,
 }
 
 var knownApprovalValues = map[string]bool{"on-request": true, "never": true}

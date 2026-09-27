@@ -44,9 +44,9 @@ import (
 // PermissionMode "yolo", the ONE bypass flag below (curator-spec Decision
 // 0018's codex_cli row). Nothing else: no `exec`, no sandbox or approval
 // policy, no profile, no service tier, no composition prefix, no `-` prompt
-// marker. The composer that owns the terminal spells the MCP channel; the yolo
-// flag is spelled HERE, once, because Decision 0013 D5 forbids the launcher
-// from spelling a provider flag. Both spellings were checked against
+// marker. Typed context descriptors are validated and rendered by this plugin;
+// callers do not rebuild the provider grammar. The yolo flag is mapped here
+// from the typed permission posture. Both spellings were checked against
 // `codex --help` at 0.153.2: `-m, --model <MODEL>` and `-c, --config
 // <key=value>` are top-level flags of the interactive invocation, not `exec`
 // subcommand flags.
@@ -74,8 +74,7 @@ const yoloAliasFlag = "--yolo"
 // It is the single construction site. Every surface of this plugin that needs
 // codex flags calls it: System.Argv for all four modes, and nothing else.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
-	effective, err := req.PermissionMode.Resolve()
-	if err != nil {
+	if _, err := req.PermissionMode.Resolve(); err != nil {
 		return nil, fmt.Errorf("codex: %w", err)
 	}
 	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
@@ -86,10 +85,15 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return nil, fmt.Errorf("codex: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
 			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
 	}
+	context, err := buildContextValues(req, mode)
+	if err != nil {
+		return nil, err
+	}
 	model := strings.TrimSpace(req.Model.ID)
 	switch mode {
 	case agentic.LaunchModeExec, agentic.LaunchModeDryRun:
 		args := compositionArgvPrefix(req)
+		args = appendContextConfigOverrides(args, context)
 		args = append(args, "--search", "-a", "never")
 		if profile := strings.TrimSpace(req.Profile); profile != "" {
 			args = append(args, "-p", profile)
@@ -108,12 +112,13 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		args = append(args, "-")
 		return args, nil
 	case agentic.LaunchModeManagedSession:
-		args := []string{
+		args := appendContextConfigOverrides([]string{}, context)
+		args = append(args,
 			"--model", model,
 			"--search",
 			"--sandbox", "danger-full-access",
 			"--ask-for-approval", "never",
-		}
+		)
 		if profile := strings.TrimSpace(req.Profile); profile != "" {
 			args = append(args, "--profile", profile)
 		}
@@ -132,12 +137,13 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		if tier := strings.TrimSpace(req.ServiceTier); tier != "" {
 			return nil, fmt.Errorf("codex: an interactive launch carries no service tier; %q would reach no override", tier)
 		}
-		args := []string{"-m", model}
+		args := appendContextConfigOverrides([]string{}, context)
+		args = append(args, "-m", model)
 		// With the tier refused above, appendReasoningAndTier contributes the
 		// effort override alone — the same spelling the other two grammars use,
 		// from the same fragment, so the three cannot drift.
 		args = appendReasoningAndTier(args, req)
-		if effective != agentic.PermissionModeYolo {
+		if context.permission != agentic.PermissionModeYolo {
 			// Native forwards the caller's arguments with no inspection
 			// at all: the raw contract is unchanged and no claim is made
 			// over them (curator-spec Decision 0018 item 4).
@@ -163,7 +169,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		// scan classifies against it: an unpinned or newer release, and an
 		// empty one, fail closed here, and the scan below never reasons
 		// under a grammar no release verified.
-		mapping, err := permissionMapping(req.ToolRelease, effective)
+		mapping, err := permissionMapping(req.ToolRelease, context.permission)
 		if err != nil {
 			return nil, err
 		}
@@ -174,6 +180,18 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	default:
 		return nil, fmt.Errorf("codex: unsupported launch mode %s", mode)
 	}
+}
+
+// appendContextConfigOverrides emits plugin-validated channel values through
+// the one Codex argv construction path. It does not start the CLI.
+func appendContextConfigOverrides(args []string, context contextValues) []string {
+	if context.hasSystemPrompt {
+		args = append(args, "-c", developerInstructionsConfigKey+"="+context.systemPrompt)
+	}
+	for _, override := range context.mcpOverrides {
+		args = append(args, "-c", override.key+"="+override.value)
+	}
+	return args
 }
 
 // appendReasoningAndTier appends the `-c` config overrides both codex launch

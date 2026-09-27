@@ -57,7 +57,10 @@ source-compatible adapters, so their shipped vendor→system semantics and launc
 surfaces remain unchanged. See [docs/architecture.md](docs/architecture.md).
 The planned Curator launch-context contract is documented in
 [docs/launch-context-contract.md](docs/launch-context-contract.md) (v1.0.0,
-not shipped); LaunchRequest does not yet carry typed Curator context.
+not shipped). `LaunchRequest.ContextDescriptors` carries native MCP,
+additional system-prompt and permission values for Claude and Codex. It does
+not yet carry the Curator fragment descriptor union or profile, lock, managed
+home and provenance identity.
 
 ### General graph: `pkg/plugin`
 
@@ -82,12 +85,17 @@ The agentic-system plugin contract and its registry.
   optional typed permission-mode member (`LaunchRequest.PermissionMode`,
   curator-spec Decision 0018), and the caller's native
   arguments forwarded verbatim after everything the module spells
-  (`LaunchRequest.NativeArgs` — the item after that).
-  `BuildPlan` refuses an interactive request carrying a composition
-  (`ErrCompositionNotInteractive`) or a goal, budget, service tier or prompt
-  (`ErrParameterNotInteractive`), and holds every plugin to a detached stdin
-  unless its effort transport is stdin. `claude-code`, `codex` and `pi` declare
-  the mode; the other four refuse it with `ErrUnsupportedLaunchMode`.
+  (`LaunchRequest.NativeArgs` — the item after that). `LaunchRequest.ContextDescriptors`
+  carries semantic MCP server, additional system-prompt and permission values;
+  Claude and Codex validate conflicts and own provider rendering behind
+  `BuildPlan`. Callers do not spell those provider arguments. Unknown,
+  malformed, duplicate, unsupported or conflicting descriptors are refused
+  with typed errors before preparation. A legacy raw composition remains
+  refused in interactive mode (`ErrCompositionNotInteractive`), as do a goal,
+  budget, service tier or prompt (`ErrParameterNotInteractive`). The plan holds
+  detached stdin unless its effort transport is stdin. `claude-code`, `codex`
+  and `pi` declare the mode; the other four refuse it with
+  `ErrUnsupportedLaunchMode`.
 - `LaunchRequest.PermissionMode` is the interactive permission posture
   (curator-spec Decision 0018): the zero value and `native` pass nothing — the
   provider's stored settings decide — while `yolo` selects the single provider
@@ -1216,6 +1224,7 @@ concluding that a missing golden is permission.
 | Tool | Purpose | Entry point | Artifacts |
 | --- | --- | --- | --- |
 | `make` | build, test, vet, regress and install the CLI | `make build` / `test` / `vet` / `regress` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
+| `golangci-lint` | lint all Go packages | `golangci-lint run ./...` | terminal output; task logs under `.temp/` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
 | model registry capture | regenerate the vendor fixtures: the source's model rows and frozen v2 tiers (read from its Go sources) and the admitted-pair digests (read from its own binary) | `.scripts/capture-model-registry.sh` | `pkg/vendorplugin/testdata/source-model-registry.json`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`, scratch in `.temp/capture-model-registry/` |

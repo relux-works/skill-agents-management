@@ -81,9 +81,10 @@ func (*System) ID() agentic.SystemID { return systemID }
 // one-shot `codex exec` this tool owns, its side-effect-free dry-run mirror,
 // and the provider-args fragment an external composer splices into a PTY-owned
 // managed session. The fourth, LaunchModeInteractive, is curator-spec Decision
-// 0013 §5: the interactive (non-`exec`) grammar reduced to model selection and
-// the effort override, with no golden behind it because no source capture ever
-// produced one — interactive_test.go is its evidence and says so.
+// 0013 §5: the interactive (non-`exec`) grammar carries model selection, the
+// effort override, and supported typed context descriptors, with no golden
+// behind it because no source capture ever produced one — interactive_test.go
+// and context_test.go are its evidence and say so.
 //
 // LaunchModeManagedSession is declared with its evidence named, because the
 // goldens have NONE for it — the source's capture harness lives in package

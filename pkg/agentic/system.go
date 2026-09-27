@@ -103,27 +103,24 @@ const (
 	// tool executes.
 	LaunchModeManagedSession
 	// LaunchModeInteractive is the terminal session a human drives: a complete
-	// argv the launcher hands to a terminal, with no prompt and no result
-	// protocol. It is curator-spec Decision 0013 §5, and its grammar is a
-	// CLOSED set of constraints rather than a spelling:
+	// argv the launcher hands to a terminal, with no assignment prompt or result
+	// protocol. Its grammar is a closed set of constraints:
 	//
-	//   - The argv contains ONLY model selection, the system's declared
-	//     effort transport for the requested effort, — when the request
-	//     carries PermissionMode "yolo" — the ONE provider bypass flag that
-	//     system's plugin maps yolo to (curator-spec Decision 0018; the
-	//     launcher only resolves and passes the mode, Decision 0013 D5),
-	//     and the caller's NativeArgs forwarded verbatim after everything
-	//     the module spells. It carries no print or headless mode, no
-	//     output-format flag, no OTHER permission-bypass or
-	//     unrestricted-mode flag of its own spelling, no goal or
-	//     assignment-prompt machinery, no budget flag and no service-tier
-	//     flag. What the module may not SPELL is the invariant; the
-	//     verbatim suffix is the caller's spelling, not the module's — the
-	//     module classifies its flag positions under yolo and claims no
-	//     posture over it.
-	//   - Composition is NOT part of the interactive argv. The MCP composition
-	//     prefix is the composer's plane, and BuildPlan refuses a request
-	//     carrying one with ErrCompositionNotInteractive.
+	//   - The argv contains model selection, the system's declared effort
+	//     transport, supported semantic ContextDescriptors, the legacy typed
+	//     PermissionMode where declared, and the caller's NativeArgs forwarded
+	//     verbatim after every plugin-built value. Claude and Codex own the
+	//     MCP, additional system-prompt and permission descriptor rendering; a
+	//     system without that optional validator refuses descriptors with
+	//     ErrContextDescriptorsUnsupported. Consumers pass values and never
+	//     reconstruct the provider grammar.
+	//   - The module adds no print or headless mode, no goal or assignment-prompt
+	//     machinery, no budget and no service tier. NativeArgs are the caller's
+	//     suffix; plugins classify flag positions under yolo and claim no
+	//     posture over a suffix they forward unchanged.
+	//   - The legacy raw Composition prefix is not part of this mode. BuildPlan
+	//     refuses it with ErrCompositionNotInteractive; a typed MCP descriptor
+	//     is validated and rendered by a supporting plugin.
 	//   - StdinPayload is Attached: false, unless the system's EffortTransport
 	//     is EffortTransportStdin — then it is exactly the effort encoding that
 	//     system declares and nothing else. BuildPlan holds every plugin to it.
@@ -572,6 +569,12 @@ type LaunchRequest struct {
 	ServiceTier string
 	Composition Composition
 
+	// ContextDescriptors carry semantic MCP, additional system-prompt and
+	// permission values. A supporting system plugin validates conflicts and
+	// maps values to its own CLI grammar; consumers do not construct provider
+	// arguments. Unsupported systems and unknown kinds are typed refusals.
+	ContextDescriptors []ContextDescriptor
+
 	// Deadline is the hard fence the caller will enforce on the child
 	// process. A plugin whose harness carries a deadline of its own (pi
 	// spells `--deadline`) transports THIS value and never a constant of its
@@ -608,12 +611,12 @@ type LaunchRequest struct {
 	// identity Pi would resolve to whichever provider it likes.
 	Vendor string
 
-	// PermissionMode is the interactive permission posture, curator-spec
-	// Decision 0018. The zero value means native (pass nothing); "yolo" maps
-	// to the single provider bypass flag the system declares for its pinned
-	// tool release. It is valid ONLY for LaunchModeInteractive: any other
-	// mode carrying a non-zero value is refused, and so is an unknown value
-	// in any mode. The mapping — and only the mapping — is each plugin's.
+	// PermissionMode is the legacy typed interactive permission posture. New
+	// callers may supply the same channel through ContextDescriptors. The zero
+	// value means native (pass nothing); "yolo" maps through the system plugin
+	// for its pinned tool release. Supplying both sources is a typed conflict.
+	// It is valid ONLY for LaunchModeInteractive; any other non-zero value and
+	// any unknown value are refused.
 	PermissionMode PermissionMode
 
 	// ToolRelease is the running tool's release the yolo mapping was verified

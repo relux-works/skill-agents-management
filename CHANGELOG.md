@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add typed launch-context descriptors for MCP servers, additional
+  system-prompt text and interactive permission posture. Claude and Codex own
+  descriptor validation, conflict refusals and provider-specific rendering;
+  `BuildPlan` runs validation before launch preparation and starts no process.
+  Expected release v0.5.23; the orchestrator cuts the tag.
+
 - Add a public release-versioned native-argument classifier for interactive
   launchers. It identifies Claude and Pi print forms and Codex `exec` through
   the plugin-owned grammar, returns that grammar version, stops at `--`, and

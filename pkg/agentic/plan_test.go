@@ -371,3 +371,22 @@ func TestBuildPlanPrefersAnExplicitHomeOverTheDeclaredDefault(t *testing.T) {
 		t.Errorf("child env = %v, want the explicit home exported to the child", plan.Env)
 	}
 }
+
+func TestBuildPlanRefusesContextDescriptorsWithoutPluginSupport(t *testing.T) {
+	sys := newPangolin()
+	registry := registerPangolin(t, sys)
+	req := pangolinRequest()
+	req.ContextDescriptors = []ContextDescriptor{{Kind: ContextSystemPrompt, SystemPrompt: &SystemPromptContext{Text: "add detail"}}}
+
+	_, err := BuildPlan(registry, req, LaunchModeExec)
+	if !errors.Is(err, ErrContextDescriptorsUnsupported) {
+		t.Fatalf("BuildPlan err = %v, want ErrContextDescriptorsUnsupported", err)
+	}
+	var unsupported *ContextDescriptorsUnsupportedError
+	if !errors.As(err, &unsupported) || unsupported.System != pangolinID {
+		t.Fatalf("BuildPlan err = %v, want typed refusal naming %s", err, pangolinID)
+	}
+	if sys.calls["Argv"] != 0 {
+		t.Fatalf("Argv was called %d times for unsupported context descriptors", sys.calls["Argv"])
+	}
+}

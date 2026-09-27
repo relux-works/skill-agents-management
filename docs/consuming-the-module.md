@@ -9,18 +9,19 @@ whose `tools/board-cli` swapped its whole spawn plane onto this module.
 One Go module, one path, one tag:
 
 ```
-github.com/relux-works/skill-agents-management v0.4.3
+github.com/relux-works/skill-agents-management v0.5.22
 ```
 
-Continue requiring published `v0.4.3` until an immutable `v0.5.0` tag exists;
-the Story branch is not a dependency version.
+The current published version is `v0.5.22`. The context descriptor API in this
+change is proposed for `v0.5.23` after review and release; a feature branch is
+not a dependency version.
 
 There is no `replace` on trunk and there must not be one: a committed
 sibling-path `replace` is a path that exists on exactly one machine, and CI is
 not that machine.
 
 ```bash
-go get github.com/relux-works/skill-agents-management@v0.4.3
+go get github.com/relux-works/skill-agents-management@v0.5.22
 ```
 
 **Nothing else.** This repository went PUBLIC on 2026-08-23, so the fetch goes
@@ -277,23 +278,55 @@ how a consumer validates a Curator fragment and passes typed descriptors
 through the launch request, then records the profile, lock, managed home and
 fragment identity for child or session reuse. It requires refusal for a missing
 profile, unknown descriptor, malformed fragment, stale identity or incompatible
-capability. The current LaunchRequest has no typed Curator context, and its
-harness-side Profile is a separate value. Tracked-child wiring and primary
-session provenance remain next-slice work; the Claude PTY and Codex app-server
-entry mapping belongs to the session-host stream.
+capability. `LaunchRequest.ContextDescriptors` currently carries normalized
+MCP, additional system-prompt and permission values for Claude and Codex; it
+does not yet carry Curator's fragment descriptor union or its profile, lock,
+managed-home and provenance identity. Its harness-side `Profile` remains a
+separate value. Tracked-child wiring and primary-session provenance remain
+next-slice work; the Claude PTY and Codex app-server entry mapping belongs to
+the session-host stream.
 
 **Interactive sessions.** A launcher that starts a terminal session for a human
 — the curator launcher at `0.2.0-draft` §4.1 is the named consumer — requests
 `agentic.LaunchModeInteractive` by name and never spells a provider flag
-itself. The plan it gets back holds model selection and the system's effort
-transport and nothing else: no `-p`/`exec`, no output format, no permission
-bypass, no goal, budget, service tier or assignment prompt, no MCP composition
-prefix, and no stdin unless the system carries effort on stdin. `BuildPlan`
-refuses a request carrying any of those (`ErrCompositionNotInteractive`,
-`ErrParameterNotInteractive`) rather than dropping them; the MCP channel, the
-system-prompt channel and the permission posture are the composer's to append
-after the plan's `Argv`. `claude-code`, `codex`, `pi` and `pi-native` declare
-the mode; a system that does not is refused with `ErrUnsupportedLaunchMode`.
+itself. Supply context through `LaunchRequest.ContextDescriptors`; `BuildPlan`
+validates these values and the Claude or Codex plugin renders them into its
+plan in the modes each declares. MCP and additional prompt descriptors are
+available in those modes; permission descriptors are interactive-only.
+Callers can describe a stdio server with a command and arguments, or an HTTP
+server with an HTTP(S) URL. HTTP URLs cannot contain embedded credentials or a
+fragment; an optional bearer-token environment-variable name supplies
+authorization without carrying the token value. MCP names use letters,
+digits, `_` and `-`. Callers can also append system-prompt text or select an
+interactive permission mode. The prompt value augments the harness
+instructions and does not replace them. Unknown kinds, invalid payloads,
+duplicate channels, unsupported systems and conflicts with legacy inputs
+return typed errors.
+The legacy `LaunchRequest.PermissionMode` field conflicts with a permission
+descriptor when both are set.
+
+```go
+req.ContextDescriptors = []agentic.ContextDescriptor{
+    {
+        Kind: agentic.ContextMCPServers,
+        MCP: &agentic.MCPServersContext{Servers: []agentic.MCPServerDescriptor{
+            {Name: "docs", Transport: agentic.MCPTransportHTTP, URL: "https://mcp.example.test", BearerTokenEnvVar: "DOCS_TOKEN"},
+        }},
+    },
+    {Kind: agentic.ContextSystemPrompt, SystemPrompt: &agentic.SystemPromptContext{Text: "Use the repository guidance."}},
+    {Kind: agentic.ContextPermission, Permission: &agentic.PermissionContext{Mode: agentic.PermissionModeNative}},
+}
+plan, err := agentic.BuildPlan(registry, req, agentic.LaunchModeInteractive)
+```
+
+The caller executes the returned plan; it does not append provider arguments.
+`BuildPlan` refuses a legacy raw composition in interactive mode and any goal,
+budget, service tier or assignment prompt (`ErrCompositionNotInteractive`,
+`ErrParameterNotInteractive`). Permission descriptors are interactive-only.
+`claude-code`, `codex`, `pi` and `pi-native` declare the mode; a system without
+a context renderer refuses descriptors with
+`ErrContextDescriptorsUnsupported`, and a system that does not declare the
+mode is refused with `ErrUnsupportedLaunchMode`.
 
 For native Pi the launcher resolves one of the frozen `pi-anthropic`,
 `pi-openai` or `pi-google` runtimes, asks

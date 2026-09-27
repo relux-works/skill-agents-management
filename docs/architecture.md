@@ -13,8 +13,10 @@ this file, they are describing reality and this file is describing the rule.
 
 The planned Curator fragment-to-launch-context boundary is versioned separately
 in [launch-context-contract.md](launch-context-contract.md). It defines the
-next-slice descriptor, provenance and refusal requirements; the current
-LaunchRequest does not yet carry typed Curator context.
+next-slice descriptor, provenance and refusal requirements. `LaunchRequest`
+currently carries native MCP, additional system-prompt and permission channel
+values for Claude and Codex, but not the Curator fragment descriptor union or
+its profile, lock, managed-home and provenance identity.
 
 ## The plugin graph
 
@@ -364,18 +366,21 @@ contracts here, not suggestions:
    source paid repeatedly for shadow tables and duplicate charsets; a plugin
    declaration is the only place its kind and dependency edges may live, and
    guards should make a second binding fail a test.
-6. **An interactive plan carries model selection and effort transport, and
-   nothing else.** `LaunchModeInteractive` (curator-spec Decision 0013 §5)
-   spells no print or headless mode, no output-format flag, no permission
-   bypass, no goal or assignment-prompt machinery, no budget and no service
-   tier; `BuildPlan` refuses a composition in this mode
-   (`ErrCompositionNotInteractive`) and any parameter the grammar has no
-   channel for (`ErrParameterNotInteractive`), and attaches no stdin unless the
-   system's effort transport IS stdin. The MCP channel and the permission
-   posture belong to the composer that owns the terminal; a second component
-   spelling either is the defect class the decision names M2. Each declaring
-   plugin pins its exact interactive argv and a negative proving every
-   exec-mode marker absent, with the sweep shown to fire on its own exec argv.
+6. **Interactive context uses typed values rendered by the selected plugin.**
+   `LaunchModeInteractive` (curator-spec Decision 0013 §5) spells no print or
+   headless mode, no output-format flag, no goal or assignment-prompt
+   machinery, no budget and no service tier; `BuildPlan` refuses a legacy raw
+   composition in this mode (`ErrCompositionNotInteractive`) and any parameter
+   the grammar has no channel for (`ErrParameterNotInteractive`). It accepts
+   semantic `ContextDescriptors` only when the selected plugin implements the
+   context validator. Claude and Codex own MCP, additional system-prompt and
+   permission rendering; callers provide values and never construct provider
+   flags. Unknown, malformed, unsupported or conflicting descriptors are
+   typed refusals before launch preparation. Permission context remains
+   interactive-only, and the plan attaches no stdin unless the system's
+   effort transport IS stdin. Each declaring plugin pins its exact interactive
+   argv and a negative proving every exec-mode marker absent, with the sweep
+   shown to fire on its own exec argv.
 7. **A launch names its model.** `BuildPlan` refuses a request whose
    `Model.ID` is empty or whitespace (`ErrModelMissing`) once, in every mode,
    before any plugin surface is dispatched. The exec grammar used to admit
