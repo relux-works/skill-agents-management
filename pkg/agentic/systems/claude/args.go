@@ -160,7 +160,10 @@ func interactiveArgs(req agentic.LaunchRequest, context contextValues) ([]string
 	args := []string{"--model", strings.TrimSpace(req.Model.ID)}
 	args = appendEffort(args, req)
 	if context.hasMCP {
-		args = append(args, mcpConfigFlag, context.mcpConfig)
+		// --mcp-config accepts a variadic list, so keep the JSON attached to
+		// the flag. A separate value would consume a following NativeArgs
+		// positional prompt as another config file.
+		args = append(args, mcpConfigFlag+"="+context.mcpConfig)
 	}
 	if context.hasSystemPrompt {
 		args = append(args, appendSystemPromptFlag, context.systemPrompt)

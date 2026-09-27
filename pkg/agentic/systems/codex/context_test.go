@@ -209,3 +209,46 @@ func TestCodexRejectsBlankAdditionalSystemPrompt(t *testing.T) {
 		t.Fatalf("BuildPlan err = %v, want ErrInvalidContextDescriptor", err)
 	}
 }
+
+func TestCodexContextConflictsFollowNativeConfigKeyTrimming(t *testing.T) {
+	cases := []struct {
+		name       string
+		descriptor agentic.ContextDescriptor
+		nativeArgs []string
+		channel    agentic.ContextDescriptorKind
+	}{
+		{
+			name: "system prompt",
+			descriptor: agentic.ContextDescriptor{Kind: agentic.ContextSystemPrompt,
+				SystemPrompt: &agentic.SystemPromptContext{Text: "Add instructions."}},
+			nativeArgs: []string{"-c", ` developer_instructions="replaced"`},
+			channel:    agentic.ContextSystemPrompt,
+		},
+		{
+			name: "MCP server URL",
+			descriptor: agentic.ContextDescriptor{Kind: agentic.ContextMCPServers,
+				MCP: &agentic.MCPServersContext{Servers: []agentic.MCPServerDescriptor{{
+					Name: "board", Transport: agentic.MCPTransportHTTP, URL: "https://mcp.example.test",
+				}}}},
+			nativeArgs: []string{"-c", ` mcp_servers.board.url="https://other.example.test"`},
+			channel:    agentic.ContextMCPServers,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := interactiveRequest(tempSlot(t))
+			req.ContextDescriptors = []agentic.ContextDescriptor{tc.descriptor}
+			req.NativeArgs = tc.nativeArgs
+
+			err := interactivePlanError(t, req)
+			if !errors.Is(err, agentic.ErrContextDescriptorConflict) {
+				t.Fatalf("BuildPlan err = %v, want ErrContextDescriptorConflict for native args %q", err, tc.nativeArgs)
+			}
+			var conflict *agentic.ContextDescriptorConflictError
+			if !errors.As(err, &conflict) || conflict.Channel != tc.channel {
+				t.Fatalf("BuildPlan err = %v, want a typed conflict for channel %q", err, tc.channel)
+			}
+		})
+	}
+}

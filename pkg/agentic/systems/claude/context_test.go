@@ -24,7 +24,7 @@ func TestBuildPlanTranslatesClaudeContextChannels(t *testing.T) {
 	want := []string{
 		"--model", parityModel,
 		"--effort", parityEffort,
-		mcpConfigFlag, `{"mcpServers":{"board":{"type":"http","url":"https://mcp.example.test"},"local":{"type":"stdio","command":"mcp-tool","args":["serve"]}}}`,
+		mcpConfigFlag + `={"mcpServers":{"board":{"type":"http","url":"https://mcp.example.test"},"local":{"type":"stdio","command":"mcp-tool","args":["serve"]}}}`,
 		appendSystemPromptFlag, "Keep the repository instructions in force.",
 		bypassPermissionsFlag,
 	}

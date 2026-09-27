@@ -315,3 +315,25 @@ func TestAnUndeclaredLaunchModeIsRefused(t *testing.T) {
 		t.Errorf("BuildPlan returned %v, want %v", err, agentic.ErrUnsupportedLaunchMode)
 	}
 }
+
+func TestBuildPlanKeepsNativePromptAfterVariadicMCPConfig(t *testing.T) {
+	t.Parallel()
+	workDir := tempSlot(t)
+	req := parityRequest(workDir, parityPromptRunID, parityPromptTaskID)
+	req.ContextDescriptors = []agentic.ContextDescriptor{
+		{Kind: agentic.ContextMCPServers, MCP: &agentic.MCPServersContext{Servers: []agentic.MCPServerDescriptor{{
+			Name: "board", Transport: agentic.MCPTransportHTTP, URL: "https://mcp.example.test",
+		}}}},
+	}
+	req.NativeArgs = []string{"summarize the repository"}
+
+	args := argvFor(t, req, agentic.LaunchModeInteractive)
+	wantConfig := mcpConfigFlag + `={"mcpServers":{"board":{"type":"http","url":"https://mcp.example.test"}}}`
+	configAt := indexOf(args, wantConfig)
+	if configAt < 0 {
+		t.Fatalf("BuildPlan argv = %#v, want one attached %s=<json> argument", args, mcpConfigFlag)
+	}
+	if configAt+1 > len(args) || strings.Join(args[configAt+1:], "\x00") != strings.Join(req.NativeArgs, "\x00") {
+		t.Fatalf("BuildPlan argv suffix after MCP config = %#v, want native prompt verbatim %q", args[configAt+1:], req.NativeArgs)
+	}
+}

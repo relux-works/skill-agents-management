@@ -208,12 +208,12 @@ func nativeConfigKeyAt(args []string, index int) (string, bool) {
 			value = args[index+1]
 		}
 		key, _, ok := strings.Cut(value, "=")
-		return key, ok
+		return strings.TrimSpace(key), ok
 	}
 	if isAttachedConfigValue(el) {
 		value = strings.TrimPrefix(el, configFlag)
 		key, _, ok := strings.Cut(value, "=")
-		return key, ok
+		return strings.TrimSpace(key), ok
 	}
 	return "", false
 }
