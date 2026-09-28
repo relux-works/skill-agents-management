@@ -13,8 +13,8 @@ import (
 const statusSourceLabel = "local-runtime status"
 
 const (
-	restartNotBeforeSourceLabel = "agents-infra runtime status --json.restart_not_before"
-	quarantinedUntilSourceLabel = "agents-infra runtime status --json.quarantined_until"
+	restartNotBeforeSourceLabel = "curator-engines status --json.restart_not_before"
+	quarantinedUntilSourceLabel = "curator-engines status --json.quarantined_until"
 )
 
 // Availability reads query.Runtime to disambiguate which of this vendor's
@@ -37,10 +37,10 @@ func (v *Vendor) Availability(query vendorplugin.AvailabilityQuery) (vendorplugi
 	}
 
 	status, err := v.status.Status(context.Background(), localruntime.StatusQuery{
-		Runtime:            localruntime.RuntimeID(query.Runtime),
-		Model:              localruntime.ModelID(query.Model),
-		AgentsInfraProject: pointer.AgentsInfraProject,
-		AgentsInfraProfile: pointer.AgentsInfraProfile,
+		Runtime:               localruntime.RuntimeID(query.Runtime),
+		Model:                 localruntime.ModelID(query.Model),
+		CuratorEnginesProject: pointer.CuratorEnginesProject,
+		CuratorEnginesProfile: pointer.CuratorEnginesProfile,
 	})
 	if err != nil {
 		// A read failure is a COMPLETE, honest Unknown verdict — never

@@ -28,6 +28,8 @@ var (
 	}
 )
 
+const curatorEnginesStatusContractVersion = 1
+
 // brokerPair is one (state, source) combination.
 type brokerPair struct {
 	state  string
@@ -77,6 +79,11 @@ type wireBroker struct {
 	Source string `json:"source"`
 }
 
+type wireEngineIdentity struct {
+	Name string `json:"name"`
+	Key  string `json:"key"`
+}
+
 // wireSharingConfigured is the `sharing.configured` object's shape.
 type wireSharingConfigured struct {
 	MaxLeases int `json:"max_leases"`
@@ -93,7 +100,8 @@ type wireRuntime struct {
 	StartTime string `json:"start_time"`
 }
 
-// decodeStatus decodes one `agents-infra runtime status --json` response.
+// decodeStatus decodes one `curator-engines status --json` response from the
+// released status contract and verifies that it names the requested engine.
 //
 // It decodes into a map[string]json.RawMessage first specifically so
 // "missing" and "present" are distinguishable — json.Unmarshal into a
@@ -101,10 +109,35 @@ type wireRuntime struct {
 // indistinguishable from a legitimate zero, and this adapter must not
 // confuse the two for `runtime`, whose absence is a real, common,
 // non-error answer.
-func decodeStatus(raw []byte, runtime RuntimeID, model ModelID, now time.Time) (Status, error) {
+func decodeStatus(raw []byte, runtime RuntimeID, model ModelID, expectedEngine string, now time.Time) (Status, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return Status{}, fmt.Errorf("%w: response is not a JSON object: %v", ErrDecodeFailure, err)
+	}
+	versionRaw, ok := fields["contract_version"]
+	if !ok {
+		return Status{}, fmt.Errorf("%w: missing field %q", ErrDecodeFailure, "contract_version")
+	}
+	var version int
+	if err := json.Unmarshal(versionRaw, &version); err != nil {
+		return Status{}, fmt.Errorf("%w: field %q is not an integer: %v", ErrDecodeFailure, "contract_version", err)
+	}
+	if version != curatorEnginesStatusContractVersion {
+		return Status{}, fmt.Errorf("%w: unsupported curator-engines status contract_version %d (want %d)", ErrDecodeFailure, version, curatorEnginesStatusContractVersion)
+	}
+	engineRaw, ok := fields["engine_identity"]
+	if !ok {
+		return Status{}, fmt.Errorf("%w: missing field %q", ErrDecodeFailure, "engine_identity")
+	}
+	var engine wireEngineIdentity
+	if err := json.Unmarshal(engineRaw, &engine); err != nil {
+		return Status{}, fmt.Errorf("%w: field %q is not an engine identity object: %v", ErrDecodeFailure, "engine_identity", err)
+	}
+	if strings.TrimSpace(engine.Name) == "" || strings.TrimSpace(engine.Key) == "" {
+		return Status{}, fmt.Errorf("%w: engine_identity requires non-empty name and key", ErrDecodeFailure)
+	}
+	if engine.Name != expectedEngine {
+		return Status{}, fmt.Errorf("%w: requested engine %q but curator-engines reported %q", ErrDecodeFailure, expectedEngine, engine.Name)
 	}
 
 	runtimeKey, err := requiredNonEmptyString(fields, "runtime_key")

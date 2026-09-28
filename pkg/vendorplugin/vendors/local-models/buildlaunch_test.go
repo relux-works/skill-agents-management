@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,7 +57,7 @@ func (a *countingObservationAdapter) EngineObservationAdapterDeclaration() vendo
 
 func (a *countingObservationAdapter) ObserveEngine(context.Context, vendorplugin.EngineObservationQuery) (vendorplugin.EngineObservation, error) {
 	a.calls++
-	return vendorplugin.EngineObservation{}, errors.New("observation must not run for an invalid prompt")
+	return vendorplugin.EngineObservation{}, errors.New("observation must not run for a request rejected by the system's pure launch gate")
 }
 
 func (r *countingStatusReader) Status(ctx context.Context, _ localruntime.StatusQuery) (localruntime.Status, error) {
@@ -111,11 +113,11 @@ func isolatedLocalQwenRegistryWithAdapters(t *testing.T, reader localruntime.Sta
 	return registry
 }
 
-func fakeAgentsInfraOnPath(t *testing.T) string {
+func fakePiOnPath(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "agents-infra"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatalf("writing fake agents-infra: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "pi"), []byte("#!/bin/sh\n: > \"$0.started\"\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("writing fake pi: %v", err)
 	}
 	return dir
 }
@@ -125,7 +127,7 @@ func localQwenSpawnRequest(t *testing.T) vendorplugin.SpawnRequest {
 		Runtime: "local-qwen",
 		Model:   "qwen-3.8-27b-mlx-8bit",
 		Prompt:  []byte("inspect the repository"),
-		Env:     []string{"PATH=" + fakeAgentsInfraOnPath(t)},
+		Env:     []string{"PATH=" + fakePiOnPath(t)},
 	}
 }
 
@@ -141,15 +143,14 @@ func configWithoutEngine() Config {
 }
 
 // TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight is the end-to-end
-// seam proof: a positively-absent broker admits, and the resulting Plan's
+// seam proof: a live, attested broker admits, and the resulting Plan's
 // argv/env carry what this vendor's real Spawn and pi's real Argv/ChildEnv
 // build together.
-// TestBuildLaunchCarriesTheCallerDeadlineIntoThePiPlan proves the vendor
-// layer projects SpawnRequest.Deadline onto the pi argv end to end: the
-// caller's 6h fence is what Process A fences at, not the 30m the plugin used
-// to hard-code. The sibling test keeps the undeclared plan byte-identical.
+// TestBuildLaunchCarriesTheCallerDeadlineIntoThePiPlan proves the native Pi
+// plan does not claim a timeout that Pi itself cannot enforce. The caller
+// retains the external hard fence.
 func TestBuildLaunchCarriesTheCallerDeadlineIntoThePiPlan(t *testing.T) {
-	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
 	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
 	req := localQwenSpawnRequest(t)
 	req.Deadline = 6 * time.Hour
@@ -158,55 +159,119 @@ func TestBuildLaunchCarriesTheCallerDeadlineIntoThePiPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLaunch: %v", err)
 	}
-	for i := 0; i+1 < len(plan.Argv); i++ {
-		if plan.Argv[i] == "--deadline" {
-			if plan.Argv[i+1] != "6h0m0s" {
-				t.Fatalf("plan.Argv %v fences at %q, want the caller's 6h", plan.Argv, plan.Argv[i+1])
-			}
-			return
+	for _, argument := range plan.Argv {
+		if argument == "--deadline" || argument == "6h0m0s" {
+			t.Fatalf("native Pi plan carries a timeout option/value it cannot enforce: %v", plan.Argv)
 		}
 	}
-	t.Fatalf("plan.Argv %v carries no --deadline", plan.Argv)
 }
 
 func TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight(t *testing.T) {
-	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
 	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
+	req := localQwenSpawnRequest(t)
 
-	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
 	if err != nil {
 		t.Fatalf("BuildLaunch: %v", err)
 	}
 	if reader.calls != 1 {
 		t.Fatalf("StatusReader called %d times, want exactly 1", reader.calls)
 	}
-	if filepath.Base(plan.Binary) != "agents-infra" {
-		t.Fatalf("plan.Binary = %q, want the agents-infra wrapper, not raw pi", plan.Binary)
+	if filepath.Base(plan.Binary) != "pi" {
+		t.Fatalf("plan.Binary = %q, want native pi", plan.Binary)
 	}
-	wantArgv := []string{"pi", "spawn", "--profile", "local-qwen", "--prompt", "inspect the repository", "--deadline", "30m", "--result-schema", "1"}
-	if len(plan.Argv) != len(wantArgv) {
-		t.Fatalf("plan.Argv = %v, want %v", plan.Argv, wantArgv)
+	if _, err := os.Stat(plan.Binary + ".started"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("BuildLaunch started native Pi while constructing a plan: marker stat error = %v", err)
 	}
-	for i := range wantArgv {
-		if plan.Argv[i] != wantArgv[i] {
-			t.Fatalf("plan.Argv = %v, want %v", plan.Argv, wantArgv)
+	if got := launchArgValue(plan.Argv, "--model"); got != "qwen-local/qwen-local" {
+		t.Fatalf("plan.Argv --model = %q, want the configured Pi provider/model identity", got)
+	}
+	if got := launchArgValue(plan.Argv, "--tools"); got != "read,bash,edit,write" {
+		t.Fatalf("plan.Argv --tools = %q, want the closed unattended allowlist", got)
+	}
+	for _, flag := range []string{"--no-approve", "--no-extensions", "--no-session", "--print"} {
+		if !launchHasArg(plan.Argv, flag) {
+			t.Errorf("plan.Argv %v omits required Pi flag %s", plan.Argv, flag)
 		}
+	}
+	if launchHasArg(plan.Argv, "--") || plan.Argv[len(plan.Argv)-1] != "inspect the repository" {
+		t.Fatalf("plan.Argv = %v, want the complete prompt as the final Pi message operand without a -- delimiter", plan.Argv)
 	}
 	foundEnv := false
 	for _, entry := range plan.Env {
-		if entry == "AGENTS_INFRA_CALLER_CWD=/Users/op/skill-agents-management" {
+		if entry == "CURATOR_ENGINES_PROJECT_DIR=/Users/op/skill-agents-management" {
 			foundEnv = true
 		}
 	}
 	if !foundEnv {
-		t.Fatalf("plan.Env = %v; missing AGENTS_INFRA_CALLER_CWD contributed by this vendor's Spawn", plan.Env)
+		t.Fatalf("plan.Env = %v; missing CURATOR_ENGINES_PROJECT_DIR contributed by this vendor's Spawn", plan.Env)
 	}
 	if plan.Provenance != (agentic.LaunchProvenance{}) {
 		t.Fatalf("preflight-only fixture invented engine provenance: %#v", plan.Provenance)
 	}
 }
 
-func TestBuildLaunchIsInvariantAcrossAbsentAndPositiveCacheBudgets(t *testing.T) {
+func TestBuildLaunchKeepsTheNativePiUnattendedPolicy(t *testing.T) {
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
+	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch: %v", err)
+	}
+	tests := []struct {
+		name  string
+		check func() bool
+	}{
+		{name: "no_approve", check: func() bool { return launchHasArg(plan.Argv, "--no-approve") }},
+		{name: "no_extensions", check: func() bool { return launchHasArg(plan.Argv, "--no-extensions") }},
+		{name: "tools_allowlist", check: func() bool { return launchArgValue(plan.Argv, "--tools") == "read,bash,edit,write" }},
+		{name: "no_session", check: func() bool { return launchHasArg(plan.Argv, "--no-session") }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if !test.check() {
+				t.Fatalf("BuildLaunch Argv %v dropped unattended policy %s", plan.Argv, test.name)
+			}
+		})
+	}
+}
+
+func TestBuildLaunchUsesTheConfiguredPiProviderModelIdentity(t *testing.T) {
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
+	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch: %v", err)
+	}
+	if got := launchArgValue(plan.Argv, "--model"); got != "qwen-local/qwen-local" {
+		t.Fatalf("BuildLaunch --model = %q, want Pi catalog identity qwen-local/qwen-local", got)
+	}
+	if reader.calls != 1 {
+		t.Fatalf("StatusReader calls = %d, want one preflight before returning the plan", reader.calls)
+	}
+}
+
+func TestBuildLaunchRefusesAbsentEngineBeforePiStarts(t *testing.T) {
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
+	binDir := fakePiOnPath(t)
+	req := localQwenSpawnRequest(t)
+	req.Env = []string{"PATH=" + binDir}
+
+	_, err := vendorplugin.BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
+	if !errors.Is(err, pi.ErrPreflightRefused) {
+		t.Fatalf("BuildLaunch absent/determined = %v, want ErrPreflightRefused", err)
+	}
+	if reader.calls != 1 {
+		t.Fatalf("StatusReader calls = %d, want exactly one", reader.calls)
+	}
+	if _, err := os.Stat(filepath.Join(binDir, "pi.started")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("absent-engine refusal started Pi: marker stat error = %v", err)
+	}
+}
+
+func TestBuildLaunchIsInvariantAcrossCacheBudgets(t *testing.T) {
 	request := localQwenSpawnRequest(t)
 	var baseline agentic.Plan
 	for i, cacheBudget := range []*int64{nil, cacheBudgetPtr(1), cacheBudgetPtr(12_884_901_888)} {
@@ -215,7 +280,7 @@ func TestBuildLaunchIsInvariantAcrossAbsentAndPositiveCacheBudgets(t *testing.T)
 		entry.CacheBudgetBytes = cacheBudget
 		cfg.Runtimes[0].Models["qwen-3.8-27b-mlx-8bit"] = entry
 
-		reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+		reader := &countingStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
 		registry := isolatedLocalQwenRegistry(t, reader, cfg)
 		plan, err := vendorplugin.BuildLaunch(context.Background(), registry, request, agentic.LaunchModeExec)
 		if err != nil {
@@ -231,6 +296,24 @@ func TestBuildLaunchIsInvariantAcrossAbsentAndPositiveCacheBudgets(t *testing.T)
 		if !reflect.DeepEqual(plan, baseline) {
 			t.Fatalf("cache metadata changed runtime plan\nbaseline: %#v\nmutated:  %#v", baseline, plan)
 		}
+	}
+}
+
+func TestBuildLaunchRefusesInvalidPiProviderIdentityBeforeObservation(t *testing.T) {
+	cfg := validConfig()
+	entry := cfg.Runtimes[0].Models["qwen-3.8-27b-mlx-8bit"]
+	entry.Pointer.PiModelIdentity = "local-models//qwen-3.8-27b-mlx-8bit"
+	cfg.Runtimes[0].Models["qwen-3.8-27b-mlx-8bit"] = entry
+	adapter := &countingObservationAdapter{engine: cfg.Runtimes[0].Engine}
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
+	registry := isolatedLocalQwenRegistryWithAdapters(t, reader, cfg, []vendorplugin.EngineObservationAdapter{adapter})
+
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
+	if !errors.Is(err, pi.ErrSystemModelIdentityInvalid) {
+		t.Fatalf("BuildLaunch invalid Pi identity = %v, want ErrSystemModelIdentityInvalid", err)
+	}
+	if plan.Binary != "" || len(plan.Argv) != 0 || adapter.calls != 0 || reader.calls != 0 {
+		t.Fatalf("plan=%+v adapter calls=%d status calls=%d; invalid identity must refuse before observation and preflight", plan, adapter.calls, reader.calls)
 	}
 }
 
@@ -250,6 +333,9 @@ func TestBuildLaunchRefusesInvalidPiPromptBeforeObservationOrPreflight(t *testin
 		}},
 		{"invalid UTF-8", func(req *vendorplugin.SpawnRequest) { req.Prompt = []byte{0xff} }},
 		{"NUL", func(req *vendorplugin.SpawnRequest) { req.Prompt = []byte("a\x00b") }},
+		{"leading long option", func(req *vendorplugin.SpawnRequest) { req.Prompt = []byte("--list-models") }},
+		{"leading short option", func(req *vendorplugin.SpawnRequest) { req.Prompt = []byte("-inspect") }},
+		{"leading at-file reference", func(req *vendorplugin.SpawnRequest) { req.Prompt = []byte("@repo") }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -387,7 +473,7 @@ func mutatePersistedProvenance(t *testing.T, projection agentic.LaunchProvenance
 // the exact v0.4.0 TOML shape through the production parser and BuildLaunch.
 // Absence is a legitimate no-engine declaration: all pre-extension runtime,
 // model and observable launch fields must survive without invented provenance.
-func TestBuildLaunchLegacyConfigWithoutEngineRequirementPreservesParity(t *testing.T) {
+func TestBuildLaunchLegacyConfigWithoutPiProviderIdentityRefusesExec(t *testing.T) {
 	result := newConfigLoader(func() ([]byte, bool, error) {
 		return []byte(legacyTOML), false, nil
 	}).load()
@@ -403,42 +489,16 @@ func TestBuildLaunchLegacyConfigWithoutEngineRequirementPreservesParity(t *testi
 		t.Fatalf("legacy config invented engine refs: runtime=%#v model=%#v", runtime.Engine, model.Engine)
 	}
 
-	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
 	registry := isolatedLocalQwenRegistry(t, reader, result.Config)
 	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
-	if err != nil {
-		t.Fatalf("BuildLaunch(v0.4.0 config): %v", err)
+	if !errors.Is(err, pi.ErrSystemModelIdentityMissing) {
+		t.Fatalf("BuildLaunch(v0.4.0 config) = %v, want ErrSystemModelIdentityMissing", err)
 	}
-	if plan.System != "pi" || filepath.Base(plan.Binary) != "agents-infra" {
-		t.Fatalf("legacy launch identity changed: system=%q binary=%q", plan.System, plan.Binary)
-	}
-	wantArgv := []string{"pi", "spawn", "--profile", "local-qwen", "--prompt", "inspect the repository", "--deadline", "30m", "--result-schema", "1"}
-	if len(plan.Argv) != len(wantArgv) {
-		t.Fatalf("legacy argv = %v, want %v", plan.Argv, wantArgv)
-	}
-	for index := range wantArgv {
-		if plan.Argv[index] != wantArgv[index] {
-			t.Fatalf("legacy argv = %v, want %v", plan.Argv, wantArgv)
-		}
-	}
-	if plan.Provenance != (agentic.LaunchProvenance{}) {
-		t.Fatalf("legacy launch invented engine provenance: %#v", plan.Provenance)
-	}
-	projection, err := plan.ConsumerProvenance()
-	if err != nil {
-		t.Fatalf("ConsumerProvenance(v0.4.0 launch): %v", err)
-	}
-	body, err := json.Marshal(projection)
-	if err != nil {
-		t.Fatalf("Marshal v0.4.0 consumer provenance: %v", err)
-	}
-	wantProjection := `{"contract":"agents-management.launch-provenance","schema_version":1,"system":"pi","engine_binding":"none"}`
-	if string(body) != wantProjection {
-		t.Fatalf("v0.4.0 consumer provenance = %s, want %s", body, wantProjection)
+	if plan.Binary != "" || len(plan.Argv) != 0 || reader.calls != 0 {
+		t.Fatalf("legacy plan=%+v StatusReader calls=%d; missing provider mapping must refuse before preflight or Pi", plan, reader.calls)
 	}
 }
-
-func cfgEngineRef(cfg Config) plugin.Ref { return cfg.Runtimes[0].Engine }
 
 // TestBuildLaunchRefusesLocalQwenWhenPreflightRefuses: a refusing Preflight
 // stops BuildLaunch before agentic.BuildPlan.
@@ -456,9 +516,10 @@ func TestBuildLaunchRefusesLocalQwenWhenPreflightRefuses(t *testing.T) {
 }
 
 // TestBuildLaunchConfiguredMLXRefusesBeforePiPreflight proves the independent
-// production MLX observation seam. Until agents-infra supplies its public
-// adapter at trusted registry construction, configured local-qwen must refuse before Pi reads
-// broker status; this refusal is not evidence about Pi Preflight.
+// production MLX observation seam. Until a read-only engine observation
+// contract is available at trusted registry construction, configured
+// local-qwen must refuse before Pi reads broker status; this is not evidence
+// about Pi Preflight.
 func TestBuildLaunchConfiguredMLXRefusesBeforePiPreflight(t *testing.T) {
 	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
 	registry := isolatedLocalQwenRegistry(t, reader, validConfig())
@@ -477,8 +538,9 @@ func TestBuildLaunchConfiguredMLXRefusesBeforePiPreflight(t *testing.T) {
 func TestBuildLaunchSkipsPreflightOnDryRun(t *testing.T) {
 	reader := &countingStatusReader{err: errors.New("must never be called on a dry run")}
 	registry := isolatedLocalQwenRegistry(t, reader, validConfig())
+	req := localQwenSpawnRequest(t)
 
-	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeDryRun)
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, req, agentic.LaunchModeDryRun)
 	if err != nil {
 		t.Fatalf("BuildLaunch(dry-run): %v", err)
 	}
@@ -487,6 +549,18 @@ func TestBuildLaunchSkipsPreflightOnDryRun(t *testing.T) {
 	}
 	if plan.System != "pi" {
 		t.Fatalf("plan.System = %q, want pi", plan.System)
+	}
+	if filepath.Base(plan.Binary) != "pi" {
+		t.Fatalf("dry-run binary = %q, want native pi", plan.Binary)
+	}
+	if _, err := os.Stat(plan.Binary + ".started"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("BuildLaunch(dry-run) started native Pi: marker stat error = %v", err)
+	}
+	if got := launchArgValue(plan.Argv, "--model"); got != "qwen-local/qwen-local" {
+		t.Fatalf("dry-run --model = %q, want configured Pi provider/model identity", got)
+	}
+	if launchHasArg(plan.Argv, "--") || plan.Argv[len(plan.Argv)-1] != "<prompt>" {
+		t.Fatalf("dry-run argv = %v, want native Pi flags followed by the prompt placeholder", plan.Argv)
 	}
 }
 
@@ -511,4 +585,80 @@ func TestBuildLaunchPreflightTimeoutRefusesLocalQwen(t *testing.T) {
 	if elapsed > 5*time.Second {
 		t.Fatalf("BuildLaunch took %v to return", elapsed)
 	}
+}
+
+// AGENTIC_PI_REAL_BINARY opts into a read-only real Pi CLI probe. It is
+// intentionally explicit so ordinary package tests never consult a user's Pi
+// catalog or run a model request.
+func TestBuildLaunchRealPi0842AcceptsConfiguredProviderIdentity(t *testing.T) {
+	binary := os.Getenv("AGENTIC_PI_REAL_BINARY")
+	if binary == "" {
+		t.Skip("set AGENTIC_PI_REAL_BINARY to opt into the pinned real-Pi catalog probe")
+	}
+	resolved, err := exec.LookPath(binary)
+	if err != nil {
+		t.Fatalf("LookPath(%q): %v", binary, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	version, err := exec.CommandContext(ctx, resolved, "--version").CombinedOutput()
+	if err != nil {
+		t.Fatalf("Pi --version: %v; output=%s", err, version)
+	}
+	if got := strings.TrimSpace(string(version)); got != "0.84.2" {
+		t.Fatalf("Pi version = %q, want pinned 0.84.2", got)
+	}
+
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
+	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
+	req := localQwenSpawnRequest(t)
+	req.Env = []string{"PATH=" + filepath.Dir(resolved)}
+	plan, err := vendorplugin.BuildLaunch(ctx, registry, req, agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch with Pi 0.84.2: %v", err)
+	}
+	if got := launchArgValue(plan.Argv, "--model"); got != "qwen-local/qwen-local" {
+		t.Fatalf("BuildLaunch --model = %q, want configured Pi identity", got)
+	}
+
+	// --list-models validates Pi's real provider/model catalog without sending
+	// a prompt to, or starting, the local model engine.
+	output, err := exec.CommandContext(ctx, resolved,
+		"--offline", "--no-approve", "--no-extensions", "--no-session",
+		"--tools", "read,bash,edit,write",
+		"--model", "qwen-local/qwen-local",
+		"--list-models", "qwen-local",
+	).CombinedOutput()
+	if err != nil {
+		t.Fatalf("Pi catalog query: %v; output=%s", err, output)
+	}
+	found := false
+	for _, line := range strings.Split(string(output), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "qwen-local" && fields[1] == "qwen-local" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("Pi 0.84.2 catalog does not list qwen-local/qwen-local: %s", output)
+	}
+}
+
+func launchArgValue(argv []string, name string) string {
+	for i := 0; i+1 < len(argv); i++ {
+		if argv[i] == name {
+			return argv[i+1]
+		}
+	}
+	return ""
+}
+
+func launchHasArg(argv []string, name string) bool {
+	for _, argument := range argv {
+		if argument == name {
+			return true
+		}
+	}
+	return false
 }

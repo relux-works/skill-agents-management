@@ -9,13 +9,10 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
-// LaunchModeInteractive (curator-spec Decision 0013 §5) for pi: the interactive
-// primary session the agents-infra wrapper starts for any first argument that
-// is not `spawn`, `turn` or `lifecycle`. There is no golden — pi has none for
-// any mode; its exec surface is pinned in pi_test.go the same way — so the
-// evidence is the exact argv, environment and stdin through the real registry
-// and BuildPlan, plus the decision's negative: no Process-A `spawn` grammar and
-// no exec-mode marker of any system on the interactive argv.
+// LaunchModeInteractive (curator-spec Decision 0013 §5) for local Pi. The
+// evidence is the exact native argv, environment and stdin through the real
+// registry and BuildPlan, plus the decision's negative: no exec-mode marker
+// reaches the interactive argv.
 
 var execModeMarkers = []string{
 	"spawn", "--profile", "--prompt", "--deadline", "--result-schema",
@@ -41,17 +38,17 @@ func markersOn(argv []string) int {
 func interactiveRequest(t *testing.T) (agentic.LaunchRequest, string) {
 	t.Helper()
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "agents-infra"))
 	writeExecutable(t, filepath.Join(binDir, "pi"))
 	return agentic.LaunchRequest{
-		System:  New(&fakeStatusReader{}).ID(),
-		Model:   agentic.Model{ID: "qwen-3.8-27b-mlx-8bit", Effort: agentic.EffortSupportNone},
-		WorkDir: "/Users/op/project",
-		Env:     []string{"PATH=" + binDir, "AGENTS_INFRA_CALLER_CWD=/Users/op/project"},
-		Run:     agentic.RunContext{RunID: "RUN-pi-interactive", TaskID: "TASK-pi-interactive"},
-		// local-models' Spawn always contributes the lease profile; the
-		// interactive wrapper resolves its own from the project configuration,
-		// so the request carries it and the argv must not.
+		System:              New(&fakeStatusReader{}).ID(),
+		Vendor:              "local-models",
+		SystemModelIdentity: "qwen-local/qwen-local",
+		Model:               agentic.Model{ID: "qwen-3.8-27b-mlx-8bit", Effort: agentic.EffortSupportNone},
+		WorkDir:             "/Users/op/project",
+		Env:                 []string{"PATH=" + binDir, "CURATOR_ENGINES_PROJECT_DIR=/Users/op/project"},
+		Run:                 agentic.RunContext{RunID: "RUN-pi-interactive", TaskID: "TASK-pi-interactive"},
+		// local-models' Spawn contributes this curator-engines profile; it is
+		// used by the read-only preflight and is not a native Pi flag.
 		Profile: "local-qwen",
 	}, binDir
 }
@@ -65,28 +62,28 @@ func buildPlan(t *testing.T, req agentic.LaunchRequest, mode agentic.LaunchMode)
 	return agentic.BuildPlan(registry, req, mode)
 }
 
-func TestTheInteractiveArgvIsTheModelFlagOnTheWrapper(t *testing.T) {
+func TestTheInteractiveArgvIsTheConfiguredProviderModel(t *testing.T) {
 	req, binDir := interactiveRequest(t)
 	plan, err := buildPlan(t, req, agentic.LaunchModeInteractive)
 	if err != nil {
 		t.Fatalf("BuildPlan(interactive): %v", err)
 	}
-	if want := []string{"pi", "--model", "qwen-3.8-27b-mlx-8bit"}; !reflect.DeepEqual(plan.Argv, want) {
+	if want := []string{"--model", "qwen-local/qwen-local"}; !reflect.DeepEqual(plan.Argv, want) {
 		t.Errorf("Argv = %#v, want %#v", plan.Argv, want)
 	}
-	if filepath.Base(plan.Binary) != "agents-infra" || filepath.Dir(plan.Binary) != binDir {
-		t.Errorf("Binary = %q, want the agents-infra wrapper on the launch PATH, never raw pi", plan.Binary)
+	if filepath.Base(plan.Binary) != "pi" || filepath.Dir(plan.Binary) != binDir {
+		t.Errorf("Binary = %q, want native pi on the launch PATH", plan.Binary)
 	}
 	if plan.Stdin.Attached || len(plan.Stdin.Bytes) != 0 {
 		t.Errorf("Stdin = %+v, want detached: EffortTransportNone puts nothing on stdin", plan.Stdin)
 	}
 	wantEnv := []string{
-		"PATH=" + binDir, "AGENTS_INFRA_CALLER_CWD=/Users/op/project",
+		"PATH=" + binDir, "CURATOR_ENGINES_PROJECT_DIR=/Users/op/project",
 		agentic.EnvRunID + "=RUN-pi-interactive",
 		agentic.EnvTaskID + "=TASK-pi-interactive",
 	}
 	if !reflect.DeepEqual(plan.Env, wantEnv) {
-		t.Errorf("Env = %#v, want %#v; the caller CWD must pass through so the wrapper finds the project configuration", plan.Env, wantEnv)
+		t.Errorf("Env = %#v, want %#v; the selected project must pass through", plan.Env, wantEnv)
 	}
 	if n := markersOn(plan.Argv); n != 0 {
 		t.Errorf("the interactive argv carries %d exec-mode marker(s): %v", n, plan.Argv)
@@ -105,8 +102,8 @@ func TestTheMarkerSweepFiresOnTheProcessAGrammar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPlan(exec): %v", err)
 	}
-	if n := markersOn(plan.Argv); n < 4 {
-		t.Fatalf("the sweep saw %d marker(s) on the exec argv %v; it has to see spawn, --profile, --prompt and --deadline there", n, plan.Argv)
+	if n := markersOn(plan.Argv); n == 0 {
+		t.Fatalf("the sweep saw no native exec marker on argv %v", plan.Argv)
 	}
 }
 
@@ -207,7 +204,7 @@ func TestPermissionModeNegativesAreNamed(t *testing.T) {
 		if err != nil {
 			t.Fatalf("BuildPlan(zero): %v", err)
 		}
-		if want := []string{"pi", "--model", "qwen-3.8-27b-mlx-8bit"}; !reflect.DeepEqual(planNative.Argv, want) || !reflect.DeepEqual(planZero.Argv, want) {
+		if want := []string{"--model", "qwen-local/qwen-local"}; !reflect.DeepEqual(planNative.Argv, want) || !reflect.DeepEqual(planZero.Argv, want) {
 			t.Errorf("native = %#v, zero = %#v, want both %#v", planNative.Argv, planZero.Argv, want)
 		}
 	})

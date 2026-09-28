@@ -1,20 +1,11 @@
-// Package pi is the agentic-system plugin for Process A: `agents-infra pi
-// spawn --profile <name> --prompt <prompt> --deadline <caller fence> --result-schema 1`,
-// the short-lived wrapper that holds the
-// shared-runtime lease connection for its own lifetime and execs the real
-// `pi` binary as its child.
+// Package pi is the agentic-system plugin for the retained local-model worker.
+// It plans native Pi invocations and uses curator-engines only for a
+// read-only broker status preflight.
 //
-// It is the Layer-1 half of the local-models design (architecture decision
-// TASK-260829-3jlxed): this package owns Process A's harness surface only —
-// the binary, the argv prefix, the environment passthrough, the stdin
-// transport, and the Preflight readiness check. It never starts, stops or
-// signals Process B (the long-running local model server); that authority
-// belongs entirely to relux-agents-infra's own shared-runtime broker, reached
-// only through the read-only pkg/localruntime status client.
-//
-// It owns only the deterministic outer Process-A surface. agents-infra owns
-// Pi's inner flags, child environment, process group, result translation and
-// cleanup; Process B lifecycle remains outside this module.
+// The package owns only the deterministic launch plan: native Pi's binary,
+// argv, environment and stdin contract. It never starts, stops or signals the
+// local model engine. curator-engines remains the lifecycle owner and is
+// queried only by the read-only pkg/localruntime status client.
 package pi
 
 import (
@@ -61,15 +52,12 @@ func (*System) ID() agentic.SystemID { return systemID }
 // Capabilities is the static declaration.
 //
 // No composition grammar, no goal/budget/service-tier support, no effort
-// transport — none of these are specified anywhere in the architecture
-// decision for Process A's wrapper, and declaring one with no construction
-// behind it would be a capability claim nothing backs.
+// transport — none of these are declared for this retained local worker.
 //
-// LaunchModeInteractive (curator-spec Decision 0013 §5) is the interactive
-// primary session the SAME wrapper starts when its first argument is not
-// `spawn`, `turn` or `lifecycle`: `agents-infra pi --model <id>`, through the
-// same resolved binary. With EffortTransportNone the argv is the model flag
-// alone and stdin stays detached. See args.go.
+// LaunchModeInteractive (curator-spec Decision 0013 §5) is a native
+// interactive session `pi --model <provider>/<model>`. Exec uses Pi's native
+// `--print` mode for retained local-model workers. With EffortTransportNone
+// the plugin transports no effort value. See args.go.
 func (*System) Capabilities() agentic.Capabilities {
 	return agentic.Capabilities{
 		LaunchModes: []agentic.LaunchMode{
@@ -88,10 +76,9 @@ func (*System) Capabilities() agentic.Capabilities {
 	}
 }
 
-// ResolveBinary returns the exact executable this launch will run:
-// `agents-infra`, resolved on the LAUNCH environment's PATH — never raw
-// `pi`, and never the process's own ambient PATH. It is the same function
-// for every mode, so a dry run reports the launch's real target.
+// ResolveBinary returns the exact native Pi executable on the launch
+// environment's PATH. It is the same function for every mode, so a dry run
+// reports its real target.
 func (*System) ResolveBinary(req agentic.LaunchRequest) (string, error) {
 	return resolveBinary(req.Env)
 }
@@ -104,15 +91,19 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 	return args(req, mode)
 }
 
-// PrepareLaunchRequest validates and snapshots the exact profile/prompt input
-// before vendorplugin may observe an engine or invoke Preflight. PromptPath is
-// read once and replaced with copied bytes, so the later BuildPlan cannot see a
-// different file value. Dry-run retains its no-read placeholder behavior. An
-// interactive launch has no prompt to snapshot and no profile flag to assert,
-// so it passes through byte-for-byte (args.go says why).
+// PrepareLaunchRequest validates the explicit Pi provider/model identity and
+// snapshots the prompt before vendorplugin may observe an engine or invoke
+// Preflight. PromptPath is read once and replaced with copied bytes, so the
+// later BuildPlan cannot see a different file value. Dry-run retains its
+// no-read placeholder behavior. An interactive launch has no prompt to
+// snapshot and no profile flag to assert, so it passes through byte-for-byte
+// after validating the model identity (args.go says why).
 func (s *System) PrepareLaunchRequest(req agentic.LaunchRequest, mode agentic.LaunchMode) (agentic.LaunchRequestPreparation, error) {
 	if !s.Capabilities().SupportsMode(mode) {
 		return agentic.LaunchRequestPreparation{}, fmt.Errorf("pi: launch mode %s is not declared by this system", mode)
+	}
+	if _, err := nativeModelIdentity(req); err != nil {
+		return agentic.LaunchRequestPreparation{}, err
 	}
 	prepared, err := prepareLaunchRequest(req, mode)
 	if err != nil {
@@ -122,9 +113,8 @@ func (s *System) PrepareLaunchRequest(req agentic.LaunchRequest, mode agentic.La
 }
 
 // ChildEnv passes the parent environment through UNFILTERED, plus the
-// caller's run context written over it — deliberately, so any
-// AGENTS_INFRA_CALLER_CWD entry the vendor's Spawn added reaches the child
-// verbatim. See env.go.
+// caller's run context written over it. This preserves the explicit
+// CURATOR_ENGINES_PROJECT_DIR pointer for status preflight. See env.go.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
 	return childEnv(parent, req), nil
 }

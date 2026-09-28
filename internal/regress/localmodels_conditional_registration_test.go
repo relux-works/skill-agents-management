@@ -138,8 +138,8 @@ func validLocalModelsConfig() localmodels.Config {
 					EffortSupport:       agentic.EffortSupportNone,
 					ContextWindowTokens: 131072,
 					Pointer: localmodels.Pointer{
-						AgentsInfraProject: "/Users/op/skill-agents-management",
-						AgentsInfraProfile: "local-qwen",
+						CuratorEnginesProject: "/Users/op/skill-agents-management",
+						CuratorEnginesProfile: "local-qwen",
 					},
 				},
 			},
@@ -172,7 +172,7 @@ func TestConditionalRegistrationAbsentConfig(t *testing.T) {
 // call BuildLaunch itself makes — while every unrelated runtime is
 // unaffected.
 func TestConditionalRegistrationMalformedConfig(t *testing.T) {
-	parseErr := errors.New("local-models.toml:3: pointer.agents_infra_project is required")
+	parseErr := errors.New("local-models.toml:3: pointer.curator_engines_project is required")
 	registry, err := buildFakeLaunchRegistry(t, localmodels.ConfigResult{Err: parseErr})
 	if err != nil {
 		t.Fatalf("buildFakeLaunchRegistry(malformed): %v", err)

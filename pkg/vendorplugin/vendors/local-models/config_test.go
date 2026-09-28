@@ -31,8 +31,9 @@ effort_support        = "none"
 engine                = "mlx"
 
 [runtimes.local-qwen.models."qwen-3.8-27b-mlx-8bit".pointer]
-agents_infra_project  = "/Users/op/skill-agents-management"
-agents_infra_profile  = "local-qwen"
+curator_engines_project  = "/Users/op/skill-agents-management"
+curator_engines_profile  = "local-qwen"
+pi_model_identity       = "qwen-local/qwen-local"
 `
 
 // legacyTOML is the exact pre-inference-engine configuration shape accepted
@@ -51,8 +52,8 @@ context_window_tokens = 131072
 effort_support        = "none"
 
 [runtimes.local-qwen.models."qwen-3.8-27b-mlx-8bit".pointer]
-agents_infra_project  = "/Users/op/skill-agents-management"
-agents_infra_profile  = "local-qwen"
+curator_engines_project  = "/Users/op/skill-agents-management"
+curator_engines_profile  = "local-qwen"
 `
 
 func TestShippedLocalQwenFixtureMatchesTheConfiguredAxes(t *testing.T) {
@@ -69,7 +70,7 @@ func TestShippedLocalQwenFixtureMatchesTheConfiguredAxes(t *testing.T) {
 		t.Fatalf("runtime axes = %#v", runtime)
 	}
 	model, ok := runtime.Models["qwen-3.8-27b-mlx-8bit"]
-	if !ok || model.Publisher != "alibaba" || model.Family != "qwen" || model.Engine != runtime.Engine || model.Pointer.AgentsInfraProfile != "local-qwen" {
+	if !ok || model.Publisher != "alibaba" || model.Family != "qwen" || model.Engine != runtime.Engine || model.Pointer.CuratorEnginesProfile != "local-qwen" || model.Pointer.PiModelIdentity != "qwen-local/qwen-local" {
 		t.Fatalf("model axes = %#v", model)
 	}
 	if model.CacheBudgetBytes == nil || *model.CacheBudgetBytes != 6_442_450_944 {
@@ -139,7 +140,7 @@ func TestLoadConfigMalformedIsADistinctResultFromAbsent(t *testing.T) {
 			t.Fatalf("err = %v, want ErrConfigMalformed", result.Err)
 		}
 	})
-	t.Run("pointer missing agents_infra_project", func(t *testing.T) {
+	t.Run("pointer missing curator_engines_project", func(t *testing.T) {
 		reader := &fakeFileReader{content: []byte(`
 [runtimes.local-qwen]
 system = "pi"
@@ -148,7 +149,7 @@ description = "d"
 lifecycle = "current"
 effort_support = "none"
 [runtimes.local-qwen.models."m".pointer]
-agents_infra_profile = "local-qwen"
+curator_engines_profile = "local-qwen"
 `)}
 		result := newConfigLoader(reader.read).load()
 		if result.Absent {
@@ -158,7 +159,7 @@ agents_infra_profile = "local-qwen"
 			t.Fatalf("err = %v, want ErrConfigMalformed", result.Err)
 		}
 	})
-	t.Run("pointer missing agents_infra_profile", func(t *testing.T) {
+	t.Run("pointer missing curator_engines_profile", func(t *testing.T) {
 		reader := &fakeFileReader{content: []byte(`
 [runtimes.local-qwen]
 system = "pi"
@@ -167,7 +168,7 @@ description = "d"
 lifecycle = "current"
 effort_support = "none"
 [runtimes.local-qwen.models."m".pointer]
-agents_infra_project = "/x"
+curator_engines_project = "/x"
 `)}
 		result := newConfigLoader(reader.read).load()
 		if !errors.Is(result.Err, ErrConfigMalformed) {
@@ -199,7 +200,7 @@ func TestLoadConfigValidResolvesExactly(t *testing.T) {
 	if !ok {
 		t.Fatal("model qwen-3.8-27b-mlx-8bit not found")
 	}
-	if model.Pointer.AgentsInfraProject != "/Users/op/skill-agents-management" || model.Pointer.AgentsInfraProfile != "local-qwen" {
+	if model.Pointer.CuratorEnginesProject != "/Users/op/skill-agents-management" || model.Pointer.CuratorEnginesProfile != "local-qwen" {
 		t.Fatalf("pointer = %+v, want the fixture's project/profile", model.Pointer)
 	}
 	if model.Publisher != "alibaba" || model.Family != "qwen" {
@@ -211,6 +212,40 @@ func TestLoadConfigValidResolvesExactly(t *testing.T) {
 	if model.CacheBudgetBytes == nil || *model.CacheBudgetBytes != 6_442_450_944 {
 		t.Fatalf("cache budget = %v, want exact positive value 6442450944", model.CacheBudgetBytes)
 	}
+}
+
+func TestLoadConfigAcceptsLegacyPointerKeysAsMigrationAliases(t *testing.T) {
+	legacy := strings.NewReplacer(
+		"curator_engines_project", "agents_infra_project",
+		"curator_engines_profile", "agents_infra_profile",
+	).Replace(validTOML)
+	result := newConfigLoader(func() ([]byte, bool, error) { return []byte(legacy), false, nil }).load()
+	if result.Err != nil || result.Absent {
+		t.Fatalf("legacy pointer config = %+v, want a parsed config", result)
+	}
+	model := result.Config.Runtimes[0].Models["qwen-3.8-27b-mlx-8bit"]
+	if model.Pointer.CuratorEnginesProject != "/Users/op/skill-agents-management" || model.Pointer.CuratorEnginesProfile != "local-qwen" {
+		t.Fatalf("legacy aliases resolved to %+v, want curator-engines project/profile", model.Pointer)
+	}
+}
+
+func TestLoadConfigRejectsRelativeAndConflictingCuratorEnginePointers(t *testing.T) {
+	t.Run("relative project", func(t *testing.T) {
+		body := strings.Replace(validTOML, "/Users/op/skill-agents-management", "relative/project", 1)
+		result := newConfigLoader(func() ([]byte, bool, error) { return []byte(body), false, nil }).load()
+		if !errors.Is(result.Err, ErrConfigMalformed) || !strings.Contains(result.Err.Error(), "absolute path") {
+			t.Fatalf("relative project error = %v, want malformed absolute-path refusal", result.Err)
+		}
+	})
+	t.Run("conflicting legacy and current aliases", func(t *testing.T) {
+		body := strings.Replace(validTOML,
+			"curator_engines_profile  = \"local-qwen\"",
+			"curator_engines_profile  = \"local-qwen\"\nagents_infra_project = \"/old/project\"\nagents_infra_profile = \"old-profile\"", 1)
+		result := newConfigLoader(func() ([]byte, bool, error) { return []byte(body), false, nil }).load()
+		if !errors.Is(result.Err, ErrConfigMalformed) || !strings.Contains(result.Err.Error(), "conflict") {
+			t.Fatalf("conflicting pointer error = %v, want malformed conflict refusal", result.Err)
+		}
+	})
 }
 
 func TestLoadConfigPreservesOptionalPositiveCacheBudgetExactly(t *testing.T) {

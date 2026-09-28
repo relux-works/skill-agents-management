@@ -26,7 +26,7 @@ type Vendor struct {
 type Option func(*Vendor)
 
 // WithStatusReader overrides the StatusReader Availability reads through.
-// Tests use this to avoid ever invoking a real agents-infra binary; a real
+// Tests use this to avoid ever invoking a real curator-engines binary; a real
 // caller passes a localruntime.NewCLIStatusReader().
 func WithStatusReader(reader localruntime.StatusReader) Option {
 	return func(v *Vendor) { v.status = reader }

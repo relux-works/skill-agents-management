@@ -37,7 +37,7 @@ func (f *fakeStatusReader) Status(ctx context.Context, query localruntime.Status
 	return f.status, nil
 }
 
-func TestResolveBinaryIsAgentsInfraNotRawPi(t *testing.T) {
+func TestResolveBinaryIsNativePi(t *testing.T) {
 	system := New(&fakeStatusReader{})
 
 	t.Run("empty PATH is refused", func(t *testing.T) {
@@ -46,7 +46,7 @@ func TestResolveBinaryIsAgentsInfraNotRawPi(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves agents-infra, never raw pi", func(t *testing.T) {
+	t.Run("resolves raw pi, never agents-infra", func(t *testing.T) {
 		dir := t.TempDir()
 		writeExecutable(t, filepath.Join(dir, "pi"))
 		writeExecutable(t, filepath.Join(dir, "agents-infra"))
@@ -54,8 +54,8 @@ func TestResolveBinaryIsAgentsInfraNotRawPi(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ResolveBinary: %v", err)
 		}
-		if filepath.Base(binary) != "agents-infra" {
-			t.Fatalf("resolved %q, want the agents-infra wrapper, not raw pi", binary)
+		if filepath.Base(binary) != "pi" {
+			t.Fatalf("resolved %q, want native pi, not the agents-infra wrapper", binary)
 		}
 	})
 }
@@ -67,7 +67,7 @@ func writeExecutable(t *testing.T, path string) {
 	}
 }
 
-func TestArgvBuildsExactProcessAContract(t *testing.T) {
+func TestArgvUsesPiMessageGrammarAndUnattendedPolicy(t *testing.T) {
 	system := New(&fakeStatusReader{})
 	t.Run("no profile is refused", func(t *testing.T) {
 		if _, err := system.Argv(agentic.LaunchRequest{Prompt: []byte("turn")}, agentic.LaunchModeExec); !errors.Is(err, ErrProfileMissing) {
@@ -75,56 +75,66 @@ func TestArgvBuildsExactProcessAContract(t *testing.T) {
 		}
 	})
 	t.Run("exec bytes", func(t *testing.T) {
-		argv, err := system.Argv(agentic.LaunchRequest{Profile: "local-qwen", Prompt: []byte("-inspect @repo")}, agentic.LaunchModeExec)
+		const prompt = "inspect the repository"
+		argv, err := system.Argv(agentic.LaunchRequest{SystemModelIdentity: "qwen-local/qwen-local", Model: agentic.Model{ID: "qwen-3.8-27b-mlx-8bit"}, Profile: "local-qwen", Prompt: []byte(prompt)}, agentic.LaunchModeExec)
 		if err != nil {
 			t.Fatalf("Argv(exec): %v", err)
 		}
-		want := []string{"pi", "spawn", "--profile", "local-qwen", "--prompt", "-inspect @repo", "--deadline", "30m", "--result-schema", "1"}
-		if !reflect.DeepEqual(argv, want) {
-			t.Fatalf("argv = %v, want %v", argv, want)
+		if argv[len(argv)-1] != prompt {
+			t.Fatalf("last argv item = %q, want the complete prompt as one message operand", argv[len(argv)-1])
+		}
+		if containsArg(argv, "--") {
+			t.Fatalf("argv uses an unsupported end-of-options delimiter: %v", argv)
+		}
+		if got := argvFlag(argv, "--model"); got != "qwen-local/qwen-local" {
+			t.Fatalf("--model = %q, want explicit Pi provider/model identity", got)
+		}
+		if got := argvFlag(argv, "--tools"); got != unattendedTools {
+			t.Fatalf("--tools = %q, want closed unattended allowlist %q", got, unattendedTools)
+		}
+		for _, flag := range []string{"--no-approve", "--no-extensions", "--no-session", "--print"} {
+			if !containsArg(argv, flag) {
+				t.Errorf("argv %v omits required Pi flag %s", argv, flag)
+			}
 		}
 	})
 	t.Run("dry run uses placeholder without reading file", func(t *testing.T) {
-		argv, err := system.Argv(agentic.LaunchRequest{Profile: "local-qwen", PromptPath: filepath.Join(t.TempDir(), "missing")}, agentic.LaunchModeDryRun)
+		argv, err := system.Argv(agentic.LaunchRequest{SystemModelIdentity: "qwen-local/qwen-local", Model: agentic.Model{ID: "qwen-3.8-27b-mlx-8bit"}, Profile: "local-qwen", PromptPath: filepath.Join(t.TempDir(), "missing")}, agentic.LaunchModeDryRun)
 		if err != nil {
 			t.Fatalf("Argv(dry-run): %v", err)
 		}
-		want := []string{"pi", "spawn", "--profile", "local-qwen", "--prompt", "<prompt>", "--deadline", "30m", "--result-schema", "1"}
-		if !reflect.DeepEqual(argv, want) {
-			t.Fatalf("argv = %v, want %v", argv, want)
+		if argv[len(argv)-1] != "<prompt>" || containsArg(argv, "--") {
+			t.Fatalf("dry-run argv = %v, want native Pi flags followed by a placeholder message", argv)
 		}
 	})
-	// The pi child fences its own turn at --deadline, so the value has to be
-	// the caller's hard fence: a 30m constant cut every local-model run at
-	// 30:00 whatever task-board had planned. The exec and dry-run argv both
-	// carry LaunchRequest.Deadline verbatim (Go duration spelling), and only a
-	// caller that declared none gets the historical 30m default.
+	// Raw Pi has no deadline flag. The outer caller enforces its own process
+	// deadline; the plugin must not invent or misrepresent a Pi-side timeout.
 	t.Run("deadline is the caller's fence", func(t *testing.T) {
 		for _, mode := range []agentic.LaunchMode{agentic.LaunchModeExec, agentic.LaunchModeDryRun} {
-			argv, err := system.Argv(agentic.LaunchRequest{Profile: "local-qwen", Prompt: []byte("turn"), Deadline: 6 * time.Hour}, mode)
+			argv, err := system.Argv(agentic.LaunchRequest{SystemModelIdentity: "qwen-local/qwen-local", Model: agentic.Model{ID: "qwen"}, Profile: "local-qwen", Prompt: []byte("turn"), Deadline: 6 * time.Hour}, mode)
 			if err != nil {
 				t.Fatalf("Argv(%s): %v", mode, err)
 			}
-			if got := argvFlag(argv, "--deadline"); got != "6h0m0s" {
-				t.Fatalf("%s argv %v spells --deadline %q, want the caller's 6h fence", mode, argv, got)
+			if got := argvFlag(argv, "--deadline"); got != "" {
+				t.Fatalf("%s argv %v spells --deadline %q, which Pi does not support", mode, argv, got)
 			}
 		}
 	})
-	t.Run("no declared deadline keeps the 30m default", func(t *testing.T) {
+	t.Run("no declared deadline adds no timeout", func(t *testing.T) {
 		for _, deadline := range []time.Duration{0, -time.Minute} {
-			argv, err := system.Argv(agentic.LaunchRequest{Profile: "local-qwen", Prompt: []byte("turn"), Deadline: deadline}, agentic.LaunchModeExec)
+			argv, err := system.Argv(agentic.LaunchRequest{SystemModelIdentity: "qwen-local/qwen-local", Model: agentic.Model{ID: "qwen"}, Profile: "local-qwen", Prompt: []byte("turn"), Deadline: deadline}, agentic.LaunchModeExec)
 			if err != nil {
 				t.Fatalf("Argv: %v", err)
 			}
-			if got := argvFlag(argv, "--deadline"); got != "30m" {
-				t.Fatalf("deadline %v: argv %v spells --deadline %q, want the 30m default", deadline, argv, got)
+			if got := argvFlag(argv, "--deadline"); got != "" {
+				t.Fatalf("deadline %v: argv %v spells unsupported --deadline %q", deadline, argv, got)
 			}
 		}
 	})
 	t.Run("profile bytes are not normalized", func(t *testing.T) {
-		argv, err := system.Argv(agentic.LaunchRequest{Profile: " Exact-Profile ", Prompt: []byte("turn")}, agentic.LaunchModeExec)
-		if err != nil || argv[3] != " Exact-Profile " {
-			t.Fatalf("argv=%v err=%v, want byte-exact profile", argv, err)
+		argv, err := system.Argv(agentic.LaunchRequest{SystemModelIdentity: "qwen-local/qwen-local", Model: agentic.Model{ID: "qwen"}, Profile: " Exact-Profile ", Prompt: []byte("turn")}, agentic.LaunchModeExec)
+		if err != nil || argvFlag(argv, "--model") != "qwen-local/qwen-local" {
+			t.Fatalf("argv=%v err=%v, want the configured provider-qualified model identity", argv, err)
 		}
 	})
 	t.Run("unsupported mode is refused", func(t *testing.T) {
@@ -134,21 +144,43 @@ func TestArgvBuildsExactProcessAContract(t *testing.T) {
 	})
 }
 
-func TestChildEnvPassesAgentsInfraCallerCWDThroughUnfiltered(t *testing.T) {
+func TestNativePiExecRequiresProviderQualifiedModelIdentity(t *testing.T) {
+	for _, identity := range []string{"", "local-models//qwen", "qwen-local/", "/qwen-local", "qwen/local/model", "qwen local/model"} {
+		t.Run(identity, func(t *testing.T) {
+			_, err := New(&fakeStatusReader{}).Argv(agentic.LaunchRequest{
+				SystemModelIdentity: identity,
+				Model:               agentic.Model{ID: "qwen-3.8-27b-mlx-8bit"},
+				Profile:             "local-qwen",
+				Prompt:              []byte("turn"),
+			}, agentic.LaunchModeExec)
+			if identity == "" {
+				if !errors.Is(err, ErrSystemModelIdentityMissing) {
+					t.Fatalf("Argv(exec) error = %v, want ErrSystemModelIdentityMissing", err)
+				}
+				return
+			}
+			if !errors.Is(err, ErrSystemModelIdentityInvalid) {
+				t.Fatalf("Argv(exec) error = %v, want ErrSystemModelIdentityInvalid", err)
+			}
+		})
+	}
+}
+
+func TestChildEnvPassesCuratorEnginesProjectThroughUnfiltered(t *testing.T) {
 	system := New(&fakeStatusReader{})
-	parent := []string{"PATH=/usr/bin", "AGENTS_INFRA_CALLER_CWD=/Users/op/project"}
+	parent := []string{"PATH=/usr/bin", "CURATOR_ENGINES_PROJECT_DIR=/Users/op/project"}
 	env, err := system.ChildEnv(parent, agentic.LaunchRequest{})
 	if err != nil {
 		t.Fatalf("ChildEnv: %v", err)
 	}
 	found := false
 	for _, entry := range env {
-		if entry == "AGENTS_INFRA_CALLER_CWD=/Users/op/project" {
+		if entry == "CURATOR_ENGINES_PROJECT_DIR=/Users/op/project" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("env = %v; AGENTS_INFRA_CALLER_CWD was stripped or rewritten", env)
+		t.Fatalf("env = %v; CURATOR_ENGINES_PROJECT_DIR was stripped or rewritten", env)
 	}
 }
 
@@ -158,15 +190,18 @@ func TestPromptPathPrecedesPromptAndInvalidPromptsRefuse(t *testing.T) {
 	if err := os.WriteFile(path, []byte("from file"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	argv, err := system.Argv(agentic.LaunchRequest{Profile: "p", PromptPath: path, Prompt: []byte("fallback")}, agentic.LaunchModeExec)
-	if err != nil || argv[5] != "from file" {
+	argv, err := system.Argv(agentic.LaunchRequest{SystemModelIdentity: "qwen-local/qwen-local", Model: agentic.Model{ID: "qwen"}, Profile: "p", PromptPath: path, Prompt: []byte("fallback")}, agentic.LaunchModeExec)
+	if err != nil || argv[len(argv)-1] != "from file" {
 		t.Fatalf("PromptPath precedence argv=%v err=%v", argv, err)
 	}
 	for name, req := range map[string]agentic.LaunchRequest{
-		"missing":      {Profile: "p"},
-		"unreadable":   {Profile: "p", PromptPath: filepath.Join(t.TempDir(), "missing")},
-		"invalid utf8": {Profile: "p", Prompt: []byte{0xff}},
-		"nul":          {Profile: "p", Prompt: []byte("a\x00b")},
+		"missing":             {Profile: "p", SystemModelIdentity: "qwen-local/qwen-local"},
+		"unreadable":          {Profile: "p", SystemModelIdentity: "qwen-local/qwen-local", PromptPath: filepath.Join(t.TempDir(), "missing")},
+		"invalid utf8":        {Profile: "p", SystemModelIdentity: "qwen-local/qwen-local", Prompt: []byte{0xff}},
+		"nul":                 {Profile: "p", SystemModelIdentity: "qwen-local/qwen-local", Prompt: []byte("a\x00b")},
+		"leading pi option":   {Profile: "p", SystemModelIdentity: "qwen-local/qwen-local", Prompt: []byte("--list-models")},
+		"leading short flag":  {Profile: "p", SystemModelIdentity: "qwen-local/qwen-local", Prompt: []byte("-inspect")},
+		"leading pi file ref": {Profile: "p", SystemModelIdentity: "qwen-local/qwen-local", Prompt: []byte("@repo")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := system.Argv(req, agentic.LaunchModeExec); !errors.Is(err, ErrTurnPromptInvalid) {
@@ -174,6 +209,15 @@ func TestPromptPathPrecedesPromptAndInvalidPromptsRefuse(t *testing.T) {
 			}
 		})
 	}
+}
+
+func containsArg(argv []string, value string) bool {
+	for _, argument := range argv {
+		if argument == value {
+			return true
+		}
+	}
+	return false
 }
 
 func TestStdinIsAlwaysDetachedEOF(t *testing.T) {

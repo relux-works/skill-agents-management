@@ -3,10 +3,9 @@
 // interactive session against a cloud provider Pi authenticates with in its
 // own managed home.
 //
-// It is the upstream half of TASK-260908-ggxfte (accepted rev2). The existing
-// `pi` plugin (pkg/agentic/systems/pi) is a DIFFERENT thing and is untouched:
-// that one is Process A of the local-models design, the `agents-infra pi`
-// wrapper that holds a shared-runtime lease and drives a local model server.
+// It is the upstream half of TASK-260908-ggxfte (accepted rev2). The `pi`
+// plugin (pkg/agentic/systems/pi) serves retained local-model workers through
+// native Pi Exec and performs curator-engines status preflight.
 // Rebinding `pi` would break `local-models.toml system="pi"` and the frozen
 // local-qwen goldens, so native Pi gets its own id.
 //
@@ -14,9 +13,8 @@
 //
 //   - Binary: whatever `pi` resolves to on the LAUNCH environment's PATH
 //     (binary.go). No wrapper, no npm root, no shim.
-//   - Modes: interactive and dry-run ONLY. There is no exec grammar here —
-//     the wrapper owns headless Pi (`spawn --profile … --result-schema 1`), and
-//     a native `-p`/`--print` run would be an unbounded unsupervised child.
+//   - Modes: interactive and dry-run ONLY. There is no exec grammar here;
+//     this cloud-provider plugin does not authorize headless execution.
 //     BuildPlan refuses exec with ErrUnsupportedLaunchMode.
 //   - Argv: `--model <vendor>/<launch identity>` and, when the row carries an
 //     effort, `--thinking <effort>`. NEVER a bare model id (args.go says why).
@@ -25,8 +23,8 @@
 //     declaration that separates two Pi homes' limit records.
 //   - No preflight. This plugin does NOT implement agentic.Preflightable;
 //     vendorplugin.BuildLaunch gates on that interface and therefore never
-//     probes anything before a native plan. A plan builds with no
-//     agents-infra on PATH.
+//     probes local runtime status before a native plan. A plan builds with raw
+//     `pi` on PATH.
 //   - No composition grammar, no goal, budget or service tier. The interactive
 //     mode carries none of those by contract (Decision 0013 §5).
 //   - ChildEnv: run-context passthrough, unfiltered (env.go).

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -16,8 +18,13 @@ import (
 // timeout) fired first, or the response exceeded the configured byte cap.
 var ErrStatusReadFailed = errors.New("localruntime: status read failed")
 
-// statusCommandTimeout is this adapter's own bound on the `agents-infra
-// runtime status --json` subprocess call, named rather than inlined so a
+// ErrStatusQueryInvalid is returned when a status read lacks an explicit
+// project directory or engine profile. Falling back to the agent's current
+// directory could observe a different project's engine.
+var ErrStatusQueryInvalid = errors.New("localruntime: status query is invalid")
+
+// statusCommandTimeout is this adapter's own bound on the `curator-engines
+// status --json` subprocess call, named rather than inlined so a
 // test can shrink it via WithTimeout. It composes with whatever deadline the
 // caller's ctx already carries: context.WithTimeout always fires at the
 // EARLIER of the two.
@@ -38,13 +45,14 @@ const (
 // commandRunner executes one subprocess call and returns its stdout bytes.
 // It is the injection seam: production uses runExec, tests substitute a
 // scriptable double that never shells out.
-type commandRunner func(ctx context.Context, name string, args []string) ([]byte, error)
+type commandRunner func(ctx context.Context, name string, args []string, dir string) ([]byte, error)
 
 // runExec is the production commandRunner: exec.CommandContext, stdout
 // captured, stderr discarded. exec.LookPath failure and a non-zero exit both
 // surface as the returned error, uniformly.
-func runExec(ctx context.Context, name string, args []string) ([]byte, error) {
+func runExec(ctx context.Context, name string, args []string, dir string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	err := cmd.Run()
@@ -52,7 +60,7 @@ func runExec(ctx context.Context, name string, args []string) ([]byte, error) {
 }
 
 // CLIStatusReader is the StatusReader implementation that shells out to the
-// already-shipped `agents-infra runtime status --json` subprocess.
+// released `curator-engines status --json` subprocess.
 //
 // It performs NO caching: every Status call is a fresh subprocess read.
 // Memoization belongs to local-models.toml's own loader (a different fact,
@@ -72,7 +80,7 @@ type CLIStatusReader struct {
 type Option func(*CLIStatusReader)
 
 // WithCommandRunner substitutes the subprocess runner. Tests use this to
-// avoid ever invoking a real agents-infra binary.
+// avoid invoking a real curator-engines binary.
 func WithCommandRunner(run commandRunner) Option { return func(r *CLIStatusReader) { r.run = run } }
 
 // WithTimeout overrides this reader's own bound on a status subprocess call.
@@ -92,7 +100,7 @@ func WithObservedCap(n int) Option {
 func WithClock(now func() time.Time) Option { return func(r *CLIStatusReader) { r.clock = now } }
 
 // NewCLIStatusReader returns a reader that shells out to the real
-// agents-infra binary on PATH, unless overridden by an Option.
+// curator-engines binary on PATH, unless overridden by an Option.
 func NewCLIStatusReader(opts ...Option) *CLIStatusReader {
 	r := &CLIStatusReader{
 		run:                     runExec,
@@ -107,27 +115,30 @@ func NewCLIStatusReader(opts ...Option) *CLIStatusReader {
 	return r
 }
 
-// Status shells out to `agents-infra runtime status --project <p> --profile
-// <profile> --json`, bounded by the earlier of ctx's own deadline and this
-// reader's own timeout, and decodes the result.
+// Status shells out to `curator-engines status --engine <profile> --json`
+// with the explicit project directory as cmd.Dir, bounded by the earlier of
+// ctx's own deadline and this reader's own timeout, and decodes the result.
 //
 // A subprocess error, a response over the byte cap, and a decode failure are
 // all returned as errors — never as a memoized prior answer and never
 // silently coerced into a Status the caller could mistake for a real read.
 func (r *CLIStatusReader) Status(ctx context.Context, query StatusQuery) (Status, error) {
+	if !filepath.IsAbs(query.CuratorEnginesProject) || strings.TrimSpace(query.CuratorEnginesProfile) == "" {
+		return Status{}, fmt.Errorf("%w: an absolute project directory and non-empty engine profile are required", ErrStatusQueryInvalid)
+	}
 	boundedCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	args := []string{"runtime", "status", "--project", query.AgentsInfraProject, "--profile", query.AgentsInfraProfile, "--json"}
-	output, err := r.run(boundedCtx, "agents-infra", args)
+	args := []string{"status", "--engine", query.CuratorEnginesProfile, "--json"}
+	output, err := r.run(boundedCtx, "curator-engines", args, query.CuratorEnginesProject)
 	if err != nil {
-		return Status{}, fmt.Errorf("%w: agents-infra runtime status: %w", ErrStatusReadFailed, err)
+		return Status{}, fmt.Errorf("%w: curator-engines status: %w", ErrStatusReadFailed, err)
 	}
 	if len(output) > r.statusResponseMaxBytes {
 		return Status{}, fmt.Errorf("%w: response is %d bytes, exceeding the %d byte cap", ErrStatusReadFailed, len(output), r.statusResponseMaxBytes)
 	}
 
-	status, err := decodeStatus(output, query.Runtime, query.Model, r.clock())
+	status, err := decodeStatus(output, query.Runtime, query.Model, query.CuratorEnginesProfile, r.clock())
 	if err != nil {
 		return Status{}, err
 	}
@@ -141,7 +152,7 @@ func (r *CLIStatusReader) Status(ctx context.Context, query StatusQuery) (Status
 func (r *CLIStatusReader) recordObservation(detail string) []Observation {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.observed = append(r.observed, Observation{Source: "agents-infra runtime status --json", Detail: detail})
+	r.observed = append(r.observed, Observation{Source: "curator-engines status --json", Detail: detail})
 	if over := len(r.observed) - r.statusObservedMaxEvents; over > 0 {
 		r.observed = r.observed[over:]
 	}

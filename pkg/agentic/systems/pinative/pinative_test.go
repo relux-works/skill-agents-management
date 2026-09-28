@@ -338,43 +338,51 @@ func TestACompositionIsRefusedOnTheInteractiveLaunch(t *testing.T) {
 }
 
 // TestNoPreflightIsWiredAndAPlanBuildsWithoutTheWrapper is the "no
-// agents-infra Preflightable" clause. The narrowing is the sibling assertion:
-// the wrapper plugin IS Preflightable, so the type assertion discriminates.
+// curator-engines preflight" clause. The narrowing is the local Pi sibling:
+// it IS Preflightable, so the type assertion discriminates.
 func TestNoPreflightIsWiredAndAPlanBuildsWithoutTheWrapper(t *testing.T) {
 	var system agentic.System = pinative.New()
 	if _, ok := system.(agentic.Preflightable); ok {
-		t.Fatal("pi-native implements Preflightable; the native plan must never probe agents-infra")
+		t.Fatal("pi-native implements Preflightable; the cloud plan must never probe local runtime status")
 	}
-	var wrapper agentic.System = pi.New(nil)
-	if _, ok := wrapper.(agentic.Preflightable); !ok {
-		t.Fatal("fixture assumption broken: the wrapper pi plugin must be Preflightable for this assertion to discriminate")
+	var localPi agentic.System = pi.New(nil)
+	if _, ok := localPi.(agentic.Preflightable); !ok {
+		t.Fatal("fixture assumption broken: local pi must be Preflightable for this assertion to discriminate")
 	}
 	req, binDir := request(t)
 	if _, err := os.Stat(filepath.Join(binDir, "agents-infra")); !os.IsNotExist(err) {
 		t.Fatalf("fixture assumption broken: agents-infra must be absent from the launch PATH (%v)", err)
 	}
 	if _, err := buildPlan(t, req, agentic.LaunchModeInteractive); err != nil {
-		t.Fatalf("a native plan needs no wrapper on PATH, got %v", err)
+		t.Fatalf("a cloud-provider Pi plan needs only raw pi on PATH, got %v", err)
 	}
 }
 
 func TestTheSweepFiresOnTheWrapperExecArgv(t *testing.T) {
 	// The marker sweep's silence on pi-native means nothing unless it sees
-	// the wrapper's headless grammar on the sibling plugin.
+	// native local Pi's exec grammar on the retained worker plugin.
 	binDir := t.TempDir()
-	writeExecutable(t, filepath.Join(binDir, "agents-infra"))
+	writeExecutable(t, filepath.Join(binDir, "pi"))
 	req := agentic.LaunchRequest{
-		System:  pi.New(nil).ID(),
-		Model:   agentic.Model{ID: "qwen-3.8-27b-mlx-8bit", Effort: agentic.EffortSupportNone},
-		Env:     []string{"PATH=" + binDir},
-		Profile: "local-qwen",
+		System:              pi.New(nil).ID(),
+		Vendor:              "local-models",
+		Model:               agentic.Model{ID: "qwen-3.8-27b-mlx-8bit", Effort: agentic.EffortSupportNone},
+		SystemModelIdentity: "qwen-local/qwen-local",
+		Env:                 []string{"PATH=" + binDir},
+		Profile:             "local-qwen",
 	}
 	argv, err := pi.New(nil).Argv(req, agentic.LaunchModeDryRun)
 	if err != nil {
-		t.Fatalf("wrapper dry-run argv: %v", err)
+		t.Fatalf("native local Pi dry-run argv: %v", err)
 	}
-	if found := markersOn(argv); len(found) < 2 {
-		t.Fatalf("the sweep saw %v on the wrapper argv %v; it has to see the headless grammar there", found, argv)
+	foundPrint := false
+	for _, marker := range markersOn(argv) {
+		if marker == "--print" {
+			foundPrint = true
+		}
+	}
+	if !foundPrint {
+		t.Fatalf("the sweep saw no Pi print-mode marker on the native argv %v", argv)
 	}
 }
 

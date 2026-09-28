@@ -5,50 +5,40 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
 var (
-	ErrProfileMissing    = errors.New("pi: launch profile is missing")
-	ErrTurnPromptInvalid = errors.New("pi: turn prompt is invalid")
+	ErrProfileMissing             = errors.New("pi: launch profile is missing")
+	ErrTurnPromptInvalid          = errors.New("pi: turn prompt is invalid")
+	ErrSystemModelIdentityMissing = errors.New("pi: launch request has no provider-qualified model identity")
+	ErrSystemModelIdentityInvalid = errors.New("pi: launch request has an invalid provider-qualified model identity")
 )
 
-// Args builds the exact Process-A exec argv. It remains exported for callers
-// that used the v0.5.0 helper; System.Argv additionally supplies the launch
+// unattendedTools is the closed built-in set the standalone worker may use.
+// Extension discovery and project-local trust are disabled separately below.
+const unattendedTools = "read,bash,edit,write"
+
+// Args builds native Pi argv. System.Argv additionally supplies the launch
 // mode so dry-run can avoid reading PromptPath.
 func Args(req agentic.LaunchRequest) ([]string, error) {
 	return args(req, agentic.LaunchModeExec)
 }
 
-// interactiveArgs is the interactive primary-session argv (curator-spec
-// Decision 0013 §5): `pi --model <id>` on the same agents-infra wrapper the
-// exec mode resolves. The wrapper hands every argument that is not a `spawn`,
-// `turn` or `lifecycle` subcommand to its interactive session launcher
-// (relux-agents-infra, tools/agents-infra/main.go runPi), and raw pi accepts
-// `--model <pattern>` (checked against `pi --help` at 0.84.2). This system
-// declares EffortTransportNone, so there is no effort flag to add and BuildPlan
-// has already refused a request carrying one.
-//
-// The profile is deliberately NOT spelled. It is the Process-A lease assertion
-// of the `spawn` subcommand; the interactive wrapper resolves its own profile
-// from the project configuration under AGENTS_INFRA_CALLER_CWD, which env.go
-// passes through verbatim. A Profile arriving on the request — local-models'
-// Spawn always contributes one — therefore reaches no flag here, which is the
-// wrapper's contract rather than a drop.
+// interactiveArgs is the native interactive-session argv. The profile is a
+// curator-engines status selector and is intentionally not a Pi flag. Pi's
+// model selector is provider-qualified to avoid an ambiguous bare model id.
 //
 // Yolo is REFUSED here, not mapped: `pi --help` at the pinned 0.84.2 documents
-// no permission-bypass flag — only `--approve`/`-a` ("Trust project-local
-// files for this run") and `--no-approve`/`-na`, which curator-spec Decision
-// 0018 records as not equivalent — and `agents-infra pi --help` passes that
-// same help through, so the wrapper adds no approval flag either. Refusing
-// with ErrPermissionModeUnsupported is Decision 0018's pi row.
+// no permission-bypass flag equivalent to yolo; `--approve` trusts
+// project-local files and is not equivalent. Refusing with
+// ErrPermissionModeUnsupported is Decision 0018's Pi row.
 func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode) ([]string, error) {
-	model := strings.TrimSpace(req.Model.ID)
-	if model == "" {
-		return nil, fmt.Errorf("pi: an interactive launch requires a model id")
+	model, err := nativeModelIdentity(req)
+	if err != nil {
+		return nil, err
 	}
 	if effective == agentic.PermissionModeYolo {
 		// Drift fails closed before support is even asked: an unpinned
@@ -61,7 +51,7 @@ func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode
 		return nil, fmt.Errorf("pi: refusing yolo: %w: pi 0.84.2 documents no interactive permission-bypass flag; --approve trusts project-local files for this run and is not equivalent",
 			agentic.ErrPermissionModeUnsupported)
 	}
-	return append([]string{"pi", "--model", model}, nativeArgsSuffix(req)...), nil
+	return append([]string{"--model", model}, nativeArgsSuffix(req)...), nil
 }
 
 func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
@@ -84,18 +74,38 @@ func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	profile := prepared.Profile
+	model, err := nativeModelIdentity(prepared)
+	if err != nil {
+		return nil, err
+	}
 	prompt := "<prompt>"
 	if mode != agentic.LaunchModeDryRun {
 		prompt = string(prepared.Prompt)
 	}
 	return []string{
-		"pi", "spawn",
-		"--profile", profile,
-		"--prompt", prompt,
-		"--deadline", deadlineArg(req.Deadline),
-		"--result-schema", "1",
+		"--no-approve",
+		"--no-extensions",
+		"--no-session",
+		"--tools", unattendedTools,
+		"--model", model,
+		"--print",
+		prompt,
 	}, nil
+}
+
+func nativeModelIdentity(req agentic.LaunchRequest) (string, error) {
+	identity := strings.TrimSpace(req.SystemModelIdentity)
+	if identity == "" {
+		return "", ErrSystemModelIdentityMissing
+	}
+	if strings.ContainsAny(identity, " \t\r\n") || strings.Count(identity, "/") != 1 {
+		return "", fmt.Errorf("%w: %q must be one provider/model pair", ErrSystemModelIdentityInvalid, identity)
+	}
+	provider, model, _ := strings.Cut(identity, "/")
+	if provider == "" || model == "" {
+		return "", fmt.Errorf("%w: %q must name both provider and model", ErrSystemModelIdentityInvalid, identity)
+	}
+	return identity, nil
 }
 
 // nativeArgsSuffix returns the caller's native arguments for the verbatim
@@ -103,23 +113,6 @@ func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 // backing array.
 func nativeArgsSuffix(req agentic.LaunchRequest) []string {
 	return append([]string{}, req.NativeArgs...)
-}
-
-// defaultDeadline is the Process-A deadline spelled when the caller declared
-// none. It is the historical constant, kept only as the zero-value fallback:
-// a caller with a fence of its own (task-board's hard timeout) passes it on
-// LaunchRequest.Deadline and the child gets that fence, not this one.
-const defaultDeadline = "30m"
-
-// deadlineArg spells the caller's deadline the way `agents-infra pi spawn
-// --deadline` parses it (a Go duration). A zero or negative deadline is "none
-// declared" and yields the documented default, spelled exactly as before so a
-// plan without a declared deadline stays byte-identical.
-func deadlineArg(deadline time.Duration) string {
-	if deadline <= 0 {
-		return defaultDeadline
-	}
-	return deadline.String()
 }
 
 func prepareLaunchRequest(req agentic.LaunchRequest, mode agentic.LaunchMode) (agentic.LaunchRequest, error) {
@@ -159,6 +152,9 @@ func turnPrompt(req agentic.LaunchRequest) ([]byte, error) {
 	}
 	if strings.IndexByte(string(data), 0) >= 0 {
 		return nil, fmt.Errorf("%w: prompt contains NUL", ErrTurnPromptInvalid)
+	}
+	if data[0] == '-' || data[0] == '@' {
+		return nil, fmt.Errorf("%w: prompt starts with a Pi option or @file prefix", ErrTurnPromptInvalid)
 	}
 	return append([]byte(nil), data...), nil
 }

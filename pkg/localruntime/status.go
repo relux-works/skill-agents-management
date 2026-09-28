@@ -3,10 +3,10 @@
 // names them).
 //
 // It owns two things and nothing else: the status TYPES a caller reads, and
-// a StatusReader implementation that shells out to the already-shipped
-// `agents-infra runtime status --json` subprocess. It never starts, stops or
+// a StatusReader implementation that shells out to the released
+// `curator-engines status --json` subprocess. It never starts, stops or
 // signals the process it reports on — that authority lives entirely in
-// relux-agents-infra's own shared-runtime broker. A static import-graph
+// curator-engines' shared-runtime broker. A static import-graph
 // check in this module refuses os/exec (or any process-control package) in
 // the local-models vendor's own import graph; this package's use of os/exec
 // is confined to the read-only status subprocess call below, never to a
@@ -77,11 +77,12 @@ type StatusQuery struct {
 	Runtime RuntimeID
 	// Model is the model row the caller resolved.
 	Model ModelID
-	// AgentsInfraProject is the agents-infra checkout this query is about.
-	AgentsInfraProject string
-	// AgentsInfraProfile is the agents.pi.profiles.<name> key inside that
-	// checkout's project config.
-	AgentsInfraProfile string
+	// CuratorEnginesProject is the absolute project directory whose
+	// .agents/.configs/project-config.toml declares the engine profile.
+	CuratorEnginesProject string
+	// CuratorEnginesProfile is the engine entry name selected by
+	// `curator-engines status --engine <name>`.
+	CuratorEnginesProfile string
 }
 
 // Status is one status read's whole answer.

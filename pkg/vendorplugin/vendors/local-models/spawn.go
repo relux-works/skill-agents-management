@@ -9,10 +9,9 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
 
-// agentsInfraCallerCWDEnv is the environment variable carrying the
-// agents-infra project pointer through to Process A's own `agents-infra pi`
-// invocation (architecture decision §2.4).
-const agentsInfraCallerCWDEnv = "AGENTS_INFRA_CALLER_CWD"
+// curatorEnginesProjectEnv carries the selected project directory to the
+// local Pi system's read-only curator-engines status preflight.
+const curatorEnginesProjectEnv = "CURATOR_ENGINES_PROJECT_DIR"
 
 var (
 	// ErrNoLocalPointer is returned when a (runtime, model) pair this
@@ -25,14 +24,14 @@ var (
 	// ErrProfileConflict is returned when the caller's request already
 	// carries a Profile that conflicts with this pair's declared one.
 	ErrProfileConflict = errors.New("localmodels: caller's profile conflicts with the declared pointer")
-	// ErrCallerCWDConflict is returned when the caller's request already
-	// carries an AGENTS_INFRA_CALLER_CWD entry that conflicts with this
+	// ErrProjectConflict is returned when the caller's request already
+	// carries a CURATOR_ENGINES_PROJECT_DIR entry that conflicts with this
 	// pair's declared project.
-	ErrCallerCWDConflict = errors.New("localmodels: caller's AGENTS_INFRA_CALLER_CWD conflicts with the declared pointer")
+	ErrProjectConflict = errors.New("localmodels: caller's CURATOR_ENGINES_PROJECT_DIR conflicts with the declared pointer")
 )
 
 // Spawn is local-models's half of one launch: it resolves the (runtime,
-// model) pointer, then contributes Profile and AGENTS_INFRA_CALLER_CWD
+// model) pointer, then contributes Profile and CURATOR_ENGINES_PROJECT_DIR
 // idempotently. It never sets launch.Runtime — that field is set uniformly
 // by BuildLaunch itself, for every runtime, after Spawn returns.
 func (v *Vendor) Spawn(sc vendorplugin.SpawnContext) (agentic.LaunchRequest, error) {
@@ -42,14 +41,17 @@ func (v *Vendor) Spawn(sc vendorplugin.SpawnContext) (agentic.LaunchRequest, err
 	}
 
 	launch := vendorplugin.PassthroughLaunch(sc)
+	if sc.Runtime.SystemID == "pi" {
+		launch.SystemModelIdentity = pointer.PiModelIdentity
+	}
 
-	profile, err := mergeIdempotent("profile", launch.Profile, pointer.AgentsInfraProfile, ErrProfileConflict)
+	profile, err := mergeIdempotent("profile", launch.Profile, pointer.CuratorEnginesProfile, ErrProfileConflict)
 	if err != nil {
 		return agentic.LaunchRequest{}, err
 	}
 	launch.Profile = profile
 
-	env, err := mergeEnvIdempotent(launch.Env, agentsInfraCallerCWDEnv, pointer.AgentsInfraProject, ErrCallerCWDConflict)
+	env, err := mergeEnvIdempotent(launch.Env, curatorEnginesProjectEnv, pointer.CuratorEnginesProject, ErrProjectConflict)
 	if err != nil {
 		return agentic.LaunchRequest{}, err
 	}

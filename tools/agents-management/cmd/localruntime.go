@@ -44,11 +44,12 @@ var localRuntimeStatusCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("encoding local-runtime status: %w", err)
 			}
-			fmt.Fprintf(out, "%s\n", encoded)
+			if _, err := fmt.Fprintf(out, "%s\n", encoded); err != nil {
+				return fmt.Errorf("writing local-runtime status: %w", err)
+			}
 			return nil
 		}
-		printLocalRuntimeReport(out, report)
-		return nil
+		return printLocalRuntimeReport(out, report)
 	},
 }
 
@@ -90,10 +91,10 @@ func buildLocalRuntimeReport(ctx context.Context, result localmodels.ConfigResul
 			for modelID, model := range runtime.Models {
 				row := localRuntimeStatusRow{Runtime: string(runtime.ID), Model: string(modelID)}
 				status, err := reader.Status(ctx, localruntime.StatusQuery{
-					Runtime:            localruntime.RuntimeID(runtime.ID),
-					Model:              localruntime.ModelID(modelID),
-					AgentsInfraProject: model.Pointer.AgentsInfraProject,
-					AgentsInfraProfile: model.Pointer.AgentsInfraProfile,
+					Runtime:               localruntime.RuntimeID(runtime.ID),
+					Model:                 localruntime.ModelID(modelID),
+					CuratorEnginesProject: model.Pointer.CuratorEnginesProject,
+					CuratorEnginesProfile: model.Pointer.CuratorEnginesProfile,
 				})
 				if err != nil {
 					row.Error = err.Error()
@@ -117,27 +118,32 @@ func buildLocalRuntimeReport(ctx context.Context, result localmodels.ConfigResul
 	}
 }
 
-func printLocalRuntimeReport(out io.Writer, report localRuntimeReport) {
+func printLocalRuntimeReport(out io.Writer, report localRuntimeReport) error {
 	if !report.Registered {
 		if report.Error != "" {
-			fmt.Fprintf(out, "registered: false (%s: %s)\n", report.Reason, report.Error)
-			return
+			_, err := fmt.Fprintf(out, "registered: false (%s: %s)\n", report.Reason, report.Error)
+			return err
 		}
-		fmt.Fprintf(out, "registered: false (%s)\n", report.Reason)
-		return
+		_, err := fmt.Fprintf(out, "registered: false (%s)\n", report.Reason)
+		return err
 	}
 	if len(report.Runtimes) == 0 {
-		fmt.Fprintln(out, "registered: true (no runtimes declared)")
-		return
+		_, err := fmt.Fprintln(out, "registered: true (no runtimes declared)")
+		return err
 	}
 	for _, row := range report.Runtimes {
 		if row.Error != "" {
-			fmt.Fprintf(out, "%s\t%s\terror: %s\n", row.Runtime, row.Model, row.Error)
+			if _, err := fmt.Fprintf(out, "%s\t%s\terror: %s\n", row.Runtime, row.Model, row.Error); err != nil {
+				return err
+			}
 			continue
 		}
-		fmt.Fprintf(out, "%s\t%s\tstate=%s source=%s pid=%d leases=%d/%d\n",
-			row.Runtime, row.Model, row.BrokerState, row.BrokerSource, row.PID, row.ActiveLeases, row.MaxLeases)
+		if _, err := fmt.Fprintf(out, "%s\t%s\tstate=%s source=%s pid=%d leases=%d/%d\n",
+			row.Runtime, row.Model, row.BrokerState, row.BrokerSource, row.PID, row.ActiveLeases, row.MaxLeases); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func init() {

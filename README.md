@@ -144,9 +144,8 @@ The agentic-system plugin contract and its registry.
   `LaunchRequest.ToolRelease`. On drift — an unpinned or newer release, or
   none established at all — yolo fails closed first with
   `ErrPermissionModeUnverifiedRelease`, while native still forwards verbatim
-  with no claims. `pi` has no probe (its binary is the agents-infra wrapper,
-  whose version is not pi's release), so yolo there without an explicitly
-  passed release refuses as unverified. Under yolo the plugin scans the
+  with no claims. `pi` has no release probe of its own, so yolo there without
+  an explicitly passed Pi release refuses as unverified. Under yolo the plugin scans the
   caller's `NativeArgs` against the looked-up release's closed grammar: an
   unknown codex `-c` key or an unknown claude `--permission-mode` value is
   refused as usage (`ErrNativePolicyUnknown`, which the caller maps to exit
@@ -193,8 +192,9 @@ whose arity is declared in the pinned plugin grammar. A root flag whose arity
 the classifier does not model returns an indeterminate-classification error
 because its next token could be a value rather than a command. All three stop
 at `--`, so a prompt that looks like a flag or command is not classified. The
-`pi` system is the local-runtime wrapper, not the native Pi CLI, and does not
-declare this classifier; the launcher maps Pi to `pi-native`.
+`pi` system is the retained local-model worker and plans native Pi exec;
+`pi-native` is the separate cloud-provider session plugin. Neither system
+uses this classifier.
 
 #### Permission-mode: release mapping
 
@@ -485,13 +485,14 @@ plugin id and runtime id are the same spelling.
 
 The Pi coding agent run natively — the `pi` binary on the launch PATH, as a
 human's interactive session against a cloud provider — as distinct from the
-`pi` plugin above, which is the `agents-infra pi` wrapper for local models.
+`pi` plugin above, which serves retained local-model workers through the same
+native Pi binary.
 Plugin id `pi-native`; the frozen runtimes that bind it are `pi-anthropic`,
 `pi-openai` and `pi-google`. Added by TASK-260908-ggxfte (accepted rev2).
 
-- **Interactive and dry-run only.** No exec grammar: headless Pi is the
-  wrapper's, and a native `-p` run would be an unsupervised child. Exec is
-  refused with `ErrUnsupportedLaunchMode`. `yolo` at the verified pi 0.84.2 is
+- **Interactive and dry-run only.** The cloud-provider plugin has no exec
+  grammar and refuses Exec with `ErrUnsupportedLaunchMode`. Retained local
+  workers use the separate `pi` plugin's native print mode. `yolo` at the verified pi 0.84.2 is
   refused with `ErrPermissionModeUnsupported` — that release documents no
   permission-bypass flag, and `--approve` trusts project-local files rather
   than bypassing permissions — and yolo at any other release fails closed
@@ -505,8 +506,9 @@ Plugin id `pi-native`; the frozen runtimes that bind it are `pi-anthropic`,
 - **Effort is `--thinking <word>`**, transported unchanged after native harness admission. Native Pi refuses model vocabulary words that Pi 0.84.2 would clamp: `minimal` on `gpt-5.3-codex`/`gpt-5.2`. `BuildLaunch` returns `ErrEffortNotNativelySupported`, naming the model, runtime, native supported vocabulary and row recommendation. Global model vocabularies and Codex support remain unchanged; no translation, clamp or default is injected. Effort-none rows emit no `--thinking`; Pi may apply its own settings default, which the module does not control.
 - **Home is `PI_CODING_AGENT_DIR`, default `~/.pi/agent`.** Provider-limit
   identity is (runtime, home), so two managed Pi homes hold separate records.
-- **No preflight.** The plugin does not implement `Preflightable`; a plan
-  builds with no `agents-infra` on PATH.
+- **No preflight.** The cloud-provider plugin does not implement
+  `Preflightable`; its plan builds with raw `pi` on PATH and never queries
+  local runtime status.
 - **Catalog-verified membership.** A vendor row names `pi-native` only when
   its id is in the installed Pi catalog's provider data (Pi 0.84.2). Today: 8
   anthropic, 9 openai and 7 google rows. `claude-fable-5-1`, `gpt-6-astra`,
@@ -655,7 +657,7 @@ The vendor plugin contract, its registry, and the runtime declarations.
   readings before preflight or plan construction. `NewRegistry` installs no
   positive adapter, so non-dry-run engine launches fail closed while legacy
   zero-engine and dry-run plans remain observation-free. Process B lifecycle
-  stays wholly in agents-infra.
+  belongs to curator-engines.
 - `Availability` is a structured verdict, not a boolean: healthy,
   limited-until(time, evidence), unreachable(evidence), or unknown — with
   "checked and found nothing" distinguishable from "nobody looked" and from "the
@@ -666,13 +668,24 @@ The vendor plugin contract, its registry, and the runtime declarations.
   The local-model resource plane described in `docs/architecture.md` is
   implemented in this branch as the module-side M1 candidate:
   `pkg/vendorplugin/vendors/local-models` is a real vendor plugin,
-  `pkg/agentic/systems/pi` is Process A's harness plugin, and `pkg/localruntime`
-  is the machine-local `StatusReader` contract. `local-models`, unlike every
+  `pkg/agentic/systems/pi` plans retained local workers through native Pi and
+  performs read-only curator-engines status preflight; `pkg/localruntime` is
+  the machine-local `StatusReader` contract. `local-models`, unlike every
   other vendor plugin, does NOT self-register in `init()` — its catalog depends
   on a machine-local `~/.agents/.configs/local-models.toml` that may not exist,
   so a caller building the shared registry decides whether to register it at
   all via `localmodels.Peek()`'s three-way absent/malformed/valid result (see
   `docs/architecture.md`). End-to-end M1 is not shipped by this module alone.
+  Each local model pointer supplies `pi_model_identity` as the exact
+  provider/model pair in Pi's own catalog (for example,
+  `qwen-local/qwen-local`); launch code never derives it from the vendor's
+  model ID or Curator profile. A missing or malformed mapping refuses before
+  engine observation. Pi Exec plans use `--no-approve`, `--no-extensions`,
+  `--no-session`, and the `read,bash,edit,write` allowlist. The prompt is one
+  final message operand; prompts beginning with `-` or `@` are refused because
+  Pi 0.84.2 has no `--` end-of-options delimiter. A read-only, attested live
+  broker status is required before Exec planning; a positively absent broker
+  refuses because this package has no owner that can ensure or lease it.
   A model row may declare `cache_budget_bytes` as a positive integer. The
   generic catalog exposes it as `Model.CacheBudgetBytes *int64`: `nil` means
   unrecorded, while an explicit zero or negative value is malformed. The fact
@@ -716,14 +729,18 @@ The vendor plugin contract, its registry, and the runtime declarations.
   EXECUTION is not here — that is a consumer responsibility. This branch does
   not claim production reachability until the coordinated consumer candidate
   calls this API from its real `buildLaunchPlan` path.
-- Pi Process-A plans are exact:
-  `agents-infra pi spawn --profile <exact> --prompt <one UTF-8 argv value>
-  --deadline <LaunchRequest.Deadline, 30m when none> --result-schema 1`.
-  The deadline is the caller's own hard fence spelled as a Go duration, never
-  a constant of this module's (v0.5.15). Stdin is detached/EOF; dry-run substitutes
-  `<prompt>` without reading `PromptPath`; agents-management emits no inner Pi
-  flags. Consumers classify bounded schema-1 stdout, actual Process-A exit,
-  intervention and cleanup only through `pi.ValidateTurnResult`. The closed
+- The retained local-model `pi` plugin's Exec plan resolves raw `pi` and uses
+  the configured `--model <provider>/<model>` plus Pi's native `--print`
+  message grammar. The Curator profile selects the read-only curator-engines
+  status preflight and is not a native Pi flag. Pi's unattended policy is
+  `--no-approve`, `--no-extensions`, `--no-session`, and the
+  `read,bash,edit,write` tool allowlist. Prompts that begin with `-` or `@`
+  refuse before preflight because Pi 0.84.2 parses those prefixes as options
+  or file references and has no `--` delimiter. Only a live, attested broker
+  admits Exec; absence refuses because this plugin cannot ensure or lease the
+  engine. Stdin is detached/EOF; dry-run substitutes `<prompt>` without
+  reading `PromptPath` and starts neither Pi nor the engine. `pi.ValidateTurnResult` remains the compatibility parser for
+  schema-1 Process-A consumers; native Pi plans do not emit that envelope. The closed
   classifier rejects duplicate/unknown fields, unknown versions/codes,
   exit/document disagreement and documents over 1 MiB, while preserving
   cancellation and cleanup precedence. `pi_turn_lifecycle_integrity_unknown`
@@ -1179,8 +1196,9 @@ concrete engine branch in generic core.
 `inferenceengine.ValidateReadings` is only the closed schema validator used by
 that gate. Callers may construct its untrusted `Reading` inputs, but doing so
 does not install an engine source or authorize a launch. The built-in MLX
-path therefore returns the typed missing-adapter refusal until agents-infra
-ships the concrete observation adapter; it never invents positive runtime facts.
+path therefore returns the typed missing-adapter refusal until the
+curator-engines read-only observation contract is available; it never invents
+positive runtime facts.
 
 Every measured fact has a closed value grammar. Readiness requires resident
 weights, inference-busy is boolean, lifecycle transitions carry matching
@@ -1194,7 +1212,7 @@ with both local facts observed absent; simultaneous and partial shapes refuse.
 
 The module validates observations and orders the pre-launch refusal only.
 Process launch, SSH, polling, signals, memory-pressure action, and restart
-supervision remain owned and executed by agents-infra.
+supervision belong to curator-engines.
 
 ### Launch-surface parity goldens
 
@@ -1240,6 +1258,8 @@ concluding that a missing golden is permission.
 | `golangci-lint` | lint all Go packages | `golangci-lint run ./...` | terminal output; task logs under `.temp/` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | Codex CLI | launch target for `pkg/agentic/systems/codex`; custom local providers are selected with generated config overrides and private `CODEX_HOME/config.toml` entries | `codex --version`; runtime launches execute the `Binary` and `Argv` returned by `agentic.BuildPlan` | child work under the requested `WorkDir`; private settings remain under `CODEX_HOME` |
+| `curator-engines` | read local engine status for local-model preflight and availability; this package never calls lifecycle-changing commands | `curator-engines status --engine <profile> --json` with the selected project as the working directory | JSON to stdout; validation logs under `.temp/TASK-<id>/` |
+| `pi` | native Pi executable used by retained local-model Exec plans | `--no-approve --no-extensions --no-session --tools read,bash,edit,write --model <provider>/<model> --print <prompt>`; plan resolution uses the launch environment's `PATH` | child stdout/stderr are owned by the launch consumer; dry-run only returns a plan |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
 | model registry capture | regenerate the vendor fixtures: the source's model rows and frozen v2 tiers (read from its Go sources) and the admitted-pair digests (read from its own binary) | `.scripts/capture-model-registry.sh` | `pkg/vendorplugin/testdata/source-model-registry.json`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`, scratch in `.temp/capture-model-registry/` |
 | board model-facts capture (TRANSITIONAL) | regenerate the frozen capture of the BOARD table's own model facts — score, lifecycle, supersession, recommendation, context window, pricing — read from the board binary's `q 'models()'` projection at a named commit. Dies with the board's half of the swap: when the board reads these facts from this module, delete the fixture and `pkg/vendorplugin/boardfacts_test.go` rather than regenerating them | `.scripts/capture-board-model-facts.sh [--source /path/to/skill-project-management]` | `pkg/vendorplugin/testdata/board-model-facts.json`, scratch in `.temp/capture-board-model-facts/` |

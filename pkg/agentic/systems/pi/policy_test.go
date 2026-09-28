@@ -14,8 +14,7 @@ import (
 // (curator-spec Decision 0018 choice 6): drift fails closed before
 // support is even asked, the verified release stays unsupported, and
 // native forwards verbatim. Pi has no native-policy scan — yolo never
-// reaches classification — and no release probe: its binary is the
-// agents-infra wrapper, and the wrapper's version is not pi's release.
+// reaches classification — and no release probe in this plugin.
 
 // The verified release stays unsupported: yolo at pi 0.84.2 is refused
 // with the unchanged sentinel even carrying native arguments no
@@ -109,7 +108,7 @@ func TestNativeForwardsVerbatimAtAnyRelease(t *testing.T) {
 			if err != nil {
 				t.Fatalf("BuildPlan: %v", err)
 			}
-			want := append([]string{"pi", "--model", "qwen-3.8-27b-mlx-8bit"}, native...)
+			want := append([]string{"--model", "qwen-local/qwen-local"}, native...)
 			if !reflect.DeepEqual(plan.Argv, want) {
 				t.Fatalf("Argv = %#v, want %#v", plan.Argv, want)
 			}
@@ -117,10 +116,8 @@ func TestNativeForwardsVerbatimAtAnyRelease(t *testing.T) {
 	}
 }
 
-// The wrapper has no probe: resolving `agents-infra` and asking IT for
-// a version would attest the wrapper, not pi's release, so the system
-// establishes none and yolo without an explicitly passed release fails
-// closed as unverified.
+// This plugin does not probe the resolved Pi binary for a release; yolo
+// without an explicitly passed release fails closed as unverified.
 func TestTheWrapperEstablishesNoToolRelease(t *testing.T) {
 	_, binDir := interactiveRequest(t)
 	if _, err := agentic.ProbeToolRelease(context.Background(), New(&fakeStatusReader{}), []string{"PATH=" + binDir}); !errors.Is(err, agentic.ErrToolReleaseUndetected) {

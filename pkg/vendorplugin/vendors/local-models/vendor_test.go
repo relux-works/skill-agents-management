@@ -21,7 +21,7 @@ func (fakePiSystem) ID() agentic.SystemID { return "pi" }
 func (fakePiSystem) Capabilities() agentic.Capabilities {
 	return agentic.Capabilities{LaunchModes: []agentic.LaunchMode{agentic.LaunchModeExec, agentic.LaunchModeDryRun}}
 }
-func (fakePiSystem) ResolveBinary(agentic.LaunchRequest) (string, error) { return "agents-infra", nil }
+func (fakePiSystem) ResolveBinary(agentic.LaunchRequest) (string, error) { return "pi", nil }
 func (fakePiSystem) Argv(agentic.LaunchRequest, agentic.LaunchMode) ([]string, error) {
 	return nil, nil
 }
@@ -65,8 +65,9 @@ func validConfig() Config {
 					EffortSupport:       agentic.EffortSupportNone,
 					Engine:              engine,
 					Pointer: Pointer{
-						AgentsInfraProject: "/Users/op/skill-agents-management",
-						AgentsInfraProfile: "local-qwen",
+						CuratorEnginesProject: "/Users/op/skill-agents-management",
+						CuratorEnginesProfile: "local-qwen",
+						PiModelIdentity:       "qwen-local/qwen-local",
 					},
 				},
 			},
@@ -170,7 +171,10 @@ func TestSpawnFillsAbsentProfileAndEnv(t *testing.T) {
 	if launch.Profile != "local-qwen" {
 		t.Fatalf("Profile = %q, want local-qwen", launch.Profile)
 	}
-	wantEnv := "AGENTS_INFRA_CALLER_CWD=/Users/op/skill-agents-management"
+	if launch.SystemModelIdentity != "qwen-local/qwen-local" {
+		t.Fatalf("SystemModelIdentity = %q, want the configured Pi provider/model pair", launch.SystemModelIdentity)
+	}
+	wantEnv := "CURATOR_ENGINES_PROJECT_DIR=/Users/op/skill-agents-management"
 	if len(launch.Env) != 2 || launch.Env[0] != "PATH=/usr/bin" || launch.Env[1] != wantEnv {
 		t.Fatalf("Env = %v, want [PATH=/usr/bin, %s]", launch.Env, wantEnv)
 	}
@@ -195,7 +199,7 @@ func TestSpawnAcceptsAnIdenticalPresentValue(t *testing.T) {
 		Model:   model,
 		Request: vendorplugin.SpawnRequest{
 			Profile: "local-qwen",
-			Env:     []string{"AGENTS_INFRA_CALLER_CWD=/Users/op/skill-agents-management"},
+			Env:     []string{"CURATOR_ENGINES_PROJECT_DIR=/Users/op/skill-agents-management"},
 		},
 	})
 	if err != nil {
@@ -231,10 +235,10 @@ func TestSpawnRefusesAConflictingCallerCWD(t *testing.T) {
 	_, err := vendor.Spawn(vendorplugin.SpawnContext{
 		Runtime: runtime,
 		Model:   model,
-		Request: vendorplugin.SpawnRequest{Env: []string{"AGENTS_INFRA_CALLER_CWD=/somewhere/else"}},
+		Request: vendorplugin.SpawnRequest{Env: []string{"CURATOR_ENGINES_PROJECT_DIR=/somewhere/else"}},
 	})
-	if !errors.Is(err, ErrCallerCWDConflict) {
-		t.Fatalf("Spawn(conflicting env) = %v, want ErrCallerCWDConflict", err)
+	if !errors.Is(err, ErrProjectConflict) {
+		t.Fatalf("Spawn(conflicting env) = %v, want ErrProjectConflict", err)
 	}
 }
 

@@ -33,7 +33,7 @@ const exemptDir = "pkg/localruntime"
 // that reaches any of these anywhere in its OWN import graph (outside the
 // one named exception above) could start or signal Process B directly,
 // which is exactly the authority this design reserves entirely to
-// relux-agents-infra's shared-runtime broker.
+// curator-engines' shared-runtime broker.
 var forbiddenImports = map[string]string{
 	"os/exec":   "can start, signal and wait on child processes",
 	"os/signal": "can send/receive OS process signals",

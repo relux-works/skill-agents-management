@@ -13,9 +13,8 @@ import "github.com/relux-works/skill-agents-management/pkg/agentic"
 // unsupported. Any other release — and an empty one — fails closed
 // earlier, as drift.
 //
-// This plugin has no release probe to fill ToolRelease with: its binary
-// is the agents-infra wrapper, and the wrapper's version is not pi's
-// release. The caller passes the release when it established it another
+// This plugin has no release probe to fill ToolRelease with. The caller
+// passes the Pi release when it established it another
 // way, and yolo without one is refused as unverified. Native never
 // reads the table either way.
 var verifiedReleases = []agentic.ReleaseCapability{

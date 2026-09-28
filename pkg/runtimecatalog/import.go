@@ -329,11 +329,11 @@ func convertLocalModelsDocument(document map[string]any, engines EngineCatalog) 
 				effectiveEngine = runtime.Engine
 			}
 			if effectiveEngine.ID == "" {
-				if strings.TrimSpace(model.Pointer.AgentsInfraProfile) != "" {
+				if strings.TrimSpace(model.Pointer.CuratorEnginesProfile) != "" {
 					unbound = append(unbound, string(runtime.ID)+"/"+string(modelID))
 				}
 			} else {
-				engineName := model.Pointer.AgentsInfraProfile
+				engineName := model.Pointer.CuratorEnginesProfile
 				newModel["engine"] = map[string]any{"plugin": string(effectiveEngine.ID), "name": engineName}
 				entry, found := engines.Entry(engineName)
 				if !found {

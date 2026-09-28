@@ -34,19 +34,22 @@ import (
 var ErrConfigMalformed = errors.New("localmodels: local-models.toml is malformed")
 
 // Pointer is what local-models.toml stores for one (RuntimeID, ModelID)
-// row: a pointer from that pair to a locally-running agents-infra project
-// and profile.
+// row: a pointer from that pair to a locally-running curator-engines project
+// and engine profile.
 //
 // Neither field ever travels through remote board policy — they exist only
 // in this operator-populated, global, machine-local file. Remote/local board
 // policy carries RuntimeID/ModelID only.
 type Pointer struct {
-	// AgentsInfraProject is the absolute local filesystem path to the
-	// agents-infra checkout on THIS machine that owns the weights.
-	AgentsInfraProject string
-	// AgentsInfraProfile is the agents.pi.profiles.<name> key inside that
-	// checkout's project-config.toml.
-	AgentsInfraProfile string
+	// CuratorEnginesProject is the absolute project directory containing the
+	// .agents/.configs/project-config.toml selected for this engine.
+	CuratorEnginesProject string
+	// CuratorEnginesProfile is the engine entry name selected in that project.
+	CuratorEnginesProfile string
+	// PiModelIdentity is the exact provider/model id configured in Pi's model
+	// catalog. It is separate from this vendor's registry id and is never
+	// inferred from the runtime profile.
+	PiModelIdentity string
 }
 
 // ModelEntry is one declared model row under one runtime.
@@ -223,8 +226,11 @@ type wireModel struct {
 }
 
 type wirePointer struct {
-	AgentsInfraProject string `toml:"agents_infra_project"`
-	AgentsInfraProfile string `toml:"agents_infra_profile"`
+	CuratorEnginesProject string `toml:"curator_engines_project"`
+	CuratorEnginesProfile string `toml:"curator_engines_profile"`
+	PiModelIdentity       string `toml:"pi_model_identity"`
+	LegacyProject         string `toml:"agents_infra_project"`
+	LegacyProfile         string `toml:"agents_infra_profile"`
 }
 
 // parseConfig decodes and validates one local-models.toml body, returning a
@@ -282,12 +288,11 @@ func parseConfig(data []byte) (Config, error) {
 }
 
 func parseModel(cfg Config, runtimeID, modelID string, wireM wireModel) (ModelEntry, error) {
-	if strings.TrimSpace(wireM.Pointer.AgentsInfraProject) == "" {
-		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: pointer.agents_infra_project is required", ErrConfigMalformed, runtimeID, modelID)
+	project, profile, err := resolveEnginePointer(wireM.Pointer)
+	if err != nil {
+		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: %v", ErrConfigMalformed, runtimeID, modelID, err)
 	}
-	if strings.TrimSpace(wireM.Pointer.AgentsInfraProfile) == "" {
-		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: pointer.agents_infra_profile is required", ErrConfigMalformed, runtimeID, modelID)
-	}
+	piModelIdentity := wireM.Pointer.PiModelIdentity
 	lifecycle := vendorplugin.Lifecycle(wireM.Lifecycle)
 	if err := lifecycle.Validate(); err != nil {
 		return ModelEntry{}, fmt.Errorf("%w: runtime %q model %q: %v", ErrConfigMalformed, runtimeID, modelID, err)
@@ -318,8 +323,9 @@ func parseModel(cfg Config, runtimeID, modelID string, wireM wireModel) (ModelEn
 		EffortSupport:       effort,
 		Engine:              engine,
 		Pointer: Pointer{
-			AgentsInfraProject: wireM.Pointer.AgentsInfraProject,
-			AgentsInfraProfile: wireM.Pointer.AgentsInfraProfile,
+			CuratorEnginesProject: project,
+			CuratorEnginesProfile: profile,
+			PiModelIdentity:       piModelIdentity,
 		},
 	}
 	if wireM.CacheBudgetBytes != nil {
@@ -327,6 +333,31 @@ func parseModel(cfg Config, runtimeID, modelID string, wireM wireModel) (ModelEn
 		model.CacheBudgetBytes = &value
 	}
 	return model, nil
+}
+
+func resolveEnginePointer(pointer wirePointer) (string, string, error) {
+	project, profile := pointer.CuratorEnginesProject, pointer.CuratorEnginesProfile
+	legacyProject, legacyProfile := pointer.LegacyProject, pointer.LegacyProfile
+	newPresent := strings.TrimSpace(project) != "" || strings.TrimSpace(profile) != ""
+	legacyPresent := strings.TrimSpace(legacyProject) != "" || strings.TrimSpace(legacyProfile) != ""
+	if newPresent && legacyPresent {
+		if project != legacyProject || profile != legacyProfile {
+			return "", "", errors.New("curator-engines pointer fields conflict with legacy agents-infra pointer fields")
+		}
+	}
+	if !newPresent && legacyPresent {
+		project, profile = legacyProject, legacyProfile
+	}
+	if strings.TrimSpace(project) == "" {
+		return "", "", errors.New("pointer.curator_engines_project is required")
+	}
+	if !filepath.IsAbs(project) {
+		return "", "", errors.New("pointer.curator_engines_project must be an absolute path")
+	}
+	if strings.TrimSpace(profile) == "" {
+		return "", "", errors.New("pointer.curator_engines_profile is required")
+	}
+	return project, profile, nil
 }
 
 func configuredEngineRef(cfg Config, raw *string) (plugin.Ref, error) {

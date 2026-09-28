@@ -29,8 +29,7 @@ func TestPermissionMappingKeepsVerifiedPiNativeEmptyAndYoloUnsupported(t *testin
 // drift fails closed before support is even asked, the verified
 // release stays unsupported, and native forwards verbatim. Pi-native
 // has no native-policy scan — yolo never reaches classification — but
-// unlike the wrapper it does probe: its binary is raw `pi`, which
-// attests its own release (probe_test.go).
+// its pre-plan probe checks the raw `pi` binary's release (probe_test.go).
 
 // The verified release stays unsupported: yolo at pi 0.84.2 is refused
 // with the unchanged sentinel even carrying native arguments no

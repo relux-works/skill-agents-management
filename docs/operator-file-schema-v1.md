@@ -64,11 +64,16 @@ positive integer; `effort_support` is `none` or `required`. Model IDs and their
 metadata are preserved without changing their admission, window, effort, or
 billing meaning. Fields inside runtime and model declarations stay with those
 declarations; policy tables outside the `runtimes` table are imported into
-`models.toml` without reinterpretation. The importer drops only the retired
-`pointer.agents_infra_project` and `pointer.agents_infra_profile` fields after
-it has either resolved the profile to an exact engine entry or reported the
-row unbound. An old engine kind must match the kind declared by that exact
-entry; a mismatch refuses as unsupported rather than guessing an alias.
+`models.toml` without reinterpretation. Direct local-models configuration uses
+`pointer.curator_engines_project` and `pointer.curator_engines_profile`.
+Native Pi model rows also set `pointer.pi_model_identity` to the exact
+provider/model identity present in Pi's model catalog; it is not inferred from
+the model vendor ID or Curator profile, and native launch refuses when it is
+missing or malformed. The importer drops only the retired source fields `pointer.agents_infra_project`
+and `pointer.agents_infra_profile` after it has either resolved the profile to
+an exact engine entry or reported the row unbound. An old engine kind must
+match the kind declared by that exact entry; a mismatch refuses as unsupported
+rather than guessing an alias.
 
 Credential metadata, if present, uses only the exact `credential` table. Its
 `source` is `env-name`, `command`, or `none`. For `env-name`, `name` is an

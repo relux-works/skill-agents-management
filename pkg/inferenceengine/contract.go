@@ -1,5 +1,5 @@
 // Package inferenceengine specifies the observed inference-engine boundary.
-// agents-infra owns process, SSH, polling, signal, and supervision execution.
+// curator-engines owns process, SSH, polling, signal, and supervision execution.
 package inferenceengine
 
 import (
@@ -16,7 +16,7 @@ import (
 )
 
 const ContractVersion = "observed-process/v2"
-const ExecutionOwner = "agents-infra"
+const ExecutionOwner = "curator-engines"
 
 type EngineKind string
 
@@ -185,7 +185,7 @@ func (NotObserved) Outcome() Outcome                { return OutcomeNotObserved 
 func (r NotObserved) Cause() NotObservedCause       { return r.cause }
 func (r NotObserved) Detail() string                { return r.detail }
 
-// ReadOutcome is the only data returned by the agents-infra read boundary.
+// ReadOutcome is the only data returned by the curator-engines read boundary.
 // It cannot stamp a fact, method, engine label, or value contract.
 type ReadOutcome struct {
 	outcome Outcome
@@ -374,7 +374,7 @@ func contractFor(kind EngineKind) Contract {
 	rules := make([]ObservationRule, 0, len(measuredFacts))
 	refuse := FailurePolicy{FailureActionRefuse, FailureActionRefuse, FailureActionRefuse}
 	for _, definition := range measuredFacts {
-		rules = append(rules, ObservationRule{definition.Fact, "agents-infra/" + string(kind) + "/" + string(definition.Fact), valueContractForFact(definition.Fact), refuse})
+		rules = append(rules, ObservationRule{definition.Fact, "curator-engines/" + string(kind) + "/" + string(definition.Fact), valueContractForFact(definition.Fact), refuse})
 	}
 	return Contract{ContractVersion, rules, ModelHarnessExpansion{FactLocalExecutable, FactLocalArgv, FactSSHForwarding, FactStressPolicy, FactRestartSupervisionPolicy, ExecutionOwner}}
 }
@@ -486,15 +486,16 @@ func canonicalizeValue(contract ValueContract, raw string) (string, error) {
 		if err := decodeClosed(raw, &value); err != nil {
 			return "", err
 		}
-		if value.Format == "safetensors" {
+		switch value.Format {
+		case "safetensors":
 			if !cleanAbsolute(value.ModelPath) || !cleanAbsolute(value.ConfigPath) || filepath.Base(value.ConfigPath) != "config.json" || value.MMProjPath != "" {
 				return "", errors.New("invalid safetensors shape")
 			}
-		} else if value.Format == "gguf" {
+		case "gguf":
 			if !cleanAbsolute(value.ModelPath) || !strings.EqualFold(filepath.Ext(value.ModelPath), ".gguf") || value.ConfigPath != "" || (value.MMProjPath != "" && (!cleanAbsolute(value.MMProjPath) || !strings.EqualFold(filepath.Ext(value.MMProjPath), ".gguf"))) {
 				return "", errors.New("invalid gguf shape")
 			}
-		} else {
+		default:
 			return "", errors.New("unknown weight format")
 		}
 		return encode(value)

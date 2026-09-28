@@ -16,6 +16,10 @@ type fakeCLIStatusReader struct {
 	err    error
 }
 
+type failingWriter struct{ err error }
+
+func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }
+
 func (f fakeCLIStatusReader) Status(context.Context, localruntime.StatusQuery) (localruntime.Status, error) {
 	if f.err != nil {
 		return localruntime.Status{}, f.err
@@ -32,7 +36,7 @@ func TestBuildLocalRuntimeReportAbsentAndMalformedAreDistinct(t *testing.T) {
 		t.Fatalf("absent report = %+v, want {registered:false reason:absent}", absent)
 	}
 
-	malformedErr := errors.New("pointer.agents_infra_project is required")
+	malformedErr := errors.New("pointer.curator_engines_project is required")
 	malformed := buildLocalRuntimeReport(context.Background(), localmodels.ConfigResult{Err: malformedErr}, fakeCLIStatusReader{})
 	if malformed.Registered || malformed.Reason != "malformed" || malformed.Error != malformedErr.Error() {
 		t.Fatalf("malformed report = %+v, want {registered:false reason:malformed error:%q}", malformed, malformedErr.Error())
@@ -51,8 +55,8 @@ func validLocalRuntimeConfig() localmodels.Config {
 			Models: map[vendorplugin.ModelID]localmodels.ModelEntry{
 				"qwen-3.8-27b-mlx-8bit": {
 					Pointer: localmodels.Pointer{
-						AgentsInfraProject: "/Users/op/skill-agents-management",
-						AgentsInfraProfile: "local-qwen",
+						CuratorEnginesProject: "/Users/op/skill-agents-management",
+						CuratorEnginesProfile: "local-qwen",
 					},
 				},
 			},
@@ -85,7 +89,7 @@ func TestBuildLocalRuntimeReportValidConfigReportsLiveStatus(t *testing.T) {
 // failed status read never suppresses the whole report — it becomes that
 // row's own Error field.
 func TestBuildLocalRuntimeReportStatusReadErrorIsPerRow(t *testing.T) {
-	reader := fakeCLIStatusReader{err: errors.New("agents-infra: not found")}
+	reader := fakeCLIStatusReader{err: errors.New("curator-engines: not found")}
 	report := buildLocalRuntimeReport(context.Background(), localmodels.ConfigResult{Config: validLocalRuntimeConfig()}, reader)
 	if !report.Registered {
 		t.Fatalf("report = %+v, want registered:true even when a status read fails", report)
@@ -110,5 +114,13 @@ func TestLocalRuntimeStatusCommandJSONShapeIsValid(t *testing.T) {
 	}
 	if _, ok := decoded["registered"]; !ok {
 		t.Fatalf("decoded = %v, missing the required \"registered\" field", decoded)
+	}
+}
+
+func TestPrintLocalRuntimeReportPropagatesWriterError(t *testing.T) {
+	want := errors.New("output failed")
+	err := printLocalRuntimeReport(failingWriter{err: want}, localRuntimeReport{Reason: "absent"})
+	if !errors.Is(err, want) {
+		t.Fatalf("printLocalRuntimeReport error = %v, want wrapped output error %v", err, want)
 	}
 }

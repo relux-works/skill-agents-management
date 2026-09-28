@@ -287,11 +287,11 @@ today.
 ### 5. The local-model plugin — module-side M1 candidate, coordinated M1 pending
 
 `pkg/vendorplugin/vendors/local-models` (the generic resource-plane vendor),
-`pkg/agentic/systems/pi` (Process A's harness plugin, implementing
-`Preflightable`), and `pkg/localruntime` (the machine-local `StatusReader`
-contract and its CLI-subprocess adapter) are implemented and tested in this
-branch — see [architecture.md](architecture.md)'s local-model section for the
-contract. `vendorplugin.BuildLaunch`
+`pkg/agentic/systems/pi` (the retained local worker using native Pi Exec and
+implementing `Preflightable`), and `pkg/localruntime` (the machine-local
+`StatusReader` contract and its curator-engines status adapter) are implemented
+and tested in this branch — see [architecture.md](architecture.md)'s
+local-model section for the contract. `vendorplugin.BuildLaunch`
 gained a leading `ctx`, `SpawnRequest.Profile`, typed `SpawnRequest.Run`,
 `AvailabilityQuery.Runtime`
 and the `agentic.Preflightable` step; `Registry` gained
@@ -328,11 +328,16 @@ What is still open, and owned elsewhere:
   `Unknown` for a legacy response missing `restart_not_before` and never
   infers a current limit from `restart_count` or `half_open`. Partial
   restart-status cohorts are read failures, never legacy absence.
-- **The concrete agents-infra Pi translator and observer adapter** — owned by
-  the companion consumer task. This module now publishes the exact outer
-  `pi spawn --profile/--prompt/--deadline/--result-schema` plan, EOF stdin,
-  immutable observer interface, and closed `pi.ValidateTurnResult` consumer;
-  it intentionally does not parse raw Pi JSONL or implement Process-B work.
+- **The engine observation contract and trusted adapter** — the engine-bound
+  Exec gate remains fail-closed until curator-engines publishes a read-only
+  observation contract and the consumer installs its trusted adapter. The
+  engine-bound Exec path still refuses before Pi preflight. The retained
+  no-engine worker builds native Pi plans only after explicit provider/model
+  identity and live attested broker status are established. Its unattended
+  policy disables approval, extensions and sessions and supplies a strict
+  tool allowlist; Pi 0.84.2 unsafe leading prompt forms are refused before
+  preflight. `pi.ValidateTurnResult` remains the compatibility parser for
+  existing Process-A consumers; native Pi does not emit that envelope.
 
 **Owner: this repository** for the three packages above; the four bullets
 just above are each owned by the repository named next to them.
@@ -348,14 +353,15 @@ the response must match its authoritative engine/runtime/model/profile query
 and live validity interval. The non-dry-run `vendorplugin.BuildLaunch` entry
 invokes this gate after pure vendor profile resolution and before `Preflight`
 or plan materialization. `inferenceengine.ValidateReadings` remains an
-untrusted schema helper, not an authorization surface. Without a concrete
-agents-infra adapter, the launch refuses as missing evidence.
+untrusted schema helper, not an authorization surface. Without the
+curator-engines read-only observation contract and a trusted adapter, the
+launch refuses as missing evidence.
 
 Model-harness expansion is a validated sum type in behavior: local executable
 and argv require positive SSH absence, while SSH forwarding requires both local
 facts positively absent. Partial or simultaneous variants refuse. This is a
-static contract candidate only; agents-infra still owns and executes every
-process, SSH, polling, pressure, and supervision operation.
+static contract candidate only; curator-engines owns process, SSH, polling,
+pressure, and supervision operations.
 
 ### 6. What the CLI answers today, and what that answer means
 
@@ -386,16 +392,19 @@ Added on top of `v0.5.10`: the `pi-native` system plugin
 (`pkg/agentic/systems/pinative`), `agentic.LaunchRequest.Vendor` set by
 `BuildLaunch`, three frozen runtimes (`pi-anthropic`, `pi-openai`,
 `pi-google`) and catalog-verified `pi-native` memberships on the anthropic,
-openai and google lineups. The legacy `pi` wrapper plugin, the local-models
-broker/runtime and every existing registry admission are unchanged; the
+openai and google lineups. The `pi-native` cloud-provider plugin and every
+existing registry admission are unchanged. The separate retained local-model
+worker was later migrated from the wrapper to native Pi by
+`TASK-260927-2i90pp`; the
 source-port pin now compares only the systems the extraction source knew, and
 its narrowing (`TestTheSourcePortPinStillSeesASourceSystemDropped`) shows it
 still sees a dropped source harness.
 
 What is deliberately NOT here:
 
-- **No exec/headless native Pi.** Interactive and dry-run only; the wrapper
-  owns headless Pi.
+- **No exec/headless mode on `pi-native`.** The cloud-provider plugin remains
+  interactive and dry-run only. The separate local `pi` plugin owns native
+  print-mode plans for retained local-model workers.
 - **No group rows for `pi-*`.** Pi's own limit output has not been captured, so
   models resolve to `pi-<vendor>-unmapped:<model>` singletons. `pi-google` has
   no classifier and can never be suppressed.

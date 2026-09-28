@@ -36,7 +36,7 @@ type EngineObservationQuery struct {
 }
 
 // EngineObservation is the sanitized, versioned response accepted from an
-// agents-infra-owned, bounded, read-only adapter.
+// curator-engines-owned, bounded, read-only adapter.
 type EngineObservation struct {
 	Contract      string
 	SchemaVersion int
@@ -50,7 +50,7 @@ type EngineObservation struct {
 }
 
 // EngineObservationAdapter performs one cooperative bounded observation. It
-// does not own engine lifecycle; Process B remains owned by agents-infra.
+// does not own engine lifecycle; Process B remains owned by curator-engines.
 type EngineObservationAdapter interface {
 	EngineObservationAdapterDeclaration() EngineObservationAdapterDeclaration
 	ObserveEngine(context.Context, EngineObservationQuery) (EngineObservation, error)

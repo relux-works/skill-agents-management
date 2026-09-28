@@ -512,6 +512,13 @@ type LaunchRequest struct {
 	// System selects the plugin. It is normalized on the way in.
 	System SystemID
 
+	// SystemModelIdentity is the exact provider/model spelling this System
+	// resolves when the vendor's catalog identity differs from the harness's
+	// provider identity. It is explicit configuration, never inferred from the
+	// vendor ID or model label. Systems that require a native provider identity
+	// validate it before producing argv.
+	SystemModelIdentity string
+
 	// Model is the selected model and its effort requirement. Effort is the
 	// chosen effort value, in the vendor's per-model vocabulary; this layer
 	// never inspects the word, only whether one is present and whether the
@@ -806,9 +813,8 @@ type LaunchRequestPreparer interface {
 // (follow-up F-L1) — never part of BuildPlan, which starts no process.
 //
 // A system whose binary cannot attest its tool release does not implement
-// it: pi's binary is the agents-infra wrapper, and the wrapper's version
-// is not pi's release, so pi has no probe and yolo there fails closed as
-// unverified unless the caller established the release another way.
+// it. The pi plugins currently require the caller to establish the Pi release
+// another way; yolo fails closed as unverified when no release is supplied.
 type ToolReleaseProber interface {
 	ProbeToolRelease(ctx context.Context, env []string) (string, error)
 }

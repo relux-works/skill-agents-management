@@ -15,21 +15,23 @@ import (
 // callers can distinguish an operational read error from a policy refusal.
 var ErrPreflightRefused = errors.New("pi: preflight refused")
 
-// agentsInfraCallerCWDEnv mirrors local-models's own constant of the same
-// name — the one environment variable Preflight reads to recover which
-// agents-infra project a StatusQuery is about.
-const agentsInfraCallerCWDEnv = "AGENTS_INFRA_CALLER_CWD"
+// curatorEnginesProjectEnv mirrors local-models's environment contract — the
+// explicit project directory whose engine profile the status read queries.
+const curatorEnginesProjectEnv = "CURATOR_ENGINES_PROJECT_DIR"
 
 // preflight constructs a StatusQuery from req's OWN fields — never from
 // ambient CWD, an environment variable read directly by this process, or
 // any other fallback — reads it through status, and applies the admit/
 // refuse table below.
 func preflight(ctx context.Context, status localruntime.StatusReader, req agentic.LaunchRequest) (agentic.PreflightEvidence, error) {
+	if _, err := nativeModelIdentity(req); err != nil {
+		return agentic.PreflightEvidence{}, err
+	}
 	query := localruntime.StatusQuery{
-		Runtime:            localruntime.RuntimeID(req.Runtime),
-		Model:              localruntime.ModelID(req.Model.ID),
-		AgentsInfraProject: launchenv.Value(req.Env, agentsInfraCallerCWDEnv),
-		AgentsInfraProfile: req.Profile,
+		Runtime:               localruntime.RuntimeID(req.Runtime),
+		Model:                 localruntime.ModelID(req.Model.ID),
+		CuratorEnginesProject: launchenv.Value(req.Env, curatorEnginesProjectEnv),
+		CuratorEnginesProfile: req.Profile,
 	}
 
 	result, err := status.Status(ctx, query)
@@ -47,24 +49,22 @@ func preflight(ctx context.Context, status localruntime.StatusReader, req agenti
 // admitOrRefuse is Preflight's own admit/refuse table (architecture decision
 // §5.2.1), answering a narrower operational question than Availability's
 // UX table (pkg/vendorplugin/vendors/local-models/availability.go):
-// "should BuildLaunch even attempt the wrapper launch."
+// "should BuildLaunch even attempt the native Pi launch."
 //
-// ("absent", "determined") is the SOLE non-attested fallback ADMIT. Every
-// other unattested/indeterminate row — contention in progress
-// (candidate-only), and every record-derived-unverified state including
-// unverified-stale, however fresh- or stale-looking a record it reports —
-// REFUSES: something was observed but proves nothing about right now. Only a
-// LIVE, attested connection may admit a non-absent state, and even then
-// "draining" refuses, because the broker's own listener is confirmed
-// already closed.
+// Only a LIVE, attested connection may admit: absence is not permission to
+// start a local model, because this process has no ensure/lease owner.
+// Contention (candidate-only) and every record-derived-unverified state,
+// including unverified-stale, REFUSE because they prove nothing about now.
+// Even an attested "draining" state refuses, because the broker's own
+// listener is confirmed already closed.
 //
 // This function performs ZERO filesystem or process-table operations of its
 // own: it is advisory-only, and any reclaim or cleanup of a stale record
-// belongs entirely to the wrapper's own live election, entered only via a
-// fresh `agents-infra pi` attempt downstream of an ADMIT here.
+// belongs entirely to curator-engines' lifecycle owner; this Pi plugin only
+// builds a native launch plan after an ADMIT here.
 func admitOrRefuse(status localruntime.Status) error {
 	if status.BrokerSource == localruntime.SourceDetermined && status.BrokerState == "absent" {
-		return nil
+		return fmt.Errorf("%w: broker is absent; native Pi Exec has no owner that can start or lease this local model", ErrPreflightRefused)
 	}
 	if status.BrokerSource == localruntime.SourceAttested {
 		switch status.BrokerState {
@@ -76,6 +76,6 @@ func admitOrRefuse(status localruntime.Status) error {
 			return fmt.Errorf("%w: attested but unrecognized broker state %q", ErrPreflightRefused, status.BrokerState)
 		}
 	}
-	return fmt.Errorf("%w: unattested/indeterminate broker read (state=%q source=%q); only a live attested connection or a positively-determined absence may admit", ErrPreflightRefused,
+	return fmt.Errorf("%w: unattested/indeterminate broker read (state=%q source=%q); only a live, attested broker outside draining may admit", ErrPreflightRefused,
 		status.BrokerState, status.BrokerSource)
 }

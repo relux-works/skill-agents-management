@@ -15,5 +15,6 @@ effort_support        = "none"
 engine                = "mlx"
 
 [runtimes.local-qwen.models."qwen-3.8-27b-mlx-8bit".pointer]
-agents_infra_project  = "/Users/op/skill-agents-management"
-agents_infra_profile  = "local-qwen"
+curator_engines_project  = "/Users/op/skill-agents-management"
+curator_engines_profile  = "local-qwen"
+pi_model_identity       = "qwen-local/qwen-local"

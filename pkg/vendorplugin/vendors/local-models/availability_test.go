@@ -99,7 +99,7 @@ func TestAvailabilityServingAtCapacityNeverFabricatesALimitedUntil(t *testing.T)
 
 // TestAvailabilityReadFailureIsUnknownWithFailures is case 18(i).
 func TestAvailabilityReadFailureIsUnknownWithFailures(t *testing.T) {
-	reader := &scriptedStatusReader{err: errors.New("agents-infra: exit status 1")}
+	reader := &scriptedStatusReader{err: errors.New("curator-engines: exit status 1")}
 	vendor := availabilityFixtureVendor(reader)
 	registry := registryWithPi(t)
 	if err := registry.Register(vendor); err != nil {
@@ -234,7 +234,7 @@ func TestCheckAvailabilityConsumesRestartExtensionFixtures(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture := restartExtensionAvailabilityFixture(t, tc.mutate)
 			reader := localruntime.NewCLIStatusReader(
-				localruntime.WithCommandRunner(func(context.Context, string, []string) ([]byte, error) { return fixture, nil }),
+				localruntime.WithCommandRunner(func(context.Context, string, []string, string) ([]byte, error) { return fixture, nil }),
 				localruntime.WithClock(func() time.Time { return checkedAt }),
 			)
 			registry := registryWithPi(t)
@@ -267,7 +267,7 @@ func TestCheckAvailabilityRefusesMalformedRestartDeadlineAsAReadFailure(t *testi
 		f["half_open"] = false
 	})
 	reader := localruntime.NewCLIStatusReader(
-		localruntime.WithCommandRunner(func(context.Context, string, []string) ([]byte, error) { return fixture, nil }),
+		localruntime.WithCommandRunner(func(context.Context, string, []string, string) ([]byte, error) { return fixture, nil }),
 	)
 	registry := registryWithPi(t)
 	if err := registry.Register(availabilityFixtureVendor(reader)); err != nil {
@@ -307,7 +307,7 @@ func TestCheckAvailabilityRefusesPartialRestartStatusCohorts(t *testing.T) {
 				}
 			})
 			reader := localruntime.NewCLIStatusReader(
-				localruntime.WithCommandRunner(func(context.Context, string, []string) ([]byte, error) { return fixture, nil }),
+				localruntime.WithCommandRunner(func(context.Context, string, []string, string) ([]byte, error) { return fixture, nil }),
 			)
 			registry := registryWithPi(t)
 			if err := registry.Register(availabilityFixtureVendor(reader)); err != nil {
@@ -329,12 +329,14 @@ func TestCheckAvailabilityRefusesPartialRestartStatusCohorts(t *testing.T) {
 func restartExtensionAvailabilityFixture(t *testing.T, mutate func(map[string]any)) []byte {
 	t.Helper()
 	fixture := map[string]any{
-		"runtime_key":    "local-qwen@/home/op/project",
-		"profile_digest": "deadbeef",
-		"broker":         map[string]any{"state": "serving", "source": "attested"},
-		"sharing":        map[string]any{"configured": map[string]any{"max_leases": 3}},
-		"runtime":        map[string]any{"pid": 4242, "start_time": "2026-08-29T10:00:00Z"},
-		"leases":         []any{},
+		"contract_version": 1,
+		"engine_identity":  map[string]any{"name": "local-qwen", "key": "engine-key"},
+		"runtime_key":      "local-qwen@/home/op/project",
+		"profile_digest":   "deadbeef",
+		"broker":           map[string]any{"state": "serving", "source": "attested"},
+		"sharing":          map[string]any{"configured": map[string]any{"max_leases": 3}},
+		"runtime":          map[string]any{"pid": 4242, "start_time": "2026-08-29T10:00:00Z"},
+		"leases":           []any{},
 	}
 	mutate(fixture)
 	data, err := json.Marshal(fixture)

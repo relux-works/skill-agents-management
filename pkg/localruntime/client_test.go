@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -11,12 +12,14 @@ import (
 func fixtureBytes(t *testing.T, mutate func(map[string]any)) []byte {
 	t.Helper()
 	fixture := map[string]any{
-		"runtime_key":    "local-qwen@/home/op/project",
-		"profile_digest": "deadbeef",
-		"broker":         map[string]any{"state": "serving", "source": "attested"},
-		"sharing":        map[string]any{"configured": map[string]any{"max_leases": 3}},
-		"runtime":        map[string]any{"pid": 1, "start_time": "2026-08-29T10:00:00Z"},
-		"leases":         []any{},
+		"contract_version": 1,
+		"engine_identity":  map[string]any{"name": "local-qwen", "key": "deadbeef"},
+		"runtime_key":      "local-qwen@/home/op/project",
+		"profile_digest":   "deadbeef",
+		"broker":           map[string]any{"state": "serving", "source": "attested"},
+		"sharing":          map[string]any{"configured": map[string]any{"max_leases": 3}},
+		"runtime":          map[string]any{"pid": 1, "start_time": "2026-08-29T10:00:00Z"},
+		"leases":           []any{},
 	}
 	if mutate != nil {
 		mutate(fixture)
@@ -35,16 +38,18 @@ type scriptedRunner struct {
 	calls    int
 	lastCtx  context.Context
 	lastArgs []string
+	lastDir  string
 
 	output []byte
 	err    error
 	hang   bool
 }
 
-func (s *scriptedRunner) run(ctx context.Context, name string, args []string) ([]byte, error) {
+func (s *scriptedRunner) run(ctx context.Context, name string, args []string, dir string) ([]byte, error) {
 	s.calls++
 	s.lastCtx = ctx
 	s.lastArgs = append([]string{name}, args...)
+	s.lastDir = dir
 	if s.hang {
 		<-ctx.Done()
 		return nil, ctx.Err()
@@ -58,19 +63,15 @@ func TestCLIStatusReaderHappyPath(t *testing.T) {
 	runner := &scriptedRunner{output: fixtureBytes(t, nil)}
 	reader := NewCLIStatusReader(WithCommandRunner(runner.run))
 
-	status, err := reader.Status(context.Background(), StatusQuery{
-		Runtime:            "local-qwen",
-		Model:              "qwen-3.8-27b-mlx-8bit",
-		AgentsInfraProject: "/home/op/project",
-		AgentsInfraProfile: "local-qwen",
-	})
+	query := validStatusQuery()
+	status, err := reader.Status(context.Background(), query)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
 	if status.BrokerState != "serving" || status.BrokerSource != SourceAttested {
 		t.Fatalf("got (%s, %s)", status.BrokerState, status.BrokerSource)
 	}
-	wantArgs := []string{"agents-infra", "runtime", "status", "--project", "/home/op/project", "--profile", "local-qwen", "--json"}
+	wantArgs := []string{"curator-engines", "status", "--engine", "local-qwen", "--json"}
 	if len(runner.lastArgs) != len(wantArgs) {
 		t.Fatalf("args = %v, want %v", runner.lastArgs, wantArgs)
 	}
@@ -78,6 +79,57 @@ func TestCLIStatusReaderHappyPath(t *testing.T) {
 		if runner.lastArgs[i] != wantArgs[i] {
 			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, runner.lastArgs[i], wantArgs[i], runner.lastArgs)
 		}
+	}
+	if runner.lastDir != query.CuratorEnginesProject {
+		t.Fatalf("command dir = %q, want explicit project %q", runner.lastDir, query.CuratorEnginesProject)
+	}
+}
+
+func TestCLIStatusReaderUsesReadOnlyCuratorEnginesStatus(t *testing.T) {
+	runner := &scriptedRunner{output: fixtureBytes(t, nil)}
+	query := validStatusQuery()
+	if _, err := NewCLIStatusReader(WithCommandRunner(runner.run)).Status(context.Background(), query); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	want := []string{"curator-engines", "status", "--engine", "local-qwen", "--json"}
+	if !reflect.DeepEqual(runner.lastArgs, want) {
+		t.Fatalf("command = %v, want read-only status command %v", runner.lastArgs, want)
+	}
+	if runner.lastDir != query.CuratorEnginesProject {
+		t.Fatalf("command dir = %q, want the selected project %q", runner.lastDir, query.CuratorEnginesProject)
+	}
+}
+
+func validStatusQuery() StatusQuery {
+	return StatusQuery{
+		Runtime:               "local-qwen",
+		Model:                 "qwen-3.8-27b-mlx-8bit",
+		CuratorEnginesProject: "/home/op/project",
+		CuratorEnginesProfile: "local-qwen",
+	}
+}
+
+func TestCLIStatusReaderRejectsMissingProjectOrProfileBeforeSubprocess(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*StatusQuery)
+	}{
+		{name: "missing project", mutate: func(q *StatusQuery) { q.CuratorEnginesProject = "" }},
+		{name: "relative project", mutate: func(q *StatusQuery) { q.CuratorEnginesProject = "project" }},
+		{name: "missing profile", mutate: func(q *StatusQuery) { q.CuratorEnginesProfile = " " }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &scriptedRunner{output: fixtureBytes(t, nil)}
+			query := validStatusQuery()
+			tc.mutate(&query)
+			_, err := NewCLIStatusReader(WithCommandRunner(runner.run)).Status(context.Background(), query)
+			if !errors.Is(err, ErrStatusQueryInvalid) {
+				t.Fatalf("Status error = %v, want ErrStatusQueryInvalid", err)
+			}
+			if runner.calls != 0 {
+				t.Fatalf("runner called %d times for an invalid query, want 0", runner.calls)
+			}
+		})
 	}
 }
 
@@ -87,7 +139,7 @@ func TestCLIStatusReaderHappyPath(t *testing.T) {
 func TestCLIStatusReaderSubprocessErrorIsARefusal(t *testing.T) {
 	runner := &scriptedRunner{err: errors.New("exit status 1")}
 	reader := NewCLIStatusReader(WithCommandRunner(runner.run))
-	_, err := reader.Status(context.Background(), StatusQuery{})
+	_, err := reader.Status(context.Background(), validStatusQuery())
 	if !errors.Is(err, ErrStatusReadFailed) {
 		t.Fatalf("err = %v, want ErrStatusReadFailed", err)
 	}
@@ -98,7 +150,7 @@ func TestCLIStatusReaderSubprocessErrorIsARefusal(t *testing.T) {
 func TestCLIStatusReaderTruncatedJSONIsADecodeFailure(t *testing.T) {
 	runner := &scriptedRunner{output: []byte(`{"runtime_key": "x"`)}
 	reader := NewCLIStatusReader(WithCommandRunner(runner.run))
-	_, err := reader.Status(context.Background(), StatusQuery{})
+	_, err := reader.Status(context.Background(), validStatusQuery())
 	if !errors.Is(err, ErrDecodeFailure) {
 		t.Fatalf("err = %v, want ErrDecodeFailure", err)
 	}
@@ -114,7 +166,7 @@ func TestCLIStatusReaderCallerCtxDeadlineFiring(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	_, err := reader.Status(ctx, StatusQuery{})
+	_, err := reader.Status(ctx, validStatusQuery())
 	elapsed := time.Since(start)
 	if !errors.Is(err, ErrStatusReadFailed) {
 		t.Fatalf("err = %v, want ErrStatusReadFailed", err)
@@ -131,7 +183,7 @@ func TestCLIStatusReaderOwnTimeoutFiring(t *testing.T) {
 	runner := &scriptedRunner{hang: true}
 	reader := NewCLIStatusReader(WithCommandRunner(runner.run), WithTimeout(20*time.Millisecond))
 	start := time.Now()
-	_, err := reader.Status(context.Background(), StatusQuery{})
+	_, err := reader.Status(context.Background(), validStatusQuery())
 	elapsed := time.Since(start)
 	if !errors.Is(err, ErrStatusReadFailed) {
 		t.Fatalf("err = %v, want ErrStatusReadFailed", err)
@@ -148,12 +200,12 @@ func TestCLIStatusReaderOwnTimeoutFiring(t *testing.T) {
 func TestCLIStatusReaderSuccessThenFailureNeverReusesTheStaleAnswer(t *testing.T) {
 	runner := &scriptedRunner{output: fixtureBytes(t, nil)}
 	reader := NewCLIStatusReader(WithCommandRunner(runner.run))
-	if _, err := reader.Status(context.Background(), StatusQuery{}); err != nil {
+	if _, err := reader.Status(context.Background(), validStatusQuery()); err != nil {
 		t.Fatalf("first Status: %v", err)
 	}
 	runner.output = nil
 	runner.err = errors.New("broker unreachable")
-	_, err := reader.Status(context.Background(), StatusQuery{})
+	_, err := reader.Status(context.Background(), validStatusQuery())
 	if !errors.Is(err, ErrStatusReadFailed) {
 		t.Fatalf("second Status: err = %v, want ErrStatusReadFailed (a fresh failure, not the first call's cached success)", err)
 	}
@@ -166,14 +218,14 @@ func TestCLIStatusReaderResponseCapIsExact(t *testing.T) {
 	t.Run("at the cap succeeds", func(t *testing.T) {
 		runner := &scriptedRunner{output: body}
 		reader := NewCLIStatusReader(WithCommandRunner(runner.run), WithResponseCap(len(body)))
-		if _, err := reader.Status(context.Background(), StatusQuery{}); err != nil {
+		if _, err := reader.Status(context.Background(), validStatusQuery()); err != nil {
 			t.Fatalf("at cap: %v", err)
 		}
 	})
 	t.Run("one byte over the cap is refused", func(t *testing.T) {
 		runner := &scriptedRunner{output: body}
 		reader := NewCLIStatusReader(WithCommandRunner(runner.run), WithResponseCap(len(body)-1))
-		_, err := reader.Status(context.Background(), StatusQuery{})
+		_, err := reader.Status(context.Background(), validStatusQuery())
 		if !errors.Is(err, ErrStatusReadFailed) {
 			t.Fatalf("over cap: err = %v, want ErrStatusReadFailed", err)
 		}
@@ -193,7 +245,7 @@ func TestCLIStatusReaderObservedRingBufferEvictsOldest(t *testing.T) {
 		runner.output = fixtureBytes(t, func(f map[string]any) {
 			f["broker"] = map[string]any{"state": state, "source": "attested"}
 		})
-		status, err := reader.Status(context.Background(), StatusQuery{})
+		status, err := reader.Status(context.Background(), validStatusQuery())
 		if err != nil {
 			t.Fatalf("Status(%s): %v", state, err)
 		}

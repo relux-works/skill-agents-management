@@ -11,12 +11,14 @@ import (
 // mirroring the fields §2.3.2 of the architecture decision requires.
 func validFixture() map[string]any {
 	return map[string]any{
-		"runtime_key":    "local-qwen@/home/op/project",
-		"profile_digest": "deadbeef",
-		"broker":         map[string]any{"state": "serving", "source": "attested"},
-		"sharing":        map[string]any{"configured": map[string]any{"max_leases": 3}},
-		"runtime":        map[string]any{"pid": 4242, "start_time": "2026-08-29T10:00:00Z"},
-		"leases":         []any{map[string]any{"id": "lease-1"}},
+		"contract_version": 1,
+		"engine_identity":  map[string]any{"name": "local-qwen", "key": "engine-key"},
+		"runtime_key":      "local-qwen@/home/op/project",
+		"profile_digest":   "deadbeef",
+		"broker":           map[string]any{"state": "serving", "source": "attested"},
+		"sharing":          map[string]any{"configured": map[string]any{"max_leases": 3}},
+		"runtime":          map[string]any{"pid": 4242, "start_time": "2026-08-29T10:00:00Z"},
+		"leases":           []any{map[string]any{"id": "lease-1"}},
 	}
 }
 
@@ -33,7 +35,7 @@ func mustJSON(t *testing.T, v any) []byte {
 // extra fields decodes cleanly.
 func TestDecodeStatusHappyPath(t *testing.T) {
 	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
-	status, err := decodeStatus(mustJSON(t, validFixture()), "local-qwen", "qwen-3.8-27b-mlx-8bit", now)
+	status, err := decodeStatus(mustJSON(t, validFixture()), "local-qwen", "qwen-3.8-27b-mlx-8bit", "local-qwen", now)
 	if err != nil {
 		t.Fatalf("decodeStatus: %v", err)
 	}
@@ -60,12 +62,31 @@ func TestDecodeStatusHappyPath(t *testing.T) {
 func TestDecodeStatusExtraTopLevelFieldIsIgnored(t *testing.T) {
 	fixture := validFixture()
 	fixture["future_extension_field"] = map[string]any{"value": 7}
-	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", time.Now())
+	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", "local-qwen", time.Now())
 	if err != nil {
 		t.Fatalf("decodeStatus with an unknown extra field: %v", err)
 	}
 	if status.BrokerState != "serving" {
 		t.Fatalf("BrokerState = %q, want serving (an unknown field must not disturb known ones)", status.BrokerState)
+	}
+}
+
+func TestDecodeStatusRefusesUnsupportedContractVersionAndWrongEngine(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "unsupported status contract", mutate: func(f map[string]any) { f["contract_version"] = 2 }},
+		{name: "wrong selected engine", mutate: func(f map[string]any) { f["engine_identity"] = map[string]any{"name": "other", "key": "engine-key"} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := validFixture()
+			tc.mutate(fixture)
+			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now())
+			if !errors.Is(err, ErrDecodeFailure) {
+				t.Fatalf("decodeStatus error = %v, want ErrDecodeFailure", err)
+			}
+		})
 	}
 }
 
@@ -79,7 +100,7 @@ func TestDecodeStatusPreRestartDeadlineFixture(t *testing.T) {
 	fixture["quarantined_until"] = nil
 	fixture["last_readiness_match"] = "2026-08-29T12:00:00Z"
 	fixture["manual_quarantine"] = false
-	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", time.Now())
+	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", "local-qwen", time.Now())
 	if err != nil {
 		t.Fatalf("decodeStatus(pre-extension fixture): %v", err)
 	}
@@ -112,7 +133,7 @@ func TestDecodeStatusPostRestartDeadlineFixture(t *testing.T) {
 	fixture["last_readiness_match"] = "2026-08-29T12:00:00Z"
 	fixture["manual_quarantine"] = false
 	fixture["half_open"] = true
-	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", time.Now())
+	status, err := decodeStatus(mustJSON(t, fixture), "local-qwen", "m", "local-qwen", time.Now())
 	if err != nil {
 		t.Fatalf("decodeStatus(post-extension fixture): %v", err)
 	}
@@ -161,7 +182,7 @@ func TestDecodeStatusRestartExtensionWrongTypesAreRefused(t *testing.T) {
 				fixture[key] = value
 			}
 			fixture[tc.field] = tc.value
-			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now())
 			if !errors.Is(err, ErrDecodeFailure) {
 				t.Fatalf("%s=%v: err = %v, want ErrDecodeFailure", tc.field, tc.value, err)
 			}
@@ -190,7 +211,7 @@ func TestDecodeStatusRestartExtensionPartialCohortsAreRefused(t *testing.T) {
 					fixture[key] = value
 				}
 			}
-			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now())
 			if !errors.Is(err, ErrDecodeFailure) {
 				t.Fatalf("current cohort missing %s: err = %v, want ErrDecodeFailure", field, err)
 			}
@@ -199,7 +220,7 @@ func TestDecodeStatusRestartExtensionPartialCohortsAreRefused(t *testing.T) {
 
 	fixture := validFixture()
 	fixture["restart_count"] = 2
-	_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+	_, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now())
 	if !errors.Is(err, ErrDecodeFailure) {
 		t.Fatalf("partial pre-extension cohort: err = %v, want ErrDecodeFailure", err)
 	}
@@ -209,11 +230,11 @@ func TestDecodeStatusRestartExtensionPartialCohortsAreRefused(t *testing.T) {
 // structurally-necessary field's absence is a decode failure naming the
 // missing field.
 func TestDecodeStatusMissingRequiredFieldIsRefused(t *testing.T) {
-	for _, field := range []string{"runtime_key", "profile_digest", "broker", "sharing", "leases"} {
+	for _, field := range []string{"contract_version", "engine_identity", "runtime_key", "profile_digest", "broker", "sharing", "leases"} {
 		t.Run(field, func(t *testing.T) {
 			fixture := validFixture()
 			delete(fixture, field)
-			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+			_, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now())
 			if !errors.Is(err, ErrDecodeFailure) {
 				t.Fatalf("missing %q: err = %v, want ErrDecodeFailure", field, err)
 			}
@@ -226,7 +247,7 @@ func TestDecodeStatusMissingRequiredFieldIsRefused(t *testing.T) {
 func TestDecodeStatusWrongTypeIsRefused(t *testing.T) {
 	fixture := validFixture()
 	fixture["sharing"] = map[string]any{"configured": map[string]any{"max_leases": "three"}}
-	if _, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now()); !errors.Is(err, ErrDecodeFailure) {
+	if _, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now()); !errors.Is(err, ErrDecodeFailure) {
 		t.Fatalf("max_leases as a string: err = %v, want ErrDecodeFailure", err)
 	}
 }
@@ -241,7 +262,7 @@ func TestDecodeStatusRuntimeAbsentIsNotAnError(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			fixture := validFixture()
 			mutate(fixture)
-			status, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+			status, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now())
 			if err != nil {
 				t.Fatalf("runtime %s: %v", name, err)
 			}
@@ -258,7 +279,7 @@ func TestDecodeStatusRuntimeAbsentIsNotAnError(t *testing.T) {
 func TestDecodeStatusRuntimePresentButMalformedIsRefused(t *testing.T) {
 	fixture := validFixture()
 	fixture["runtime"] = map[string]any{"pid": "not-a-number", "start_time": "2026-08-29T10:00:00Z"}
-	if _, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now()); !errors.Is(err, ErrDecodeFailure) {
+	if _, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now()); !errors.Is(err, ErrDecodeFailure) {
 		t.Fatalf("malformed runtime object: err = %v, want ErrDecodeFailure", err)
 	}
 }
@@ -270,7 +291,7 @@ func TestDecodeStatusEveryFrozenPairDecodes(t *testing.T) {
 		t.Run(pair.state+"/"+string(pair.source), func(t *testing.T) {
 			fixture := validFixture()
 			fixture["broker"] = map[string]any{"state": pair.state, "source": string(pair.source)}
-			status, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+			status, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now())
 			if err != nil {
 				t.Fatalf("decodeStatus(%s, %s): %v", pair.state, pair.source, err)
 			}
@@ -290,7 +311,7 @@ func TestDecodeStatusEveryFrozenPairDecodes(t *testing.T) {
 func TestDecodeStatusNeverJointlyReachablePairIsRefused(t *testing.T) {
 	fixture := validFixture()
 	fixture["broker"] = map[string]any{"state": "serving", "source": "determined"}
-	_, err := decodeStatus(mustJSON(t, fixture), "r", "m", time.Now())
+	_, err := decodeStatus(mustJSON(t, fixture), "r", "m", "local-qwen", time.Now())
 	if !errors.Is(err, ErrDecodeFailure) {
 		t.Fatalf("(serving, determined): err = %v, want ErrDecodeFailure", err)
 	}

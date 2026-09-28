@@ -402,7 +402,7 @@ func narrowingMutants() []mutant {
 			replacements: []replacement{
 				{
 					before: "parsed, err := localmodels.ParseConfig(encoded)\n\tif err != nil {\n\t\treturn nil, nil, nil, refuse(RefusalMalformed, \"local-models.toml\", \"\")\n\t}",
-					after:  "parsed, err := localmodels.ParseConfig(encoded)\n\tif err != nil {\n\t\tif strings.Contains(err.Error(), \"pointer.agents_infra_project is required\") {\n\t\t\tparsed = localmodels.Config{}\n\t\t} else {\n\t\t\treturn nil, nil, nil, refuse(RefusalMalformed, \"local-models.toml\", \"\")\n\t\t}\n\t}",
+					after:  "parsed, err := localmodels.ParseConfig(encoded)\n\tif err != nil {\n\t\tif strings.Contains(err.Error(), \"pointer.curator_engines_project is required\") {\n\t\t\tparsed = localmodels.Config{}\n\t\t} else {\n\t\t\treturn nil, nil, nil, refuse(RefusalMalformed, \"local-models.toml\", \"\")\n\t\t}\n\t}",
 				},
 			},
 			test:       "TestImportAtRefusesMalformedLocalModelsSource",

@@ -2,6 +2,7 @@ package inferenceengine_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
@@ -86,6 +87,21 @@ func TestValidatorUsesConcreteEngineKindAndClosedInventory(t *testing.T) {
 		}
 		if len(definition.Evidence) == 0 {
 			t.Fatalf("fact %s has no measurement provenance", definition.Fact)
+		}
+	}
+}
+
+func TestContractNamesCuratorEnginesAsExecutionOwner(t *testing.T) {
+	resolved, err := validate(nil)
+	if err != nil {
+		t.Fatalf("ValidateReadings: %v", err)
+	}
+	if inferenceengine.ExecutionOwner != "curator-engines" || resolved.Contract.ProfileExpansion.ExecutionOwner != inferenceengine.ExecutionOwner {
+		t.Fatalf("execution owner const/contract = %q/%q, want curator-engines", inferenceengine.ExecutionOwner, resolved.Contract.ProfileExpansion.ExecutionOwner)
+	}
+	for _, rule := range resolved.Contract.Rules {
+		if !strings.HasPrefix(rule.Method, "curator-engines/") {
+			t.Errorf("rule %s method = %q, want curator-engines-owned observation", rule.Fact, rule.Method)
 		}
 	}
 }

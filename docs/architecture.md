@@ -75,7 +75,7 @@ plugin per system:
 | `gemini-cli` | Gemini CLI |
 | `antigravity` | Antigravity CLI |
 | `muse` | Muse CLI |
-| `pi` | Process A: exact `agents-infra pi spawn --profile <name> --prompt <prompt> --deadline <caller fence, 30m when none> --result-schema 1`, with EOF stdin; agents-infra owns the shared-runtime lease, inner Pi policy, execution and cleanup |
+| `pi` | Retained local-model worker: raw `pi` with an explicit catalog identity `--model <provider>/<model>`, Pi native `--print` message grammar, and the unattended `--no-approve --no-extensions --no-session --tools read,bash,edit,write` policy; only a live attested broker admits Exec |
 | `pi-native` | The Pi coding agent itself (`pi` on the launch PATH) as an interactive session against a cloud provider: `--model <vendor>/<model>` plus `--thinking <effort>`, home `PI_CODING_AGENT_DIR` (default `~/.pi/agent`), interactive and dry-run only, no preflight, no exec grammar |
 
 An agentic-system plugin declares (this mirrors the adapter table the
@@ -406,13 +406,15 @@ two DISTINCT, typed outcomes (`ConfigResult{Absent: true}` vs
 `Registry.NoteUnregistered`/`ErrRuntimeConfigMalformed` so the coordinated
 consumer's `ResolveRuntime` call can surface it, not only a separate status
 CLI. `pkg/agentic/systems/pi` is
-Process A's harness plugin (see the agentic-system table above) and implements
+the retained local-worker plugin (see the agentic-system table above) and implements
 `Preflightable`: a context-bounded, fail-closed admit/refuse check against
-`pkg/localruntime`'s machine-local `StatusReader` — `("absent", "determined")`
-is the sole non-attested admit; every other unattested/indeterminate broker
-read refuses. Neither this vendor nor `pi` nor `pkg/localruntime` ever starts,
-stops or signals the local model server itself (Process B); that authority
-belongs entirely to `relux-agents-infra`'s own shared-runtime broker.
+`pkg/localruntime`'s machine-local `StatusReader`. Only attested `starting`,
+`serving`, or `lingering` states admit. Positively absent status refuses:
+this process has no owner that can ensure or lease the engine. Every other
+unattested/indeterminate broker read also refuses. Neither this vendor nor
+`pi` nor `pkg/localruntime` ever starts, stops or signals the local model
+server itself (Process B); that authority belongs entirely to curator-engines'
+shared-runtime broker.
 
 The same static configuration may carry `cache_budget_bytes` on a model row.
 It is an optional-positive catalog fact: omission remains `nil`, while an
@@ -432,22 +434,26 @@ part of this candidate.
 `pkg/localruntime`'s read-only status subprocess call is the one exception to
 "no `os/exec` in this vendor's import graph", and a static test enforces it.
 
-`pkg/agentic/systems/pi` now pins the complete outer Process-A contract:
-`["pi", "spawn", "--profile", <exact-profile>, "--prompt", <one UTF-8 value>,
-"--deadline", <LaunchRequest.Deadline as a Go duration, "30m" when none>,
-"--result-schema", "1"]`, resolved against
-`agents-infra` on the launch environment's PATH. Stdin is detached/EOF and
-dry-run uses `<prompt>` without reading the prompt file. This module emits no
-inner Pi flags. agents-infra remains the sole owner of inner Pi policy,
-Process-A execution/cleanup, raw Pi parsing and schema translation.
+`pkg/agentic/systems/pi` plans retained local-model turns through raw `pi` on
+the launch PATH. Each model pointer declares the exact Pi catalog identity in
+`pointer.pi_model_identity` (provider/model); the plugin never derives it from
+the vendor ID or Curator profile. Exec uses that identity with Pi's native
+`--print` message grammar, `--no-approve`, `--no-extensions`, `--no-session`,
+and `--tools read,bash,edit,write`. Prompts beginning with `-` or `@` refuse
+before preflight because Pi 0.84.2 parses those prefixes as options or file
+references and provides no `--` delimiter. The declared profile selects the
+read-only curator-engines preflight and is not a Pi flag. Stdin is detached/EOF
+and dry-run uses `<prompt>` without reading the prompt file. No plan or status
+read starts the harness or model engine.
 
-The corresponding public consumer boundary is `pi.ValidateTurnResult`. It is
-the sole parser for the closed, 1 MiB-bounded
-`agents-infra.pi-turn-result` schema 1 document and classifies it against the
-actual Process-A exit, recorded consumer intervention and cleanup outcome.
-Cancellation/deadline survives an induced signal or missing post-kill document
-after successful cleanup; cleanup failure has higher precedence. Process B is
-never signalled or supervised by this module. The error-code table is closed:
+The public compatibility parser `pi.ValidateTurnResult` still validates the
+closed, 1 MiB-bounded `agents-infra.pi-turn-result` schema 1 document for
+existing Process-A consumers. Native Pi plans do not produce that envelope.
+The parser classifies the document against the actual process exit, recorded
+consumer intervention and cleanup outcome. Cancellation/deadline survives an
+induced signal or missing post-kill document after successful cleanup;
+cleanup failure has higher precedence. Process B is never signalled or
+supervised by this module. The error-code table is closed:
 `pi_turn_lifecycle_integrity_unknown` (Process A could not establish the
 integrity of its lifecycle evidence) classifies as Process-A-refused with exit
 1, carries no detail members, and any other spelling, exit pairing or extra
@@ -491,8 +497,8 @@ entry. Its inputs are explicitly untrusted; constructing them cannot alter the
 Registry's adapter table or reach launch effects. Package tests install fake
 public adapters only at immutable registry construction and exercise every
 result class without contacting a live runtime. `NewRegistry` has no positive
-adapter: an engine-bound exec launch fails closed until trusted agents-infra
-assembly supplies the concrete adapter.
+adapter: an engine-bound exec launch remains fail-closed pending
+curator-engines' read-only observation contract and its trusted adapter.
 
 `pkg/inferenceengine` owns validation, not execution. Its v2 contract closes
 the 17 measured facts independently and preserves observed value, observed

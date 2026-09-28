@@ -21,7 +21,7 @@ var admitCases = []struct {
 	source localruntime.BrokerObservationSource
 	admit  bool
 }{
-	{"absent/determined", "absent", localruntime.SourceDetermined, true},
+	{"absent/determined", "absent", localruntime.SourceDetermined, false},
 	{"starting-unverified/candidate-only", "starting-unverified", localruntime.SourceCandidateOnly, false},
 	{"starting/record-derived-unverified", "starting", localruntime.SourceRecordUnverified, false},
 	{"serving/record-derived-unverified", "serving", localruntime.SourceRecordUnverified, false},
@@ -34,9 +34,9 @@ var admitCases = []struct {
 	{"draining/attested", "draining", localruntime.SourceAttested, false},
 }
 
-// TestPreflightAdmitRefuseTable is case 21b(a)-(f): the tightened,
-// single-ADMIT table, with ("absent","determined") the ONLY non-attested
-// fallback admit and every other unattested/indeterminate row refusing.
+// TestPreflightAdmitRefuseTable holds the closed broker policy: only a live,
+// attested state outside draining admits native Pi Exec. Absence refuses
+// because this process has no engine start/lease owner.
 func TestPreflightAdmitRefuseTable(t *testing.T) {
 	if len(admitCases) != 11 {
 		t.Fatalf("admitCases has %d entries, want all eleven frozen pairs", len(admitCases))
@@ -80,11 +80,10 @@ func TestPreflightAdmitRefuseAcrossRepeatedCalls(t *testing.T) {
 	if _, err := system.Preflight(context.Background(), req); err == nil {
 		t.Fatal("call 3 (resume): admitted, want refuse")
 	}
-	// (4) recovery: the fake reader is reconfigured to the sole non-attested
-	// ADMIT row.
-	reader.status = localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}
+	// (4) recovery: the fake reader is reconfigured to a live, attested row.
+	reader.status = localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}
 	if _, err := system.Preflight(context.Background(), req); err != nil {
-		t.Fatalf("call 4 (recovery, absent/determined): refused, want admit: %v", err)
+		t.Fatalf("call 4 (recovery, serving/attested): refused, want admit: %v", err)
 	}
 }
 
@@ -134,10 +133,11 @@ func TestPreflightRealTimeoutFires(t *testing.T) {
 // local-qwen-shaped launch.
 func agenticRequest() agentic.LaunchRequest {
 	return agentic.LaunchRequest{
-		Runtime: "local-qwen",
-		Model:   agentic.Model{ID: "qwen-3.8-27b-mlx-8bit"},
-		Profile: "local-qwen",
-		Env:     []string{"AGENTS_INFRA_CALLER_CWD=/Users/op/project"},
+		Runtime:             "local-qwen",
+		SystemModelIdentity: "qwen-local/qwen-local",
+		Model:               agentic.Model{ID: "qwen-3.8-27b-mlx-8bit"},
+		Profile:             "local-qwen",
+		Env:                 []string{"CURATOR_ENGINES_PROJECT_DIR=/Users/op/project"},
 	}
 }
 
@@ -145,14 +145,15 @@ func agenticRequest() agentic.LaunchRequest {
 // StatusQuery field is sourced from the SAME LaunchRequest, and none of them
 // is ever recovered from an ambient fallback.
 func TestPreflightConstructsStatusQueryFromRequestFieldsOnly(t *testing.T) {
-	reader := &fakeStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
+	reader := &fakeStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
 	system := New(reader)
 
 	req := agentic.LaunchRequest{
-		Runtime: "local-test-profile",
-		Model:   agentic.Model{ID: "some-other-model"},
-		Profile: "some-other-profile",
-		Env:     []string{"AGENTS_INFRA_CALLER_CWD=/Users/op/other-project"},
+		Runtime:             "local-test-profile",
+		SystemModelIdentity: "qwen-local/qwen-local",
+		Model:               agentic.Model{ID: "some-other-model"},
+		Profile:             "some-other-profile",
+		Env:                 []string{"CURATOR_ENGINES_PROJECT_DIR=/Users/op/other-project"},
 	}
 	if _, err := system.Preflight(context.Background(), req); err != nil {
 		t.Fatalf("Preflight: %v", err)
@@ -162,26 +163,26 @@ func TestPreflightConstructsStatusQueryFromRequestFieldsOnly(t *testing.T) {
 	}
 	got := reader.calls[0]
 	if got.Runtime != "local-test-profile" || got.Model != "some-other-model" ||
-		got.AgentsInfraProject != "/Users/op/other-project" || got.AgentsInfraProfile != "some-other-profile" {
+		got.CuratorEnginesProject != "/Users/op/other-project" || got.CuratorEnginesProfile != "some-other-profile" {
 		t.Fatalf("StatusQuery = %+v, want fields sourced verbatim from the request", got)
 	}
 }
 
 // TestPreflightNeverFallsBackToAmbientState is case 16c(c): a LaunchRequest
-// with Runtime set but Profile/Env's AGENTS_INFRA_CALLER_CWD entry EMPTY
-// must produce a StatusQuery with empty AgentsInfraProject/
-// AgentsInfraProfile, never a value recovered from os.Getwd() or a direct
+// with Runtime set but Profile/Env's CURATOR_ENGINES_PROJECT_DIR entry EMPTY
+// must produce a StatusQuery with empty CuratorEnginesProject/
+// CuratorEnginesProfile, never a value recovered from os.Getwd() or a direct
 // process environment read.
 func TestPreflightNeverFallsBackToAmbientState(t *testing.T) {
 	reader := &fakeStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
 	system := New(reader)
 
-	req := agentic.LaunchRequest{Runtime: "local-qwen", Model: agentic.Model{ID: "m"}}
-	if _, err := system.Preflight(context.Background(), req); err != nil {
-		t.Fatalf("Preflight: %v", err)
+	req := agentic.LaunchRequest{Runtime: "local-qwen", Model: agentic.Model{ID: "m"}, SystemModelIdentity: "qwen-local/qwen-local"}
+	if _, err := system.Preflight(context.Background(), req); !errors.Is(err, ErrPreflightRefused) {
+		t.Fatalf("Preflight: %v, want ErrPreflightRefused for absent broker", err)
 	}
 	got := reader.calls[0]
-	if got.AgentsInfraProject != "" || got.AgentsInfraProfile != "" {
+	if got.CuratorEnginesProject != "" || got.CuratorEnginesProfile != "" {
 		t.Fatalf("StatusQuery = %+v, want empty project/profile with no ambient fallback", got)
 	}
 }
