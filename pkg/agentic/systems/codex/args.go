@@ -85,6 +85,10 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return nil, fmt.Errorf("codex: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
 			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
 	}
+	localProvider, err := localProviderArgs(req, mode)
+	if err != nil {
+		return nil, err
+	}
 	context, err := buildContextValues(req, mode)
 	if err != nil {
 		return nil, err
@@ -99,6 +103,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 			args = append(args, "-p", profile)
 		}
 		args = append(args, "exec", "-m", model)
+		args = append(args, localProvider...)
 		args = appendReasoningAndTier(args, req)
 		args = append(args, bypassApprovalsAndSandboxFlag)
 		args = append(args, "--skip-git-repo-check")

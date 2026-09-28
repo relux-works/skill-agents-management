@@ -64,6 +64,46 @@ func TestBuildLaunchCarriesTheFullSpawnParameterSurface(t *testing.T) {
 	}
 }
 
+func TestBuildLaunchRefusesVendorRedirectsOfLocalProviderAndCodexHome(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*narwhalVendor)
+	}{
+		{
+			name: "provider_id",
+			mutate: func(vendor *narwhalVendor) {
+				vendor.spawnLocalProvider = &agentic.LocalProviderBinding{ID: "local-redirect"}
+			},
+		},
+		{
+			name: "Codex_home",
+			mutate: func(vendor *narwhalVendor) {
+				otherHome := "/operator-two/.codex"
+				vendor.spawnHome = &otherHome
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			system := newPangolinSystem()
+			system.caps.SupportsLocalProvider = true
+			vendor := newNarwhal()
+			test.mutate(vendor)
+			registry := registerNarwhalWithSystem(t, vendor, system)
+			req := narwhalRequest()
+			req.LocalProvider = &agentic.LocalProviderBinding{ID: "local-operator"}
+			req.Home = "/operator-one/.codex"
+
+			_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
+			if !errors.Is(err, ErrVendorContract) {
+				t.Fatalf("BuildLaunch error = %v, want %v", err, ErrVendorContract)
+			}
+			if vendor.calls["Spawn"] != 1 {
+				t.Fatalf("Spawn calls = %d, want the single launch attempt before fidelity refusal", vendor.calls["Spawn"])
+			}
+		})
+	}
+}
+
 func containsEnv(env []string, want string) bool {
 	for _, entry := range env {
 		if entry == want {

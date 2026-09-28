@@ -54,6 +54,22 @@ func TestBuildPlanRefusesUndeclaredLaunchMode(t *testing.T) {
 	}
 }
 
+func TestBuildPlanRefusesLocalProviderOnAnUnsupportedSystem(t *testing.T) {
+	sys := newPangolin()
+	registry := registerPangolin(t, sys)
+	req := pangolinRequest()
+	req.LocalProvider = &LocalProviderBinding{ID: "local-test"}
+
+	_, err := BuildPlan(registry, req, LaunchModeExec)
+	var refusal *LocalProviderRefusal
+	if !errors.Is(err, ErrLocalProviderUnsupported) || !errors.As(err, &refusal) || refusal.Kind != LocalProviderUnsupported {
+		t.Fatalf("BuildPlan error = %v, want typed local-provider unsupported refusal", err)
+	}
+	if sys.calls["ResolveBinary"] != 0 || sys.calls["Argv"] != 0 {
+		t.Fatalf("unsupported local-provider request reached system surfaces: %#v", sys.calls)
+	}
+}
+
 // AC4, at the launch site. A system whose transport is none, combined with a
 // model that requires an effort, must be refused rather than launched with the
 // effort dropped — the silent wrong-cost launch the source repository's

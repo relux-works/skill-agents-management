@@ -540,6 +540,12 @@ type LaunchRequest struct {
 	// (provider, home), so this value is load-bearing beyond the launch.
 	Home string
 
+	// LocalProvider selects one explicitly configured local model provider.
+	// Nil keeps the harness's native provider selection untouched. A non-nil
+	// binding is carried to the system plugin and must be refused if that
+	// system cannot prove the selected provider is bound in its private home.
+	LocalProvider *LocalProviderBinding
+
 	// Env is the parent environment the child inherits from, before the
 	// system's own filtering. It is passed in rather than read from the
 	// process so a launch is reproducible and testable without mutating the
@@ -863,9 +869,10 @@ type Capabilities struct {
 	// SupportsGoal, SupportsBudget and SupportsServiceTier gate the three
 	// optional launch parameters. A request carrying one a system does not
 	// support is refused, not dropped.
-	SupportsGoal        bool
-	SupportsBudget      bool
-	SupportsServiceTier bool
+	SupportsGoal          bool
+	SupportsBudget        bool
+	SupportsServiceTier   bool
+	SupportsLocalProvider bool
 
 	// CompositionGrammar names the launch-composition argv shape, or
 	// GrammarNone when the system supports none.

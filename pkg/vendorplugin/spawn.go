@@ -90,6 +90,10 @@ type SpawnRequest struct {
 	WorkDir string
 	Home    string
 
+	// LocalProvider selects a provider declared in the private Codex config
+	// home. Nil preserves native subscription selection.
+	LocalProvider *agentic.LocalProviderBinding
+
 	// Profile is the harness-side named configuration profile a launch runs
 	// under, carried straight onto agentic.LaunchRequest.Profile by the
 	// vendors that use it. It is transport for a fact a vendor may need to
@@ -183,6 +187,7 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	// it cannot mutate the caller's permission arguments before fidelity checks
 	// and the agentic plugin see them.
 	req.NativeArgs = append([]string(nil), req.NativeArgs...)
+	req.LocalProvider = cloneLocalProvider(req.LocalProvider)
 	binding, err := resolveLaunchBinding(r, req.Runtime)
 	if err != nil {
 		return agentic.Plan{}, err
@@ -231,6 +236,7 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 		runtime := binding.Runtime()
 		vendorRequest := req
 		vendorRequest.NativeArgs = append([]string(nil), req.NativeArgs...)
+		vendorRequest.LocalProvider = cloneLocalProvider(req.LocalProvider)
 		launch, err = binding.Vendor.Spawn(SpawnContext{
 			Runtime: runtime,
 			Model:   model,
@@ -479,7 +485,21 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 	if !reflect.DeepEqual(launch.NativeArgs, req.NativeArgs) {
 		return fmt.Errorf("%w: vendor %s changed the caller's native arguments", ErrVendorContract, runtime.VendorID)
 	}
+	if !reflect.DeepEqual(launch.LocalProvider, req.LocalProvider) {
+		return fmt.Errorf("%w: vendor %s changed the caller's local provider selection", ErrVendorContract, runtime.VendorID)
+	}
+	if req.LocalProvider != nil && launch.Home != req.Home {
+		return fmt.Errorf("%w: vendor %s redirected the caller's local provider to a different Codex home", ErrVendorContract, runtime.VendorID)
+	}
 	return nil
+}
+
+func cloneLocalProvider(value *agentic.LocalProviderBinding) *agentic.LocalProviderBinding {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 // CheckAvailability asks one vendor whether requests can be made right now,

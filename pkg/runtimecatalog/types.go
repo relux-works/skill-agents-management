@@ -1,6 +1,8 @@
 // Package runtimecatalog parses and discovers the machine-local Curator
 // runtime and role-binding catalogs. It reports plans and provenance only; it
-// does not start engines or construct launch transport.
+// does not start engines. Codex's per-launch local-provider transport is
+// configured through its supported CLI config overrides, while spawn-side
+// engine lifecycle remains outside this package.
 package runtimecatalog
 
 import (

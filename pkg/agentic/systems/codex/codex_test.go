@@ -89,6 +89,9 @@ func TestTheDeclaredCapabilitiesMatchTheSourceAdapter(t *testing.T) {
 	if !caps.SupportsServiceTier {
 		t.Error("SupportsServiceTier = false; codex is the one system in the source that carries a tier")
 	}
+	if !caps.SupportsLocalProvider {
+		t.Error("SupportsLocalProvider = false; codex declares the supported per-launch provider override")
+	}
 	if caps.CompositionGrammar != GrammarTOMLConfigPairs {
 		t.Errorf("CompositionGrammar = %q, want %q", caps.CompositionGrammar, GrammarTOMLConfigPairs)
 	}

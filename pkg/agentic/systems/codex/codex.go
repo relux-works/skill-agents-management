@@ -104,11 +104,12 @@ func (*System) Capabilities() agentic.Capabilities {
 		// Argv: codex carries effort as a `-c model_reasoning_effort=...`
 		// config override. TRANSPORT only — the words themselves belong to the
 		// model row in the vendor layer.
-		EffortTransport:     agentic.EffortTransportArgv,
-		SupportsGoal:        true,
-		SupportsBudget:      false,
-		SupportsServiceTier: true,
-		CompositionGrammar:  GrammarTOMLConfigPairs,
+		EffortTransport:       agentic.EffortTransportArgv,
+		SupportsGoal:          true,
+		SupportsBudget:        false,
+		SupportsServiceTier:   true,
+		SupportsLocalProvider: true,
+		CompositionGrammar:    GrammarTOMLConfigPairs,
 		// The codex CLI reads exactly one variable for its configuration home,
 		// regardless of which runtime asked it to launch. Limit state is keyed
 		// by the home this resolves to, so neither value may move without a
@@ -145,9 +146,19 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 }
 
 // ChildEnv is the environment contract: strip the parent codex runtime state,
-// then write the run context and the resolved service tier.
+// then write the run context and the resolved service tier. A local-provider
+// launch also binds CODEX_HOME to the root whose provider table was validated;
+// without that pin, Codex could load a same-id entry from HOME/.codex instead.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
-	return childEnv(parent, req), nil
+	env := childEnv(parent, req)
+	if req.LocalProvider == nil {
+		return env, nil
+	}
+	home, err := localProviderHome(req)
+	if err != nil {
+		return nil, err
+	}
+	return agentic.SetEnvValue(env, "CODEX_HOME", home), nil
 }
 
 // Stdin is codex's prompt transport: the assignment prompt is streamed on

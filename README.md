@@ -324,6 +324,16 @@ proven against all four codex launch-surface goldens through the real
 - **Effort transport is argv** — a `-c model_reasoning_effort="..."` override —
   and the vocabulary stays with the vendor layer. The service-tier override
   travels the same way.
+- **Local model providers are opt-in per launch.** A non-nil
+  `LaunchRequest.LocalProvider` selects a provider entry from the private
+  Codex home; its ID uses the separate `local-` namespace, so Codex's built-in
+  provider identifiers are refused. Nil keeps the native subscription argv
+  unchanged. The plugin validates the entry, requires a loopback HTTP endpoint and the Responses
+  API with OpenAI account auth disabled, then pins those values with Codex's
+  supported `-c` overrides. The child also receives the validated canonical
+  root as `CODEX_HOME`, so a same-id provider under `HOME/.codex` cannot add
+  unvalidated credentials or headers. Missing, malformed, conflicting-home, unbound and
+  unsupported entries return typed refusals before a plan is produced.
 - **Environment filtering by EXACT KEY**, never by prefix, including two
   pointers whose VALUES name the credential variables to block. The parity
   package's two permanent negatives — a whole-environment wipe and a
@@ -1226,8 +1236,10 @@ concluding that a missing golden is permission.
 | Tool | Purpose | Entry point | Artifacts |
 | --- | --- | --- | --- |
 | `make` | build, test, vet, regress and install the CLI | `make build` / `test` / `vet` / `regress` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
+| Go toolchain | package tests and static analysis | `go test -mod=mod ./... -count=1` / `go vet -mod=mod ./...`; `make test` / `make vet` wrap the repository gates | terminal output and task-scoped logs in `.temp/` |
 | `golangci-lint` | lint all Go packages | `golangci-lint run ./...` | terminal output; task logs under `.temp/` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
+| Codex CLI | launch target for `pkg/agentic/systems/codex`; custom local providers are selected with generated config overrides and private `CODEX_HOME/config.toml` entries | `codex --version`; runtime launches execute the `Binary` and `Argv` returned by `agentic.BuildPlan` | child work under the requested `WorkDir`; private settings remain under `CODEX_HOME` |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
 | model registry capture | regenerate the vendor fixtures: the source's model rows and frozen v2 tiers (read from its Go sources) and the admitted-pair digests (read from its own binary) | `.scripts/capture-model-registry.sh` | `pkg/vendorplugin/testdata/source-model-registry.json`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`, scratch in `.temp/capture-model-registry/` |
 | board model-facts capture (TRANSITIONAL) | regenerate the frozen capture of the BOARD table's own model facts — score, lifecycle, supersession, recommendation, context window, pricing — read from the board binary's `q 'models()'` projection at a named commit. Dies with the board's half of the swap: when the board reads these facts from this module, delete the fixture and `pkg/vendorplugin/boardfacts_test.go` rather than regenerating them | `.scripts/capture-board-model-facts.sh [--source /path/to/skill-project-management]` | `pkg/vendorplugin/testdata/board-model-facts.json`, scratch in `.temp/capture-board-model-facts/` |

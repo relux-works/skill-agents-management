@@ -78,6 +78,7 @@ func passthroughLaunchRequest(system agentic.SystemID, model Model, effort strin
 		Prompt:         req.Prompt,
 		WorkDir:        req.WorkDir,
 		Home:           req.Home,
+		LocalProvider:  cloneLocalProvider(req.LocalProvider),
 		Env:            req.Env,
 		Run:            req.Run,
 		Profile:        req.Profile,

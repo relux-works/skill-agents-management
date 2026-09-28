@@ -177,5 +177,7 @@ Provenance identifies the source kind and basename, schema version, and
 resolved runtime/engine IDs. It does not persist source file contents,
 absolute paths, environment values, or secrets.
 
-This version does not define launch transport. The Codex local-provider
-transport is owned by `TASK-260927-1ycuhl`.
+Schema v1 describes operator bindings and provenance; it does not define
+engine lifecycle. Codex's local-provider transport selects a provider from the
+private Codex home through Codex-supported `-c` overrides. Spawn-side engine
+ensure and lease remain owned by `TASK-260927-1ycuhl`.

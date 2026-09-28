@@ -305,6 +305,14 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	if !mode.Valid() || !caps.SupportsMode(mode) {
 		return Plan{}, fmt.Errorf("%w: %s does not declare %s", ErrUnsupportedLaunchMode, id, mode)
 	}
+	if req.LocalProvider != nil {
+		if !caps.SupportsLocalProvider {
+			return Plan{}, &LocalProviderRefusal{Kind: LocalProviderUnsupported, Subject: string(id)}
+		}
+		if strings.TrimSpace(req.LocalProvider.ID) == "" {
+			return Plan{}, &LocalProviderRefusal{Kind: LocalProviderUnbound}
+		}
+	}
 	// Permission modes are validated before the pre-plan gate runs: a refused
 	// value must not trigger even a file read, and the unknown-value refusal
 	// fires in every mode while the scope refusal fires in every mode but one.

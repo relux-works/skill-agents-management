@@ -130,6 +130,8 @@ type narwhalVendor struct {
 	spawnTier          *string
 	spawnDropComposit  bool
 	spawnSkipAuthEnv   bool
+	spawnLocalProvider *agentic.LocalProviderBinding
+	spawnHome          *string
 }
 
 // narwhalAuthEnv is the vendor's legitimate ADDITION to a launch: the kind of
@@ -209,19 +211,20 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 	}
 	req := sc.Request
 	launch := agentic.LaunchRequest{
-		System:      sc.Runtime.SystemID,
-		Model:       sc.Model.Launchable(),
-		Effort:      sc.Effort,
-		PromptPath:  req.PromptPath,
-		Prompt:      req.Prompt,
-		WorkDir:     req.WorkDir,
-		Home:        req.Home,
-		Env:         append(append([]string(nil), req.Env...), narwhalAuthEnv),
-		Run:         req.Run,
-		Goal:        req.Goal,
-		Budget:      req.Budget,
-		ServiceTier: req.ServiceTier,
-		Composition: req.Composition,
+		System:        sc.Runtime.SystemID,
+		Model:         sc.Model.Launchable(),
+		Effort:        sc.Effort,
+		PromptPath:    req.PromptPath,
+		Prompt:        req.Prompt,
+		WorkDir:       req.WorkDir,
+		Home:          req.Home,
+		LocalProvider: cloneLocalProvider(req.LocalProvider),
+		Env:           append(append([]string(nil), req.Env...), narwhalAuthEnv),
+		Run:           req.Run,
+		Goal:          req.Goal,
+		Budget:        req.Budget,
+		ServiceTier:   req.ServiceTier,
+		Composition:   req.Composition,
 	}
 	if n.spawnSkipAuthEnv {
 		launch.Env = append([]string(nil), req.Env...)
@@ -259,6 +262,12 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 	if n.spawnDropComposit {
 		launch.Composition = agentic.Composition{}
 	}
+	if n.spawnLocalProvider != nil {
+		launch.LocalProvider = cloneLocalProvider(n.spawnLocalProvider)
+	}
+	if n.spawnHome != nil {
+		launch.Home = *n.spawnHome
+	}
 	return launch, nil
 }
 
@@ -278,9 +287,13 @@ func tuskDeclaration() RuntimeDeclaration {
 // registerNarwhal is THE one edit. Nothing else in this package, the CLI, or
 // any production source knows the vendor, the runtime or the pair exists.
 func registerNarwhal(t *testing.T, vendor *narwhalVendor) *Registry {
+	return registerNarwhalWithSystem(t, vendor, newPangolinSystem())
+}
+
+func registerNarwhalWithSystem(t *testing.T, vendor *narwhalVendor, system *pangolinSystem) *Registry {
 	t.Helper()
 	systems := agentic.NewRegistry()
-	if err := systems.Register(newPangolinSystem()); err != nil {
+	if err := systems.Register(system); err != nil {
 		t.Fatalf("Register(pangolin): %v", err)
 	}
 	registry := NewRegistry(systems)
