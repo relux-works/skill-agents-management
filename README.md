@@ -500,8 +500,8 @@ Plugin id `pi-native`; the frozen runtimes that bind it are `pi-anthropic`,
 - **Catalog-verified membership.** A vendor row names `pi-native` only when
   its id is in the installed Pi catalog's provider data (Pi 0.84.2). Today: 8
   anthropic, 9 openai and 7 google rows. `claude-fable-5-1`, `gpt-6-astra`,
-  `gpt-6-sol`, `gpt-6-luna`, `claude-opus-5-5` (and their `astra`, `sol`,
-  `luna` and `opus` aliases), `gpt-5.2-codex`, `gpt-5.1-codex-max` and
+  `gpt-6-sol`, `gpt-6-luna`, `claude-opus-5-5`, `claude-sonnet-5-5` (and their
+  `astra`, `sol`, `luna`, `opus` and `sonnet` aliases), `gpt-5.2-codex`, `gpt-5.1-codex-max` and
   `gpt-5.1-codex-mini` are absent from that catalog and are refused with
   `ErrModelNotDrivenBySystem`. `TestPiNativeMembershipMatchesTheInstalledCatalog`
   re-reads the installed bytes when Pi is present.
@@ -739,8 +739,9 @@ All 45 rows of the extraction source's model registry, carried across. 42 land
 in the four vendors; the three `muse` rows belong to no vendor, because the
 source records that runtime's broker as checked-and-never-established, and the
 port accounts for them explicitly rather than dropping them. Eight further rows —
-`gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna` and `claude-opus-5-5`, each with its
-floating short alias `astra`, `sol`, `luna` and `opus` — are declared HERE and
+`gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `claude-opus-5-5` and
+`claude-sonnet-5-5`, each with its floating short alias `astra`, `sol`, `luna`,
+`opus` and `sonnet` — plus the agy Flash rows, are declared HERE and
 not ported; see
 *Rows declared ahead of the board's registry* below.
 
@@ -821,7 +822,8 @@ skip did not quietly widen to every leftover row.
 Eight entries today: four models, each under its full id and a floating short
 spelling. The astra pair is described below; `gpt-6-sol`/`sol` and
 `gpt-6-luna`/`luna` (codex-cli 0.155.1 catalog, 2026-09-22) and
-`claude-opus-5-5`/`opus` (Claude Code 2.1.280 probe, 2026-09-22) follow the
+`claude-opus-5-5`/`opus` (Claude Code 2.1.280 probe, 2026-09-22) and
+`claude-sonnet-5-5`/`sonnet` (Claude Code 2.1.284 probe, 2026-09-28) follow the
 same shape — none is `Recommended`, none is pi-native, and each alias declares
 `AliasOf` its head. `pkg/vendorplugin/gpt6_opus55_alias_test.go` drives
 `BuildLaunch` for every one of them at each probed effort.
@@ -850,9 +852,9 @@ NOT contain rather than for what it does.
 ### Alias identity resolution
 
 A model row may declare `AliasOf`: the identity it is a short spelling of.
-Five rows do today — `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
-`gpt-6-astra`, `sol` → `gpt-6-sol`, `luna` → `gpt-6-luna` and `opus` →
-`claude-opus-5-5` — and all exist for the same reason: the alias is a name
+Six rows do today — `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
+`gpt-6-astra`, `sol` → `gpt-6-sol`, `luna` → `gpt-6-luna`, `opus` →
+`claude-opus-5-5` and `sonnet` → `claude-sonnet-5-5` — and all exist for the same reason: the alias is a name
 operators, configuration and spawn ceilings use and the provider does not have.
 
 Measured, not assumed. A spawn of `--model muse-spark --reasoning-effort high`

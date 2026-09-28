@@ -61,7 +61,8 @@ import (
 // position: membership comes from the frozen snapshot
 // (pkg/vendorplugin/v2snapshot.go), and a capability rank stays evidence.
 //
-// TWO ROWS ARE NOT PORTS. claude-opus-5-5 and its `opus` spelling reached this
+// FOUR ROWS ARE NOT PORTS: claude-opus-5-5 / `opus` and claude-sonnet-5-5 /
+// `sonnet` (declared the same way on 2026-09-28). claude-opus-5-5 and its `opus` spelling reached this
 // repository before the board's registry, so they rest on the Claude Code CLI
 // probe (claudeCLIProbe) through declaredRank and quote no source PolicyRank;
 // pkg/vendorplugin/declaredhere_test.go names both. They tie each other at 45,
@@ -138,11 +139,43 @@ const claudeCLIProbe = "the Claude Code CLI's own model resolution, probed with 
 // the source registry at a commit, which for a row that registry never held is
 // a sentence a reader would open the file and not find.
 func declaredRank(score int, bench vendorplugin.RankEvidence, note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	return declaredRankFrom(claudeCLIProbe, score, bench, note, evidence...)
+}
+
+// declaredRankFrom is declaredRank against a NAMED probe, for a row read off a
+// later CLI than the one claude-opus-5-5 was declared from.
+func declaredRankFrom(probe string, score int, bench vendorplugin.RankEvidence, note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
 	basis := []vendorplugin.RankEvidence{
 		bench,
-		{Source: claudeCLIProbe, Observation: note},
+		{Source: probe, Observation: note},
 	}
 	return vendorplugin.CapabilityRank{Score: score, Basis: append(basis, evidence...)}
+}
+
+// claudeCLIProbeSonnet55 is the probe the claude-sonnet-5-5 rows rest on. It is
+// its own constant because it is a different binary: Claude Code 2.1.281
+// answered `claude -p --model claude-sonnet-5-5` with
+// `[claude-code:unrecognized_model]`, and 2.1.284 ran the turn. On 2.1.284 the
+// CLI's own floating `sonnet` still resolves to claude-sonnet-5, which is why
+// the `sonnet` row below declares AliasOf rather than trusting the CLI's alias.
+const claudeCLIProbeSonnet55 = "the Claude Code CLI's own model resolution, probed with `claude -p --model <id> --output-format json` (Claude Code 2.1.284, 2026-09-28)"
+
+// sonnet55Effort is the claude-sonnet-5-5 effort axis, shared by the identity
+// row and its `sonnet` alias. Anthropic publishes low/medium/high/xhigh/max,
+// the platform default is high, and high is the recommendation.
+func sonnet55Effort() vendorplugin.EffortDeclaration {
+	return effortRequired("high", []string{"low", "medium", "high", "xhigh", "max"})
+}
+
+// sonnet55Rank is claude-sonnet-5-5's rank, handed to both the identity and its
+// alias. Unmeasured on the leaderboard, so INTERPOLATED: Anthropic's own card
+// puts it level with opus-5-5 on agentic work (Terminal-Bench 4.0 70.6% against
+// 66.4%, GDPval-AA 1844 against 1846, CursorBench 4.0 55.5% against 57.8%), so
+// it sits just under opus-5-5's 45 and above fable-5-1's measured 43.
+func sonnet55Rank(note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	return declaredRankFrom(claudeCLIProbeSonnet55, 44,
+		vendorplugin.BughuntInterpolated("claude-opus-5-5", "claude-fable-5-1", "unmeasured; Anthropic's card places sonnet-5-5 level with opus-5-5 on agentic benchmarks, so it sits just under it and above fable-5-1's measured 43"),
+		note, evidence...)
 }
 
 // opus55Effort is the claude-opus-5-5 effort axis, shared by the identity row
@@ -225,6 +258,34 @@ var models = []vendorplugin.Model{
 		AliasOf:   "claude-opus-5-5",
 		Lifecycle: vendorplugin.LifecycleCurrent,
 		Effort:    opus55Effort(),
+		Systems:   []agentic.SystemID{"claude-code"},
+	},
+	{
+		ID:          "claude-sonnet-5-5",
+		Description: "Near-Opus judgement at Sonnet cost and speed: everyday agentic coding, multi-file changes and reviews where opus-5-5 is more than the task needs",
+		Rank:        sonnet55Rank("`claude -p --model claude-sonnet-5-5` on Claude Code 2.1.284 ran one turn whose modelUsage names claude-sonnet-5-5; the source registry contains NO row for it and this score is therefore not a ported one"),
+		Lifecycle:   vendorplugin.LifecycleCurrent,
+		Effort:      sonnet55Effort(),
+		// NOT Recommended: claude-opus-5 keeps this vendor's display pick.
+		// NOT pi-native: the installed Pi catalog (0.84.2) carries no
+		// claude-sonnet-5-5.
+		Systems: []agentic.SystemID{"claude-code"},
+	},
+	{
+		// The floating short spelling of the current sonnet head, declared with
+		// AliasOf so argv carries claude-sonnet-5-5. The installed Claude Code
+		// CLI resolves its own `sonnet` to claude-sonnet-5 on 2.1.284, so
+		// relying on the CLI's alias would run the previous generation.
+		ID:          "sonnet",
+		Description: "The short spelling of the current sonnet head, for an invocation that names the model without its generation; it executes as claude-sonnet-5-5",
+		Rank: sonnet55Rank("this row is a short spelling of claude-sonnet-5-5 and carries that row's score; there is no second capability to score",
+			vendorplugin.RankEvidence{
+				Source:      claudeCLIProbeSonnet55,
+				Observation: "`claude -p --model sonnet` on Claude Code 2.1.284 ran one turn whose modelUsage names claude-sonnet-5, the PREVIOUS generation; this row declares AliasOf so argv carries claude-sonnet-5-5 instead of the CLI's own floating alias",
+			}),
+		AliasOf:   "claude-sonnet-5-5",
+		Lifecycle: vendorplugin.LifecycleCurrent,
+		Effort:    sonnet55Effort(),
 		Systems:   []agentic.SystemID{"claude-code"},
 	},
 	{

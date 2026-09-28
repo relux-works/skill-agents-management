@@ -144,6 +144,28 @@ func TestTheOpusSpellingLaunchesAsClaudeOpus55AtEveryProbedEffort(t *testing.T) 
 	}
 }
 
+// TestTheSonnetSpellingLaunchesAsClaudeSonnet55AtEveryProbedEffort holds the
+// `sonnet` alias to claude-sonnet-5-5 through the same launch proof as `opus`.
+// Probed vocabulary: Anthropic's card lists low..max for sonnet-5-5.
+func TestTheSonnetSpellingLaunchesAsClaudeSonnet55AtEveryProbedEffort(t *testing.T) {
+	registry := isolatedRegistry(t, nil)
+	for _, requested := range []vendorplugin.ModelID{"sonnet", "claude-sonnet-5-5"} {
+		t.Run(string(requested), func(t *testing.T) {
+			for _, problem := range opusLaunchProblems(t, registry, requested, "claude-sonnet-5-5") {
+				t.Error(problem)
+			}
+		})
+	}
+	// The narrowing direction: the previous sonnet keeps its own id.
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, opusRequest(t, "claude-sonnet-5", "high"), agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch(claude, claude-sonnet-5): %v", err)
+	}
+	if plan.ModelIdentity.IsAlias() || !argvHasElement(plan.Argv, "claude-sonnet-5") {
+		t.Errorf("claude-sonnet-5 launched as %q (argv %v); a pinned sonnet row must not be rewritten", plan.ModelIdentity.Launched, plan.Argv)
+	}
+}
+
 // TestTheOpusAliasBindsTheDeclaredHeadNotAnotherOpusRow is the narrowing
 // direction: the older opus rows keep launching under their own ids.
 func TestTheOpusAliasBindsTheDeclaredHeadNotAnotherOpusRow(t *testing.T) {

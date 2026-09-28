@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Declare `claude-sonnet-5-5` and its floating alias `sonnet` →
+  `claude-sonnet-5-5` in `anthropic`, ahead of the board's registry. Read off
+  Claude Code 2.1.284 on 2026-09-28 (2.1.281 answered
+  `unrecognized_model`); the CLI's own `sonnet` still resolves to
+  `claude-sonnet-5`, which is why the alias is declared rather than trusted.
+  Effort: required `low`..`max`, recommended `high`. Score interpolated at 44
+  between `claude-opus-5-5` (45) and `claude-fable-5-1` (43), from Anthropic's
+  published agentic benchmarks placing it level with opus-5-5. Not
+  `Recommended`, not pi-native.
+
 - Add typed launch-context descriptors for MCP servers, additional
   system-prompt text and interactive permission posture. Claude and Codex own
   descriptor validation, conflict refusals and provider-specific rendering;

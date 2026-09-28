@@ -86,6 +86,10 @@ var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
 	"luna":            "openai",
 	"claude-opus-5-5": "anthropic",
 	"opus":            "anthropic",
+	// claude-sonnet-5-5 and its `sonnet` spelling, read off Claude Code 2.1.284
+	// on 2026-09-28.
+	"claude-sonnet-5-5": "anthropic",
+	"sonnet":            "anthropic",
 	// The agy Flash heads of 2026-09-23 and their `gemini-flash` spelling,
 	// declared from the operator's instruction (agy was not installed on the
 	// declaring machine, so no catalogue read backs them — the evidence says so).

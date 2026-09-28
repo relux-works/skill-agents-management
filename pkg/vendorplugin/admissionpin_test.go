@@ -718,9 +718,9 @@ func TestRuntimeModelsScopeToTheHarnessThatDrivesThem(t *testing.T) {
 		// See declaredhere_test.go. 18 since gpt-6-sol, gpt-6-luna and their
 		// `sol` / `luna` aliases were declared the same way.
 		{runtime: "codex", system: "codex", count: 18, holds: "gpt-6-astra", excedes: "qwen3.7-plus-via-codex"},
-		// 11, not the source table's 9: claude-opus-5-5 and its `opus` alias
-		// are declared ahead of the board's registry.
-		{runtime: "claude", system: "claude-code", count: 11, holds: "claude-opus-5", excedes: "gpt-5.6-sol"},
+		// 13, not the source table's 9: claude-opus-5-5 / `opus` and
+		// claude-sonnet-5-5 / `sonnet` are declared ahead of the board's registry.
+		{runtime: "claude", system: "claude-code", count: 13, holds: "claude-opus-5", excedes: "gpt-5.6-sol"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.runtime), func(t *testing.T) {
