@@ -387,6 +387,14 @@ requires_openai_auth = false
 			},
 		},
 		{
+			name: "endpoint_port_integer_overflow_is_malformed",
+			kind: agentic.LocalProviderMalformed,
+			want: agentic.ErrLocalProviderMalformed,
+			configure: func(t *testing.T, req *agentic.LaunchRequest) {
+				writeProviderConfig(t, req.Home, "local-story", "http://127.0.0.1:999999999999999999999999999999/v1", "responses", false)
+			},
+		},
+		{
 			name: "conflicting_Codex_home_binding",
 			kind: agentic.LocalProviderConflicting,
 			want: agentic.ErrLocalProviderConflicting,
@@ -581,6 +589,14 @@ token = "test-secret"
 			want: agentic.ErrLocalProviderMalformed,
 			configure: func(t *testing.T, req *agentic.LaunchRequest) {
 				writeProviderConfig(t, req.Home, "local-story", "http://127.0.0.1:38171/v1#fragment", "responses", false)
+			},
+		},
+		{
+			name: "endpoint_invalid_escape_is_malformed",
+			kind: agentic.LocalProviderMalformed,
+			want: agentic.ErrLocalProviderMalformed,
+			configure: func(t *testing.T, req *agentic.LaunchRequest) {
+				writeProviderConfig(t, req.Home, "local-story", "http://127.0.0.1:38171/v1%zz", "responses", false)
 			},
 		},
 		{
