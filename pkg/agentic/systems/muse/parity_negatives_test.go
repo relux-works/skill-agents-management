@@ -10,28 +10,24 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic/parity"
 )
 
-// MUSE'S ENVIRONMENT NEGATIVES POINT THE OTHER WAY FROM QWEN'S, exactly as
-// gemini's do — the two empty-filter systems have the same bound to hold.
-//
-// qwen strips twelve keys, so the defect worth attacking is a filter that
-// strips too much or matches by prefix. Muse strips NOTHING, so the defect
-// worth attacking is a filter that EXISTS — a port author who read qwen's
-// env.go, concluded "every system must clear the parent runtime state" and
-// copied the filter one directory over. That is the plausible mistake here, and
-// it is what borrowedFilterSystem plants.
-//
-// The prefix-strip attack the parity package carries is deliberately not
-// reproduced for muse: this plugin has no exact-key strip for a prefix to be
-// a near miss OF, so the attack would collapse into the borrowed-filter one
-// below while pretending to measure something else. What it measures for qwen
-// and codex, it cannot measure here.
+func leakedParentEnvNames(child []string, names []string) []string {
+	childEnv := paritycase.EnvMap(child)
+	var leaked []string
+	for _, name := range names {
+		if _, ok := childEnv[name]; ok {
+			leaked = append(leaked, name)
+		}
+	}
+	return leaked
+}
 
-// wipeSurvivorKeys returns the keys of every parent entry the golden does NOT
-// record as removed — that is, everything this system's child inherits.
-//
-// It is computed from the fixture rather than listed, because for muse the
-// list is almost the whole pinned environment and a hand-written copy would rot
-// the first time the capture script seeds one more key.
+// These tests attack the Muse environment boundary through BuildPlan. The
+// golden catches accidental loss of allowed process state, while the explicit
+// credential-negative test catches an allowlist weakened by one admitted name.
+
+// wipeSurvivorKeys returns the keys of parent entries that the golden says the
+// system preserves. The allowlist golden uses this set to prove a whole-env
+// wipe is not an acceptable substitute for filtering.
 func wipeSurvivorKeys(g parity.Golden) []string {
 	removed := map[string]bool{}
 	for _, entry := range g.Surface.EnvRemoved {
@@ -48,12 +44,19 @@ func wipeSurvivorKeys(g parity.Golden) []string {
 	return keys
 }
 
-// TestAWholeEnvironmentWipeFailsAgainstTheMuseGolden is the preservation
-// bound, against the shipped plugin.
+// TestAWholeEnvironmentWipeFailsAgainstTheMuseGolden proves the Muse child
+// still receives the allowed parent environment rather than an empty one.
 func TestAWholeEnvironmentWipeFailsAgainstTheMuseGolden(t *testing.T) {
 	const subject = "muse/exec"
 	c := parityCaseFor(t, subject)
 	g, dirs, req := prepareParityCase(t, c)
+	// The source capture omits HOME, so seed one deterministic allowed parent
+	// entry here. It makes the whole-environment wipe observable even though
+	// every key in the frozen capture itself is outside Muse's allowlist.
+	const allowedParentSentinel = "HOME=/parity/pinned/allowlisted-home"
+	g.Capture.ParentEnv = append(g.Capture.ParentEnv, allowedParentSentinel)
+	req.Env = append(req.Env, allowedParentSentinel)
+	g = museGoldenWithDeclaredEnvDivergence(g)
 
 	clean := paritycase.BuildPlan(t, New(), req, c.mode)
 	if diffs := parity.ComparePlan(g, clean, dirs.Substitutions()); len(diffs) != 0 {
@@ -61,7 +64,7 @@ func TestAWholeEnvironmentWipeFailsAgainstTheMuseGolden(t *testing.T) {
 	}
 
 	survivors := wipeSurvivorKeys(g)
-	if len(survivors) == 0 {
+	if len(survivors) != 1 || survivors[0] != "HOME" {
 		t.Fatalf("%s records %d parent entries and removes all %d of them, so no key proves this plugin preserves anything",
 			subject, len(g.Capture.ParentEnv), len(g.Surface.EnvRemoved))
 	}
@@ -69,16 +72,13 @@ func TestAWholeEnvironmentWipeFailsAgainstTheMuseGolden(t *testing.T) {
 	plan := paritycase.BuildPlan(t, paritycase.WholeEnvWipeSystem{System: New()}, req, c.mode)
 	diffs := parity.ComparePlan(g, plan, dirs.Substitutions())
 	if len(diffs) == 0 {
-		t.Fatalf("a muse plugin that discards the WHOLE parent environment byte-matched %s", subject)
+		t.Fatalf("a muse plugin that discards the whole parent environment byte-matched %s", subject)
 	}
 	if !paritycase.NamesField(diffs, "EnvRemoved") {
-		t.Errorf("the wipe was planted in the environment but the harness reported %v", diffs)
+		t.Errorf("the defect was planted in the environment but the harness reported %v", diffs)
 	}
 
-	// The narrowing that shows WHICH part of the fixture is doing the catching:
-	// take every inherited key back out of the recorded parent environment and
-	// the identical wipe walks straight through.
-	t.Run("and would not be caught without the inherited keys", func(t *testing.T) {
+	t.Run("the golden must contain inherited parent keys", func(t *testing.T) {
 		narrowed := g
 		narrowed.Capture.ParentEnv = paritycase.WithoutKeys(g.Capture.ParentEnv, survivors...)
 		if len(narrowed.Capture.ParentEnv) == len(g.Capture.ParentEnv) {
@@ -88,104 +88,159 @@ func TestAWholeEnvironmentWipeFailsAgainstTheMuseGolden(t *testing.T) {
 		narrowedReq.Env = paritycase.WithoutKeys(req.Env, survivors...)
 		wiped := paritycase.BuildPlan(t, paritycase.WholeEnvWipeSystem{System: New()}, narrowedReq, c.mode)
 		if diffs := parity.ComparePlan(narrowed, wiped, dirs.Substitutions()); len(diffs) != 0 {
-			t.Fatalf("removing every inherited key did NOT restore the bypass (%v); something other than the survivors is catching the wipe", diffs)
+			t.Fatalf("removing all allowed inherited keys did not restore the bypass (%v)", diffs)
 		}
 	})
 }
 
-// borrowedFilterSystem is the muse plugin with QWEN'S filter bolted on.
-//
-// It is the plausible port defect for this system, and it is written as a real
-// call into the shared codex-family strip rather than as a hand-listed set of
-// keys, so it is exactly what a port author would produce by copying the import
-// and the one line that uses it.
+// borrowedFilterSystem is the plausible port defect that uses the Codex-family
+// filter INSTEAD OF Muse's allowlist. It preserves Muse's run-context overlay
+// and update pin so the golden negative isolates the filtering boundary.
 type borrowedFilterSystem struct{ agentic.System }
 
 func (b borrowedFilterSystem) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
-	return b.System.ChildEnv(runtimeenv.Filter(parent), req)
+	env := agentic.WithRunContext(runtimeenv.Filter(parent), req)
+	return agentic.SetEnvValue(env, museNoAutoUpdateEnv, "1"), nil
 }
 
-// TestABorrowedRuntimeFilterFailsAgainstTheMuseGolden is the bound that makes
-// muse's empty filter LOAD-BEARING rather than an absence nobody measured.
-//
-// Without it, env.go's whole comment — "muse strips nothing, here is what it
-// therefore inherits" — would be prose a reader trusts with nothing holding it
-// to the code, and a port that added a filter for good reasons would pass every
-// other test in this package.
+func unallowedParentKeysKeptByCodexFilter(parent []string) []string {
+	filtered := paritycase.EnvMap(runtimeenv.Filter(parent))
+	var keys []string
+	for _, entry := range parent {
+		name, _, _ := strings.Cut(entry, "=")
+		if name == agentic.EnvRunID || name == agentic.EnvTaskID || allowMuseParentEnvName(name) {
+			continue
+		}
+		if _, kept := filtered[name]; kept {
+			keys = append(keys, name)
+		}
+	}
+	return keys
+}
+
+// TestABorrowedRuntimeFilterFailsAgainstTheMuseGolden keeps the original
+// golden-negative name while re-pointing its mutant at the chosen Muse
+// divergence. A Codex-only strip must not stand in for Muse's complete
+// allowlist, even when the run-context and update-pin writes are correct.
 func TestABorrowedRuntimeFilterFailsAgainstTheMuseGolden(t *testing.T) {
 	const subject = "muse/exec"
 	c := parityCaseFor(t, subject)
 	g, dirs, req := prepareParityCase(t, c)
 
 	clean := paritycase.BuildPlan(t, New(), req, c.mode)
-	if diffs := parity.ComparePlan(g, clean, dirs.Substitutions()); len(diffs) != 0 {
-		t.Fatalf("the correct plan already differs, so the borrowed filter below proves nothing: %v", diffs)
+	if diffs := compareMuseGoldenPlan(g, clean, dirs.Substitutions()); len(diffs) != 0 {
+		t.Fatalf("the correct plan already differs, so the borrowed-filter mutant proves nothing: %v", diffs)
 	}
 
 	plan := paritycase.BuildPlan(t, borrowedFilterSystem{System: New()}, req, c.mode)
-	diffs := parity.ComparePlan(g, plan, dirs.Substitutions())
+	diffs := parity.ComparePlan(museGoldenWithDeclaredEnvDivergence(g), plan, dirs.Substitutions())
 	if len(diffs) == 0 {
-		t.Fatalf("a muse plugin carrying the codex-family filter byte-matched %s; the goldens would then say nothing about which systems strip parent runtime state", subject)
+		t.Fatalf("a Muse plugin using only the Codex-family filter byte-matched %s", subject)
 	}
 	if !paritycase.NamesField(diffs, "EnvRemoved") {
-		t.Errorf("the borrowed filter was planted in the environment but the harness reported %v", diffs)
+		t.Errorf("the defect was planted in parent filtering but the harness reported %v", diffs)
 	}
 
-	// The narrowing: which keys is the fixture using to catch it. Take the
-	// codex-family keys out of the recorded parent environment and the same
-	// borrowed filter has nothing left to strip, so it walks through.
-	t.Run("and would not be caught without the codex-family keys in parent_env", func(t *testing.T) {
-		narrowed := g
-		narrowed.Capture.ParentEnv = paritycase.WithoutKeys(g.Capture.ParentEnv, runtimeenv.Keys()...)
-		if len(narrowed.Capture.ParentEnv) == len(g.Capture.ParentEnv) {
-			t.Fatal("no codex-family entry was removed, so this narrowing changed nothing")
+	t.Run("the golden must contain a disallowed key the borrowed filter keeps", func(t *testing.T) {
+		survivors := unallowedParentKeysKeptByCodexFilter(req.Env)
+		if len(survivors) == 0 {
+			t.Fatal("the capture has no unallowed parent key that survives the Codex-family filter")
 		}
+		narrowed := g
+		narrowed.Capture.ParentEnv = paritycase.WithoutKeys(g.Capture.ParentEnv, survivors...)
+		narrowed.Surface.EnvRemoved = paritycase.WithoutKeys(g.Surface.EnvRemoved, survivors...)
 		narrowedReq := req
-		narrowedReq.Env = paritycase.WithoutKeys(req.Env, runtimeenv.Keys()...)
+		narrowedReq.Env = paritycase.WithoutKeys(req.Env, survivors...)
+		narrowed = museGoldenWithDeclaredEnvDivergence(narrowed)
+		narrowed.Surface.EnvRemoved = paritycase.WithoutKeys(narrowed.Surface.EnvRemoved, survivors...)
 		borrowed := paritycase.BuildPlan(t, borrowedFilterSystem{System: New()}, narrowedReq, c.mode)
 		if diffs := parity.ComparePlan(narrowed, borrowed, dirs.Substitutions()); len(diffs) != 0 {
-			t.Fatalf("removing the codex-family keys did NOT restore the bypass (%v); the fixture is catching the borrowed filter with something else, so the seeded family is unaccounted for", diffs)
+			t.Fatalf("removing the observed survivor keys did not restore parity (%v)", diffs)
 		}
 	})
 }
 
-// TestTheEmptyFilterIsDeliberate states the same fact positively and names the
-// keys, so a reader does not have to derive muse's inheritance from two
-// attack tests.
-//
-// Every key here is one the source's BUG-260819-3qn52o records as leaking. If
-// one of these starts failing, a filter has been added — which may well be
-// right, but it is a behaviour change no golden covers, and env.go's comment
-// has to change with it or the code and the prose disagree.
-func TestTheEmptyFilterIsDeliberate(t *testing.T) {
-	c := parityCaseFor(t, "muse/exec")
-	g, _, req := prepareParityCase(t, c)
-	plan := paritycase.BuildPlan(t, New(), req, c.mode)
-	child := paritycase.EnvMap(plan.Env)
+// oneNameWideningSystem admits a single unrelated captured parent variable.
+// The frozen literal divergence must still reject it.
+type oneNameWideningSystem struct {
+	agentic.System
+	name string
+}
 
-	inherited := []string{
-		"CLAUDECODE",
-		runtimeenv.ThreadIDEnv,
-		runtimeenv.SessionEnv,
-		runtimeenv.ManagedPackageRootEnv,
-		runtimeenv.SessionIDEnv,
-		"PARITY_CODEX_APP_SERVER_TOKEN",
-		"PARITY_SESSION_MANAGER_TOKEN",
-		"PARITY_BYSTANDER",
+func (m oneNameWideningSystem) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
+	env := filterMuseParentEnv(parent)
+	for _, entry := range parent {
+		name, _, _ := strings.Cut(entry, "=")
+		if name == m.name {
+			env = append(env, entry)
+			break
+		}
 	}
-	parent := paritycase.EnvMap(g.Capture.ParentEnv)
-	for _, key := range inherited {
-		want, seeded := parent[key]
-		if !seeded {
-			t.Fatalf("%q is not seeded in the golden's parent_env, so this test measures nothing for it", key)
+	env = agentic.WithRunContext(env, req)
+	return agentic.SetEnvValue(env, museNoAutoUpdateEnv, "1"), nil
+}
+
+func TestAnAllowlistWideningMutantFailsAgainstTheMuseGolden(t *testing.T) {
+	const name = "PARITY_BYSTANDER"
+	c := parityCaseFor(t, "muse/exec")
+	g, dirs, req := prepareParityCase(t, c)
+
+	clean := paritycase.BuildPlan(t, New(), req, c.mode)
+	if diffs := compareMuseGoldenPlan(g, clean, dirs.Substitutions()); len(diffs) != 0 {
+		t.Fatalf("the correct plan already differs, so the widening mutant proves nothing: %v", diffs)
+	}
+	if got, ok := paritycase.Lookup(req.Env, name); !ok || got != "keep-me" {
+		t.Fatalf("the golden does not seed the widening control: %s=%q present=%v", name, got, ok)
+	}
+
+	mutant := paritycase.BuildPlan(t, oneNameWideningSystem{System: New(), name: name}, req, c.mode)
+	diffs := parity.ComparePlan(museGoldenWithDeclaredEnvDivergence(g), mutant, dirs.Substitutions())
+	if len(diffs) == 0 {
+		t.Fatalf("admitting exactly %s still matched the declared Muse golden divergence", name)
+	}
+	if !paritycase.NamesField(diffs, "EnvRemoved") {
+		t.Fatalf("the one-name widening mutant changed an unexpected surface: %v", diffs)
+	}
+}
+
+// oneCredentialAdmissionSystem is the allowlist with exactly one forbidden
+// credential name admitted. The rest of the filtering and run-context overlay
+// stay active so the test attacks the credential predicate itself.
+type oneCredentialAdmissionSystem struct {
+	agentic.System
+	name string
+}
+
+func (m oneCredentialAdmissionSystem) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
+	filtered := filterMuseParentEnv(parent)
+	for _, entry := range parent {
+		name, _, _ := strings.Cut(entry, "=")
+		if name == m.name {
+			filtered = append(filtered, entry)
+			break
 		}
-		got, present := child[key]
-		if !present {
-			t.Errorf("the muse child no longer inherits %q; env.go declares this filter EMPTY and it is not", key)
-			continue
-		}
-		if got != want {
-			t.Errorf("the muse child rewrote %q from %q to %q", key, want, got)
-		}
+	}
+	env := agentic.WithRunContext(filtered, req)
+	return agentic.SetEnvValue(env, museNoAutoUpdateEnv, "1"), nil
+}
+
+// TestAOneCredentialAdmissionMutantIsDetected proves the negative test's
+// assertion reports exactly one leak when the filter is weakened to admit one
+// credential-shaped parent variable.
+func TestAOneCredentialAdmissionMutantIsDetected(t *testing.T) {
+	c := parityCaseFor(t, "muse/exec")
+	_, _, req := prepareParityCase(t, c)
+	const entry = "RANDOM_PARENT_TOKEN=synthetic-test-value"
+	const name = "RANDOM_PARENT_TOKEN"
+	req.Env = append(req.Env, entry)
+
+	clean := paritycase.BuildPlan(t, New(), req, c.mode)
+	if leaks := leakedParentEnvNames(clean.Env, []string{name}); len(leaks) != 0 {
+		t.Fatalf("the shipped allowlist admitted the credential-shaped control %q", name)
+	}
+
+	mutant := paritycase.BuildPlan(t, oneCredentialAdmissionSystem{System: New(), name: name}, req, c.mode)
+	if leaks := leakedParentEnvNames(mutant.Env, []string{name}); len(leaks) != 1 || leaks[0] != name {
+		t.Fatalf("the narrowing mutant was not detected for exactly %s: %v", name, leaks)
 	}
 }

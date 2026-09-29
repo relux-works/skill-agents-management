@@ -16,9 +16,9 @@
 //   - Because the path is in argv, the dry run has something to substitute: the
 //     source's `<prompt-file>` placeholder. That is the only difference between
 //     the two modes' argv (args.go).
-//   - NO environment filter, NO composition grammar, NO goal, budget or service
-//     tier. Every one of those is the source's adapter row rather than an
-//     omission; env.go says what the empty filter leaks.
+//   - A curated parent-environment allowlist and a forced
+//     MUSE_NO_AUTO_UPDATE=1; env.go owns that boundary. There is no composition
+//     grammar, goal, budget or service tier.
 //   - The effort transport is the ONE row that is no longer the source's. The
 //     extraction source registered muse with no effort transport because every
 //     muse model row was effort-none; muse-spark-1.3-contributor is not, so
@@ -41,7 +41,8 @@
 //
 //  1. Binary resolution reads LaunchRequest.Env rather than the process
 //     environment, through internal/launchenv (binary.go).
-//  2. Nothing else.
+//  2. The parent environment is allowlisted and auto-update is disabled in
+//     every child, as documented and tested in env.go.
 package muse
 
 import (
@@ -163,9 +164,9 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 	return Args(req, mode)
 }
 
-// ChildEnv is the environment contract, and muse's is the EMPTY one: the child
-// inherits the parent unfiltered, with only the run context written over it.
-// See env.go for what that leaks and why it is not fixed here.
+// ChildEnv applies Muse's curated parent allowlist, overlays caller run
+// context, and forces auto-update off. See env.go for the exact names and
+// rationale.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
 	return childEnv(parent, req), nil
 }

@@ -1,6 +1,7 @@
 package muse
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/relux-works/skill-agents-management/internal/paritycase"
@@ -125,14 +126,148 @@ func parityCaseFor(t *testing.T, goldenID string) parityCase {
 	return parityCase{}
 }
 
+// museGoldenDivergenceDeclaration freezes the one chosen departure from the
+// extraction captures: Muse filters parent environment entries through the
+// pinned allowlist and forces MUSE_NO_AUTO_UPDATE=1. The golden comparison
+// keeps every non-environment field exact.
+const museGoldenDivergenceDeclaration = "Muse drops parent entries outside the pinned allowlist and adds MUSE_NO_AUTO_UPDATE=1; only EnvAdded and EnvRemoved differ from the extraction capture."
+
+// These literal additions freeze the selected EnvRemoved divergence from the
+// source capture. Keeping this list independent of allowMuseParentEnvName
+// makes an allowlist widening visible in the parity tests.
+var museGoldenEnvRemovedDivergence = []string{
+	"CLAUDECODE=1",
+	"CLAUDECODE_LIKE_BUT_NOT=keep-me",
+	"CODEX_CI=parity-ci",
+	"CODEX_LIKE_BUT_NOT=keep-me",
+	"CODEX_MANAGED_BY_BUN=1",
+	"CODEX_MANAGED_BY_NPM=1",
+	"CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
+	"CODEX_SESSION=parity-session",
+	"CODEX_THREAD_ID=parity-thread",
+	"PARITY_BYSTANDER=keep-me",
+	"PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
+	"PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
+	"TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
+	"TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
+	"TASK_BOARD_LIKE_BUT_NOT=keep-me",
+	"TASK_BOARD_SESSION_ID=SESSION-parity-parent",
+	"TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
+	"TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
+}
+
+var museGoldenEnvAddedDivergence = []string{
+	"MUSE_NO_AUTO_UPDATE=1",
+}
+
+// museGoldenWithDeclaredEnvDivergence applies the frozen environment delta to
+// the source-owned golden. The captured parent environment remains the
+// baseline used by parity.
+func museGoldenWithDeclaredEnvDivergence(g parity.Golden) parity.Golden {
+	if g.ID != "muse/exec" {
+		return g
+	}
+
+	for _, entry := range museGoldenEnvRemovedDivergence {
+		g.Surface.EnvRemoved = appendMuseGoldenEntry(g.Surface.EnvRemoved, entry)
+	}
+	for _, entry := range museGoldenEnvAddedDivergence {
+		g.Surface.EnvAdded = appendMuseGoldenEntry(g.Surface.EnvAdded, entry)
+	}
+	sort.Strings(g.Surface.EnvAdded)
+	sort.Strings(g.Surface.EnvRemoved)
+	return g
+}
+
+func appendMuseGoldenEntry(entries []string, entry string) []string {
+	for _, existing := range entries {
+		if existing == entry {
+			return entries
+		}
+	}
+	return append(entries, entry)
+}
+
+func compareMuseGoldenPlan(g parity.Golden, plan agentic.Plan, subs parity.Substitutions) []parity.Difference {
+	return parity.ComparePlan(museGoldenWithDeclaredEnvDivergence(g), plan, subs)
+}
+
+func TestMuseGoldenDivergenceChangesOnlyTheDeclaredEnvFields(t *testing.T) {
+	const wantDeclaration = "Muse drops parent entries outside the pinned allowlist and adds MUSE_NO_AUTO_UPDATE=1; only EnvAdded and EnvRemoved differ from the extraction capture."
+	if museGoldenDivergenceDeclaration != wantDeclaration {
+		t.Fatalf("the Muse golden divergence declaration changed:\\n%s", museGoldenDivergenceDeclaration)
+	}
+
+	g, err := parity.Load("muse/exec")
+	if err != nil {
+		t.Fatalf("Load(muse/exec): %v", err)
+	}
+	got := museGoldenWithDeclaredEnvDivergence(g)
+
+	wantAdded := []string{
+		"MUSE_NO_AUTO_UPDATE=1",
+		"TASK_BOARD_RUN_ID=RUN-parity-muse",
+		"TASK_BOARD_TASK_ID=TASK-parity-muse",
+	}
+	wantRemoved := []string{
+		"CLAUDECODE=1",
+		"CLAUDECODE_LIKE_BUT_NOT=keep-me",
+		"CODEX_CI=parity-ci",
+		"CODEX_LIKE_BUT_NOT=keep-me",
+		"CODEX_MANAGED_BY_BUN=1",
+		"CODEX_MANAGED_BY_NPM=1",
+		"CODEX_MANAGED_PACKAGE_ROOT=/parity/pinned/codex-managed-package-root",
+		"CODEX_SESSION=parity-session",
+		"CODEX_THREAD_ID=parity-thread",
+		"PARITY_BYSTANDER=keep-me",
+		"PARITY_CODEX_APP_SERVER_TOKEN=parity-codex-app-server-token",
+		"PARITY_SESSION_MANAGER_TOKEN=parity-session-manager-token",
+		"TASK_BOARD_BOARD_DIR=/parity/pinned/parent/.task-board",
+		"TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV=PARITY_CODEX_APP_SERVER_TOKEN",
+		"TASK_BOARD_CODEX_APP_SERVER_URL=http://parity.invalid/app-server",
+		"TASK_BOARD_DELIVERY_GOAL_ID=GOAL-parity-parent",
+		"TASK_BOARD_LIKE_BUT_NOT=keep-me",
+		"TASK_BOARD_RUN_ID=RUN-parity-parent",
+		"TASK_BOARD_SESSION_ID=SESSION-parity-parent",
+		"TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV=PARITY_SESSION_MANAGER_TOKEN",
+		"TASK_BOARD_SESSION_MANAGER_URL=http://parity.invalid/session-manager",
+		"TASK_BOARD_TASK_ID=TASK-parity-parent",
+	}
+	if !equalMuseGoldenEntries(got.Surface.EnvAdded, wantAdded) {
+		t.Fatalf("declared Muse EnvAdded divergence = %v, want %v", got.Surface.EnvAdded, wantAdded)
+	}
+	if !equalMuseGoldenEntries(got.Surface.EnvRemoved, wantRemoved) {
+		t.Fatalf("declared Muse EnvRemoved divergence = %v, want %v", got.Surface.EnvRemoved, wantRemoved)
+	}
+
+	unchanged := g.Surface
+	unchanged.EnvAdded = got.Surface.EnvAdded
+	unchanged.EnvRemoved = got.Surface.EnvRemoved
+	if diffs := parity.Compare(unchanged, got.Surface); len(diffs) != 0 {
+		t.Fatalf("the Muse divergence changed fields outside EnvAdded and EnvRemoved: %v", diffs)
+	}
+}
+
+func equalMuseGoldenEntries(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // TestPlansMatchTheMuseGoldens is the acceptance: both captured launch
-// surfaces, byte for byte.
+// surfaces, byte for byte except the single declared environment divergence.
 func TestPlansMatchTheMuseGoldens(t *testing.T) {
 	for _, c := range parityCases {
 		t.Run(c.goldenID, func(t *testing.T) {
 			g, dirs, req := prepareParityCase(t, c)
 			plan := paritycase.BuildPlan(t, New(), req, c.mode)
-			if diffs := parity.ComparePlan(g, plan, dirs.Substitutions()); len(diffs) != 0 {
+			if diffs := compareMuseGoldenPlan(g, plan, dirs.Substitutions()); len(diffs) != 0 {
 				for _, d := range diffs {
 					t.Errorf("%s does not match its golden:\n  %s", c.goldenID, d)
 				}
@@ -235,12 +370,12 @@ func TestAWrongPlanFailsAgainstTheMuseGolden(t *testing.T) {
 			g, dirs, req := prepareParityCase(t, c)
 
 			clean := paritycase.BuildPlan(t, New(), req, c.mode)
-			if diffs := parity.ComparePlan(g, clean, dirs.Substitutions()); len(diffs) != 0 {
+			if diffs := compareMuseGoldenPlan(g, clean, dirs.Substitutions()); len(diffs) != 0 {
 				t.Fatalf("the unmutated plan already differs, so this mutant proves nothing: %v", diffs)
 			}
 
 			plan := paritycase.BuildPlan(t, mutant.system(New()), req, c.mode)
-			diffs := parity.ComparePlan(g, plan, dirs.Substitutions())
+			diffs := compareMuseGoldenPlan(g, plan, dirs.Substitutions())
 			if len(diffs) == 0 {
 				t.Fatalf("the golden admitted a plan with a real defect (%s); a golden a wrong plan satisfies proves nothing", mutant.defect)
 			}
@@ -397,12 +532,12 @@ func TestAnEffortRunMatchesTheGoldenExtendedByExactlyTheEffortPair(t *testing.T)
 			// or the extension below is being compared against a baseline that
 			// was already wrong.
 			clean := paritycase.BuildPlan(t, New(), req, c.mode)
-			if diffs := parity.ComparePlan(g, clean, dirs.Substitutions()); len(diffs) != 0 {
+			if diffs := compareMuseGoldenPlan(g, clean, dirs.Substitutions()); len(diffs) != 0 {
 				t.Fatalf("the effortless plan already differs from %s, so the effort case proves nothing: %v", c.goldenID, diffs)
 			}
 
 			plan := paritycase.BuildPlan(t, New(), withEffort(req, parityEffort), c.mode)
-			if diffs := parity.ComparePlan(withEffortPair(t, g, parityEffort), plan, dirs.Substitutions()); len(diffs) != 0 {
+			if diffs := compareMuseGoldenPlan(withEffortPair(t, g, parityEffort), plan, dirs.Substitutions()); len(diffs) != 0 {
 				for _, d := range diffs {
 					t.Errorf("the effort run differs from %s extended by the effort pair:\n  %s", c.goldenID, d)
 				}
@@ -423,7 +558,7 @@ func TestTheEffortRunDiffersFromTheUnextendedGolden(t *testing.T) {
 		t.Run(c.goldenID, func(t *testing.T) {
 			g, dirs, req := prepareParityCase(t, c)
 			plan := paritycase.BuildPlan(t, New(), withEffort(req, parityEffort), c.mode)
-			diffs := parity.ComparePlan(g, plan, dirs.Substitutions())
+			diffs := compareMuseGoldenPlan(g, plan, dirs.Substitutions())
 			if len(diffs) == 0 {
 				t.Fatalf("an effort-carrying plan byte-matched %s, which records no effort; the configured word reached nothing", c.goldenID)
 			}
@@ -449,12 +584,12 @@ func TestAMisplacedEffortPairFailsTheExtendedGolden(t *testing.T) {
 	extended := withEffortPair(t, g, parityEffort)
 
 	clean := paritycase.BuildPlan(t, New(), effortReq, c.mode)
-	if diffs := parity.ComparePlan(extended, clean, dirs.Substitutions()); len(diffs) != 0 {
+	if diffs := compareMuseGoldenPlan(extended, clean, dirs.Substitutions()); len(diffs) != 0 {
 		t.Fatalf("the correct effort plan already differs, so this mutant proves nothing: %v", diffs)
 	}
 
 	plan := paritycase.BuildPlan(t, trailingEffortSystem{System: New()}, effortReq, c.mode)
-	diffs := parity.ComparePlan(extended, plan, dirs.Substitutions())
+	diffs := compareMuseGoldenPlan(extended, plan, dirs.Substitutions())
 	if len(diffs) == 0 {
 		t.Fatalf("the extended golden admitted an effort pair moved to the end of argv; the comparison is not ordered")
 	}

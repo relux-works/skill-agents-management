@@ -462,7 +462,14 @@ plugin id and runtime id are the same spelling.
 - **Nothing about muse's VENDOR reaches this plugin.** The extraction source
   records muse's broker as unknown; that is Layer-2's business, settled there,
   and a test holds the declaration to carrying no opinion about it.
-- The environment filter is EMPTY, with the same bound gemini's has.
+- **The child environment is a chosen divergence from the extraction capture.**
+  `env.go` admits only the pinned process, XDG, and locale names; no parent
+  `MUSE_*` variable reaches the child. Operator Muse configuration uses Muse's
+  files under `HOME` or `XDG_CONFIG_HOME`; explicit Muse environment settings
+  are unsupported by this launch API. After filtering, the caller's tracked run
+  context is overlaid and `MUSE_NO_AUTO_UPDATE=1` is written last. The Muse
+  parity test derives only those `EnvAdded` and `EnvRemoved` changes in memory;
+  every other surface remains exact against the unchanged source golden.
 - **The effort transport is ARGV** (`--reasoning-effort`), and it is the one
   capability row that is no longer the extraction source's. The source declared
   `EffortTransportNone` because every muse model was effort-none;
@@ -477,9 +484,9 @@ plugin id and runtime id are the same spelling.
   harness captured, and a hand-written fixture claiming that provenance would be
   a forged capture. The parity evidence is instead the SHIPPED `muse/exec` and
   `muse/dry-run` goldens extended in memory by exactly the two-argument
-  insertion, bounded both ways: the effort plan must match the extended golden
-  and must NOT match the unextended one, and a mutant that emits the same pair
-  at the end of argv must fail.
+  insertion, with the environment divergence above applied separately. The
+  effort plan must match the extended golden and must NOT match the unextended
+  one, and a mutant that emits the same pair at the end of argv must fail.
 
 ### The pi-native plugin: `pkg/agentic/systems/pinative`
 

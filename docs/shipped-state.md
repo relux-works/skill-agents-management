@@ -198,18 +198,30 @@ present in both repositories. Four things stay in the consumer on purpose:
 parity goldens were captured from. Its shape is that each system's environment
 filter names only the runtimes its author knew about:
 
-| Plugin | What the child inherits that it should not |
+| Plugin | Current child-environment boundary |
 | --- | --- |
 | `codex` | the two board credentials the bug records |
 | `claude-code` | the whole `CODEX_*` family, the app-server and session-manager URLs, and the credentials their pointers name — the bug seen from the other side |
 | `qwen-code` | the two board credentials, plus `QWEN_CODE_SESSION_ID`, which nothing strips, so a qwen child spawned from inside a qwen session inherits its parent's session id |
-| `gemini-cli`, `muse`, `antigravity` | everything — their filters are EMPTY, and `env.go` says so rather than expressing it by omitting the file |
+| `gemini-cli`, `antigravity` | everything — their filters are still EMPTY, and `env.go` says so rather than expressing it by omitting the file |
+| `muse` | only exact process, XDG, and locale names survive; no parent `MUSE_*` name is inherited |
 
-Every one is pinned by a test asserting the CURRENT behaviour, so closing one
-has to be a deliberate edit to the pin and its comment. That is the port's
-contract: a parity port that quietly fixed a leak would be a behaviour change
-wearing a refactor's clothes, and the goldens would have to be recaptured to
-prove it.
+The source capture's Muse environment is no longer the chosen behavior here.
+The Muse package keeps its source-owned JSON goldens byte-identical and derives
+the expected `muse/exec` surface in memory with exactly two changes: parent
+entries outside the pinned allowlist become removals, and
+`MUSE_NO_AUTO_UPDATE=1` becomes an addition. Binary, argv, stdin, and every
+other environment entry still compare field for field. The Muse tests pin this
+single divergence and keep the golden-dependent negative tests active.
+
+**Chosen divergence owner: this repository.** The source board's bug remains
+open for the other plugins. Gemini's empty filter is intentionally unchanged
+by this work and is tracked through the board workflow.
+
+Operator Muse configuration reaches the child through Muse's own configuration
+files under `HOME` or `XDG_CONFIG_HOME`. Explicit Muse environment settings are
+unsupported by the current launch API; the caller's tracked run context remains
+overlaid after parent filtering, and `MUSE_NO_AUTO_UPDATE=1` is the final write.
 
 **Owner: `skill-project-management`**, which owns the bug. When it closes, the
 pins here are what tells the next reader which filters to widen and in what
