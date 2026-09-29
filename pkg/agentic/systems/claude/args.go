@@ -49,9 +49,10 @@ const promptFilePlaceholder = "<assignment-prompt-file>"
 // reference this const rather than repeating the literal, so the yolo mapping
 // is one site and the argvguard occurrence proof can hold it.
 const (
-	bypassPermissionsFlag      = "--dangerously-skip-permissions"
-	appendSystemPromptFlag     = "--append-system-prompt"
-	appendSystemPromptFileFlag = "--append-system-prompt-file"
+	bypassPermissionsFlag       = "--dangerously-skip-permissions"
+	appendSystemPromptFlag      = "--append-system-prompt"
+	appendSystemPromptFileFlag  = "--append-system-prompt-file"
+	replaceSystemPromptFileFlag = "--system-prompt-file"
 )
 
 // Args builds the claude argv for one launch mode, excluding the binary.
@@ -107,13 +108,14 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	}
 
 	args := compositionArgvPrefix(req)
+	args = append(args, context.curatorMCPArgs...)
 	if context.hasMCP {
 		args = append(args, mcpConfigFlag, context.mcpConfig)
 	}
 	args = append(args, "-p", "--output-format", "json", "--model", strings.TrimSpace(req.Model.ID))
 	args = appendEffort(args, req)
 	if context.hasSystemPrompt {
-		args = append(args, appendSystemPromptFlag, context.systemPrompt)
+		args = append(args, context.systemPromptFlag, context.systemPrompt)
 	}
 	if req.Budget != nil && req.Budget.USD > 0 {
 		// The source's `%.2f` and its `> 0` guard, both kept rather than
@@ -159,6 +161,7 @@ func interactiveArgs(req agentic.LaunchRequest, context contextValues) ([]string
 	}
 	args := []string{"--model", strings.TrimSpace(req.Model.ID)}
 	args = appendEffort(args, req)
+	args = append(args, context.curatorMCPArgs...)
 	if context.hasMCP {
 		// --mcp-config accepts a variadic list, so keep the JSON attached to
 		// the flag. A separate value would consume a following NativeArgs
@@ -166,7 +169,7 @@ func interactiveArgs(req agentic.LaunchRequest, context contextValues) ([]string
 		args = append(args, mcpConfigFlag+"="+context.mcpConfig)
 	}
 	if context.hasSystemPrompt {
-		args = append(args, appendSystemPromptFlag, context.systemPrompt)
+		args = append(args, context.systemPromptFlag, context.systemPrompt)
 	}
 	if context.permission != agentic.PermissionModeYolo {
 		// Native forwards the caller's arguments with no inspection at

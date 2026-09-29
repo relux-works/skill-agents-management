@@ -99,6 +99,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		args := compositionArgvPrefix(req)
 		args = appendContextConfigOverrides(args, context)
 		args = append(args, "--search", "-a", "never")
+		args = append(args, context.curatorMCPArgs...)
 		if profile := strings.TrimSpace(req.Profile); profile != "" {
 			args = append(args, "-p", profile)
 		}
@@ -118,6 +119,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return args, nil
 	case agentic.LaunchModeManagedSession:
 		args := appendContextConfigOverrides([]string{}, context)
+		args = append(args, context.curatorMCPArgs...)
 		args = append(args,
 			"--model", model,
 			"--search",
@@ -143,6 +145,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 			return nil, fmt.Errorf("codex: an interactive launch carries no service tier; %q would reach no override", tier)
 		}
 		args := appendContextConfigOverrides([]string{}, context)
+		args = append(args, context.curatorMCPArgs...)
 		args = append(args, "-m", model)
 		// With the tier refused above, appendReasoningAndTier contributes the
 		// effort override alone — the same spelling the other two grammars use,
@@ -192,6 +195,9 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 func appendContextConfigOverrides(args []string, context contextValues) []string {
 	if context.hasSystemPrompt {
 		args = append(args, "-c", developerInstructionsConfigKey+"="+context.systemPrompt)
+	}
+	if context.curatorSystemPrompt != nil {
+		args = append(args, "-c", context.curatorSystemPrompt.key+"="+context.curatorSystemPrompt.value)
 	}
 	for _, override := range context.mcpOverrides {
 		args = append(args, "-c", override.key+"="+override.value)

@@ -11,12 +11,15 @@ import (
 )
 
 type contextValues struct {
-	mcpConfig       string
-	hasMCP          bool
-	systemPrompt    string
-	hasSystemPrompt bool
-	permission      agentic.PermissionMode
-	hasPermission   bool
+	mcpConfig        string
+	hasMCP           bool
+	curatorMCPArgs   []string
+	hasCuratorMCP    bool
+	systemPrompt     string
+	systemPromptFlag string
+	hasSystemPrompt  bool
+	permission       agentic.PermissionMode
+	hasPermission    bool
 }
 
 type claudeMCPDocument struct {
@@ -35,6 +38,13 @@ type claudeMCPServer struct {
 // before BuildPlan performs any other plugin preparation. Args calls the same
 // pure builder so direct plugin callers receive identical refusals.
 func (*System) ValidateContextDescriptors(req agentic.LaunchRequest, mode agentic.LaunchMode) error {
+	_, err := buildContextValues(req, mode)
+	return err
+}
+
+// ValidateCuratorContext is the Claude channel-layer gate for a typed Curator
+// fragment. BuildPlan invokes it before any launch surface is built.
+func (*System) ValidateCuratorContext(req agentic.LaunchRequest, mode agentic.LaunchMode) error {
 	_, err := buildContextValues(req, mode)
 	return err
 }
@@ -83,6 +93,7 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 				return values, contextConflict(agentic.ContextSystemPrompt, "the goal binding already uses Claude's appended system-prompt channel")
 			}
 			values.systemPrompt = text
+			values.systemPromptFlag = appendSystemPromptFlag
 			values.hasSystemPrompt = true
 		case payload.Permission != nil:
 			if !req.PermissionMode.IsZero() {
@@ -96,6 +107,14 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 				return values, fmt.Errorf("claude context: %w", err)
 			}
 			values.hasPermission = true
+		}
+	}
+	if req.Context != nil {
+		if err := agentic.ValidateCuratorContext(req.Context, req.Home); err != nil {
+			return values, err
+		}
+		if err := applyClaudeCuratorContext(req, &values); err != nil {
+			return values, err
 		}
 	}
 
@@ -116,6 +135,80 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 		return values, err
 	}
 	return values, nil
+}
+
+func applyClaudeCuratorContext(req agentic.LaunchRequest, values *contextValues) error {
+	context := req.Context
+	if context.Environment != "claude_code" {
+		return fmt.Errorf("%w: Claude requires the claude_code fragment environment", agentic.ErrCuratorContextUnsupported)
+	}
+	for _, descriptor := range req.ContextDescriptors {
+		if context.MCP != nil && descriptor.Kind == agentic.ContextMCPServers {
+			return contextConflict(descriptor.Kind, "Curator context already supplies the MCP channel")
+		}
+		if context.SystemPrompt != nil && descriptor.Kind == agentic.ContextSystemPrompt {
+			return contextConflict(descriptor.Kind, "Curator context already supplies the system-prompt channel")
+		}
+	}
+	if context.MCP != nil {
+		if !req.Composition.IsZero() {
+			return curatorConflict("legacy composition already supplies launch configuration")
+		}
+		descriptor := context.MCP.Channels[0]
+		if descriptor.Kind != agentic.CuratorDescriptorFlag || descriptor.Flag != mcpConfigFlag ||
+			descriptor.Argument != agentic.CuratorArgumentPath || len(descriptor.With) != 1 || descriptor.With[0] != "--strict-mcp-config" {
+			return fmt.Errorf("%w: Claude's MCP channel is incompatible with the fragment descriptor", agentic.ErrCuratorContextUnsupported)
+		}
+		values.curatorMCPArgs = []string{descriptor.Flag, context.MCP.Path}
+		values.curatorMCPArgs = append(values.curatorMCPArgs, descriptor.With...)
+		values.hasCuratorMCP = true
+	}
+	if context.SystemPrompt != nil {
+		if req.Goal != nil {
+			return curatorConflict("the goal binding already uses Claude's system-prompt channel")
+		}
+		var selected *agentic.CuratorChannelDescriptor
+		for i := range context.SystemPrompt.Channels {
+			descriptor := &context.SystemPrompt.Channels[i]
+			if descriptor.Semantics != context.SystemPrompt.Intent {
+				continue
+			}
+			if selected != nil {
+				return agentic.ErrCuratorSystemPromptChannelAmbiguous
+			}
+			selected = descriptor
+		}
+		if selected == nil {
+			return agentic.ErrCuratorSystemPromptChannelMissing
+		}
+		if !claudeSystemPromptDescriptorSupported(selected) {
+			return fmt.Errorf("%w: Claude cannot apply a system-prompt descriptor", agentic.ErrCuratorContextUnsupported)
+		}
+		values.systemPromptFlag = selected.Flag
+		values.systemPrompt = context.SystemPrompt.Path
+		values.hasSystemPrompt = true
+	}
+	return nil
+}
+
+func claudeSystemPromptDescriptorSupported(descriptor *agentic.CuratorChannelDescriptor) bool {
+	return descriptor.Kind == agentic.CuratorDescriptorFlag && descriptor.Argument == agentic.CuratorArgumentPath &&
+		len(descriptor.With) == 0 && claudeSystemPromptFlagMatches(descriptor)
+}
+
+func claudeSystemPromptFlagMatches(descriptor *agentic.CuratorChannelDescriptor) bool {
+	switch descriptor.Semantics {
+	case agentic.CuratorSystemPromptAppend:
+		return descriptor.Flag == appendSystemPromptFileFlag
+	case agentic.CuratorSystemPromptReplace:
+		return descriptor.Flag == replaceSystemPromptFileFlag
+	default:
+		return false
+	}
+}
+
+func curatorConflict(reason string) error {
+	return fmt.Errorf("%w: %s", agentic.ErrCuratorContextUnsupported, reason)
 }
 
 func encodeClaudeMCP(context agentic.MCPServersContext) (string, []agentic.CompositionServer, error) {
@@ -139,11 +232,11 @@ func encodeClaudeMCP(context agentic.MCPServersContext) (string, []agentic.Compo
 func rejectNativeContextConflicts(args []string, values contextValues) error {
 	for _, index := range nativeargs.FlagIndexes(args) {
 		name, _, _ := nativeargs.SplitFlagValue(args[index])
-		if values.hasMCP && name == mcpjson.ConfigFlag {
+		if (values.hasMCP || values.hasCuratorMCP) && name == mcpjson.ConfigFlag {
 			return contextConflict(agentic.ContextMCPServers, "native arguments already set the MCP configuration")
 		}
-		if values.hasSystemPrompt && (name == appendSystemPromptFlag || name == appendSystemPromptFileFlag) {
-			return contextConflict(agentic.ContextSystemPrompt, "native arguments already set appended system-prompt text")
+		if values.hasSystemPrompt && (name == values.systemPromptFlag || name == appendSystemPromptFlag || name == appendSystemPromptFileFlag || name == replaceSystemPromptFileFlag || name == "--system-prompt") {
+			return contextConflict(agentic.ContextSystemPrompt, "native arguments already set the system prompt")
 		}
 		if values.hasPermission && values.permission == agentic.PermissionModeNative && isClaudePermissionSelector(name) {
 			return contextConflict(agentic.ContextPermission, "native arguments already set the permission posture")

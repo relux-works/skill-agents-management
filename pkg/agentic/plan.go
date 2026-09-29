@@ -49,11 +49,23 @@ type Plan struct {
 
 	Provenance LaunchProvenance
 
+	curatorContextProvenance *CuratorContextProvenance
+
 	// Nodes is empty for the source-compatible single-process plan. A
 	// consumer that needs an inference engine or sidecar calls
 	// BuildMultiNodePlan, which preserves every field above as the primary
 	// process and adds a validated, dependency-ordered node graph here.
 	Nodes []PlanNode `json:"nodes,omitempty"`
+}
+
+// CuratorContextProvenanceSnapshot returns a detached copy of the fragment
+// identity carried by this plan. Mutating the request, the returned value, or
+// any nested slice/map cannot change the snapshot held by the plan.
+func (p Plan) CuratorContextProvenanceSnapshot() (CuratorContextProvenance, bool) {
+	if p.curatorContextProvenance == nil {
+		return CuratorContextProvenance{}, false
+	}
+	return cloneCuratorProvenance(*p.curatorContextProvenance), true
 }
 
 // ModelIdentity is the pair one plan must keep: the model spelling the caller
@@ -327,6 +339,28 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		return Plan{}, fmt.Errorf("%w: %s carries %d native argument(s) in %s mode; only the interactive grammar forwards them",
 			ErrNativeArgsNotInteractive, id, len(req.NativeArgs), mode)
 	}
+	var contextProvenance *CuratorContextProvenance
+	if req.Context != nil {
+		if err := ValidateCuratorContext(req.Context, req.Home); err != nil {
+			return Plan{}, fmt.Errorf("agentic: building plan for %s: %w", id, err)
+		}
+		provenance := curatorContextProvenance(req.Context)
+		if req.Context.ExpectedProvenance != nil {
+			if err := ValidateCuratorContextIdentity(*req.Context.ExpectedProvenance, provenance); err != nil {
+				return Plan{}, fmt.Errorf("agentic: building plan for %s: %w", id, err)
+			}
+		}
+		validator, supported := sys.(CuratorContextValidator)
+		if !supported {
+			return Plan{}, fmt.Errorf("agentic: building plan for %s: %w", id, ErrCuratorContextUnsupported)
+		}
+		request := req
+		request.Context = cloneCuratorContext(req.Context)
+		if err := validator.ValidateCuratorContext(request, mode); err != nil {
+			return Plan{}, fmt.Errorf("agentic: %s rejected Curator context before planning: %w", id, err)
+		}
+		contextProvenance = &provenance
+	}
 	if len(req.ContextDescriptors) > 0 {
 		validator, supported := sys.(ContextDescriptorValidator)
 		if !supported {
@@ -447,14 +481,15 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	}
 
 	return Plan{
-		System:        id,
-		Mode:          mode,
-		Binary:        binary,
-		Argv:          argv,
-		Env:           env,
-		Stdin:         stdin,
-		WorkDir:       req.WorkDir,
-		Home:          home,
-		ModelIdentity: identity,
+		System:                   id,
+		Mode:                     mode,
+		Binary:                   binary,
+		Argv:                     argv,
+		Env:                      env,
+		Stdin:                    stdin,
+		WorkDir:                  req.WorkDir,
+		Home:                     home,
+		ModelIdentity:            identity,
+		curatorContextProvenance: contextProvenance,
 	}, nil
 }

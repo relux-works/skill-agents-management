@@ -11,38 +11,62 @@ An outcome with no owner is a rumour.
 Written at the close of `EPIC-260821-1qvnz2`. Every claim below was read off
 the two boards and the two checkouts rather than remembered.
 
-## Current published release: v0.4.3; v0.5.0 candidate
+## Current published release at refreshed task base `2dff98f`: v0.5.31
 
-The `v0.5.0` candidate adds the concrete configured `mlx` inference-engine
-plugin, binds the shipped local-Qwen fixture through ordinary graph refs, and
-publishes `agents-management.launch-provenance` schema v1 for task-board. The
-projection carries system=`pi`, broker=`local-models`, publisher=`alibaba`,
-family=`qwen`, engine=`mlx`, runtime/profile=`local-qwen`, and leaves the
-concrete model id as data. Its mandatory `engine_binding=none|required`
-distinguishes genuine system-only legacy absence from removed evidence. The
-registry-backed validator refuses `none` with any engine-bound identity axis,
-absent or partial required refs, non-normalized or wrong-kind graph identities,
-and any configured/resolved mismatch after persistence. It reconstructs the
-configured identity from registry declarations and resolves it through the
-plugin graph, so equal self-minted refs do not validate an unconfigured engine.
+The latest published module tag at this refreshed task base is `v0.5.31`. The
+`v0.5.0` release added the concrete configured `mlx` inference-engine plugin,
+bound the shipped local-Qwen fixture through ordinary graph refs, and published
+`agents-management.launch-provenance` schema v1 for task-board. The projection
+carries system=`pi`, broker=`local-models`, publisher=`alibaba`, family=`qwen`,
+engine=`mlx`, runtime/profile=`local-qwen`, and leaves the concrete model id as
+data. Its mandatory `engine_binding=none|required` distinguishes genuine
+system-only legacy absence from removed evidence. The registry-backed validator
+refuses `none` with any engine-bound identity axis, absent or partial required
+refs, non-normalized or wrong-kind graph identities, and any configured/resolved
+mismatch after persistence. It reconstructs the configured identity from
+registry declarations and resolves it through the plugin graph, so equal
+self-minted refs do not validate an unconfigured engine.
 
-This is registration and metadata only. It does not discover, contact, start,
-supervise, attest, or execute an MLX model runtime. The candidate becomes a
-published dependency only after independent review, Story integration, and an
-immutable signed tag; this document does not treat the candidate branch as a
-release.
+This remains registration and metadata only. It does not discover, contact,
+start, supervise, attest, or execute an MLX model runtime. The Curator Launch
+Context Bridge v1.1.0 is the current Story candidate. Its proposed module tag is
+the next free tag verified by `git ls-remote --tags origin` at handoff; the
+proposal is a live lookup, not a fixed version. It is not a published dependency
+until review, Story integration, and an immutable signed tag.
 
-## Planned Launch Context Bridge Contract v1.0.0 (not shipped)
+## Launch Context Bridge Contract v1.1.0 candidate (module release pending)
 
 The [versioned contract](launch-context-contract.md) defines how validated
 Curator fragment descriptors cross into the module's typed launch request, how
-child and session provenance is retained, and when a launch must refuse. This
-is a documentation contract for the next consumer slices: the current
-LaunchRequest has no typed Curator context. Tracked children must pass context
-through the module; primary sessions carry provenance in Curator's composed
-plan for the session host to persist. Claude PTY and Codex app-server entry
-mapping remains with the session-host stream. Curator-spec follow-ups are
-listed as plain issue references in the contract.
+child and session provenance is retained, and when a launch must refuse. The
+module candidate now carries typed Curator context on `LaunchRequest`, validates
+the fragment pin and shape in `agentic.BuildPlan`, delegates descriptor
+interpretation to the selected Claude or Codex plugin, and exposes a detached
+provenance snapshot on `Plan`. System-prompt intent is explicit and selects one
+matching descriptor while retaining the full descriptor list in provenance.
+Named BuildPlan tests drive all four descriptor kinds, the contract refusal
+rows, and each plugin channel-conflict refusal for both plugins. Narrowing
+mutants are killed by the corresponding behavioral tests. The change remains a
+candidate under the proposed tag lookup above; it is not a published dependency
+until the signed PR is reviewed, landed, and tagged. Tracked-child and
+interactive consumers must still validate their raw
+fragment, pass typed context through the module, and persist the plan snapshot.
+Claude PTY and Codex app-server entry mapping remains with the session-host
+stream. Curator-spec follow-ups remain issue-only references.
+
+The refusal guard scans all non-test Go files under `pkg/agentic` from the
+module root. Its measured site subset is recognized refusal constructors and
+`ErrCurator`-prefixed sentinels in the two allowed shapes: a direct `return`
+expression or an `if` initializer whose branch returns it. Forwarding through
+other helpers, named-result bare returns and unprefixed sentinels are out of
+scope, tracked by TASK-260930-3txv44; other shapes and non-regular files refuse.
+Mutation accounting: a member counts as killed when a named BuildPlan subtest
+fails on at least one plugin; per-plugin completeness (killed on claude AND
+codex, in separate processes) is out of scope, tracked by TASK-260930-3txv44.
+Managed-home `homeVariable` mutants additionally spot-check both plugins; this
+does not establish per-plugin completeness. The curator validator matrix
+restriction check is best-effort; `t.Skip` and aliased plugin conditions are
+known blind spots, tracked by TASK-260930-3txv44.
 
 ## General graph baseline: v0.4.3
 

@@ -17,17 +17,27 @@ type configOverride struct {
 }
 
 type contextValues struct {
-	mcpOverrides    []configOverride
-	systemPrompt    string
-	hasSystemPrompt bool
-	permission      agentic.PermissionMode
-	hasPermission   bool
+	mcpOverrides        []configOverride
+	curatorMCPArgs      []string
+	hasCuratorMCP       bool
+	systemPrompt        string
+	hasSystemPrompt     bool
+	curatorSystemPrompt *configOverride
+	permission          agentic.PermissionMode
+	hasPermission       bool
 }
 
 // ValidateContextDescriptors validates and resolves semantic launch contexts
 // before BuildPlan performs any other plugin preparation. Args calls the same
 // pure builder so direct plugin callers receive identical refusals.
 func (*System) ValidateContextDescriptors(req agentic.LaunchRequest, mode agentic.LaunchMode) error {
+	_, err := buildContextValues(req, mode)
+	return err
+}
+
+// ValidateCuratorContext is the Codex channel-layer gate for a typed Curator
+// fragment. BuildPlan invokes it before any launch surface is built.
+func (*System) ValidateCuratorContext(req agentic.LaunchRequest, mode agentic.LaunchMode) error {
 	_, err := buildContextValues(req, mode)
 	return err
 }
@@ -83,6 +93,14 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 			values.hasPermission = true
 		}
 	}
+	if req.Context != nil {
+		if err := agentic.ValidateCuratorContext(req.Context, req.Home); err != nil {
+			return values, err
+		}
+		if err := applyCodexCuratorContext(req, &values); err != nil {
+			return values, err
+		}
+	}
 
 	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
 		return values, fmt.Errorf("codex: %w: permission mode %q is valid only for interactive launches",
@@ -101,6 +119,63 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 		return values, err
 	}
 	return values, nil
+}
+
+func applyCodexCuratorContext(req agentic.LaunchRequest, values *contextValues) error {
+	context := req.Context
+	if context.Environment != "codex_cli" {
+		return fmt.Errorf("%w: Codex requires the codex_cli fragment environment", agentic.ErrCuratorContextUnsupported)
+	}
+	for _, descriptor := range req.ContextDescriptors {
+		if context.MCP != nil && descriptor.Kind == agentic.ContextMCPServers {
+			return contextConflict(descriptor.Kind, "Curator context already supplies the MCP channel")
+		}
+		if context.SystemPrompt != nil && descriptor.Kind == agentic.ContextSystemPrompt {
+			return contextConflict(descriptor.Kind, "Curator context already supplies the system-prompt channel")
+		}
+	}
+	if context.MCP != nil {
+		if !req.Composition.IsZero() || strings.TrimSpace(req.Profile) != "" {
+			return fmt.Errorf("%w: Curator MCP layering conflicts with the request's composition or harness profile", agentic.ErrCuratorContextUnsupported)
+		}
+		descriptor := context.MCP.Channels[0]
+		if descriptor.Kind != agentic.CuratorDescriptorFlag || descriptor.Flag != "-p" ||
+			descriptor.Argument != agentic.CuratorArgumentName || descriptor.Name != "curator-mcp" || len(descriptor.With) != 0 {
+			return fmt.Errorf("%w: Codex MCP channel is incompatible with the fragment descriptor", agentic.ErrCuratorContextUnsupported)
+		}
+		values.curatorMCPArgs = []string{descriptor.Flag, descriptor.Name}
+		values.hasCuratorMCP = true
+	}
+	if context.SystemPrompt != nil {
+		var selected *agentic.CuratorChannelDescriptor
+		for i := range context.SystemPrompt.Channels {
+			descriptor := &context.SystemPrompt.Channels[i]
+			if descriptor.Semantics != context.SystemPrompt.Intent {
+				continue
+			}
+			if selected != nil {
+				return agentic.ErrCuratorSystemPromptChannelAmbiguous
+			}
+			selected = descriptor
+		}
+		if selected == nil {
+			return agentic.ErrCuratorSystemPromptChannelMissing
+		}
+		if !codexSystemPromptDescriptorSupported(selected) {
+			return fmt.Errorf("%w: Codex cannot apply this system-prompt descriptor", agentic.ErrCuratorContextUnsupported)
+		}
+		encoded, err := encodeTOMLValue(context.SystemPrompt.Path)
+		if err != nil {
+			return fmt.Errorf("%w: system-prompt path could not be encoded", agentic.ErrCuratorContextMalformed)
+		}
+		values.curatorSystemPrompt = &configOverride{key: selected.Key, value: encoded}
+	}
+	return nil
+}
+
+func codexSystemPromptDescriptorSupported(descriptor *agentic.CuratorChannelDescriptor) bool {
+	return descriptor.Kind == agentic.CuratorDescriptorConfigKey && descriptor.Key == "model_instructions_file" &&
+		descriptor.Semantics == agentic.CuratorSystemPromptReplace
 }
 
 func encodeCodexMCP(context agentic.MCPServersContext) ([]configOverride, error) {
@@ -175,6 +250,9 @@ func rejectNativeContextConflicts(args []string, values contextValues) error {
 	for _, index := range nativeargs.FlagIndexes(args) {
 		el := args[index]
 		name, _, _ := nativeargs.SplitFlagValue(el)
+		if values.hasCuratorMCP && (name == "-p" || name == "--profile" || isAttachedProfileValue(el)) {
+			return contextConflict(agentic.ContextMCPServers, "native arguments already select a Codex profile")
+		}
 		configSelector := name == configFlagLong || name == configFlag || isAttachedConfigValue(el)
 		if configSelector {
 			key, ok := nativeConfigKeyAt(args, index)
@@ -182,7 +260,10 @@ func rejectNativeContextConflicts(args []string, values contextValues) error {
 				if values.hasSystemPrompt && key == developerInstructionsConfigKey {
 					return contextConflict(agentic.ContextSystemPrompt, "native arguments already set developer instructions")
 				}
-				if len(values.mcpOverrides) > 0 && (key == "mcp_servers" || strings.HasPrefix(key, mcpServersKeyPrefix)) {
+				if values.curatorSystemPrompt != nil && key == values.curatorSystemPrompt.key {
+					return contextConflict(agentic.ContextSystemPrompt, "native arguments already set the Curator system-prompt file")
+				}
+				if (values.hasCuratorMCP || len(values.mcpOverrides) > 0) && (key == "mcp_servers" || strings.HasPrefix(key, mcpServersKeyPrefix)) {
 					return contextConflict(agentic.ContextMCPServers, "native arguments already set MCP configuration")
 				}
 				if values.hasPermission && values.permission == agentic.PermissionModeNative && isConflictingConfigKey(key) {

@@ -588,6 +588,13 @@ type LaunchRequest struct {
 	// arguments. Unsupported systems and unknown kinds are typed refusals.
 	ContextDescriptors []ContextDescriptor
 
+	// Context carries a validated Curator launch fragment when the caller
+	// selected a managed profile. It preserves the full typed fragment so the
+	// selected system plugin can interpret its channel descriptors and BuildPlan
+	// can attach an immutable-by-copy provenance snapshot. SystemPrompt.Intent is
+	// supplied by the caller and selects exactly one matching fragment channel.
+	Context *CuratorContext
+
 	// Deadline is the hard fence the caller will enforce on the child
 	// process. A plugin whose harness carries a deadline of its own (pi
 	// spells `--deadline`) transports THIS value and never a constant of its

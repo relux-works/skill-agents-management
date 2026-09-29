@@ -9,19 +9,20 @@ whose `tools/board-cli` swapped its whole spawn plane onto this module.
 One Go module, one path, one tag:
 
 ```
-github.com/relux-works/skill-agents-management v0.5.22
+github.com/relux-works/skill-agents-management v0.5.27
 ```
 
-The current published version is `v0.5.22`. The context descriptor API in this
-change is proposed for `v0.5.23` after review and release; a feature branch is
-not a dependency version.
+The current published version at the landing base is `v0.5.27`; it includes the semantic context
+descriptor API. The Curator Launch Context Bridge Contract v1.1.0 is proposed
+for `v0.5.28` after review and release; a feature branch is not a dependency
+version.
 
 There is no `replace` on trunk and there must not be one: a committed
 sibling-path `replace` is a path that exists on exactly one machine, and CI is
 not that machine.
 
 ```bash
-go get github.com/relux-works/skill-agents-management@v0.5.22
+go get github.com/relux-works/skill-agents-management@v0.5.27
 ```
 
 **Nothing else.** This repository went PUBLIC on 2026-08-23, so the fetch goes
@@ -90,6 +91,53 @@ the module refuses an alias declaration it cannot check, and a consumer-side
 rule would be a redirection nobody validated. Admission stays keyed on the
 spelling the operator configured, which is why the alias remains a first-class
 row rather than being folded into its target.
+
+## Passing validated Curator context
+
+The Launch Context Bridge accepts a typed projection of a fragment after the
+consumer has validated the complete raw fragment against Curator's closed
+schema. The request's `Home` must be the exact managed-home value in that
+projection. Pass the complete channel descriptor lists unchanged; the selected
+plugin owns channel interpretation and refuses a descriptor it cannot apply.
+Consumers do not translate descriptors into provider arguments.
+
+System-prompt intent is supplied by the caller that owns launch behavior. A
+tracked child that keeps today's additive prompt behavior sets
+`agentic.CuratorSystemPromptAppend`. The interactive Curator consumer sets the
+intent matching the profile-prompt behavior it already uses. The plugin selects
+one matching descriptor, and the complete list remains in the plan's
+provenance snapshot:
+
+```go
+curatorContext := validatedContext // typed and closed-schema validated
+if curatorContext.SystemPrompt != nil {
+	curatorContext.SystemPrompt.Intent = agentic.CuratorSystemPromptAppend
+}
+
+plan, err := agentic.BuildPlan(registry, agentic.LaunchRequest{
+	System:  selectedSystem,
+	Model:   selectedModel,
+	WorkDir: workDir,
+	Home:    managedHome,
+	Context: &curatorContext,
+}, agentic.LaunchModeExec)
+if err != nil {
+	return err
+}
+
+provenance, ok := plan.CuratorContextProvenanceSnapshot()
+if !ok {
+	return errors.New("Curator provenance missing from plan")
+}
+record.Provenance = provenance
+```
+
+`SystemPrompt.Intent` accepts only `append` or `replace`; a missing intent,
+zero matching descriptors or multiple matching descriptors refuses the plan.
+The v2 fragment remains refused until its permission member has a typed
+mapping. Resume checks pass the stored snapshot through
+`CuratorContext.ExpectedProvenance`; `BuildPlan` compares its profile pin,
+managed home, intent and complete fragment identity before returning a plan.
 
 `Model.CacheBudgetBytes` is an additive optional-positive catalog fact for
 configured local models. A consumer must distinguish `nil` (unrecorded) from a
@@ -272,18 +320,17 @@ digests, and a rebind orphans that state with no error anywhere.
 | Observed engine contract | at trusted assembly call `vendorplugin.NewRegistryWithEngineObservationAdapters`, then call `BuildLaunch`; it resolves the vendor-owned launch/profile first and validates the registered adapter's exact version, identity, freshness and readings before `Preflight` or plan materialization | pass an adapter or observation through `SpawnRequest`; mutate adapter identity after construction; treat schema validation as authorization; treat absence as read failure; run process, SSH, pressure, or supervision actions in this module |
 | Whether a launch is admissible right now | `providerlimits.Store.AvailabilityFor(VerdictQuery{Runtime, Model, Home})` → `vendorplugin.Availability` | write anything — not the state file, not the index, not a probe claim |
 
-**Curator launch context (planned, not shipped).** The
-[Launch Context Bridge Contract v1.0.0](launch-context-contract.md) specifies
-how a consumer validates a Curator fragment and passes typed descriptors
-through the launch request, then records the profile, lock, managed home and
-fragment identity for child or session reuse. It requires refusal for a missing
-profile, unknown descriptor, malformed fragment, stale identity or incompatible
-capability. `LaunchRequest.ContextDescriptors` currently carries normalized
-MCP, additional system-prompt and permission values for Claude and Codex; it
-does not yet carry Curator's fragment descriptor union or its profile, lock,
-managed-home and provenance identity. Its harness-side `Profile` remains a
-separate value. Tracked-child wiring and primary-session provenance remain
-next-slice work; the Claude PTY and Codex app-server entry mapping belongs to
+**Curator launch context (Contract v1.1.0; proposed module release `v0.5.28`).** The
+[Launch Context Bridge Contract v1.1.0](launch-context-contract.md) is
+implemented by `LaunchRequest.Context` and `agentic.BuildPlan` in this
+candidate. It validates the profile pin and typed fragment shape, lets the
+selected Claude or Codex plugin interpret supported descriptors, requires an
+explicit system-prompt intent, and exposes a detached provenance snapshot on
+the plan. `LaunchRequest.ContextDescriptors` remains a separate semantic API
+for native MCP, additional prompt text and permission values. The Curator
+profile remains distinct from the harness-side `Profile`. Tracked-child and
+primary-session consumers still own raw-fragment validation and persistence of
+the plan snapshot; the Claude PTY and Codex app-server entry mapping belongs to
 the session-host stream.
 
 **Interactive sessions.** A launcher that starts a terminal session for a human

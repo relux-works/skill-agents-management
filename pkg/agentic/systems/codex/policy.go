@@ -287,7 +287,18 @@ func isConflictingConfigKey(key string) bool {
 // start: `--configx` is an unknown long, not `--config` with an
 // attached value.
 func isAttachedConfigValue(el string) bool {
-	return len(el) > len(configFlag) && strings.HasPrefix(el, configFlag) && !strings.HasPrefix(el, "--")
+	return isAttachedShortValue(el, configFlag)
+}
+
+// isAttachedProfileValue reports the clap short form `-p<profile>`. The
+// profile's first character is attached to the flag, as with Codex's `-c`
+// override form, so native context-conflict checks must classify it as `-p`.
+func isAttachedProfileValue(el string) bool {
+	return isAttachedShortValue(el, "-p")
+}
+
+func isAttachedShortValue(el, flag string) bool {
+	return len(el) > len(flag) && strings.HasPrefix(el, flag) && !strings.HasPrefix(el, "--")
 }
 
 // checkConfigOverride classifies one `-c` override value: `key=value`

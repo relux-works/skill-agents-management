@@ -25,11 +25,13 @@
   published agentic benchmarks placing it level with opus-5-5. Not
   `Recommended`, not pi-native.
 
-- Add typed launch-context descriptors for MCP servers, additional
-  system-prompt text and interactive permission posture. Claude and Codex own
-  descriptor validation, conflict refusals and provider-specific rendering;
-  `BuildPlan` runs validation before launch preparation and starts no process.
-  Expected release v0.5.23; the orchestrator cuts the tag.
+- Add the Curator Launch Context Bridge, carrying the validated typed fragment
+  through `LaunchRequest` and `BuildPlan` into Claude or Codex channel rendering.
+  Contract v1.1.0 adds caller-selected append/replace intent; the plugin applies
+  exactly one matching descriptor, keeps the full descriptor list in plan
+  provenance, and refuses missing intent, no match, ambiguous channels, stale
+  identity and incompatible launch inputs. Expected release v0.5.28; the
+  orchestrator cuts the tag.
 
 - Add a public release-versioned native-argument classifier for interactive
   launchers. It identifies Claude and Pi print forms and Codex `exec` through
@@ -138,6 +140,13 @@
   unchanged.
 - Note that `muse` 1.3.0 accepts the `max` effort word the 1.0.2 CLI refused
   harness-side; the verbatim effort transport is unchanged.
+
+## v0.5.24
+
+- Publish typed launch-context descriptors for MCP servers, additional
+  system-prompt text and interactive permission posture. Claude and Codex own
+  descriptor validation, conflict refusals and provider-specific rendering;
+  `BuildPlan` runs validation before launch preparation and starts no process.
 
 ## Unreleased — v0.5.13
 
