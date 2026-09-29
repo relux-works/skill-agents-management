@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Decode the released curator-engines v0.1.0 runtime.start_time object as
+  Unix seconds and microseconds, refusing missing, non-integer, or out-of-range
+  components. Pin a runtime-present status payload captured from the producer.
+
 - Declare `gpt-6.1-sol` in `openai` (codex-cli 0.159.0 catalog, 2026-09-29:
   priority 1, "Latest workhorse model for coding and everyday work.") and move
   the floating `sol` alias from `gpt-6-sol` to it. Effort: required

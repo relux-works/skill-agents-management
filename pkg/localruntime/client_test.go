@@ -11,16 +11,7 @@ import (
 
 func fixtureBytes(t *testing.T, mutate func(map[string]any)) []byte {
 	t.Helper()
-	fixture := map[string]any{
-		"contract_version": 1,
-		"engine_identity":  map[string]any{"name": "local-qwen", "key": "deadbeef"},
-		"runtime_key":      "local-qwen@/home/op/project",
-		"profile_digest":   "deadbeef",
-		"broker":           map[string]any{"state": "serving", "source": "attested"},
-		"sharing":          map[string]any{"configured": map[string]any{"max_leases": 3}},
-		"runtime":          map[string]any{"pid": 1, "start_time": "2026-08-29T10:00:00Z"},
-		"leases":           []any{},
-	}
+	fixture := validFixture(t)
 	if mutate != nil {
 		mutate(fixture)
 	}
@@ -71,7 +62,7 @@ func TestCLIStatusReaderHappyPath(t *testing.T) {
 	if status.BrokerState != "serving" || status.BrokerSource != SourceAttested {
 		t.Fatalf("got (%s, %s)", status.BrokerState, status.BrokerSource)
 	}
-	wantArgs := []string{"curator-engines", "status", "--engine", "local-qwen", "--json"}
+	wantArgs := []string{"curator-engines", "status", "--engine", "qwen-local-engine", "--json"}
 	if len(runner.lastArgs) != len(wantArgs) {
 		t.Fatalf("args = %v, want %v", runner.lastArgs, wantArgs)
 	}
@@ -91,7 +82,7 @@ func TestCLIStatusReaderUsesReadOnlyCuratorEnginesStatus(t *testing.T) {
 	if _, err := NewCLIStatusReader(WithCommandRunner(runner.run)).Status(context.Background(), query); err != nil {
 		t.Fatalf("Status: %v", err)
 	}
-	want := []string{"curator-engines", "status", "--engine", "local-qwen", "--json"}
+	want := []string{"curator-engines", "status", "--engine", "qwen-local-engine", "--json"}
 	if !reflect.DeepEqual(runner.lastArgs, want) {
 		t.Fatalf("command = %v, want read-only status command %v", runner.lastArgs, want)
 	}
@@ -102,10 +93,10 @@ func TestCLIStatusReaderUsesReadOnlyCuratorEnginesStatus(t *testing.T) {
 
 func validStatusQuery() StatusQuery {
 	return StatusQuery{
-		Runtime:               "local-qwen",
+		Runtime:               "qwen-local-engine",
 		Model:                 "qwen-3.8-27b-mlx-8bit",
-		CuratorEnginesProject: "/home/op/project",
-		CuratorEnginesProfile: "local-qwen",
+		CuratorEnginesProject: "/project",
+		CuratorEnginesProfile: "qwen-local-engine",
 	}
 }
 

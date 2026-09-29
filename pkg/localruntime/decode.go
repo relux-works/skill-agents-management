@@ -96,8 +96,16 @@ type wireSharing struct {
 
 // wireRuntime is the nullable `runtime` object's shape.
 type wireRuntime struct {
-	PID       int    `json:"pid"`
-	StartTime string `json:"start_time"`
+	PID       int                   `json:"pid"`
+	StartTime *wireProcessStartTime `json:"start_time"`
+}
+
+// wireProcessStartTime is curator-engines v0.1.0's exact ProcessStartTime
+// object. Pointers preserve the distinction between a missing/null member and
+// the legitimate integer zero before decodeProcessStartTime validates it.
+type wireProcessStartTime struct {
+	Seconds      *int64 `json:"seconds"`
+	Microseconds *int32 `json:"microseconds"`
 }
 
 // decodeStatus decodes one `curator-engines status --json` response from the
@@ -288,11 +296,33 @@ func decodeOptionalRuntime(fields map[string]json.RawMessage) (pid int, startedA
 	if err := json.Unmarshal(raw, &wr); err != nil {
 		return 0, time.Time{}, fmt.Errorf("%w: field %q is present but not an object with pid/start_time: %v", ErrDecodeFailure, "runtime", err)
 	}
-	parsed, err := time.Parse(time.RFC3339, wr.StartTime)
+	if wr.StartTime == nil {
+		return 0, time.Time{}, fmt.Errorf("%w: missing field %q", ErrDecodeFailure, "runtime.start_time")
+	}
+	parsed, err := decodeProcessStartTime(*wr.StartTime)
 	if err != nil {
-		return 0, time.Time{}, fmt.Errorf("%w: field %q.start_time is not an RFC3339 timestamp: %v", ErrDecodeFailure, "runtime", err)
+		return 0, time.Time{}, err
 	}
 	return wr.PID, parsed, nil
+}
+
+func decodeProcessStartTime(start wireProcessStartTime) (time.Time, error) {
+	if start.Seconds == nil {
+		return time.Time{}, fmt.Errorf("%w: missing field %q", ErrDecodeFailure, "runtime.start_time.seconds")
+	}
+	if start.Microseconds == nil {
+		return time.Time{}, fmt.Errorf("%w: missing field %q", ErrDecodeFailure, "runtime.start_time.microseconds")
+	}
+	if *start.Seconds < 0 {
+		return time.Time{}, fmt.Errorf("%w: field %q is negative", ErrDecodeFailure, "runtime.start_time.seconds")
+	}
+	if *start.Microseconds < 0 {
+		return time.Time{}, fmt.Errorf("%w: field %q is negative", ErrDecodeFailure, "runtime.start_time.microseconds")
+	}
+	if *start.Microseconds > 999999 {
+		return time.Time{}, fmt.Errorf("%w: field %q exceeds 999999", ErrDecodeFailure, "runtime.start_time.microseconds")
+	}
+	return time.Unix(*start.Seconds, int64(*start.Microseconds)*1000), nil
 }
 
 // decodeLeases decodes the required `leases` array, returning its length.

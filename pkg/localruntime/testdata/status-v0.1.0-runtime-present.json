@@ -1,0 +1,232 @@
+{
+  "contract_version": 1,
+  "engine_identity": {
+    "name": "qwen-local-engine",
+    "key": "0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf"
+  },
+  "runtime_key": "0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf",
+  "profile_digest": "3931aaefd52d95635092f9f60f9973e06452c8cc5ee8165f696a1fb36b7e43a4",
+  "endpoint": "http://127.0.0.1:38171/v1",
+  "restart_count": 0,
+  "restart_not_before": null,
+  "quarantined_until": null,
+  "last_readiness_match": "2026-09-30T02:11:29.49227Z",
+  "manual_quarantine": false,
+  "half_open": false,
+  "failure_history": null,
+  "resources": {
+    "schema": "agents-infra.pi.shared-runtime.resource-status.v1",
+    "state": "unknown",
+    "source": "broker-config",
+    "loaded_model_memory": {
+      "state": "unknown",
+      "reason": "resource_pressure_disabled"
+    },
+    "inference": {
+      "state": "unknown",
+      "reason": "resource_pressure_disabled"
+    },
+    "admission": "not-enforced",
+    "reason": "resource_pressure_disabled",
+    "policy": {
+      "mode": "disabled",
+      "eviction_grace_seconds": 0
+    }
+  },
+  "sharing": {
+    "mode": "shared",
+    "configured": {
+      "mode": "shared",
+      "linger_seconds": 0,
+      "max_leases": 2,
+      "max_segment_bytes": 1048576,
+      "max_segments": 7,
+      "heartbeat_interval_seconds": 5,
+      "lease_stale_seconds": 30,
+      "broker_start_timeout_seconds": 420,
+      "restart_limit": 2,
+      "restart_initial_backoff_seconds": 1,
+      "restart_max_backoff_seconds": 5,
+      "stable_run_seconds": 10,
+      "quarantine_seconds": 30,
+      "resource_pressure_mode": "disabled"
+    },
+    "effective": {
+      "mode": "shared",
+      "linger_seconds": 0,
+      "max_leases": 2,
+      "max_segment_bytes": 1048576,
+      "max_segments": 7,
+      "heartbeat_interval_seconds": 5,
+      "lease_stale_seconds": 30,
+      "broker_start_timeout_seconds": 420,
+      "restart_limit": 2,
+      "restart_initial_backoff_seconds": 1,
+      "restart_max_backoff_seconds": 5,
+      "stable_run_seconds": 10,
+      "quarantine_seconds": 30,
+      "resource_pressure_mode": "disabled"
+    },
+    "fixed_by_broker_pid": 98857,
+    "fixed_by_broker_start_time": {
+      "seconds": 1790734284,
+      "microseconds": 753825
+    }
+  },
+  "broker": {
+    "state": "serving",
+    "stage": "composed",
+    "source": "attested",
+    "pid": 98857,
+    "start_time": {
+      "seconds": 1790734284,
+      "microseconds": 753825
+    },
+    "uptime_seconds": 20.00684
+  },
+  "runtime": {
+    "source": "attested",
+    "pid": 98861,
+    "pgid": 98861,
+    "start_time": {
+      "seconds": 1790734284,
+      "microseconds": 781482
+    },
+    "exec_path": "$HOME/.local/bin/llama-server",
+    "argv": [
+      "$HOME/.local/bin/llama-server",
+      "--model",
+      "$HOME/.cache/huggingface/hub/models--ggml-org--Qwen3.8-27B-GGUF/snapshots/0669b98607d47046c7c2b3f801011d54a08cfccf/Qwen3.8-27B-Q4_K_M.gguf",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "38171",
+      "--alias",
+      "Qwen3.8-27B-Q4_K_M",
+      "--jinja",
+      "--chat-template-file",
+      "$HOME/.local-engine/engine-project/qwen38-chat-template.jinja",
+      "--ctx-size",
+      "16384",
+      "--parallel",
+      "1",
+      "--n-gpu-layers",
+      "999",
+      "--n-predict",
+      "4096"
+    ],
+    "cwd": "$HOME/.local-engine/Library/Caches/curator-engines/shared-runtimes-v1/0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf/cwd",
+    "endpoint": "http://127.0.0.1:38171/v1"
+  },
+  "leases": [
+    {
+      "lease_id": "92964571d102c09a339d74bf6b4b3859",
+      "lease_lifetime": "client_process",
+      "engine_identity": {
+        "name": "qwen-local-engine",
+        "key": "0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf"
+      },
+      "client_key": "a4b5f1847239eabb6953d7b2ebe8fa59d5d36bfc0f4fba652225b231e19811a4",
+      "client_pid": 98852,
+      "client_start_time": {
+        "seconds": 1790734284,
+        "microseconds": 748042
+      },
+      "runtime_key": "0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf",
+      "profile_digest": "3931aaefd52d95635092f9f60f9973e06452c8cc5ee8165f696a1fb36b7e43a4",
+      "endpoint": "http://127.0.0.1:38171/v1",
+      "runtime_pid": 98861,
+      "granted_at": "2026-09-30T02:11:29.565042Z",
+      "last_heartbeat_at": "2026-09-30T02:11:44.584672Z",
+      "state": "held",
+      "age": 15195548000,
+      "heartbeat_age": 175918000
+    }
+  ],
+  "attestation": [
+    {
+      "gate": "peer_uid",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "peer_pid_liveness",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "broker_executable",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "broker_build",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "broker_start_time",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "protocol_version",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "runtime_key",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "engine_identity",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "profile_digest",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "endpoint",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "runtime_executable",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "runtime_process",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "runtime_liveness",
+      "outcome": "passed",
+      "source": "attested"
+    },
+    {
+      "gate": "model_discovery",
+      "outcome": "passed",
+      "source": "attested"
+    }
+  ],
+  "paths": {
+    "canonical_cache_root": "$HOME/.local-engine/Library/Caches",
+    "runtime_key": "0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf",
+    "root": "$HOME/.local-engine/Library/Caches/curator-engines/shared-runtimes-v1/0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf",
+    "broker_lock": "$HOME/.local-engine/Library/Caches/curator-engines/shared-runtimes-v1/0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf/broker.lock",
+    "broker_state": "$HOME/.local-engine/Library/Caches/curator-engines/shared-runtimes-v1/0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf/broker-state.json",
+    "restart_ledger": "$HOME/.local-engine/Library/Caches/curator-engines/shared-runtimes-v1/0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf/restart-ledger.json",
+    "broker_log": "$HOME/.local-engine/Library/Caches/curator-engines/shared-runtimes-v1/0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf/broker.log",
+    "runtime_log": "$HOME/.local-engine/Library/Caches/curator-engines/shared-runtimes-v1/0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf/runtime.log",
+    "leases_dir": "$HOME/.local-engine/Library/Caches/curator-engines/shared-runtimes-v1/0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf/leases",
+    "runtime_cwd": "$HOME/.local-engine/Library/Caches/curator-engines/shared-runtimes-v1/0d6ba9550a155f6d810beebce86874561c959df991f327f36e5ceddbf7b11bcf/cwd",
+    "rendezvous_dir": "$HOME/.local-engine/Library/Caches/curator-engines/r1/0d6ba9550a155f6d810beebce8687456",
+    "rendezvous_socket": "$HOME/.local-engine/Library/Caches/curator-engines/r1/0d6ba9550a155f6d810beebce8687456/b.sock"
+  }
+}

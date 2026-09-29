@@ -335,8 +335,14 @@ func restartExtensionAvailabilityFixture(t *testing.T, mutate func(map[string]an
 		"profile_digest":   "deadbeef",
 		"broker":           map[string]any{"state": "serving", "source": "attested"},
 		"sharing":          map[string]any{"configured": map[string]any{"max_leases": 3}},
-		"runtime":          map[string]any{"pid": 4242, "start_time": "2026-08-29T10:00:00Z"},
-		"leases":           []any{},
+		"runtime": map[string]any{
+			"pid": 4242,
+			"start_time": map[string]any{
+				"seconds":      time.Date(2026, 8, 29, 10, 0, 0, 0, time.UTC).Unix(),
+				"microseconds": int32(0),
+			},
+		},
+		"leases": []any{},
 	}
 	mutate(fixture)
 	data, err := json.Marshal(fixture)
