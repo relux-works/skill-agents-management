@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Declare `gpt-6.1-sol` in `openai` (codex-cli 0.159.0 catalog, 2026-09-29:
+  priority 1, "Latest workhorse model for coding and everyday work.") and move
+  the floating `sol` alias from `gpt-6-sol` to it. Effort: required
+  `low`..`max` (the catalog's `ultra` stays retired), recommended `medium`;
+  `sol` mirrors that axis, so it now recommends `medium` too. `gpt-6-sol` stays
+  a current row under its own id with its own `max` recommendation. Score 47,
+  interpolated between `gpt-6-astra` (48) and `gpt-6-sol` (46). Not
+  `Recommended`, not pi-native.
+
 - Declare `claude-sonnet-5-5` and its floating alias `sonnet` →
   `claude-sonnet-5-5` in `anthropic`, ahead of the board's registry. Read off
   Claude Code 2.1.284 on 2026-09-28 (2.1.281 answered

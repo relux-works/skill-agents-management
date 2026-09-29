@@ -887,7 +887,7 @@ NOT contain rather than for what it does.
 
 A model row may declare `AliasOf`: the identity it is a short spelling of.
 Six rows do today — `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
-`gpt-6-astra`, `sol` → `gpt-6-sol`, `luna` → `gpt-6-luna`, `opus` →
+`gpt-6-astra`, `sol` → `gpt-6.1-sol`, `luna` → `gpt-6-luna`, `opus` →
 `claude-opus-5-5` and `sonnet` → `claude-sonnet-5-5` — and all exist for the same reason: the alias is a name
 operators, configuration and spawn ceilings use and the provider does not have.
 

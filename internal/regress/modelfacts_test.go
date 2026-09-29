@@ -49,7 +49,7 @@ const boardModelCount = 45
 // pkg/vendorplugin/declaredhere_test.go.
 var declaredHereRows = []vendorplugin.ModelID{
 	"gpt-6-astra", "astra",
-	"gpt-6-sol", "sol",
+	"gpt-6-sol", "sol", "gpt-6.1-sol",
 	"gpt-6-luna", "luna",
 	"claude-opus-5-5", "opus",
 	"claude-sonnet-5-5", "sonnet",

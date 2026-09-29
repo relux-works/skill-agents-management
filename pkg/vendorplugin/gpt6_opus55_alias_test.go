@@ -22,7 +22,7 @@ import (
 // astraNonAliasProblems reads it so the "no other codex row is rewritten"
 // sweep holds these two to their targets instead of refusing them.
 var gpt6CodexAliases = map[vendorplugin.ModelID]vendorplugin.ModelID{
-	"sol":  "gpt-6-sol",
+	"sol":  "gpt-6.1-sol",
 	"luna": "gpt-6-luna",
 }
 
@@ -41,7 +41,10 @@ func TestTheGPT6SolAndLunaSpellingsLaunchAsTheirHeadsAtEveryProbedEffort(t *test
 		alias, identity vendorplugin.ModelID
 		efforts         []string
 	}{
-		{"sol", "gpt-6-sol", gpt6SolProbedEfforts},
+		// `sol` floats to gpt-6.1-sol since codex-cli 0.159.0 (2026-09-29);
+		// gpt-6-sol keeps launching under its own id.
+		{"sol", "gpt-6.1-sol", gpt6SolProbedEfforts},
+		{"gpt-6.1-sol", "gpt-6.1-sol", gpt6SolProbedEfforts},
 		{"gpt-6-sol", "gpt-6-sol", gpt6SolProbedEfforts},
 		{"luna", "gpt-6-luna", gpt6LunaProbedEfforts},
 		{"gpt-6-luna", "gpt-6-luna", gpt6LunaProbedEfforts},
@@ -178,5 +181,37 @@ func TestTheOpusAliasBindsTheDeclaredHeadNotAnotherOpusRow(t *testing.T) {
 		if plan.ModelIdentity.IsAlias() || !argvHasElement(plan.Argv, string(id)) {
 			t.Errorf("%q launched as %q (argv %v); a pinned opus row must not be rewritten", id, plan.ModelIdentity.Launched, plan.Argv)
 		}
+	}
+}
+
+// TestTheSolHeadRecommendsMedium pins the 2026-09-29 retarget: the floating
+// `sol` executes as gpt-6.1-sol and, as an alias must, mirrors its axis —
+// recommended medium — while the superseded gpt-6-sol keeps its own max.
+func TestTheSolHeadRecommendsMedium(t *testing.T) {
+	plugin, ok := vendorplugin.Default.Lookup("openai")
+	if !ok {
+		t.Fatal("openai vendor is not registered")
+	}
+	want := map[vendorplugin.ModelID]struct {
+		aliasOf     vendorplugin.ModelID
+		recommended string
+	}{
+		"sol":         {"gpt-6.1-sol", "medium"},
+		"gpt-6.1-sol": {"", "medium"},
+		"gpt-6-sol":   {"", "max"},
+	}
+	seen := 0
+	for _, m := range plugin.Models() {
+		w, named := want[m.ID]
+		if !named {
+			continue
+		}
+		seen++
+		if m.AliasOf != w.aliasOf || m.Effort.Recommended != w.recommended {
+			t.Errorf("%s: AliasOf=%q recommended=%q, want AliasOf=%q recommended=%q", m.ID, m.AliasOf, m.Effort.Recommended, w.aliasOf, w.recommended)
+		}
+	}
+	if seen != len(want) {
+		t.Fatalf("found %d of the %d sol rows", seen, len(want))
 	}
 }

@@ -148,6 +148,18 @@ const codexCatalogAliasProbe = "the OpenAI Codex CLI model catalog, read with `c
 // model_reasoning_effort=low` on that date and answered.
 const codexCatalogGPT6 = "the OpenAI Codex CLI model catalog, read with `codex debug models` (codex-cli 0.155.1, 2026-09-22)"
 
+// codexCatalogGPT61 is the FOURTH catalog read, the one gpt-6.1-sol and the
+// retargeted `sol` spelling rest on. At codex-cli 0.159.0 on 2026-09-29 the
+// catalog carries ten rows — gpt-6.1-sol (priority 1, "Latest workhorse model
+// for coding and everyday work."), gpt-6-astra (2), gpt-6-sol (3, now
+// "Previous generation workhorse model."), gpt-6-luna (4), gpt-reserve (4),
+// gpt-5.6-sol (5), gpt-5.6-terra (8), gpt-5.6-luna (9), gpt-5.5 (13) and
+// codex-auto-review (43). gpt-6.1-sol states low..ultra with default `low`,
+// context_window 272000 and max_context_window 872000. None of the ten slugs
+// is spelled `sol`. `codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium`
+// answered on that date. codex-cli 0.155.1 did not list the row at all.
+const codexCatalogGPT61 = "the OpenAI Codex CLI model catalog, read with `codex debug models` (codex-cli 0.159.0, 2026-09-29)"
+
 // rank builds a capability rank for a PORTED row: a bench-anchored score, the
 // bench claim behind it, and the source registry's own PolicyRank for the row.
 //
@@ -240,6 +252,27 @@ func astraEffort() vendorplugin.EffortDeclaration {
 // whose axes disagree, so the vocabulary is written once.
 func solEffort() vendorplugin.EffortDeclaration {
 	return effortRequired("max", []string{"low", "medium", "high", "xhigh", "max"})
+}
+
+// sol61Effort is the gpt-6.1-sol effort axis, shared by the identity row and the
+// `sol` alias that now points at it. The catalog lists low..ultra (ultra is
+// retired module-wide, so the axis stops at max) and defaults to `low`; the
+// RECOMMENDATION is medium, the operator's pick for this workhorse row. An
+// alias must mirror its target's axis including the recommendation, which is
+// why `sol` recommends medium from the moment it moved here.
+func sol61Effort() vendorplugin.EffortDeclaration {
+	return effortRequired("medium", []string{"low", "medium", "high", "xhigh", "max"})
+}
+
+// sol61Rank is gpt-6.1-sol's rank, handed to the identity and to `sol`.
+// Unmeasured, so INTERPOLATED: 47, strictly between gpt-6-astra's measured 48
+// and the gpt-6-sol it supersedes (46). The catalog lists it at priority 1,
+// ahead of astra, but calls it a workhorse and astra "Frontier intelligence";
+// placing it above astra would be a capability claim nothing measured.
+func sol61Rank(note string, evidence ...vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+	return declaredRankFrom(codexCatalogGPT61, 47,
+		vendorplugin.BughuntInterpolated("gpt-6-astra", "gpt-6-sol", "unmeasured; the newer sol generation, placed above the gpt-6-sol it supersedes and below the measured astra head"),
+		note, evidence...)
 }
 
 // lunaEffort is the gpt-6-luna effort axis, shared by the identity row and its
@@ -375,6 +408,15 @@ var models = []vendorplugin.Model{
 		Systems:             []agentic.SystemID{"codex"},
 	},
 	{
+		ID:                  "gpt-6.1-sol",
+		Description:         "The latest sol workhorse: everyday and hard agentic coding below astra; the row the floating `sol` spelling executes as",
+		Rank:                sol61Rank("the catalog presents this row at picker priority 1 and describes it as \"Latest workhorse model for coding and everyday work.\"; the source registry contains NO row for gpt-6.1-sol and this score is therefore not a ported one"),
+		Lifecycle:           vendorplugin.LifecycleCurrent,
+		Effort:              sol61Effort(),
+		ContextWindowTokens: 272_000,
+		Systems:             []agentic.SystemID{"codex"},
+	},
+	{
 		ID:          "gpt-6-sol",
 		Description: "The gpt-6 generation's everyday frontier coding model: the hard agentic work below astra, at a fraction of astra's cost per turn",
 		Rank:        solRank("the catalog presents this row at picker priority 2, between gpt-6-astra at 1 and gpt-5.6-sol at 4; the source registry contains NO row for gpt-6-sol and this score is therefore not a ported one"),
@@ -388,19 +430,19 @@ var models = []vendorplugin.Model{
 	{
 		// The floating short spelling of the current sol head, declared with
 		// AliasOf exactly as `astra` is: the vendor publishes no `sol` slug,
-		// so the launch must execute as gpt-6-sol and never put `sol` on argv.
-		// It moved off gpt-5.6-sol by DECLARATION when gpt-6-sol shipped;
-		// nothing derives it from a version number.
+		// so the launch must execute as the head and never put `sol` on argv.
+		// It moved gpt-5.6-sol -> gpt-6-sol -> gpt-6.1-sol, each time by
+		// DECLARATION; nothing derives it from a version number.
 		ID:          "sol",
-		Description: "The short spelling of the current sol head, for an invocation that names the model without its generation; it executes as gpt-6-sol",
-		Rank: solRank("this row is a short spelling of gpt-6-sol and carries that row's score; the catalog publishes no separate row for the spelling `sol`, so there is no second capability to score",
+		Description: "The short spelling of the current sol head, for an invocation that names the model without its generation; it executes as gpt-6.1-sol",
+		Rank: sol61Rank("this row is a short spelling of gpt-6.1-sol and carries that row's score; the catalog publishes no separate row for the spelling `sol`, so there is no second capability to score",
 			vendorplugin.RankEvidence{
-				Source:      codexCatalogGPT6,
-				Observation: "the catalog's nine rows are gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-reserve, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5 and codex-auto-review; NONE is spelled `sol`, which is why this row declares AliasOf instead of reaching argv under its own id",
+				Source:      codexCatalogGPT61,
+				Observation: "the catalog's ten rows are gpt-6.1-sol, gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-reserve, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5 and codex-auto-review; NONE is spelled `sol`, which is why this row declares AliasOf instead of reaching argv under its own id",
 			}),
-		AliasOf:             "gpt-6-sol",
+		AliasOf:             "gpt-6.1-sol",
 		Lifecycle:           vendorplugin.LifecycleCurrent,
-		Effort:              solEffort(),
+		Effort:              sol61Effort(),
 		ContextWindowTokens: 272_000,
 		Systems:             []agentic.SystemID{"codex"},
 	},

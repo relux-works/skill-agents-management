@@ -79,7 +79,7 @@ repository may spawn stays your configuration's decision.
 `Model.AliasOf` is an additive optional catalog fact: the model identity a row
 is a short spelling of, empty when the row is its own identity. Six rows carry
 it today: `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
-`gpt-6-astra`, `sol` → `gpt-6-sol`, `luna` → `gpt-6-luna`, `opus` →
+`gpt-6-astra`, `sol` → `gpt-6.1-sol`, `luna` → `gpt-6-luna`, `opus` →
 `claude-opus-5-5` and `sonnet` → `claude-sonnet-5-5`. A consumer does
 not act on it — `agentic.BuildPlan` substitutes it before argv, so a launch
 built through `BuildLaunch` already runs the identity — but a consumer that
