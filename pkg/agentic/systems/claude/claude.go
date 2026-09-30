@@ -165,8 +165,8 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 	return Args(req, mode)
 }
 
-// ChildEnv is the environment contract: strip the parent session marker, then
-// write the run context.
+// ChildEnv strips the parent session marker, writes the run context, and
+// disables prompt suggestions regardless of the caller environment.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
 	return childEnv(parent, req), nil
 }

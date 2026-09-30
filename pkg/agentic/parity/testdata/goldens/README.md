@@ -14,6 +14,17 @@ Each file records that provenance inside itself. A golden whose provenance is
 unknown cannot settle a dispute about what the source actually did — it becomes
 a number somebody once believed.
 
+## Deliberate contract updates
+
+Issue #46 adds `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false` to `env_added` in
+both Claude fixtures. These two entries are a deliberate plugin contract
+update, not a recapture of the historical source. The original capture metadata,
+parent environment and all other surface fields remain unchanged. The named
+`TestPromptSuggestionDisabledForExec`, `TestPromptSuggestionDisabledForDryRun`
+and `TestPromptSuggestionDisabledForInteractive` tests independently pin the
+literal and inherited-value override through `agentic.BuildPlan`; dry-run and
+interactive environments have no historical capture.
+
 ## Why the source captures them and this repository only compares
 
 A golden captured by code that lives next to the port proves only that the new

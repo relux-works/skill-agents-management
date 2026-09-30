@@ -62,6 +62,7 @@
       "--dangerously-skip-permissions"
     ],
     "env_added": [
+      "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false",
       "TASK_BOARD_RUN_ID=RUN-parity-claude",
       "TASK_BOARD_TASK_ID=TASK-parity-claude"
     ],

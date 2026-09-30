@@ -383,6 +383,11 @@ frozen RUNTIME id `claude`; `parity_test.go` maps between them in one place.
   credentials their pointers name. That is the source's `BUG-260819-3qn52o` seen
   from the other side; it is pinned by a test rather than left implicit. PATH is
   not sanitized either, which no golden can see, so it has its own test.
+  Every launch mode also sets `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`,
+  replacing any inherited value. `TestPromptSuggestionDisabledForExec`,
+  `TestPromptSuggestionDisabledForDryRun` and
+  `TestPromptSuggestionDisabledForInteractive` pin that override through
+  `BuildPlan`.
 - **Binary resolution is plain `PATH`.** No managed package, no shim to unwrap,
   and none of codex's resolution machinery imported.
 - **The budget ceiling is claude's alone.** `--max-budget-usd` is the one adapter

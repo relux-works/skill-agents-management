@@ -93,8 +93,8 @@ func filterRuntimeEnv(environ []string) []string {
 	return env
 }
 
-// childEnv is the whole environment contract in one expression: strip what the
-// harness must not inherit, then write the caller's run context over the result.
+// childEnv strips what the harness must not inherit, writes the caller's run
+// context, and disables prompt suggestions for every launch mode.
 //
 // The order — filter, then inject — is the source's. No key in runtimeEnvKeys
 // is also a run-context key, so the two orders currently produce identical
@@ -105,10 +105,9 @@ func filterRuntimeEnv(environ []string) []string {
 // collision arrives as a failing test naming this comment rather than as a
 // child that lost its run id.
 //
-// Nothing claude-specific is injected. Codex writes its resolved service tier;
-// claude's adapter declares SupportsServiceTier false and the source writes no
-// claude-only variable at all, so this is agentic.WithRunContext and nothing
-// else — and the goldens' env_added carries exactly the run-context keys.
+// Prompt suggestions are a plugin-owned literal: the override replaces every
+// inherited entry, including true, rather than using a caller-selected default.
 func childEnv(parent []string, req agentic.LaunchRequest) []string {
-	return agentic.WithRunContext(filterRuntimeEnv(parent), req)
+	env := agentic.WithRunContext(filterRuntimeEnv(parent), req)
+	return agentic.SetEnvValue(env, "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION", "false")
 }

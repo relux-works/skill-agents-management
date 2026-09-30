@@ -66,6 +66,7 @@
       "/goal Own the latest active revision of board goal **GOAL-260717-CLD001** for run **RUN-parity-claude-goal** through its board-defined success predicate. Before nested spawn, at every directive checkpoint, and before claiming success, run `task-board spawn goal RUN-parity-claude-goal`; treat the returned objective, resolved scope, and revision as authoritative and surface them with the required board acceptance evidence. A stale revision, cancelled/superseded goal, or missing scoped acceptance evidence is not success."
     ],
     "env_added": [
+      "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false",
       "TASK_BOARD_DELIVERY_GOAL_ID=GOAL-260717-CLD001",
       "TASK_BOARD_RUN_ID=RUN-parity-claude-goal",
       "TASK_BOARD_TASK_ID=TASK-parity-claude-goal"

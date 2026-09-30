@@ -87,11 +87,12 @@ func TestTheInteractiveArgvIsModelAndEffortOnly(t *testing.T) {
 	}
 
 	// The environment contract is mode-independent: the parent session marker
-	// is stripped and the run context is written, exactly as in exec mode.
+	// is stripped, the run context is written and prompt suggestions are disabled.
 	wantEnv := []string{
 		"HOME=/home/agent", "TERM=xterm-256color", "PATH=" + binDir,
 		agentic.EnvRunID + "=" + parityPromptRunID,
 		agentic.EnvTaskID + "=" + parityPromptTaskID,
+		"CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false",
 	}
 	if !reflect.DeepEqual(plan.Env, wantEnv) {
 		t.Errorf("Env = %#v, want %#v", plan.Env, wantEnv)

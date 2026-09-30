@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Disable Claude Code prompt suggestions in every launch mode by setting
+  `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`, overriding inherited values (#46).
+
 - Decode the released curator-engines v0.1.0 runtime.start_time object as
   Unix seconds and microseconds, refusing missing, non-integer, or out-of-range
   components. Pin a runtime-present status payload captured from the producer.

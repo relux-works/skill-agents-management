@@ -131,7 +131,7 @@ var parityProbeRecipes = []probeRecipe{
 					"--dangerously-skip-permissions",
 				},
 				stripKeys: []string{"CLAUDECODE", "TASK_BOARD_BOARD_DIR", "TASK_BOARD_DELIVERY_GOAL_ID", "TASK_BOARD_RUN_ID", "TASK_BOARD_TASK_ID"},
-				inject:    []string{"TASK_BOARD_RUN_ID=RUN-parity-claude", "TASK_BOARD_TASK_ID=TASK-parity-claude"},
+				inject:    []string{"TASK_BOARD_RUN_ID=RUN-parity-claude", "TASK_BOARD_TASK_ID=TASK-parity-claude", "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false"},
 				stdin:     agentic.StdinPayload{Attached: true, Bytes: []byte("claude prompt-mode body")},
 			}
 			return sys, req
