@@ -115,6 +115,11 @@ type SpawnRequest struct {
 	ServiceTier string
 	Composition agentic.Composition
 
+	// Context and ContextDescriptors carry caller-owned launch context using
+	// agentic's types. BuildLaunch snapshots them before vendor dispatch.
+	Context            *agentic.CuratorContext
+	ContextDescriptors []agentic.ContextDescriptor
+
 	// PermissionMode is the interactive permission posture admitted by the
 	// agentic system plugin. The vendor layer carries it without interpreting
 	// provider policy.
@@ -188,6 +193,8 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	// and the agentic plugin see them.
 	req.NativeArgs = append([]string(nil), req.NativeArgs...)
 	req.LocalProvider = cloneLocalProvider(req.LocalProvider)
+	req.Context = cloneCuratorContext(req.Context)
+	req.ContextDescriptors = cloneContextDescriptors(req.ContextDescriptors)
 	binding, err := resolveLaunchBinding(r, req.Runtime)
 	if err != nil {
 		return agentic.Plan{}, err
@@ -237,6 +244,8 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 		vendorRequest := req
 		vendorRequest.NativeArgs = append([]string(nil), req.NativeArgs...)
 		vendorRequest.LocalProvider = cloneLocalProvider(req.LocalProvider)
+		vendorRequest.Context = cloneCuratorContext(req.Context)
+		vendorRequest.ContextDescriptors = cloneContextDescriptors(req.ContextDescriptors)
 		launch, err = binding.Vendor.Spawn(SpawnContext{
 			Runtime: runtime,
 			Model:   model,
@@ -487,6 +496,12 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 	}
 	if !reflect.DeepEqual(launch.LocalProvider, req.LocalProvider) {
 		return fmt.Errorf("%w: vendor %s changed the caller's local provider selection", ErrVendorContract, runtime.VendorID)
+	}
+	if !reflect.DeepEqual(launch.Context, req.Context) {
+		return fmt.Errorf("%w: vendor %s changed the caller's Curator context", ErrVendorContract, runtime.VendorID)
+	}
+	if !reflect.DeepEqual(launch.ContextDescriptors, req.ContextDescriptors) {
+		return fmt.Errorf("%w: vendor %s changed the caller's context descriptors", ErrVendorContract, runtime.VendorID)
 	}
 	if req.LocalProvider != nil && launch.Home != req.Home {
 		return fmt.Errorf("%w: vendor %s redirected the caller's local provider to a different Codex home", ErrVendorContract, runtime.VendorID)

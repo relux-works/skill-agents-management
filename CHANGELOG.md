@@ -167,6 +167,11 @@
 - Note that `muse` 1.3.0 accepts the `max` effort word the 1.0.2 CLI refused
   harness-side; the verbatim effort transport is unchanged.
 
+- Carry Curator fragments and semantic context descriptors through vendor
+  launches without changing their agentic types or typed refusals. Snapshot
+  nested context at entry and isolate vendor callbacks, with fidelity checks
+  against caller-selected context. Nil context preserves existing plans.
+
 ## v0.5.24
 
 - Publish typed launch-context descriptors for MCP servers, additional

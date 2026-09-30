@@ -1208,6 +1208,13 @@ None of these commands keeps a list of its own. A private one would be a
 second binding for the same fact, which is exactly what the single-source
 guard exists to prevent.
 
+`vendorplugin.SpawnRequest` also carries `Context *agentic.CuratorContext`
+and `ContextDescriptors []agentic.ContextDescriptor`. `BuildLaunch` snapshots
+their nested values before vendor callbacks and refuses vendor changes. Curator
+validation errors retain their `errors.Is` / `errors.As` identity, and admitted
+plans expose the full fragment through `CuratorContextProvenanceSnapshot()`.
+Nil carriers preserve the existing launch plans.
+
 ### Observed inference-engine contract
 
 `pkg/inferenceengine` exposes the static, no-runtime-contact schemas used to
@@ -1303,3 +1310,7 @@ concluding that a missing golden is permission.
 | refusal-matrix harness | copy the current tree, narrow each raw plugin, typed plan and vendor-registration error class independently, and require its named production-entry negative to fail with exit `1` | `python3 .scripts/verify-refusal-matrix.py` | `.temp/TASK-260830-1jpse1/mutants/{summary.tsv,*.log}` |
 | launch-context mutant harness | walk the complete non-test Go source tree under `pkg/agentic/`, require every refusal-bearing file and every curator site to have named coverage or one-site out-of-contract rationale, derive validator class members from their source AST conditions, then check each named BuildPlan test against its narrowing mutant | `GOWORK=off go run -mod=mod ./tools/launchcontext-mutants -table-out .temp/launch-context-mutants/mutation-table.md`; use `-start N -limit M` for bounded sequential chunks | terminal output and `.temp/launch-context-mutants/mutation-table.md`; isolated mutant copy under `.temp/launch-context-mutants/` is removed after the run |
 | Go launch-context tests | exercise the typed fragment and refusal contract through `agentic.BuildPlan` with the Claude and Codex plugins | `env -u TASK_BOARD_DIR go test -mod=mod ./pkg/agentic ./pkg/agentic/systems/claude ./pkg/agentic/systems/codex -count=1` | terminal output; local task logs under `.temp/` |
+
+The vendor context contract tests include an AST-generated inventory of every
+`LaunchRequest` field and its `SpawnRequest` path or declared vendor owner. Run
+`env -u TASK_BOARD_DIR go test -mod=mod ./pkg/vendorplugin -run 'Test(SpawnRequestLaunchContextASTInventory|BuildLaunchCurator|BuildLaunchSemanticEntry|BuildLaunchContextFidelity|BuildLaunchNilContextPlanEquality|BuildLaunchWithEnvironment(Curator|SemanticEntry|ContextFidelity|NilContext))' -count=1 -v`; save evidence under `.temp/`.
