@@ -317,6 +317,45 @@ func runOverlayMutant(t *testing.T, id, file string, splices [][2]string, runPat
 	return stdout + stderr, exit
 }
 
+// TestChangelogChildElapsedStartMutantKilled makes setup skew deterministic.
+// Both real timeout witnesses must pass with 100ms of setup after the deadline
+// is armed. Moving only the measurement start past that setup must fail their
+// elapsed lower bounds; the deadline and typed timeout remain intact.
+func TestChangelogChildElapsedStartMutantKilled(t *testing.T) {
+	witnesses := []string{
+		"TestChangelogChildReportsNamedTimeout",
+		"TestChangelogChildForeverLoopReportsNamedTimeout",
+	}
+	pattern := "^(" + strings.Join(witnesses, "|") + ")$"
+	file := filepath.Join(repoRoot(t), "internal", "changelog", "bounded_test.go")
+	const run = "\trunErr := runChangelogRegistered(cmd)\n"
+	const delayedRun = "\ttime.Sleep(100 * time.Millisecond)\n" + run
+	control, exit := runOverlayMutant(t, "elapsed-setup-delay-control", file,
+		[][2]string{{run, delayedRun}}, pattern)
+	if exit != 0 {
+		t.Fatalf("setup-delay control exit %d, want 0:\n%s", exit, control)
+	}
+	for _, witness := range witnesses {
+		if !strings.Contains(control, "--- PASS: "+witness) {
+			t.Fatalf("setup-delay control lacks named PASS for %s:\n%s", witness, control)
+		}
+	}
+	mutant, exit := runOverlayMutant(t, "elapsed-start-after-setup", file,
+		[][2]string{
+			{"\tstart := time.Now()\n", ""},
+			{run, "\ttime.Sleep(100 * time.Millisecond)\n\tstart := time.Now()\n" + run},
+		}, pattern)
+	if exit != 1 || !strings.Contains(mutant, "timeout elapsed") {
+		t.Fatalf("elapsed-start-after-setup lacks elapsed-bound failure (exit %d, want 1):\n%s", exit, mutant)
+	}
+	for _, witness := range witnesses {
+		if !strings.Contains(mutant, "--- FAIL: "+witness) {
+			t.Fatalf("elapsed-start-after-setup mutant SURVIVED %s (exit %d):\n%s", witness, exit, mutant)
+		}
+		t.Logf("elapsed-start-after-setup mutant killed by %s (exit %d, expected-red); setup-delay control exit 0", witness, exit)
+	}
+}
+
 func runDeadlineMutant(t *testing.T, id, replace, witness string) {
 	t.Helper()
 	file := filepath.Join(repoRoot(t), "internal", "changelog", "bounded_test.go")

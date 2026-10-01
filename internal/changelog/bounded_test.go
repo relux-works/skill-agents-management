@@ -362,6 +362,10 @@ func runChangelogOutcome(dir string, env []string, timeout time.Duration, name s
 	env = changelogSetEnv(env, changelogAttestationEnv, attestation)
 	encoded, _ := json.Marshal(paths)
 	env = changelogSetEnv(env, changelogAttestationAncestorsEnv, string(encoded))
+	// Measure from before arming the deadline, including command setup. Starting
+	// at Run would omit setup time and could report elapsed < timeout even when
+	// the context expired. Queueing remains excluded by the acquire above.
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -398,7 +402,6 @@ func runChangelogOutcome(dir string, env []string, timeout time.Duration, name s
 		return nil
 	}
 	cmd.WaitDelay = changelogChildWaitDelay
-	start := time.Now()
 	runErr := runChangelogRegistered(cmd)
 	// The group cleanup runs after EVERY return, not only in Cancel: Run
 	// can return before the context deadline (a WaitDelay expiry, an early

@@ -1,0 +1,1 @@
+- Measure changelog test child elapsed time before arming its deadline, so timeout assertions include command setup and cannot undershoot the configured bound; add a deterministic setup-skew regression.
