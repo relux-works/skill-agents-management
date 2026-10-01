@@ -85,7 +85,7 @@ func TestReleaseHandlesInvalidLocalDiffAlgorithm(t *testing.T) {
 			// fixed -c overrides. Exit 128 is expected-red, not evidence of cleanliness.
 			// The raw reads run bounded like every other test child.
 			for _, args := range [][]string{{"status", "--porcelain=v1"}, {"log", "--name-only"}} {
-				stdout, stderr, exit, err := runChangelogChild(dir, fixtureEnv(t), changelogChildTimeout(), "git", args...)
+				stdout, stderr, exit, err := runChangelogChild(dir, fixtureEnv(t), 0, "git", args...)
 				if err != nil {
 					t.Fatalf("raw git %v: %v", args, err)
 				}

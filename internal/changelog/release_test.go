@@ -82,7 +82,7 @@ func scriptPath(t *testing.T) string {
 // deadline expiry is a named timeout failure, never an exit code.
 func runScript(t *testing.T, dir string, args ...string) (stdout, stderr string, exit int) {
 	t.Helper()
-	stdout, stderr, exit, err := runChangelogChild(dir, fixtureEnv(t), changelogChildTimeout(), scriptPath(t), args...)
+	stdout, stderr, exit, err := runChangelogChild(dir, fixtureEnv(t), 0, scriptPath(t), args...)
 	if err != nil {
 		t.Fatalf("running changelog-release.sh %v in %s: %v", args, dir, err)
 	}
@@ -94,7 +94,7 @@ func runScript(t *testing.T, dir string, args ...string) (stdout, stderr string,
 // and exit code. The run is bounded like runScript.
 func runScriptEnv(t *testing.T, dir string, env []string, args ...string) (stdout, stderr string, exit int) {
 	t.Helper()
-	stdout, stderr, exit, err := runChangelogChild(dir, append(fixtureEnv(t), env...), changelogChildTimeout(), scriptPath(t), args...)
+	stdout, stderr, exit, err := runChangelogChild(dir, append(fixtureEnv(t), env...), 0, scriptPath(t), args...)
 	if err != nil {
 		t.Fatalf("running changelog-release.sh %v in %s: %v", args, dir, err)
 	}
@@ -109,7 +109,7 @@ func runGit(t *testing.T, dir string, args ...string) string {
 	// maintenance.auto=false and gc.auto=0 skip the fork+stat storm of
 	// post-commit auto-maintenance in these ephemeral fixtures; no test
 	// observes maintenance, and production reads never trigger it.
-	stdout, stderr, exit, err := runChangelogChild(dir, fixtureEnv(t), changelogChildTimeout(),
+	stdout, stderr, exit, err := runChangelogChild(dir, fixtureEnv(t), 0,
 		"git", append([]string{"-c", "diff.algorithm=myers", "-c", "color.ui=never",
 			"-c", "maintenance.auto=false", "-c", "gc.auto=0", "--no-pager"}, args...)...)
 	if err != nil {

@@ -27,29 +27,38 @@ import (
 // per-stream capture cap keeping the head and tail of an over-long stream.
 
 const (
-	// defaultChangelogChildTimeout bounds one child run. A script or git
-	// invocation finishes in seconds; a mutant child test binary finishes in
-	// well under a minute. Anything slower is a hung child, not a slow one.
+	// Scripts, git and already-built test binaries keep the short bound.
 	defaultChangelogChildTimeout = 120 * time.Second
+	// Go-tool children may compile before running, including overlay mutants.
+	// Allow cold compilation on slow hosts without relaxing other children.
+	defaultChangelogCompileChildTimeout = 10 * time.Minute
 	// changelogChildWaitDelay bounds Wait after the child exits while a pipe
 	// is still held open. The process-group kill closes pipes promptly in the
 	// normal case; this only backstops a descendant that escaped it.
 	changelogChildWaitDelay = 2 * time.Second
-	// changelogChildTimeoutEnv overrides the per-run deadline for slow hosts.
+	// changelogChildTimeoutEnv overrides both command-class defaults.
 	// It carries a Go duration ("90s", "3m"). Empty, unparsable or
-	// non-positive values fall back to the default.
+	// non-positive values fall back to the command-class default. A positive
+	// explicit per-call timeout takes precedence over this override.
 	changelogChildTimeoutEnv = "CHANGELOG_TEST_CHILD_TIMEOUT"
 )
 
 // changelogChildTimeout resolves the per-run child deadline.
-func changelogChildTimeout() time.Duration {
+func changelogChildTimeout(name string) time.Duration {
+	timeout := defaultChangelogChildTimeout
+	// Classify the executable, including absolute Go-tool paths. Conservatively
+	// allow compilation for every direct Go-tool invocation; do not guess from
+	// shell text or classify an already-built test binary as a compiler.
+	if base := filepath.Base(name); base == "go" || base == "go.exe" {
+		timeout = defaultChangelogCompileChildTimeout
+	}
 	raw := strings.TrimSpace(os.Getenv(changelogChildTimeoutEnv))
 	if raw == "" {
-		return defaultChangelogChildTimeout
+		return timeout
 	}
 	d, err := time.ParseDuration(raw)
 	if err != nil || d <= 0 {
-		return defaultChangelogChildTimeout
+		return timeout
 	}
 	return d
 }
@@ -295,7 +304,7 @@ func asChangelogTimeout(err error) (*changelogTimeoutError, bool) {
 // captured separately. A non-zero exit is an ordinary result (returned with
 // a nil error); a deadline expiry returns a *changelogTimeoutError, never
 // an exit code; a failure to launch returns the launch error. A
-// non-positive timeout selects the default.
+// non-positive timeout selects the environment override or command-class default.
 func runChangelogChild(dir string, env []string, timeout time.Duration, name string, args ...string) (string, string, int, error) {
 	result := runChangelogOutcome(dir, env, timeout, name, args...)
 	return result.stdout, result.stderr, result.exit, result.err
@@ -303,7 +312,7 @@ func runChangelogChild(dir string, env []string, timeout time.Duration, name str
 
 func runChangelogOutcome(dir string, env []string, timeout time.Duration, name string, args ...string) changelogChildOutcome {
 	if timeout <= 0 {
-		timeout = defaultChangelogChildTimeout
+		timeout = changelogChildTimeout(name)
 	}
 	// The package-wide admission cap: however many test goroutines
 	// t.Parallel fans out, at most the cap launches at once. The acquire
@@ -412,6 +421,7 @@ func runChangelogOutcome(dir string, env []string, timeout time.Duration, name s
 	elapsed := time.Since(start)
 	result := changelogChildOutcome{
 		stdout: stdout.String(), stderr: stderr.String(), exit: -1,
+		timeout:   timeout,
 		truncated: changelogCaptureTruncated(stdout) || changelogCaptureTruncated(stderr),
 	}
 	result.out = result.stdout + result.stderr

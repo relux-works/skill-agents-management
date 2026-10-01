@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestChangelogNarrowingMutants runs real behavioral tests in child test
@@ -25,6 +26,7 @@ type changelogChildOutcome struct {
 	stdout, stderr                string
 	exit                          int
 	err                           error
+	timeout                       time.Duration // selected per-run bound, excluding queue time
 	attested, timedOut, truncated bool
 }
 
@@ -193,7 +195,7 @@ func TestChangelogNarrowingMutants(t *testing.T) {
 			if err := os.WriteFile(script, []byte(strings.Replace(original, m.from, m.to, 1)), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if stdout, stderr, exit, err := runChangelogChild("", fixtureEnv(t), changelogChildTimeout(), "bash", "-n", script); err != nil || exit != 0 {
+			if stdout, stderr, exit, err := runChangelogChild("", fixtureEnv(t), 0, "bash", "-n", script); err != nil || exit != 0 {
 				t.Fatalf("invalid mutant, not a kill: %v exit %d\nstdout: %s\nstderr: %s", err, exit, stdout, stderr)
 			}
 			// Every child runs under the per-run deadline in its registered
@@ -214,7 +216,7 @@ func TestChangelogNarrowingMutants(t *testing.T) {
 					pattern = "^" + parent + "$/^" + sub + "$"
 				}
 				return runChangelogOutcome("",
-					env, changelogChildTimeout(),
+					env, 0,
 					executable, "-test.count=1", "-test.v", "-test.run="+pattern)
 			}
 			childEnv := append(fixtureEnv(t), "CHANGELOG_TEST_SCRIPT="+script)
@@ -249,7 +251,7 @@ func TestChangelogClassifierRefusesNestedTimeout(t *testing.T) {
 	const control = "TestCheckAcceptsValidFragments"
 	run := func(env []string, name string) changelogChildOutcome {
 		return runChangelogOutcome("",
-			env, changelogChildTimeout(),
+			env, 0,
 			executable, "-test.count=1", "-test.v", "-test.run=^"+name+"$")
 	}
 	witnessEnv := append(fixtureEnv(t), "CHANGELOG_TEST_CHILD_TIMEOUT=1ns")

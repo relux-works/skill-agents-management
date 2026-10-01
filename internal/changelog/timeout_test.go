@@ -151,8 +151,8 @@ func TestChangelogChildTimeoutEnvOverride(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv(changelogChildTimeoutEnv, c.value)
-			if got := changelogChildTimeout(); got != c.want {
-				t.Errorf("changelogChildTimeout() with %s=%q = %s, want %s",
+			if got := changelogChildTimeout("sh"); got != c.want {
+				t.Errorf("changelogChildTimeout(sh) with %s=%q = %s, want %s",
 					changelogChildTimeoutEnv, c.value, got, c.want)
 			}
 		})
@@ -160,7 +160,7 @@ func TestChangelogChildTimeoutEnvOverride(t *testing.T) {
 	t.Run("env-var-bounds-child", func(t *testing.T) {
 		t.Setenv(changelogChildTimeoutEnv, "100ms")
 		start := time.Now()
-		_, _, _, err := runChangelogChild(t.TempDir(), fixtureEnv(t), changelogChildTimeout(),
+		_, _, _, err := runChangelogChild(t.TempDir(), fixtureEnv(t), 0,
 			"sh", "-c", "sleep 30")
 		if _, ok := asChangelogTimeout(err); !ok {
 			t.Fatalf("100ms env bound: want *changelogTimeoutError, got %v", err)
@@ -169,6 +169,90 @@ func TestChangelogChildTimeoutEnvOverride(t *testing.T) {
 			t.Errorf("100ms env bound took %s", elapsed.Round(time.Millisecond))
 		}
 	})
+}
+
+// Drive the shared launch site, not only the resolver: the recorded bound is
+// the duration supplied to context.WithTimeout by runChangelogOutcome.
+func TestChangelogChildTimeoutClassification(t *testing.T) {
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"go.mod":          "module compile-fixture\n\ngo 1.25.5\n",
+		"fixture_test.go": "package fixture\n",
+		"overlay.json":    "{\"Replace\":{}}\n",
+		"script.sh":       "true\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	commands := []struct {
+		id, name string
+		args     []string
+		want     time.Duration
+	}{
+		{"go-test", "go", []string{"test", "-count=1", "."}, 10 * time.Minute},
+		{"go-test-overlay", "go", []string{"test", "-count=1", "-overlay", "overlay.json", "."}, 10 * time.Minute},
+		{"absolute-go", goPath, []string{"version"}, 10 * time.Minute},
+		{"script", "sh", []string{"script.sh"}, 2 * time.Minute},
+		{"syntax", "bash", []string{"-n", "script.sh"}, 2 * time.Minute},
+		{"git", "git", []string{"--version"}, 2 * time.Minute},
+		{"compiled-test", testExecutable(t), []string{"-test.run=^$"}, 2 * time.Minute},
+	}
+	for _, command := range commands {
+		t.Run(command.id, func(t *testing.T) {
+			t.Setenv(changelogChildTimeoutEnv, "")
+			result := runChangelogOutcome(dir, os.Environ(), 0, command.name, command.args...)
+			if result.err != nil || result.exit != 0 {
+				t.Fatalf("launch failed: exit %d err %v\n%s", result.exit, result.err, result.out)
+			}
+			if result.timeout != command.want {
+				t.Fatalf("selected timeout %s, want %s", result.timeout, command.want)
+			}
+		})
+	}
+	for _, name := range []string{goPath, "sh"} {
+		for _, raw := range []string{"31s", " 31s ", "soon", "0", "-5s"} {
+			t.Run(filepath.Base(name)+"/override="+raw, func(t *testing.T) {
+				t.Setenv(changelogChildTimeoutEnv, raw)
+				args := []string{"version"}
+				want := 10 * time.Minute
+				if name == "sh" {
+					args = []string{"-c", "true"}
+					want = 2 * time.Minute
+				}
+				if strings.TrimSpace(raw) == "31s" {
+					want = 31 * time.Second
+				}
+				result := runChangelogOutcome(dir, os.Environ(), -1, name, args...)
+				if result.err != nil || result.exit != 0 || result.timeout != want {
+					t.Fatalf("override %q: exit %d err %v bound %s, want %s\n%s", raw, result.exit, result.err, result.timeout, want, result.out)
+				}
+			})
+		}
+	}
+	t.Run("explicit-timeout-wins", func(t *testing.T) {
+		t.Setenv(changelogChildTimeoutEnv, "1ns")
+		result := runChangelogOutcome(dir, os.Environ(), 37*time.Second, goPath, "version")
+		if result.err != nil || result.exit != 0 || result.timeout != 37*time.Second {
+			t.Fatalf("explicit timeout: exit %d err %v bound %s\n%s", result.exit, result.err, result.timeout, result.out)
+		}
+	})
+}
+
+func TestChangelogCompileChildDefaultMutantKilled(t *testing.T) {
+	const witness = "TestChangelogChildTimeoutClassification"
+	file := filepath.Join(repoRoot(t), "internal", "changelog", "bounded_test.go")
+	out, exit := runOverlayMutant(t, "compile-children-short-again", file,
+		[][2]string{{"timeout = defaultChangelogCompileChildTimeout", "timeout = defaultChangelogChildTimeout"}}, "^"+witness+"$")
+	if exit != 1 || !strings.Contains(out, "--- FAIL: "+witness) ||
+		!strings.Contains(out, "selected timeout 2m0s, want 10m0s") {
+		t.Fatalf("compile-children-short-again mutant SURVIVED (exit %d):\n%s", exit, out)
+	}
+	t.Logf("compile-children-short-again killed by %s (exit %d, expected-red)", witness, exit)
 }
 
 // TestFixtureEnvIsolatesGit pins the non-interactive fixture contract: hostile
@@ -309,7 +393,7 @@ func runOverlayMutant(t *testing.T, id, file string, splices [][2]string, runPat
 	// The mutant run itself is a bounded child (deadline, process-group kill,
 	// WaitDelay); it inherits the real environment so the go toolchain keeps
 	// its cache, home and module configuration.
-	stdout, stderr, exit, err := runChangelogChild(root, os.Environ(), changelogChildTimeout(),
+	stdout, stderr, exit, err := runChangelogChild(root, os.Environ(), 0,
 		"go", "test", "-mod=mod", "-count=1", "-v", "-overlay", overlayPath, "-run", runPattern, "./internal/changelog")
 	if err != nil {
 		t.Fatalf("%s mutant: mutant run failed to complete: %v", id, err)

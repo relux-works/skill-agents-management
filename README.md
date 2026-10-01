@@ -1166,6 +1166,17 @@ Release mode refuses an invalid version or date, a duplicate version, a dirty
 tree, or an empty `changelog.d/` (unless `--allow-empty`); it never commits or
 tags — the tagger reviews the diff, commits, and cuts the tag.
 
+Changelog tests classify children at the shared launch site: direct Go-tool
+invocations (including `go test -overlay` and absolute Go-tool paths) get a
+10-minute default to allow cold compilation; scripts, syntax checks, Git and
+already-built test binaries keep the 2-minute default. A positive explicit
+per-call timeout takes precedence, then a valid positive Go duration in
+`CHANGELOG_TEST_CHILD_TIMEOUT`, then the command-class default. Empty, invalid
+or non-positive environment values fall back to that class default. Go-tool
+classification is conservative for all direct invocations; shell wrappers that
+invoke Go internally retain the script default. The shared default concurrency
+cap remains two children, with bounded capture and process-tree cleanup.
+
 ### The regression net
 
 `make regress` runs `internal/regress`, which is not more unit tests. Each
