@@ -403,7 +403,10 @@ just above are each owned by the repository named next to them.
 
 ### 5.1 Observed inference-engine contract candidate
 
-The module carries `observed-process/v2`: 17 measured facts, closed
+The module carries `observed-process/v2` and additive `observed-process/v3`
+([readings contract](observed-process-contract.md)). V3 selects catalog-shaped
+v2 stress and supervision policies; v2 and all its v1 value contracts retain
+their existing behavior. Both versions carry 17 measured facts, closed
 fact-specific schemas, three typed outcomes, and distinct refusing causes for
 read failure, malformed data, and unsupported observations. Trusted assembly
 registers a public `EngineObservationAdapter` only through

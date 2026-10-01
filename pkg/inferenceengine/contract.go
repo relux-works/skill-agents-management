@@ -16,6 +16,10 @@ import (
 )
 
 const ContractVersion = "observed-process/v2"
+
+// ContractVersionV3 selects catalog-shaped profile policies; all other facts
+// retain their observed-process/v2 value contracts.
+const ContractVersionV3 = "observed-process/v3"
 const ExecutionOwner = "curator-engines"
 
 type EngineKind string
@@ -242,11 +246,21 @@ type Resolution struct {
 // It is intentionally not the production authorization entry: callers can
 // construct Reading values, while only vendorplugin.BuildLaunch owns the
 // source whose readings reach this validator before launch effects.
-func ValidateReadings(id plugin.ID, kind EngineKind, readings []Reading) (Resolution, error) {
+func ValidateReadings(id plugin.ID, kind EngineKind, readings []Reading, versions ...string) (Resolution, error) {
+	version := ContractVersion
+	if len(versions) > 1 {
+		return Resolution{}, fmt.Errorf("%w: specify at most one readings version", ErrContractInvalid)
+	}
+	if len(versions) == 1 {
+		version = versions[0]
+	}
+	if version != ContractVersion && version != ContractVersionV3 {
+		return Resolution{}, fmt.Errorf("%w: unsupported readings version %q", ErrContractInvalid, version)
+	}
 	if kind != EngineKindNativeTransformer && kind != EngineKindGGUFServer {
 		return Resolution{}, fmt.Errorf("%w: %q has unsupported implementation kind %q", ErrEngineContractMissing, id, kind)
 	}
-	contract, err := validateContract(contractFor(kind))
+	contract, err := validateContract(contractForVersion(kind, version))
 	if err != nil {
 		return Resolution{}, err
 	}
@@ -379,12 +393,12 @@ func contractFor(kind EngineKind) Contract {
 	return Contract{ContractVersion, rules, ModelHarnessExpansion{FactLocalExecutable, FactLocalArgv, FactSSHForwarding, FactStressPolicy, FactRestartSupervisionPolicy, ExecutionOwner}}
 }
 func validateContract(raw Contract) (Contract, error) {
-	if raw.Version != ContractVersion || len(raw.Rules) != len(measuredFacts) {
+	if (raw.Version != ContractVersion && raw.Version != ContractVersionV3) || len(raw.Rules) != len(measuredFacts) {
 		return Contract{}, fmt.Errorf("%w: version/inventory mismatch", ErrContractInvalid)
 	}
 	for i, definition := range measuredFacts {
 		rule := raw.Rules[i]
-		if rule.Fact != definition.Fact || strings.TrimSpace(rule.Method) == "" || rule.ValueContract != valueContractForFact(rule.Fact) {
+		if rule.Fact != definition.Fact || strings.TrimSpace(rule.Method) == "" || rule.ValueContract != valueContractForVersion(rule.Fact, raw.Version) {
 			return Contract{}, fmt.Errorf("%w: rule %d does not match %q", ErrContractInvalid, i, definition.Fact)
 		}
 		if rule.OnFailure != (FailurePolicy{FailureActionRefuse, FailureActionRefuse, FailureActionRefuse}) {
@@ -438,6 +452,8 @@ var jsonFieldPath = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za
 
 func canonicalizeValue(contract ValueContract, raw string) (string, error) {
 	switch contract {
+	case ValueContractStressPolicyV2, ValueContractRestartPolicyV2:
+		return canonicalizePolicyV2(contract, raw)
 	case ValueContractArgvTokens:
 		var value []string
 		if err := decodeClosed(raw, &value); err != nil || len(value) == 0 {

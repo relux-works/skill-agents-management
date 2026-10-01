@@ -1331,3 +1331,15 @@ recorded in [docs/shipped-state.md](docs/shipped-state.md).
 The vendor context contract tests include an AST-generated inventory of every
 `LaunchRequest` field and its `SpawnRequest` path or declared vendor owner. Run
 `env -u TASK_BOARD_DIR go test -mod=mod ./pkg/vendorplugin -run 'Test(SpawnRequestLaunchContextASTInventory|BuildLaunchCurator|BuildLaunchSemanticEntry|BuildLaunchContextFidelity|BuildLaunchNilContextPlanEquality|BuildLaunchWithEnvironment(Curator|SemanticEntry|ContextFidelity|NilContext))' -count=1 -v`; save evidence under `.temp/`.
+
+### Observed process readings versions
+
+`inferenceengine.ValidateReadings` defaults to the unchanged `observed-process/v2`
+contract. Pass `inferenceengine.ContractVersionV3` as its optional fourth argument
+for catalog-shaped `stress-policy/v2` and `restart-policy/v2` profile facts,
+including zero restart delay and explicit `{"configured":false}` values.
+See [the readings contract](docs/observed-process-contract.md) for keys and ranges.
+
+| Tool | Purpose | Command | Artifacts |
+| --- | --- | --- | --- |
+| profile-policy mutation suite | prove v2 refusals through named ValidateReadings tests | `python3 .scripts/verify-profile-policy-v2.py` (optionally `--start N --limit M`) | `.temp/TASK-261002-3tyn1e/mutants/` logs and TSV tables |
