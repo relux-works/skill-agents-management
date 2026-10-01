@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.41 — 2026-10-02
 
 - Add the data-only `vendorplugin/benchdata` Bug Hunt and registry accessors.
   Share model declarations with vendor and unresolved-runtime adapters; retain
@@ -180,6 +180,36 @@
   launches without changing their agentic types or typed refusals. Snapshot
   nested context at entry and isolate vendor callbacks, with fidelity checks
   against caller-selected context. Nil context preserves existing plans.
+
+- Add profile policy value contracts v2 under `observed-process/v3`.
+  `ValidateReadings` takes an optional contract version; v3 selects
+  `stress-policy/v2` and `restart-policy/v2` for the profile stress and
+  restart-supervision facts while every other fact keeps its contract. Both
+  policies carry the engine catalog's keys and ranges with exact closed
+  decoding, including zero restart delay and an explicit
+  `{"configured":false}` form. `observed-process/v2` and the v1 value
+  contracts are unchanged; three-argument callers keep v2.
+
+- Add the typed network carrier (D4 per tb-R148, decided: no callbacks):
+  optional `Network{Patch, Record}` on `agentic.LaunchRequest` and
+  `vendorplugin.SpawnRequest`, with types from
+  `github.com/relux-works/curator-network-profiles` v0.1.0 consumed by tag.
+  `BuildPlan` applies the patch once after `ChildEnv`, joins the set half
+  into `OwnedEnv`, and exposes the Record via
+  `Plan.NetworkProvenanceSnapshot` (never in env). Every production entry
+  point runs the same shared gate first: a malformed carrier refuses typed
+  `network_profile_invalid` before the first plugin invocation of any kind,
+  and a scope no verified adapter tuple names refuses typed
+  `network_scope_unsupported` right after the `Capabilities` declaration
+  read — the single permitted plugin call before the gate — ahead of any
+  vendor dispatch, preparation, observation, preflight or optional surface.
+  A patch touching a reserved run-context key or an owned `ChildEnv(nil)`
+  key refuses typed `network_configuration_conflict`. No tuple
+  is declared yet (the contract verifies none), so every harness refuses;
+  `muse` keeps a second-line `ChildEnv` refusal until D8. Zero Network leaves
+  every existing plan byte-identical.
+
+## Unreleased
 
 ## v0.5.24
 
