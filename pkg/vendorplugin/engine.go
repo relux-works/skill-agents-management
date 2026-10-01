@@ -74,7 +74,7 @@ func validateEngineObservationAdapter(adapter EngineObservationAdapter) (registe
 		return registeredEngineObservationAdapter{}, fmt.Errorf("%w: nil adapter", ErrEngineObservationAdapterInvalid)
 	}
 	declaration := adapter.EngineObservationAdapterDeclaration()
-	if declaration.Contract != EngineObservationAdapterContract || declaration.SchemaVersion != EngineObservationAdapterSchemaVersion || declaration.EngineContract != inferenceengine.ContractVersion {
+	if declaration.Contract != EngineObservationAdapterContract || declaration.SchemaVersion != EngineObservationAdapterSchemaVersion || (declaration.EngineContract != inferenceengine.ContractVersion && declaration.EngineContract != inferenceengine.ContractVersionV3) {
 		return registeredEngineObservationAdapter{}, fmt.Errorf("%w: contract=%q schema=%d engine_contract=%q", ErrEngineObservationVersion, declaration.Contract, declaration.SchemaVersion, declaration.EngineContract)
 	}
 	if err := validateInferenceEngineRef("observation adapter", declaration.Engine); err != nil || declaration.Engine == (plugin.Ref{}) {
@@ -123,7 +123,12 @@ func resolveEngineObservations(ctx context.Context, registered registeredEngineO
 		return inferenceengine.Resolution{}, ErrEngineObservationStale
 	}
 	readings := append([]inferenceengine.Reading(nil), observation.Readings...)
-	return inferenceengine.ValidateReadings(query.Engine.ID, registered.declaration.EngineKind, readings)
+	// The adapter's declared engine contract selects the readings version:
+	// v2 adapters keep the historical default and v3 adapters (curator-engines
+	// status readings) validate under the catalog-shaped policy contracts.
+	// The declaration was pinned to v2-or-v3 at registration, so this cannot
+	// smuggle an unknown version past the validator.
+	return inferenceengine.ValidateReadings(query.Engine.ID, registered.declaration.EngineKind, readings, registered.declaration.EngineContract)
 }
 
 var (

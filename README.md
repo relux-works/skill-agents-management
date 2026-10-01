@@ -1180,7 +1180,7 @@ time and require `make regress` to go red naming the right test:
 
 ### Current CLI surface
 
-Five commands of its own, because this stage is about seams rather than
+Six commands of its own, because this stage is about seams rather than
 features (cobra contributes `help` and `completion`):
 
 ```
@@ -1189,19 +1189,18 @@ agents-management plugins [--json]            # the agentic system plugins compi
 agents-management vendors [--json]            # the vendor plugins compiled in
 agents-management runtimes [--json]           # the declared (system x vendor) pairs
 agents-management local-runtime status [--json]  # local-models.toml's registration state and live pair status
+agents-management model-check --runtime <id> --model <id> --prompt <text> --expect <text> --deadline <duration> --evidence <new-path>
 ```
 
 `plugins` and `vendors` read the `pkg/agentic` and `pkg/vendorplugin` default
 registries — the same ones a plugin package registers into from its `init` —
-and print the registered ids. **Both print an empty list and exit 0 in the
-shipped binary.** That is the answer, not a stub: every plugin package exists
-and none is compiled into `tools/agents-management`, which imports no plugin
-package (`local-models` is the one deliberate exception the binary links
-directly, for `local-runtime status` below, and it still does not self-register
-— see the conditional-registration contract in `docs/architecture.md`), and
-"nothing registered" is a different fact from a failure to look. `--json`
-renders the empty case as `[]`, never `null`. A consumer links the packages it
-needs directly — see
+and print the registered ids. The shipped binary reports the linked managed-Pi
+system as `pi` and an empty vendor list; `--json` renders the latter as `[]`,
+never `null`. Pi is linked because `model-check` uses the production Pi system.
+The `local-models` package remains a deliberate direct link for conditional
+`local-runtime status` and model-check registration, and it does not
+self-register — see the conditional-registration contract in
+`docs/architecture.md`. A consumer links the packages it needs directly — see
 [docs/consuming-the-module.md](docs/consuming-the-module.md) — and gets a
 populated registry in its own binary.
 
@@ -1222,6 +1221,23 @@ distinctly for absence versus a malformed file
 valid, each declared `(runtime, model)` pair's live broker status via
 `pkg/localruntime`'s `StatusReader`. It never registers, declares, or launches
 anything itself.
+
+`model-check` is a one-shot diagnostic over the same conditional local-models
+configuration and the production `vendorplugin.BuildLaunch` → managed Pi Exec
+path. It requires one configured Pi runtime/model, a positive caller deadline,
+an expected literal substring and a new evidence path. The caller deadline
+covers admission and the child process. Pi and every admission status
+subprocess run in their own process groups so the deadline kill reaches
+descendants holding their pipes; an unmet expectation or any refusal exits
+nonzero. Engine-bound models are observed through the
+`pkg/engineobservation` adapter over `curator-engines status --json` readings
+(observed-process/v3), strictly decoded with exact-case closed keys and
+duplicate rejection: healthy readings reach Pi, while failed, stale,
+malformed or not-observed readings — and any status read failure — refuse
+before Pi starts and stay unknown, never a pass. The evidence file is created
+exclusively with mode `0600` and contains only status, reason, deadline/elapsed
+time, expectation match, whether Pi started and exit codes. It never stores the
+prompt, expected text, Pi output or process environment.
 
 None of these commands keeps a list of its own. A private one would be a
 second binding for the same fact, which is exactly what the single-source
@@ -1312,6 +1328,7 @@ concluding that a missing golden is permission.
 | changelog behavioral and mutation tests | drive the release entry point in disposable Git repositories; require named narrowing mutants to fail their behavioral witnesses | `GOWORK=off go test -count=1 -v ./internal/changelog/` | terminal output; task logs in `.temp/`; isolated fixtures and mutant script copies in the Go test temp directory |
 | `golangci-lint` | lint all Go packages | `golangci-lint run ./...` | terminal output; task logs under `.temp/` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
+| `agents-management model-check` | exercise one configured managed-Pi/model result under a caller deadline | `agents-management model-check --runtime <id> --model <id> --prompt <text> --expect <text> --deadline 45s --evidence /path/to/new-result.json` | exclusive mode-0600 JSON summary at the requested path; command output and validation logs under `.temp/` |
 | Codex CLI | launch target for `pkg/agentic/systems/codex`; custom local providers are selected with generated config overrides and private `CODEX_HOME/config.toml` entries | `codex --version`; runtime launches execute the `Binary` and `Argv` returned by `agentic.BuildPlan` | child work under the requested `WorkDir`; private settings remain under `CODEX_HOME` |
 | Muse Code | launch target for `pkg/agentic/systems/muse`; pinned help verifies the TUI and headless option grammar | `MUSE_NO_AUTO_UPDATE=1 muse --version` / `muse --help` / `muse exec --help` (use a throwaway `HOME` when checking a pinned release) | plans come from `agentic.BuildPlan`; pinned help/version output and task logs under `.temp/` |
 | `curator-engines` | read local engine status for local-model preflight and availability; this package never calls lifecycle-changing commands | `curator-engines status --engine <profile> --json` with the selected project as the working directory | JSON to stdout; validation logs under `.temp/TASK-<id>/` |

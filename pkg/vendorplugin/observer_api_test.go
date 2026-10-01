@@ -48,7 +48,7 @@ func TestNewRegistryWithEngineObservationAdaptersRefusesInvalidBatchAtomically(t
 		{"unknown adapter schema", []EngineObservationAdapter{&declaredObservationAdapter{declaration: func() EngineObservationAdapterDeclaration { d := valid; d.SchemaVersion = 2; return d }()}}, ErrEngineObservationVersion},
 		{"unknown engine contract", []EngineObservationAdapter{&declaredObservationAdapter{declaration: func() EngineObservationAdapterDeclaration {
 			d := valid
-			d.EngineContract = "observed-process/v3"
+			d.EngineContract = "observed-process/v9"
 			return d
 		}()}}, ErrEngineObservationVersion},
 		{"duplicate", []EngineObservationAdapter{&declaredObservationAdapter{declaration: valid}, &declaredObservationAdapter{declaration: valid}}, ErrEngineObservationAdapterInvalid},

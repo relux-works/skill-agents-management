@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"testing"
 
@@ -30,6 +31,65 @@ func runRoot(t *testing.T, args ...string) (stdout, stderr string, err error) {
 		_ = runtimesCmd.Flags().Set("json", "false")
 		localRuntimeJSON = false
 		_ = localRuntimeStatusCmd.Flags().Set("json", "false")
+		for name, value := range map[string]string{
+			"runtime":  "",
+			"model":    "",
+			"prompt":   "",
+			"expect":   "",
+			"deadline": "0s",
+			"evidence": "",
+		} {
+			flag := modelCheckCmd.Flags().Lookup(name)
+			_ = modelCheckCmd.Flags().Set(name, value)
+			flag.Changed = false
+		}
+	})
+
+	err = rootCmd.Execute()
+	return out.String(), errOut.String(), err
+}
+
+// runRootWithContext drives the real root command under one caller context,
+// for tests that cancel or expire the parent. It restores the command state
+// afterwards like runRoot.
+func runRootWithContext(t *testing.T, ctx context.Context, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+
+	var out, errOut bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&errOut)
+	rootCmd.SetArgs(args)
+	// Cobra does not propagate the root context to the executed
+	// subcommand, so the target command carries it explicitly.
+	rootCmd.SetContext(ctx)
+	modelCheckCmd.SetContext(ctx)
+
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetArgs(nil)
+		rootCmd.SetContext(context.Background())
+		modelCheckCmd.SetContext(context.Background())
+		pluginsJSON = false
+		_ = pluginsCmd.Flags().Set("json", "false")
+		vendorsJSON = false
+		_ = vendorsCmd.Flags().Set("json", "false")
+		runtimesJSON = false
+		_ = runtimesCmd.Flags().Set("json", "false")
+		localRuntimeJSON = false
+		_ = localRuntimeStatusCmd.Flags().Set("json", "false")
+		for name, value := range map[string]string{
+			"runtime":  "",
+			"model":    "",
+			"prompt":   "",
+			"expect":   "",
+			"deadline": "0s",
+			"evidence": "",
+		} {
+			flag := modelCheckCmd.Flags().Lookup(name)
+			_ = modelCheckCmd.Flags().Set(name, value)
+			flag.Changed = false
+		}
 	})
 
 	err = rootCmd.Execute()

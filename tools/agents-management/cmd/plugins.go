@@ -24,8 +24,8 @@ var pluginsCmd = &cobra.Command{
 	Use:   "plugins",
 	Short: "List the plugins registered in this binary",
 	Long: "List the plugins registered in this binary, one name per line.\n\n" +
-		"An empty list is a valid answer and exits 0: it means no plugin has\n" +
-		"been compiled in yet, which is different from a failure to look.",
+		"An empty list is a valid answer when no system plugin is registered;\n" +
+		"that is different from a failure to look.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		names := pluginNames()

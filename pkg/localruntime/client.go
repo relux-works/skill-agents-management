@@ -30,6 +30,11 @@ var ErrStatusQueryInvalid = errors.New("localruntime: status query is invalid")
 // EARLIER of the two.
 const statusCommandTimeout = 10 * time.Second
 
+// statusWaitDelay bounds Wait after the status child exits while a pipe is
+// still held open. The group kill closes pipes promptly in the normal case;
+// this only backstops a descendant that escaped it.
+const statusWaitDelay = 2 * time.Second
+
 // defaultStatusResponseMaxBytes and defaultStatusObservedMaxEvents are this
 // reader's own internal safety bounds — not the extension #1 operator
 // policy numbers (backoff, quarantine, log rotation) that §7.3 requires to
@@ -55,6 +60,21 @@ func runExec(ctx context.Context, name string, args []string, dir string) ([]byt
 	cmd.Dir = dir
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
+	// The caller deadline (or this reader's own timeout, whichever fires
+	// first) kills the whole status process group, not just the direct
+	// child: a descendant holding the stdout pipe would otherwise keep Run
+	// blocked past the deadline. WaitDelay backstops even a descendant that
+	// escaped the group. Only this status command group is killed; the
+	// runtime process being reported on is never signalled.
+	setStatusProcessGroup(cmd)
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			killStatusProcessGroup(cmd.Process.Pid)
+			_ = cmd.Process.Kill()
+		}
+		return nil
+	}
+	cmd.WaitDelay = statusWaitDelay
 	err := cmd.Run()
 	return stdout.Bytes(), err
 }

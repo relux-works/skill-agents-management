@@ -20,6 +20,7 @@ var testEngineRef = plugin.Ref{ID: "test-engine", Kind: inferenceengine.Kind}
 type scriptedEngineObservationAdapter struct {
 	engine       plugin.Ref
 	kind         inferenceengine.EngineKind
+	contract     string
 	overrides    map[inferenceengine.Fact]inferenceengine.ReadOutcome
 	calls        int
 	before       func()
@@ -36,9 +37,13 @@ func (source *scriptedEngineObservationAdapter) EngineObservationAdapterDeclarat
 	if kind == "" {
 		kind = inferenceengine.EngineKindNativeTransformer
 	}
+	contract := source.contract
+	if contract == "" {
+		contract = inferenceengine.ContractVersion
+	}
 	return EngineObservationAdapterDeclaration{
 		Contract: EngineObservationAdapterContract, SchemaVersion: EngineObservationAdapterSchemaVersion,
-		Engine: source.engine, EngineKind: kind, EngineContract: inferenceengine.ContractVersion,
+		Engine: source.engine, EngineKind: kind, EngineContract: contract,
 	}
 }
 
@@ -200,6 +205,58 @@ func TestBuildLaunchRunsTrustedMLXObservationGateBeforeLaunchEffects(t *testing.
 	if plan.Provenance.ResolvedEngine != engine {
 		t.Fatalf("resolved engine = %#v, want shipped identity %#v", plan.Provenance.ResolvedEngine, engine)
 	}
+}
+
+// A v3 adapter declaration selects v3 validation for its readings: the
+// catalog-shaped {"configured":false} policies admit, while the v1 policy
+// shapes the v2 contract expects refuse as malformed. Both directions prove
+// the declared version reaches the validator rather than a silent default.
+func TestBuildLaunchValidatesV3AdapterReadingsUnderV3(t *testing.T) {
+	buildV3Registry := func(t *testing.T, overrides map[inferenceengine.Fact]inferenceengine.ReadOutcome) *Registry {
+		t.Helper()
+		systems := systemsWithPangolin(t)
+		adapter := &scriptedEngineObservationAdapter{engine: testEngineRef, contract: inferenceengine.ContractVersionV3, overrides: overrides}
+		registry, err := NewRegistryWithEngineObservationAdapters(systems, adapter)
+		if err != nil {
+			t.Fatalf("NewRegistryWithEngineObservationAdapters(v3): %v", err)
+		}
+		if err := registry.RegisterPlugin(inferenceengine.NewConfigured("test-engine")); err != nil {
+			t.Fatalf("RegisterPlugin(engine): %v", err)
+		}
+		vendor := newNarwhal()
+		vendor.models[0].Engine = testEngineRef
+		if err := registry.Register(vendor); err != nil {
+			t.Fatalf("Register(vendor): %v", err)
+		}
+		declaration := tuskDeclaration()
+		declaration.Engine = testEngineRef
+		if err := registry.DeclareRuntime(declaration); err != nil {
+			t.Fatalf("DeclareRuntime: %v", err)
+		}
+		return registry
+	}
+
+	t.Run("catalog shaped policies admit", func(t *testing.T) {
+		registry := buildV3Registry(t, map[inferenceengine.Fact]inferenceengine.ReadOutcome{
+			inferenceengine.FactStressPolicy:             inferenceengine.ReadValue(`{"configured":false}`),
+			inferenceengine.FactRestartSupervisionPolicy: inferenceengine.ReadValue(`{"configured":false}`),
+		})
+		req := narwhalRequest()
+		req.Engine = testEngineRef
+		if _, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec); err != nil {
+			t.Fatalf("BuildLaunch(v3 policies): %v", err)
+		}
+	})
+
+	t.Run("v1 policy shapes refuse under v3", func(t *testing.T) {
+		registry := buildV3Registry(t, nil)
+		req := narwhalRequest()
+		req.Engine = testEngineRef
+		_, err := BuildLaunch(context.Background(), registry, req, agentic.LaunchModeExec)
+		if !errors.Is(err, inferenceengine.ErrObservationMalformed) {
+			t.Fatalf("BuildLaunch(v1 policies under v3) = %v, want ErrObservationMalformed", err)
+		}
+	})
 }
 
 func TestBuildLaunchProductionSourceRefusesUnknownConfiguredEngineIDBeforeEffects(t *testing.T) {

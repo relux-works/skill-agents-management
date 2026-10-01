@@ -427,26 +427,20 @@ pressure, and supervision operations.
 
 ### 6. What the CLI answers today, and what that answer means
 
-`agents-management plugins` and `agents-management vendors` print an empty list
-and exit 0 in the shipped binary. That is the truthful answer, not a stub: the
-command tree reads `agentic.Default` and `vendorplugin.Default`, and
-`tools/agents-management` imports no SELF-REGISTERING plugin package, so none
-is compiled into either default registry. `local-models` is the one exception
-to "imports no plugin package" — `local-runtime status` (§5 above) imports it
-directly to call `localmodels.Peek()` — but, being the one vendor that
-deliberately does not self-register in `init()` (§2.2.2's conditional
-registration), that import populates neither `vendorplugin.Default` nor
-`agents-management vendors`' output. An empty list and a failure to look are
+`agents-management plugins` reads `agentic.Default` and reports `pi`, because
+the standalone `model-check` command links the retained managed-Pi system. It
+does not link the other system plugins. `agents-management vendors` still
+reports an empty list: `local-models` is imported directly for conditional
+registration and `local-runtime status`, but deliberately does not
+self-register in `init()` (§2.2.2). An empty list and a failure to look are
 different facts, and only the first is being reported.
 
 `agents-management runtimes` prints all six frozen declarations regardless,
 because a runtime is a DECLARATION and does not need its plugins present.
 
-**Owner: this repository.** Whether the shipped binary should carry the plugins
-was left open for the switch story to settle, and the answer it gave is that
-nothing forces the question: the consumer links the packages directly and never
-runs this binary. The empty list stays truthful and unused until something
-other than the consumer needs the binary to enumerate.
+**Owner: this repository.** The shipped command binary links Pi for its
+standalone managed-runtime diagnostic; other consumers continue to link the
+systems and vendors they use directly.
 
 ### 7. Native Pi support — landed on main, tag pending (TASK-260908-ggxfte / STORY-260908-3lmnfs)
 

@@ -180,33 +180,32 @@ func TestBuildWithoutLdflagsReportsDefaults(t *testing.T) {
 	}
 }
 
-// The gate: the shipped binary answers `plugins` with an empty list and exit
-// 0. If the empty case starts erroring — or starts writing a complaint to
-// stderr that a consumer would read as a failure — this goes red.
-func TestBuiltBinaryListsEmptyPluginsWithoutError(t *testing.T) {
+// The model-check CLI links the retained Pi system, so the shipped binary's
+// default system registry contains exactly that one system.
+func TestBuiltBinaryListsPiSystemForModelCheckWithoutError(t *testing.T) {
 	bin := probeBinary(t)
 
 	stdout, stderr, code := run(t, bin, "plugins")
 	if code != 0 {
 		t.Errorf("plugins exited %d, want 0; stderr: %s", code, stderr)
 	}
-	if stdout != "" {
-		t.Errorf("stdout = %q, want empty", stdout)
+	if stdout != "pi\n" {
+		t.Errorf("stdout = %q, want the linked managed-Pi system", stdout)
 	}
 	if stderr != "" {
 		t.Errorf("stderr = %q, want empty: an empty registry is an answer, not a diagnostic", stderr)
 	}
 }
 
-func TestBuiltBinaryEncodesEmptyPluginsAsEmptyArray(t *testing.T) {
+func TestBuiltBinaryEncodesPiSystemForModelCheck(t *testing.T) {
 	bin := probeBinary(t)
 
 	stdout, stderr, code := run(t, bin, "plugins", "--json")
 	if code != 0 {
 		t.Errorf("plugins --json exited %d, want 0; stderr: %s", code, stderr)
 	}
-	if stdout != "[]\n" {
-		t.Errorf("stdout = %q, want %q", stdout, "[]\n")
+	if stdout != "[\"pi\"]\n" {
+		t.Errorf("stdout = %q, want %q", stdout, "[\"pi\"]\n")
 	}
 }
 
