@@ -1,6 +1,19 @@
 // Package refusalscan discovers typed refusal return sites across the agentic
 // production package tree. It is shared by the package coverage guard and the
 // isolated mutation runner so both use the same source-derived set.
+//
+// This is the third review round. After this revision the guard's accepted
+// subset is FROZEN as: rework-brief-03 + rework-brief-04 + rework-brief-06.
+// Any further construction that is NOT present in the module's production or
+// test code goes to an "out of contract / future hardening" list in results.md,
+// with the rule clause that excludes it. It is not a blocking finding.
+// Only constructions that actually occur in this repository, or a regression
+// in what the subset promises, block.
+//
+// In particular, derived values cannot be assigned to fields, indices or
+// dereferenced targets. Local non-error conversions remain allowed, provided
+// they never become errors again. Generics-instantiated helpers and reflection
+// calls are outside the accepted subset; this is an intraprocedural checker.
 package refusalscan
 
 import (
@@ -8,8 +21,8 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
-	"go/parser"
 	"go/token"
+	"go/types"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -104,8 +117,7 @@ func Discover(root string) ([]Site, error) {
 	}
 	errors, errorTypes := refusalSymbols(files)
 	helpers := refusalHelpers(files, errors, errorTypes)
-	constructors := refusalConstructors(files, helpers, errors, errorTypes)
-	if err := validateRefusalUseShapes(files, errors, errorTypes, constructors); err != nil {
+	if err := validateRefusalUseShapes(files, errors, errorTypes, helpers); err != nil {
 		return nil, err
 	}
 
@@ -117,7 +129,7 @@ func Discover(root string) ([]Site, error) {
 			if !ok || function.Body == nil {
 				continue
 			}
-			if function.Recv != nil && (function.Name.Name == "Error" || function.Name.Name == "Unwrap") {
+			if errorImplementation(function, errors.info) {
 				continue
 			}
 			name := declaredFunctionName(function)
@@ -151,115 +163,7 @@ func Discover(root string) ([]Site, error) {
 	return sites, nil
 }
 
-func refusalConstructors(files map[string]*parsedSource, helpers, errors, errorTypes map[string]bool) map[string]bool {
-	result := make(map[string]bool)
-	for _, source := range files {
-		for _, declaration := range source.file.Decls {
-			function, ok := declaration.(*ast.FuncDecl)
-			if !ok || function.Body == nil || !helpers[function.Name.Name] {
-				continue
-			}
-			name := strings.ToLower(function.Name.Name)
-			if strings.Contains(name, "refusal") || strings.Contains(name, "error") ||
-				strings.Contains(name, "malformed") || strings.Contains(name, "invalid") || strings.Contains(name, "conflict") {
-				result[function.Name.Name] = true
-				continue
-			}
-			if len(function.Body.List) == 1 {
-				if returned, ok := function.Body.List[0].(*ast.ReturnStmt); ok && len(returned.Results) == 1 {
-					if containsRefusalExpression(returned.Results[0], errors, errorTypes, nil) {
-						result[function.Name.Name] = true
-					}
-				}
-			}
-		}
-	}
-	return result
-}
-
-// validateRefusalUseShapes keeps the source recognizer's accepted subset
-// deliberately small: a typed refusal symbol may occur inside a return
-// expression, or on the right-hand side of an if-init that returns that local
-// from the if body. Aliasing and storing a refusal before a later return would
-// make the site inventory depend on data-flow guesses, so those shapes fail
-// closed with their source location.
-func validateRefusalUseShapes(files map[string]*parsedSource, errors, errorTypes, helpers map[string]bool) error {
-	for relative, source := range files {
-		allowed := make(map[token.Pos]bool)
-		for _, declaration := range source.file.Decls {
-			switch typed := declaration.(type) {
-			case *ast.FuncDecl:
-				if typed.Body == nil {
-					continue
-				}
-				markAllowedFunctionRefusals(allowed, typed.Body, typed.Type.Results, errors, errorTypes, helpers)
-			case *ast.GenDecl:
-				for _, specification := range typed.Specs {
-					values, ok := specification.(*ast.ValueSpec)
-					if !ok {
-						continue
-					}
-					for _, value := range values.Values {
-						if containsTypedRefusal(value, errors, errorTypes, helpers) {
-							if position := firstTypedRefusalPosition(value, errors, errorTypes, helpers); position.IsValid() {
-								return fmt.Errorf("refusalscan: typed refusal use outside a return expression or refusal if-init at %s:%d", relative, source.fset.Position(position).Line)
-							}
-						}
-					}
-				}
-			}
-		}
-
-		for _, declaration := range source.file.Decls {
-			switch typed := declaration.(type) {
-			case *ast.FuncDecl:
-				if typed.Body != nil {
-					if position := firstForbiddenTypedRefusalPosition(typed.Body, allowed, errors, errorTypes, helpers); position.IsValid() {
-						return fmt.Errorf("refusalscan: typed refusal use outside a return expression or refusal if-init at %s:%d", relative, source.fset.Position(position).Line)
-					}
-				}
-			case *ast.GenDecl:
-				for _, specification := range typed.Specs {
-					values, ok := specification.(*ast.ValueSpec)
-					if !ok {
-						continue
-					}
-					for _, value := range values.Values {
-						if position := firstForbiddenTypedRefusalPosition(value, allowed, errors, errorTypes, helpers); position.IsValid() {
-							return fmt.Errorf("refusalscan: typed refusal use outside a return expression or refusal if-init at %s:%d", relative, source.fset.Position(position).Line)
-						}
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func markAllowedFunctionRefusals(allowed map[token.Pos]bool, body *ast.BlockStmt, results *ast.FieldList, errors, errorTypes, helpers map[string]bool) {
-	ast.Inspect(body, func(node ast.Node) bool {
-		if node == nil {
-			return true
-		}
-		if literal, ok := node.(*ast.FuncLit); ok {
-			markAllowedFunctionRefusals(allowed, literal.Body, literal.Type.Results, errors, errorTypes, helpers)
-			return false
-		}
-		switch statement := node.(type) {
-		case *ast.ReturnStmt:
-			for index, result := range statement.Results {
-				if isRefusalReturnResult(statement, results, index, result, nil, errors, errorTypes, helpers) {
-					markRefusalReferences(allowed, result, errors, errorTypes, helpers)
-				}
-			}
-		case *ast.IfStmt:
-			markAllowedIfInitRefusal(allowed, statement, errors, errorTypes, helpers)
-		}
-		return true
-	})
-}
-
-func isRefusalReturnResult(statement *ast.ReturnStmt, results *ast.FieldList, index int, expression ast.Expr, stack []ast.Node, errors, errorTypes, helpers map[string]bool) bool {
+func isRefusalReturnResult(statement *ast.ReturnStmt, results *ast.FieldList, index int, expression ast.Expr, stack []ast.Node, errors, errorTypes, helpers symbolSet) bool {
 	if !returnExpressionIsRefusal(expression, stack, errors, errorTypes, helpers) {
 		return false
 	}
@@ -270,7 +174,7 @@ func isRefusalReturnResult(statement *ast.ReturnStmt, results *ast.FieldList, in
 		return false
 	}
 	call, ok := expression.(*ast.CallExpr)
-	return ok && helpers[callName(call)]
+	return ok && helpers.has(call.Fun)
 }
 
 func resultFieldCount(results *ast.FieldList) int {
@@ -288,66 +192,7 @@ func resultFieldCount(results *ast.FieldList) int {
 	return count
 }
 
-func firstForbiddenTypedRefusalPosition(root ast.Node, allowed map[token.Pos]bool, errors, errorTypes, helpers map[string]bool) token.Pos {
-	var result token.Pos
-	ast.Inspect(root, func(node ast.Node) bool {
-		if result.IsValid() {
-			return false
-		}
-		if position, ok := typedRefusalReference(node, errors, errorTypes, helpers); ok && !allowed[position] {
-			result = position
-			return false
-		}
-		return true
-	})
-	return result
-}
-
-func markAllowedIfInitRefusal(allowed map[token.Pos]bool, branch *ast.IfStmt, errors, errorTypes, helpers map[string]bool) {
-	assignment, ok := branch.Init.(*ast.AssignStmt)
-	if !ok {
-		return
-	}
-	for leftIndex, left := range assignment.Lhs {
-		identifier, ok := left.(*ast.Ident)
-		if !ok || !blockReturnsIdentifier(branch.Body, identifier.Name) {
-			continue
-		}
-		rightIndex := leftIndex
-		if len(assignment.Rhs) == 1 && len(assignment.Lhs) > 1 {
-			rightIndex = 0
-		}
-		if rightIndex < len(assignment.Rhs) && containsTypedRefusal(assignment.Rhs[rightIndex], errors, errorTypes, helpers) {
-			markRefusalReferences(allowed, assignment.Rhs[rightIndex], errors, errorTypes, helpers)
-		}
-	}
-}
-
-func blockReturnsIdentifier(block *ast.BlockStmt, name string) bool {
-	found := false
-	ast.Inspect(block, func(node ast.Node) bool {
-		if found || node == nil {
-			return !found
-		}
-		if _, nested := node.(*ast.FuncLit); nested {
-			return false
-		}
-		returned, ok := node.(*ast.ReturnStmt)
-		if !ok {
-			return true
-		}
-		for _, result := range returned.Results {
-			if expressionContainsIdentifier(result, name) {
-				found = true
-				return false
-			}
-		}
-		return true
-	})
-	return found
-}
-
-func expressionContainsIdentifier(expression ast.Expr, name string) bool {
+func expressionContainsIdentifier(expression ast.Expr, object types.Object, info *types.Info) bool {
 	found := false
 	ast.Inspect(expression, func(node ast.Node) bool {
 		if found || node == nil {
@@ -356,7 +201,7 @@ func expressionContainsIdentifier(expression ast.Expr, name string) bool {
 		if _, nested := node.(*ast.FuncLit); nested {
 			return false
 		}
-		if identifier, ok := node.(*ast.Ident); ok && identifier.Name == name {
+		if identifier, ok := node.(*ast.Ident); ok && object != nil && info.ObjectOf(identifier) == object {
 			found = true
 			return false
 		}
@@ -365,7 +210,7 @@ func expressionContainsIdentifier(expression ast.Expr, name string) bool {
 	return found
 }
 
-func markRefusalReferences(allowed map[token.Pos]bool, node ast.Node, errors, errorTypes, helpers map[string]bool) {
+func markRefusalReferences(allowed map[token.Pos]bool, node ast.Node, errors, errorTypes, helpers symbolSet) {
 	ast.Inspect(node, func(candidate ast.Node) bool {
 		if position, ok := typedRefusalReference(candidate, errors, errorTypes, helpers); ok {
 			allowed[position] = true
@@ -374,7 +219,7 @@ func markRefusalReferences(allowed map[token.Pos]bool, node ast.Node, errors, er
 	})
 }
 
-func containsTypedRefusal(node ast.Node, errors, errorTypes, helpers map[string]bool) bool {
+func containsTypedRefusal(node ast.Node, errors, errorTypes, helpers symbolSet) bool {
 	found := false
 	ast.Inspect(node, func(candidate ast.Node) bool {
 		if _, ok := typedRefusalReference(candidate, errors, errorTypes, helpers); ok {
@@ -386,7 +231,7 @@ func containsTypedRefusal(node ast.Node, errors, errorTypes, helpers map[string]
 	return found
 }
 
-func firstTypedRefusalPosition(node ast.Node, errors, errorTypes, helpers map[string]bool) token.Pos {
+func firstTypedRefusalPosition(node ast.Node, errors, errorTypes, helpers symbolSet) token.Pos {
 	var result token.Pos
 	ast.Inspect(node, func(candidate ast.Node) bool {
 		if result.IsValid() {
@@ -401,75 +246,48 @@ func firstTypedRefusalPosition(node ast.Node, errors, errorTypes, helpers map[st
 	return result
 }
 
-func typedRefusalReference(node ast.Node, errors, errorTypes, helpers map[string]bool) (token.Pos, bool) {
+func typedRefusalReference(node ast.Node, errors, errorTypes, helpers symbolSet) (token.Pos, bool) {
 	switch typed := node.(type) {
 	case *ast.Ident:
-		if errors[typed.Name] || errorTypes[typed.Name] || helpers[typed.Name] || strings.HasPrefix(typed.Name, "ErrCurator") || strings.HasSuffix(typed.Name, "Refusal") {
-			if typed.Name != "" {
-				return typed.Pos(), true
-			}
-		}
-	case *ast.SelectorExpr:
-		name := typed.Sel.Name
-		if errors[name] || errorTypes[name] || helpers[name] || strings.HasPrefix(name, "ErrCurator") || strings.HasSuffix(name, "Refusal") {
-			return typed.Sel.Pos(), true
+		if errors.has(typed) || helpers.has(typed) {
+			return typed.Pos(), true
 		}
 	case *ast.CallExpr:
-		if helpers[callName(typed)] {
+		if errorTypes.has(typed.Fun) {
+			return typed.Pos(), true
+		}
+	case *ast.CompositeLit:
+		if errorTypes.has(typed.Type) {
 			return typed.Pos(), true
 		}
 	}
 	return token.NoPos, false
 }
 
-type parsedSource struct {
-	fset *token.FileSet
-	file *ast.File
-}
-
-func parsePackageSources(root string, sourceFiles []string) (map[string]*parsedSource, error) {
-	result := make(map[string]*parsedSource)
-	for _, relative := range sourceFiles {
-		parsed, err := parseSource(root, relative)
-		if err != nil {
-			return nil, err
-		}
-		result[relative] = parsed
-	}
-	return result, nil
-}
-
-func parseSource(root, relative string) (*parsedSource, error) {
-	path := filepath.Join(root, filepath.FromSlash(relative))
-	fset := token.NewFileSet()
-	parsed, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		return nil, fmt.Errorf("parse source %s: %w", relative, err)
-	}
-	return &parsedSource{fset: fset, file: parsed}, nil
-}
-
-func refusalSymbols(files map[string]*parsedSource) (map[string]bool, map[string]bool) {
-	errors := make(map[string]bool)
-	errorTypes := make(map[string]bool)
+func refusalSymbols(files map[string]*parsedSource) (symbolSet, symbolSet) {
+	info := symbolInfo(files)
+	errors, errorTypes := newSymbolSet(info), newSymbolSet(info)
 	for _, source := range files {
 		for _, declaration := range source.file.Decls {
-			switch typed := declaration.(type) {
-			case *ast.GenDecl:
-				for _, spec := range typed.Specs {
-					switch value := spec.(type) {
-					case *ast.ValueSpec:
-						if typed.Tok == token.VAR {
-							for _, name := range value.Names {
-								if strings.HasPrefix(name.Name, "ErrCurator") {
-									errors[name.Name] = true
-								}
+			general, ok := declaration.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, spec := range general.Specs {
+				switch value := spec.(type) {
+				case *ast.ValueSpec:
+					if general.Tok == token.VAR || general.Tok == token.CONST {
+						for _, name := range value.Names {
+							object := info.Defs[name]
+							if object != nil && implementsError(object.Type()) {
+								errors.objects[object] = true
 							}
 						}
-					case *ast.TypeSpec:
-						if strings.HasSuffix(value.Name.Name, "Refusal") || strings.HasSuffix(value.Name.Name, "Error") {
-							errorTypes[value.Name.Name] = true
-						}
+					}
+				case *ast.TypeSpec:
+					object := info.Defs[value.Name]
+					if object != nil && (implementsError(object.Type()) || implementsError(types.NewPointer(object.Type()))) {
+						errorTypes.objects[object] = true
 					}
 				}
 			}
@@ -478,7 +296,7 @@ func refusalSymbols(files map[string]*parsedSource) (map[string]bool, map[string
 	return errors, errorTypes
 }
 
-func refusalHelpers(files map[string]*parsedSource, errors, errorTypes map[string]bool) map[string]bool {
+func refusalHelpers(files map[string]*parsedSource, errors, errorTypes symbolSet) symbolSet {
 	functions := make([]*ast.FuncDecl, 0)
 	for _, source := range files {
 		for _, declaration := range source.file.Decls {
@@ -487,14 +305,14 @@ func refusalHelpers(files map[string]*parsedSource, errors, errorTypes map[strin
 			}
 		}
 	}
-	helpers := make(map[string]bool)
+	helpers := newSymbolSet(symbolInfo(files))
 	changed := true
 	for changed {
-		changed = false
+		changed = interfaceRefusalHelpers(files, helpers)
 		for _, function := range functions {
 			if functionReturnsRefusal(function, errors, errorTypes, helpers) {
-				if !helpers[function.Name.Name] {
-					helpers[function.Name.Name] = true
+				if !helpers.objects[helpers.info.ObjectOf(function.Name)] {
+					helpers.objects[helpers.info.ObjectOf(function.Name)] = true
 					changed = true
 				}
 			}
@@ -503,8 +321,8 @@ func refusalHelpers(files map[string]*parsedSource, errors, errorTypes map[strin
 	return helpers
 }
 
-func functionReturnsRefusal(function *ast.FuncDecl, errors, errorTypes, helpers map[string]bool) bool {
-	if function.Recv != nil && (function.Name.Name == "Error" || function.Name.Name == "Unwrap") {
+func functionReturnsRefusal(function *ast.FuncDecl, errors, errorTypes, helpers symbolSet) bool {
+	if errorImplementation(function, errors.info) {
 		return false
 	}
 	found := false
@@ -516,7 +334,7 @@ func functionReturnsRefusal(function *ast.FuncDecl, errors, errorTypes, helpers 
 	return found
 }
 
-func refusalResultType(results *ast.FieldList, resultIndex int, errorTypes map[string]bool) bool {
+func refusalResultType(results *ast.FieldList, resultIndex int, errorTypes symbolSet) bool {
 	if results == nil {
 		return false
 	}
@@ -534,50 +352,12 @@ func refusalResultType(results *ast.FieldList, resultIndex int, errorTypes map[s
 	return false
 }
 
-func errorResultType(expression ast.Expr, errorTypes map[string]bool) bool {
-	switch typed := expression.(type) {
-	case *ast.Ident:
-		return typed.Name == "error" || errorTypes[typed.Name] || strings.HasSuffix(typed.Name, "Refusal")
-	case *ast.StarExpr:
-		return errorResultType(typed.X, errorTypes)
-	case *ast.SelectorExpr:
-		return errorTypes[typed.Sel.Name] || strings.HasSuffix(typed.Sel.Name, "Refusal") || strings.HasSuffix(typed.Sel.Name, "Error")
-	case *ast.ParenExpr:
-		return errorResultType(typed.X, errorTypes)
-	default:
-		return false
-	}
+func errorResultType(expression ast.Expr, errorTypes symbolSet) bool {
+	return implementsError(errorTypes.info.TypeOf(expression))
 }
 
-func containsRefusalExpression(expression ast.Expr, errors, errorTypes, helpers map[string]bool) bool {
-	found := false
-	ast.Inspect(expression, func(node ast.Node) bool {
-		if found || node == nil {
-			return false
-		}
-		switch typed := node.(type) {
-		case *ast.Ident:
-			found = errors[typed.Name] || errorTypes[typed.Name] || strings.HasSuffix(typed.Name, "Refusal") || strings.HasSuffix(typed.Name, "Error")
-		case *ast.SelectorExpr:
-			name := typed.Sel.Name
-			found = errors[name] || errorTypes[name] || strings.HasPrefix(name, "ErrCurator") || strings.HasSuffix(name, "Refusal") || strings.HasSuffix(name, "Error")
-		case *ast.CallExpr:
-			found = helpers[callName(typed)]
-		}
-		return !found
-	})
-	return found
-}
-
-func callName(call *ast.CallExpr) string {
-	switch function := call.Fun.(type) {
-	case *ast.Ident:
-		return function.Name
-	case *ast.SelectorExpr:
-		return function.Sel.Name
-	default:
-		return ""
-	}
+func containsRefusalExpression(expression ast.Expr, errors, errorTypes, helpers symbolSet) bool {
+	return containsTypedRefusal(expression, errors, errorTypes, helpers)
 }
 
 func declaredFunctionName(function *ast.FuncDecl) string {
@@ -608,9 +388,9 @@ type returnVisitor struct {
 	fset         *token.FileSet
 	file         string
 	function     string
-	errors       map[string]bool
-	types        map[string]bool
-	helpers      map[string]bool
+	errors       symbolSet
+	types        symbolSet
+	helpers      symbolSet
 	body         *ast.BlockStmt
 	resultTypes  *ast.FieldList
 	ordinals     map[string]int
@@ -628,6 +408,7 @@ func (v *returnVisitor) Visit(node ast.Node) ast.Visitor {
 	v.stack = append(v.stack, node)
 	if literal, ok := node.(*ast.FuncLit); ok {
 		if v.skipLiterals {
+			v.stack = v.stack[:len(v.stack)-1]
 			return nil
 		}
 		line := v.fset.Position(literal.Pos()).Line
@@ -637,6 +418,7 @@ func (v *returnVisitor) Visit(node ast.Node) ast.Visitor {
 			body: literal.Body, resultTypes: literal.Type.Results,
 		}
 		ast.Walk(&nested, literal.Body)
+		v.stack = v.stack[:len(v.stack)-1]
 		return nil
 	}
 	returned, ok := node.(*ast.ReturnStmt)
@@ -669,14 +451,14 @@ func (v *returnVisitor) Visit(node ast.Node) ast.Visitor {
 	return v
 }
 
-func returnExpressionIsRefusal(expression ast.Expr, stack []ast.Node, errors, errorTypes, helpers map[string]bool) bool {
+func returnExpressionIsRefusal(expression ast.Expr, stack []ast.Node, errors, errorTypes, helpers symbolSet) bool {
 	if containsRefusalExpression(expression, errors, errorTypes, helpers) {
 		return true
 	}
-	identifiers := make(map[string]bool)
+	identifiers := make(map[types.Object]bool)
 	ast.Inspect(expression, func(node ast.Node) bool {
 		if identifier, ok := node.(*ast.Ident); ok {
-			identifiers[identifier.Name] = true
+			identifiers[errors.info.ObjectOf(identifier)] = true
 		}
 		return true
 	})
@@ -691,7 +473,7 @@ func returnExpressionIsRefusal(expression ast.Expr, stack []ast.Node, errors, er
 		}
 		for leftIndex, left := range assignment.Lhs {
 			identifier, ok := left.(*ast.Ident)
-			if !ok || !identifiers[identifier.Name] {
+			if !ok || !identifiers[errors.info.ObjectOf(identifier)] {
 				continue
 			}
 			rightIndex := leftIndex

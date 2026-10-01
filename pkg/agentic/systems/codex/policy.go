@@ -74,13 +74,19 @@ const mcpServersKeyPrefix = "mcp_servers."
 // because its value arity is not established by this classifier. The scan
 // also stops at `--`, so prompt text can never become a subcommand.
 func (*System) ClassifyNonInteractiveArgs(toolRelease string, suffix []string) (agentic.NativeArgsClassification, error) {
-	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
-	if err != nil {
+	var capability agentic.ReleaseCapability
+
+	if capabilityValue, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease); err != nil {
 		return agentic.NativeArgsClassification{}, fmt.Errorf("codex: %w", err)
+	} else {
+		capability = capabilityValue
 	}
-	form, err := classifyCodexNonInteractiveForm(suffix)
-	if err != nil {
+	var form agentic.NonInteractiveForm
+
+	if formValue, err := classifyCodexNonInteractiveForm(suffix); err != nil {
 		return agentic.NativeArgsClassification{}, fmt.Errorf("codex: %w", err)
+	} else {
+		form = formValue
 	}
 	return agentic.NativeArgsClassification{Form: form, Grammar: capability.Grammar}, nil
 }
@@ -93,13 +99,19 @@ func (*System) PermissionMapping(toolRelease string, mode agentic.PermissionMode
 }
 
 func permissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
-	effective, err := mode.Resolve()
-	if err != nil {
+	var effective agentic.PermissionMode
+
+	if effectiveValue, err := mode.Resolve(); err != nil {
 		return agentic.PermissionMapping{}, fmt.Errorf("codex: %w", err)
+	} else {
+		effective = effectiveValue
 	}
-	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
-	if err != nil {
+	var capability agentic.ReleaseCapability
+
+	if capabilityValue, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease); err != nil {
 		return agentic.PermissionMapping{}, fmt.Errorf("codex: %w", err)
+	} else {
+		capability = capabilityValue
 	}
 	mapping := agentic.PermissionMapping{Grammar: capability.Grammar}
 	if effective == agentic.PermissionModeNative {
@@ -217,9 +229,15 @@ func scanNativePolicy(args []string) error {
 			continue
 		}
 		if name == "-a" || name == "--ask-for-approval" {
-			optionValue, placement, err := nativePolicyOptionValue(args, i, value, hasValue, name)
-			if err != nil {
+			var (
+				optionValue string
+				placement   agentic.NativePolicyPlacement
+			)
+
+			if optionValueValue, placementValue, err := nativePolicyOptionValue(args, i, value, hasValue, name); err != nil {
 				return err
+			} else {
+				optionValue, placement = optionValueValue, placementValue
 			}
 			if !knownApprovalValues[optionValue] {
 				return fmt.Errorf("%w: %s value %q is not one of the values verified under %s", agentic.ErrNativePolicyUnknown, name, optionValue, agentic.PermissionGrammarV2)
@@ -227,9 +245,15 @@ func scanNativePolicy(args []string) error {
 			return &agentic.NativePolicyConflictError{Selector: name, Placement: placement}
 		}
 		if name == "-s" || name == "--sandbox" {
-			optionValue, placement, err := nativePolicyOptionValue(args, i, value, hasValue, name)
-			if err != nil {
+			var (
+				optionValue string
+				placement   agentic.NativePolicyPlacement
+			)
+
+			if optionValueValue, placementValue, err := nativePolicyOptionValue(args, i, value, hasValue, name); err != nil {
 				return err
+			} else {
+				optionValue, placement = optionValueValue, placementValue
 			}
 			if !knownSandboxValues[optionValue] {
 				return fmt.Errorf("%w: %s value %q is not one of the values verified under %s", agentic.ErrNativePolicyUnknown, name, optionValue, agentic.PermissionGrammarV2)

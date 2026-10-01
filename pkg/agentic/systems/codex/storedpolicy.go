@@ -32,13 +32,20 @@ func (*System) InspectStoredPolicy(ctx agentic.StoredPolicyContext) agentic.Stor
 	rootOK := false
 	if root, rootOK = resolveCodexConfigRoot(configRoot, home, ctx.WorkDir); rootOK {
 		userPath := filepath.Join(root, "config.toml")
-		userConfig, userReadErr := readCodexConfig(userPath)
+		var userConfig map[string]any
+		userReadOK := false
 		var profileName string
 		var userProfileErr error
-		if userReadErr != nil {
+		if config, userReadErr := readCodexConfig(userPath); userReadErr != nil {
+			reason := agentic.StoredPolicySourceUnreadable
+			if errors.Is(userReadErr, os.ErrNotExist) {
+				reason = agentic.StoredPolicySourceAbsent
+			} else if errors.Is(userReadErr, errCodexConfigRoot) || errors.Is(userReadErr, errCodexConfigUnparseable) {
+				reason = agentic.StoredPolicySourceUnparseable
+			}
 			result.SourcesNotInspected = append(result.SourcesNotInspected, agentic.StoredPolicySourceIssue{
 				SourcePath: userPath,
-				Reason:     codexReadFailure(userReadErr),
+				Reason:     reason,
 			})
 			if !errors.Is(userReadErr, os.ErrNotExist) {
 				result.SourcesNotInspected = append(result.SourcesNotInspected, agentic.StoredPolicySourceIssue{
@@ -47,6 +54,8 @@ func (*System) InspectStoredPolicy(ctx agentic.StoredPolicyContext) agentic.Stor
 				})
 			}
 		} else {
+			userConfig = config
+			userReadOK = true
 			profileName, userProfileErr = codexSelectedProfile(userConfig)
 			if userProfileErr != nil {
 				result.SourcesNotInspected = append(result.SourcesNotInspected, agentic.StoredPolicySourceIssue{
@@ -60,11 +69,16 @@ func (*System) InspectStoredPolicy(ctx agentic.StoredPolicyContext) agentic.Stor
 
 		if projectRoot, ok := resolveCodexProjectRoot(ctx.WorkDir); ok {
 			projectPath := filepath.Join(projectRoot, ".codex", "config.toml")
-			projectConfig, err := readCodexConfig(projectPath)
-			if err != nil {
+			if projectConfig, err := readCodexConfig(projectPath); err != nil {
+				reason := agentic.StoredPolicySourceUnreadable
+				if errors.Is(err, os.ErrNotExist) {
+					reason = agentic.StoredPolicySourceAbsent
+				} else if errors.Is(err, errCodexConfigRoot) || errors.Is(err, errCodexConfigUnparseable) {
+					reason = agentic.StoredPolicySourceUnparseable
+				}
 				result.SourcesNotInspected = append(result.SourcesNotInspected, agentic.StoredPolicySourceIssue{
 					SourcePath: projectPath,
-					Reason:     codexReadFailure(err),
+					Reason:     reason,
 				})
 			} else {
 				inspectCodexConfig(&result, projectPath, projectConfig)
@@ -76,7 +90,7 @@ func (*System) InspectStoredPolicy(ctx agentic.StoredPolicyContext) agentic.Stor
 			})
 		}
 
-		if userReadErr == nil {
+		if userReadOK {
 			if userProfileErr != nil {
 				result.SourcesNotInspected = append(result.SourcesNotInspected, agentic.StoredPolicySourceIssue{
 					SourcePath: filepath.Join(root, "<selected-profile>.config.toml"),
@@ -84,11 +98,16 @@ func (*System) InspectStoredPolicy(ctx agentic.StoredPolicyContext) agentic.Stor
 				})
 			} else if profileName != "" {
 				if profilePath, ok := codexProfilePath(root, profileName); ok {
-					profileConfig, err := readCodexConfig(profilePath)
-					if err != nil {
+					if profileConfig, err := readCodexConfig(profilePath); err != nil {
+						reason := agentic.StoredPolicySourceUnreadable
+						if errors.Is(err, os.ErrNotExist) {
+							reason = agentic.StoredPolicySourceAbsent
+						} else if errors.Is(err, errCodexConfigRoot) || errors.Is(err, errCodexConfigUnparseable) {
+							reason = agentic.StoredPolicySourceUnparseable
+						}
 						result.SourcesNotInspected = append(result.SourcesNotInspected, agentic.StoredPolicySourceIssue{
 							SourcePath: profilePath,
-							Reason:     codexReadFailure(err),
+							Reason:     reason,
 						})
 					} else {
 						inspectCodexConfig(&result, profilePath, profileConfig)
@@ -113,11 +132,16 @@ func (*System) InspectStoredPolicy(ctx agentic.StoredPolicyContext) agentic.Stor
 			})
 		} else {
 			projectPath := filepath.Join(filepath.Clean(ctx.WorkDir), ".codex", "config.toml")
-			projectConfig, err := readCodexConfig(projectPath)
-			if err != nil {
+			if projectConfig, err := readCodexConfig(projectPath); err != nil {
+				reason := agentic.StoredPolicySourceUnreadable
+				if errors.Is(err, os.ErrNotExist) {
+					reason = agentic.StoredPolicySourceAbsent
+				} else if errors.Is(err, errCodexConfigRoot) || errors.Is(err, errCodexConfigUnparseable) {
+					reason = agentic.StoredPolicySourceUnparseable
+				}
 				result.SourcesNotInspected = append(result.SourcesNotInspected, agentic.StoredPolicySourceIssue{
 					SourcePath: projectPath,
-					Reason:     codexReadFailure(err),
+					Reason:     reason,
 				})
 			} else {
 				inspectCodexConfig(&result, projectPath, projectConfig)
@@ -153,13 +177,15 @@ func readCodexConfig(path string) (map[string]any, error) {
 }
 
 func inspectCodexConfig(result *agentic.StoredPolicyInspection, path string, config map[string]any) {
-	relaxations, err := codexPolicyRelaxations(config, path)
-	if err != nil {
+	var relaxations []agentic.StoredPolicyRelaxation
+	if values, err := codexPolicyRelaxations(config, path); err != nil {
 		result.SourcesNotInspected = append(result.SourcesNotInspected, agentic.StoredPolicySourceIssue{
 			SourcePath: path,
 			Reason:     agentic.StoredPolicySourceUnparseable,
 		})
 		return
+	} else {
+		relaxations = values
 	}
 	result.SourcesInspected = append(result.SourcesInspected, path)
 	result.Relaxations = append(result.Relaxations, relaxations...)
@@ -272,16 +298,6 @@ func codexProfilePath(root, name string) (string, bool) {
 		return "", false
 	}
 	return filepath.Join(root, name+".config.toml"), true
-}
-
-func codexReadFailure(err error) agentic.StoredPolicySourceReason {
-	if errors.Is(err, os.ErrNotExist) {
-		return agentic.StoredPolicySourceAbsent
-	}
-	if errors.Is(err, errCodexConfigRoot) || errors.Is(err, errCodexConfigUnparseable) {
-		return agentic.StoredPolicySourceUnparseable
-	}
-	return agentic.StoredPolicySourceUnreadable
 }
 
 func codexPolicyEnvValue(env []string, name string) string {

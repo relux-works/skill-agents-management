@@ -4,6 +4,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -69,6 +70,7 @@ func main() {
 	tableOutput := flag.String("table-out", "", "write the killed mutant table to this Markdown path")
 	start := flag.Int("start", 0, "zero-based candidate offset for bounded sequential runs")
 	limit := flag.Int("limit", 0, "maximum candidates to execute; zero means all remaining candidates")
+	validatorsOnly := flag.Bool("validators-only", false, "execute only AST-derived curator validator members")
 	flag.Parse()
 	root, err := os.Getwd()
 	if err != nil {
@@ -100,7 +102,7 @@ func main() {
 	}
 
 	candidates := narrowingMutants()
-	fmt.Println("ACCOUNTING | a member counts as killed when a named BuildPlan subtest fails on at least one plugin; per-plugin completeness (killed on claude AND codex, in separate processes) is out of scope, tracked by TASK-260930-3txv44 | managed-home homeVariable mutants additionally spot-check both plugin failures | matrix restriction check is best-effort; t.Skip and aliased plugin conditions are blind spots (TASK-260930-3txv44)")
+	fmt.Println("ACCOUNTING | a validator member counts as killed only when each plugin fails a named BuildPlan subtest in its own go test process | managed-home homeVariable mutants additionally spot-check both plugin failures | matrix restriction check is best-effort; t.Skip and aliased plugin conditions are blind spots (TASK-260930-3txv44)")
 	generated, err := generatedCuratorConflictMutants(root)
 	if err != nil {
 		fatal(err)
@@ -111,6 +113,9 @@ func main() {
 		fatal(err)
 	}
 	candidates = append(candidates, validatorMutants...)
+	if *validatorsOnly {
+		candidates = validatorMutants
+	}
 	if *start < 0 || *start > len(candidates) || *limit < 0 {
 		fatal(fmt.Errorf("invalid candidate range start=%d limit=%d for %d candidates", *start, *limit, len(candidates)))
 	}
@@ -206,11 +211,11 @@ func main() {
 			fmt.Printf("PREFLIGHT GREEN | exit=0 | %s | test=%s\n", candidate.name, candidate.preflightName)
 		}
 
-		output, exitCode := runGoTestMode(temporary, root, gitDir, gitIndex, candidate.testPackage, candidate.runPattern, candidate.runPattern != "")
+		output, exitCode := runCandidateTests(temporary, root, gitDir, gitIndex, candidate)
 		if err := validateMutantNamedTestExecution(candidate, output); err != nil {
 			fatal(err)
 		}
-		if exitCode == 0 {
+		if exitCode == 0 || candidate.validatorMemberID != "" && validatePerPluginKills(candidate, output) != nil {
 			if candidate.validatorMemberID != "" {
 				proof, proofOutput, proofErr := proveValidatorEquivalentMutant(temporary, root, gitDir, gitIndex, candidate)
 				if proofErr != nil {
@@ -259,17 +264,8 @@ func main() {
 			if len(failedNames) == 0 {
 				fatal(fmt.Errorf("mutant %q failed without a named BuildPlan negative subtest (%s)", candidate.name, candidate.runPattern))
 			}
-			for _, plugin := range candidate.requiredPlugins {
-				found := false
-				for _, failedName := range failedNames {
-					if strings.Contains(failedName, "/"+plugin+"/") {
-						found = true
-						break
-					}
-				}
-				if !found {
-					fatal(fmt.Errorf("mutant %q was not killed by a named BuildPlan negative test for %s; failures=%v", candidate.name, plugin, failedNames))
-				}
+			if err := validatePerPluginKills(candidate, output); err != nil {
+				fatal(err)
 			}
 			namedTest = strings.Join(failedNames, ", ")
 		}
@@ -279,7 +275,7 @@ func main() {
 	}
 	fmt.Printf("SUMMARY | mutants=%d | killed=%d | equivalent=%d | survived=0\n", len(candidates), killed, equivalent)
 	if *tableOutput != "" {
-		content := "<!-- Accounting: a member counts as killed when a named BuildPlan subtest fails on at least one plugin; per-plugin completeness (killed on claude AND codex, in separate processes) is out of scope, tracked by TASK-260930-3txv44. Managed-home homeVariable mutants additionally spot-check both plugin failures. The curator validator matrix restriction check is best-effort; t.Skip and aliased plugin conditions are blind spots (TASK-260930-3txv44). -->\n\n| Result | Gate | Member | Mutant | Narrowing / downstream guard | Named test |\n| --- | --- | --- | --- | --- | --- |\n" + strings.Join(killedRows, "\n") + "\n"
+		content := "<!-- Accounting: a validator member counts as killed only when each plugin fails a named BuildPlan subtest in its own go test process. Managed-home homeVariable mutants additionally spot-check both plugin failures. The curator validator matrix restriction check is best-effort; t.Skip and aliased plugin conditions are blind spots (TASK-260930-3txv44). -->\n\n| Result | Gate | Member | Mutant | Narrowing / downstream guard | Named test |\n| --- | --- | --- | --- | --- | --- |\n" + strings.Join(killedRows, "\n") + "\n"
 		if err := os.MkdirAll(filepath.Dir(*tableOutput), 0o700); err != nil {
 			fatal(err)
 		}
@@ -365,11 +361,11 @@ func proveValidatorEquivalentMutant(temporary, sourceRoot, gitDir, gitIndex stri
 			return nil, "", fmt.Errorf("restore primary source for independent downstream check %s: %w", candidate.file, err)
 		}
 		path := filepath.Join(temporary, proof.file)
-		if err := applyASTNarrowingAtSite(path, proof.function, proof.guard, proof.line, proof.returned, proof.exemption); err != nil {
+		if err := applyDownstreamNarrowing(path, proof); err != nil {
 			fmt.Printf("EQUIVALENCE CANDIDATE REJECTED | mutant=%s | downstream=%s | reason=AST mutation did not resolve: %v\n", candidate.name, proof.description, err)
 			continue
 		}
-		independentOutput, independentExit := runGoTestMode(temporary, sourceRoot, gitDir, gitIndex, candidate.testPackage, candidate.runPattern, true)
+		independentOutput, independentExit := runCandidateTests(temporary, sourceRoot, gitDir, gitIndex, candidate)
 		if validateErr := validateMutantNamedTestExecution(candidate, independentOutput); validateErr != nil {
 			fmt.Printf("EQUIVALENCE CANDIDATE REJECTED | mutant=%s | downstream=%s | reason=independent guard run: %s\n", candidate.name, proof.description, strings.ReplaceAll(validateErr.Error(), "\n", " "))
 			continue
@@ -383,11 +379,11 @@ func proveValidatorEquivalentMutant(temporary, sourceRoot, gitDir, gitIndex stri
 				return nil, "", fmt.Errorf("restore primary mutant source %s: %w", file, err)
 			}
 		}
-		if err := applyASTNarrowingAtSite(path, proof.function, proof.guard, proof.line, proof.returned, proof.exemption); err != nil {
+		if err := applyDownstreamNarrowing(path, proof); err != nil {
 			fmt.Printf("EQUIVALENCE CANDIDATE REJECTED | mutant=%s | downstream=%s | reason=combined AST mutation did not resolve: %v\n", candidate.name, proof.description, err)
 			continue
 		}
-		output, exitCode := runGoTestMode(temporary, sourceRoot, gitDir, gitIndex, candidate.testPackage, candidate.runPattern, true)
+		output, exitCode := runCandidateTests(temporary, sourceRoot, gitDir, gitIndex, candidate)
 		if validateErr := validateMutantNamedTestExecution(candidate, output); validateErr != nil {
 			fmt.Printf("EQUIVALENCE CANDIDATE REJECTED | mutant=%s | downstream=%s | reason=%s\n", candidate.name, proof.description, strings.ReplaceAll(validateErr.Error(), "\n", " "))
 			continue
@@ -397,7 +393,7 @@ func proveValidatorEquivalentMutant(temporary, sourceRoot, gitDir, gitIndex stri
 			continue
 		}
 		if downstreamMutationProvesEquivalence(independentExit, exitCode) && mutantFailureTestName(candidate, output) != "" &&
-			(candidate.failureText == "" || strings.Contains(output, candidate.failureText)) {
+			(candidate.failureText == "" || strings.Contains(output, candidate.failureText)) && validatePerPluginKills(candidate, output) == nil {
 			return &proof, output, nil
 		}
 	}
@@ -464,6 +460,71 @@ func mutantFailureTestNames(candidate mutant, output string) []string {
 
 func markdownCell(value string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(value, "|", "\\|"), "\n", " ")
+}
+
+// runCandidateTests isolates each validator plugin in a separate process.
+// A nonzero aggregate is not a kill: the caller also requires named failures
+// for every plugin, so an unexecuted or surviving plugin fails closed.
+func runCandidateTests(root, sourceRoot, gitDir, gitIndex string, candidate mutant) (string, int) {
+	if candidate.validatorMemberID == "" {
+		return runGoTestMode(root, sourceRoot, gitDir, gitIndex, candidate.testPackage, candidate.runPattern, candidate.runPattern != "")
+	}
+	var output strings.Builder
+	exit := 0
+	for _, plugin := range candidate.requiredPlugins {
+		pattern, err := validatorPluginPattern(candidate.runPattern, plugin)
+		if err != nil {
+			fatal(err)
+		}
+		text, code := runGoTestMode(root, sourceRoot, gitDir, gitIndex, candidate.testPackage, pattern, true)
+		record := fmt.Sprintf("PLUGIN_PROCESS | mutant=%s | plugin=%s | exit=%d | pattern=%s\n", candidate.name, plugin, code, pattern)
+		fmt.Fprintf(&output, "%s%s", record, text)
+		evidenceRoot := filepath.Join(sourceRoot, ".temp", "launch-context-mutants", "process-evidence")
+		if err := os.MkdirAll(evidenceRoot, 0700); err != nil {
+			fatal(err)
+		}
+		evidence, err := os.CreateTemp(evidenceRoot, processEvidencePrefix(candidate.name)+"-"+plugin+"-*.log")
+		if err != nil {
+			fatal(err)
+		}
+		if _, err := evidence.WriteString(record + text); err != nil {
+			fatal(err)
+		}
+		if err := evidence.Close(); err != nil {
+			fatal(err)
+		}
+		singlePattern := candidate
+		singlePattern.runPattern = pattern
+		fmt.Printf("%sPLUGIN_FAILURES | %s | %s | names=%s | log=%s\n", record, candidate.name, plugin, strings.Join(mutantFailureTestNames(singlePattern, text), ","), filepath.Base(evidence.Name()))
+		single := candidate
+		single.runPattern = pattern
+		if err := validateMutantNamedTestExecution(single, text); err != nil {
+			fatal(err)
+		}
+		if code != 0 {
+			exit = code
+		}
+	}
+	if len(candidate.requiredPlugins) == 0 {
+		fatal(fmt.Errorf("validator %q has no required plugins", candidate.name))
+	}
+	return output.String(), exit
+}
+
+func validatorPluginPattern(pattern, plugin string) (string, error) {
+	parts := strings.Split(pattern, "/")
+	if len(parts) == 1 {
+		parts = append(parts, "^(claude|codex)$")
+	}
+	if len(parts) < 2 {
+		return "", fmt.Errorf("validator pattern has no plugin segment: %q", pattern)
+	}
+	matched, err := regexp.MatchString(parts[1], plugin)
+	if err != nil || !matched {
+		return "", fmt.Errorf("validator pattern %q excludes plugin %q", pattern, plugin)
+	}
+	parts[1] = "^" + regexp.QuoteMeta(plugin) + "$"
+	return strings.Join(parts, "/"), nil
 }
 
 func runGoTest(root, sourceRoot, gitDir, gitIndex, packageName, testPattern string) (string, int) {
@@ -829,12 +890,7 @@ func generatedCuratorValidatorMutants(root, taskScratch, gitDir, gitIndex string
 			exemption: member.exemption, testPackage: "./pkg/agentic",
 			testName: member.testName, runPattern: curatorValidatorRunPattern(member),
 			failureText: "BuildPlan", downstreamProofs: member.downstreamProofs,
-			requiredPlugins: func() []string {
-				if strings.Contains(member.targetGuard, "homeVariable") {
-					return append([]string(nil), pluginNames...)
-				}
-				return nil
-			}(),
+			requiredPlugins: append([]string(nil), pluginNames...),
 		})
 	}
 	if err := validateValidatorMutantCompleteness(members, result, availableTests); err != nil {
@@ -928,7 +984,7 @@ func deriveCuratorValidatorClassMembers(root string, sites []refusalscan.Site, c
 	appendMember := func(site refusalscan.Site, testName string, member curatorValidatorClassMember) {
 		member.siteKey = site.Key()
 		member.testName = testName
-		member.downstreamProofs = deriveBooleanHelperDownstreamProofs(member, parsedFiles)
+		member.downstreamProofs = append(deriveBooleanHelperDownstreamProofs(member, parsedFiles), deriveSameFunctionScalarDownstreamProofs(member, parsedFiles)...)
 		member.identity = validatorSourceMemberIdentity(member)
 		if !seen[member.identity] {
 			seen[member.identity] = true
@@ -5040,4 +5096,137 @@ func narrowingMutants() []mutant {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
+}
+
+// Keep the process boundary in the evidence. Aggregate failures cannot lend a
+// missing or green plugin another plugin's kill.
+func validatePerPluginKills(candidate mutant, output string) error {
+	if candidate.validatorMemberID == "" {
+		return nil
+	}
+	if len(candidate.requiredPlugins) == 0 {
+		return fmt.Errorf("validator %q has no required plugins", candidate.name)
+	}
+	records := strings.Split(output, "PLUGIN_PROCESS | ")
+	for _, plugin := range candidate.requiredPlugins {
+		found := false
+		for _, record := range records[1:] {
+			header, body, ok := strings.Cut(record, "\n")
+			if !ok || !strings.Contains(header, "mutant="+candidate.name+" | plugin="+plugin+" | exit=1 |") {
+				continue
+			}
+			single := candidate
+			pattern, err := validatorPluginPattern(candidate.runPattern, plugin)
+			if err != nil {
+				return err
+			}
+			single.runPattern = pattern
+			for _, name := range mutantFailureTestNames(single, body) {
+				parts := strings.Split(name, "/")
+				if len(parts) >= 2 && parts[1] == plugin {
+					found = true
+				}
+			}
+		}
+		if !found {
+			return fmt.Errorf("validator %q was not killed by a named negative subtest in a separate failing process for %s", candidate.name, plugin)
+		}
+	}
+	return nil
+}
+
+func processEvidencePrefix(name string) string {
+	if len(name) <= 100 {
+		return name
+	}
+	digest := sha256.Sum256([]byte(name))
+	return name[:100] + "-" + fmt.Sprintf("%x", digest[:6])
+}
+
+// Scalar validator witnesses can be masked by a later refusal in the same
+// function, including a different field of the same descriptor. Generate the
+// witness-limited candidates mechanically; solo/combined real plugin runs
+// decide whether any candidate actually proves a downstream bound.
+func deriveSameFunctionScalarDownstreamProofs(member curatorValidatorClassMember, files map[string]*parsedSource) []downstreamGuardProof {
+	source := files[member.targetFile]
+	if source == nil {
+		return nil
+	}
+	function := findFunctionAndBody(source.file, member.targetFunction)
+	if function == nil || curatorBooleanFunction(function) {
+		return nil
+	}
+	witness, err := parser.ParseExpr(member.exemption)
+	if err != nil {
+		return nil
+	}
+	identifiers := expressionIdentifierSet(witness)
+	readsParameter := false
+	if function.Type.Params != nil {
+		for _, field := range function.Type.Params.List {
+			for _, name := range field.Names {
+				if identifiers[name.Name] {
+					readsParameter = true
+				}
+			}
+		}
+	}
+	if !readsParameter {
+		return nil
+	}
+	var proofs []downstreamGuardProof
+	ast.Inspect(function.Body, func(n ast.Node) bool {
+		if _, ok := n.(*ast.FuncLit); ok {
+			return false
+		}
+		branch, ok := n.(*ast.IfStmt)
+		if !ok || source.fset.Position(branch.Pos()).Line <= member.targetLine {
+			return true
+		}
+		guard := "if " + normalizedNode(source.fset, branch.Cond)
+		for _, returned := range returnsInBlock(branch.Body) {
+			if len(returned.Results) != 1 || normalizedNode(source.fset, returned.Results[0]) == "nil" {
+				continue
+			}
+			line := source.fset.Position(returned.Pos()).Line
+			proofs = append(proofs, downstreamGuardProof{file: member.targetFile, function: member.targetFunction, guard: guard, line: line, returned: normalizedNode(source.fset, returned), exemption: member.exemption, description: fmt.Sprintf("%s:%d %s %s (%s); witness=%s", member.targetFile, source.fset.Position(branch.Pos()).Line, member.targetFunction, guard, normalizedNode(source.fset, returned), member.exemption)})
+		}
+		return true
+	})
+	return proofs
+}
+
+// Formatting a primary mutation may move later lines. Re-resolve the exact
+// function/guard/return triple, requiring uniqueness rather than guessing the
+// shifted location. The original line stays in the reported proof identity.
+func applyDownstreamNarrowing(path string, proof downstreamGuardProof) error {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return err
+	}
+	function := findFunctionAndBody(file, proof.function)
+	if function == nil {
+		return fmt.Errorf("downstream function %s absent", proof.function)
+	}
+	var lines []int
+	ast.Inspect(function.Body, func(n ast.Node) bool {
+		if _, ok := n.(*ast.FuncLit); ok {
+			return false
+		}
+		branch, ok := n.(*ast.IfStmt)
+		if !ok || "if "+normalizedNode(fset, branch.Cond) != normalizeGuard(proof.guard) {
+			return true
+		}
+		for _, returned := range returnsInBlock(branch.Body) {
+			if normalizedNode(fset, returned) == strings.Join(strings.Fields(proof.returned), " ") {
+				lines = append(lines, fset.Position(returned.Pos()).Line)
+			}
+		}
+		return true
+	})
+	if len(lines) != 1 {
+		return fmt.Errorf("downstream function/guard/return triple is not unique: %d matches", len(lines))
+	}
+	return applyASTNarrowingAtSite(path, proof.function, proof.guard, lines[0], proof.returned, proof.exemption)
 }

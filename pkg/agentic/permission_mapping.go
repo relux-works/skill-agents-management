@@ -33,9 +33,9 @@ func (r *Registry) PermissionMapping(systemID SystemID, toolRelease string, mode
 	if !ok {
 		return PermissionMapping{}, fmt.Errorf("%w: %s has no release-pinned permission mapping", ErrPermissionModeUnsupported, system.ID())
 	}
-	mapping, err := mapper.PermissionMapping(toolRelease, mode)
-	if err != nil {
+	if mapping, err := mapper.PermissionMapping(toolRelease, mode); err != nil {
 		return PermissionMapping{}, err
+	} else {
+		return mapping, nil
 	}
-	return mapping, nil
 }

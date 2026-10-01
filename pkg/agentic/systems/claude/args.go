@@ -95,9 +95,12 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return nil, fmt.Errorf("claude: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
 			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
 	}
-	context, err := buildContextValues(req, mode)
-	if err != nil {
+	var context contextValues
+
+	if contextValue, err := buildContextValues(req, mode); err != nil {
 		return nil, err
+	} else {
+		context = contextValue
 	}
 	switch mode {
 	case agentic.LaunchModeExec, agentic.LaunchModeDryRun:
@@ -196,9 +199,12 @@ func interactiveArgs(req agentic.LaunchRequest, context contextValues) ([]string
 	// scan classifies against it: an unpinned or newer release, and an
 	// empty one, fail closed here, and the scan below never reasons
 	// under a grammar no release verified.
-	mapping, err := permissionMapping(req.ToolRelease, context.permission)
-	if err != nil {
+	var mapping agentic.PermissionMapping
+
+	if mappingValue, err := permissionMapping(req.ToolRelease, context.permission); err != nil {
 		return nil, err
+	} else {
+		mapping = mappingValue
 	}
 	if err := scanNativePolicy(req.NativeArgs); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)

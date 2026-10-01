@@ -40,10 +40,12 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	if !providerIDPattern.MatchString(providerID) {
 		return nil, localProviderRefusal(agentic.LocalProviderMalformed, "provider id")
 	}
+	var root string
 
-	root, err := localProviderHome(req)
-	if err != nil {
+	if rootValue, err := localProviderHome(req); err != nil {
 		return nil, err
+	} else {
+		root = rootValue
 	}
 	configPath := filepath.Join(root, "config.toml")
 	data, err := os.ReadFile(configPath)
@@ -58,9 +60,12 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	if err := toml.Unmarshal(data, &config); err != nil || config == nil {
 		return nil, localProviderRefusal(agentic.LocalProviderMalformed, providerID)
 	}
-	provider, err := resolvePrivateProvider(config, providerID)
-	if err != nil {
+	var provider privateProvider
+
+	if providerValue, err := resolvePrivateProvider(config, providerID); err != nil {
 		return nil, err
+	} else {
+		provider = providerValue
 	}
 	return []string{
 		"-c", "model_provider=" + strconv.Quote(providerID),

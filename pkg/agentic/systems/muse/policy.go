@@ -23,16 +23,20 @@ func (*System) PermissionMapping(toolRelease string, mode agentic.PermissionMode
 }
 
 func permissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
-	effective, err := mode.Resolve()
-	if err != nil {
+	var effective agentic.PermissionMode
+	if value, err := mode.Resolve(); err != nil {
 		return agentic.PermissionMapping{}, fmt.Errorf("muse: %w", err)
+	} else {
+		effective = value
 	}
-	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
-	if err != nil {
+	var capability agentic.ReleaseCapability
+	if value, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease); err != nil {
 		// Keep the specific release-drift classification used by the other
 		// harnesses while also classifying the absent mapping as unsupported.
 		return agentic.PermissionMapping{}, fmt.Errorf("muse: refusing yolo: %w: %w",
 			agentic.ErrPermissionModeUnsupported, err)
+	} else {
+		capability = value
 	}
 	mapping := agentic.PermissionMapping{Grammar: capability.Grammar}
 	if effective == agentic.PermissionModeNative {

@@ -39,9 +39,12 @@ const (
 // grammar as the yolo conflict scanner; prompt text after `--` is excluded by
 // the shared nativeargs flag-position parser.
 func (*System) ClassifyNonInteractiveArgs(toolRelease string, suffix []string) (agentic.NativeArgsClassification, error) {
-	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
-	if err != nil {
+	var capability agentic.ReleaseCapability
+
+	if capabilityValue, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease); err != nil {
 		return agentic.NativeArgsClassification{}, fmt.Errorf("claude: %w", err)
+	} else {
+		capability = capabilityValue
 	}
 	for _, index := range nativeargs.FlagIndexes(suffix) {
 		name, _, _ := nativeargs.SplitFlagValue(suffix[index])
@@ -60,13 +63,19 @@ func (*System) PermissionMapping(toolRelease string, mode agentic.PermissionMode
 }
 
 func permissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
-	effective, err := mode.Resolve()
-	if err != nil {
+	var effective agentic.PermissionMode
+
+	if effectiveValue, err := mode.Resolve(); err != nil {
 		return agentic.PermissionMapping{}, fmt.Errorf("claude: %w", err)
+	} else {
+		effective = effectiveValue
 	}
-	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
-	if err != nil {
+	var capability agentic.ReleaseCapability
+
+	if capabilityValue, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease); err != nil {
 		return agentic.PermissionMapping{}, fmt.Errorf("claude: %w", err)
+	} else {
+		capability = capabilityValue
 	}
 	mapping := agentic.PermissionMapping{Grammar: capability.Grammar}
 	if effective == agentic.PermissionModeNative {

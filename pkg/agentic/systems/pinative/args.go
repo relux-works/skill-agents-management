@@ -55,9 +55,12 @@ var ErrVendorMissing = errors.New("pinative: launch request names no vendor; a n
 // `--approve`/`-a` ("Trust project-local files for this run") and
 // `--no-approve`/`-na`, which Decision 0018 records as not equivalent.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
-	effective, err := req.PermissionMode.Resolve()
-	if err != nil {
+	var effective agentic.PermissionMode
+
+	if effectiveValue, err := req.PermissionMode.Resolve(); err != nil {
 		return nil, fmt.Errorf("pinative: %w", err)
+	} else {
+		effective = effectiveValue
 	}
 	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
 		return nil, fmt.Errorf("pinative: %w: permission mode %q is valid only for interactive launches",

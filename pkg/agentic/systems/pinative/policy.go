@@ -30,9 +30,12 @@ const (
 // one-shot print form. It verifies the same release row as permission policy
 // handling and delegates flag positions to the shared native-argument grammar.
 func (*System) ClassifyNonInteractiveArgs(toolRelease string, suffix []string) (agentic.NativeArgsClassification, error) {
-	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
-	if err != nil {
+	var capability agentic.ReleaseCapability
+
+	if capabilityValue, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease); err != nil {
 		return agentic.NativeArgsClassification{}, fmt.Errorf("pinative: %w", err)
+	} else {
+		capability = capabilityValue
 	}
 	for _, index := range nativeargs.FlagIndexes(suffix) {
 		name, _, _ := nativeargs.SplitFlagValue(suffix[index])
@@ -51,13 +54,19 @@ func (*System) PermissionMapping(toolRelease string, mode agentic.PermissionMode
 }
 
 func permissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
-	effective, err := mode.Resolve()
-	if err != nil {
+	var effective agentic.PermissionMode
+
+	if effectiveValue, err := mode.Resolve(); err != nil {
 		return agentic.PermissionMapping{}, fmt.Errorf("pinative: %w", err)
+	} else {
+		effective = effectiveValue
 	}
-	capability, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease)
-	if err != nil {
+	var capability agentic.ReleaseCapability
+
+	if capabilityValue, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease); err != nil {
 		return agentic.PermissionMapping{}, fmt.Errorf("pinative: %w", err)
+	} else {
+		capability = capabilityValue
 	}
 	if effective == agentic.PermissionModeYolo {
 		return agentic.PermissionMapping{}, fmt.Errorf("pinative: refusing yolo: %w: pi 0.84.2 documents no interactive permission-bypass flag; --approve trusts project-local files for this run and is not equivalent",

@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -593,4 +594,260 @@ func blockHasReturnOrContinue(block *ast.BlockStmt) bool {
 		return !found
 	})
 	return found
+}
+
+func TestPerPluginKillAccountingRequiresSeparateNamedFailures(t *testing.T) {
+	c := mutant{name: "witness", validatorMemberID: "member", testName: "TestBuildPlan", runPattern: "^TestBuildPlan$/^(claude|codex)$/^negative$", requiredPlugins: []string{"claude", "codex"}}
+	process := func(plugin string, code int, name string) string {
+		return fmt.Sprintf("PLUGIN_PROCESS | mutant=witness | plugin=%s | exit=%d | pattern=unused\n=== RUN   %s\n--- FAIL: %s (0.00s)\n", plugin, code, name, name)
+	}
+	for _, tc := range []struct {
+		name, output string
+		red          bool
+	}{
+		{"both", process("claude", 1, "TestBuildPlan/claude/negative") + process("codex", 1, "TestBuildPlan/codex/negative"), false},
+		{"one_plugin", process("claude", 1, "TestBuildPlan/claude/negative"), true},
+		{"green_codex", process("claude", 1, "TestBuildPlan/claude/negative") + process("codex", 0, "TestBuildPlan/codex/negative"), true},
+		{"wrong_named_test", process("claude", 1, "TestBuildPlan/claude/negative") + process("codex", 1, "TestBuildPlan/codex/other"), true},
+		{"borrowed_failure", process("claude", 1, "TestBuildPlan/claude/negative") + "--- FAIL: TestBuildPlan/codex/negative (0.00s)\n", true},
+		{"unnamed_compilation_error", process("claude", 1, "TestBuildPlan/claude/negative") + "PLUGIN_PROCESS | mutant=witness | plugin=codex | exit=1 | pattern=unused\n[build failed]\n", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validatePerPluginKills(c, tc.output)
+			if (err != nil) != tc.red {
+				t.Fatalf("accounting err=%v, red=%t", err, tc.red)
+			}
+		})
+	}
+}
+
+func TestValidatorPluginPatternRejectsRestrictedPatterns(t *testing.T) {
+	for _, plugin := range []string{"claude", "codex"} {
+		pattern, err := validatorPluginPattern("^TestBuildPlan$", plugin)
+		if err != nil || pattern != "^TestBuildPlan$/^"+plugin+"$" {
+			t.Fatalf("pattern=%s err=%v", pattern, err)
+		}
+	}
+	if _, err := validatorPluginPattern("^TestBuildPlan$/^claude$/^negative$", "codex"); err == nil {
+		t.Fatal("plugin-restricted pattern admitted")
+	}
+}
+
+func TestRunCandidateTestsUsesTwoRealPluginProcesses(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module plugin.fixture\n\ngo 1.25.5\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fixture := `package fixture
+import("testing";"os";"fmt")
+func TestBuildPlan(t *testing.T) {for _,plugin:=range []string{"claude","codex"} {t.Run(plugin,func(t *testing.T){t.Run("negative",func(t *testing.T){fmt.Printf("REAL_PROCESS | plugin=%s | pid=%d\n",plugin,os.Getpid());t.Fatal("BuildPlan admitted refusal")})})}}
+`
+	if err := os.WriteFile(filepath.Join(root, "plugin_test.go"), []byte(fixture), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c := mutant{name: strings.Repeat("real-process-", 30), validatorMemberID: "member", testPackage: ".", testName: "TestBuildPlan", runPattern: "^TestBuildPlan$/^(claude|codex)$/^negative$", requiredPlugins: []string{"claude", "codex"}}
+	output, code := runCandidateTests(root, root, "", "", c)
+	if code != 1 {
+		t.Fatalf("exit=%d\n%s", code, output)
+	}
+	if err := validatePerPluginKills(c, output); err != nil {
+		t.Fatal(err)
+	}
+	pids := make(map[string]bool)
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, "REAL_PROCESS | ") {
+			_, pid, ok := strings.Cut(line, "pid=")
+			if ok {
+				pids[pid] = true
+			}
+		}
+	}
+	if len(pids) != 2 {
+		t.Fatalf("expected two real processes, pids=%v\n%s", pids, output)
+	}
+}
+
+func TestPerPluginAccountingNarrowingMutant(t *testing.T) {
+	source, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := copyTree(source, root); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "tools", "launchcontext-mutants", "main.go")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := "records := strings.Split(output, \"PLUGIN_PROCESS | \")\n\tfor _, plugin := range candidate.requiredPlugins {"
+	after := "records := strings.Split(output, \"PLUGIN_PROCESS | \")\n\tfor _, plugin := range candidate.requiredPlugins[:1] {"
+	if strings.Count(string(body), before) != 1 {
+		t.Fatal("per-plugin narrowing site no longer unique")
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(body), before, after, 1)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("go", "test", "./tools/launchcontext-mutants", "-count=1", "-v", "-run", "^TestPerPluginKillAccountingRequiresSeparateNamedFailures$")
+	command.Dir = root
+	command.Env = append(os.Environ(), "GOWORK=off")
+	output, err := command.CombinedOutput()
+	code := 0
+	if err != nil {
+		if e, ok := err.(*exec.ExitError); ok {
+			code = e.ExitCode()
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if code != 1 || !strings.Contains(string(output), "--- FAIL: TestPerPluginKillAccountingRequiresSeparateNamedFailures/one_plugin") || strings.Contains(string(output), "[build failed]") {
+		t.Fatalf("accounting narrowing survived or was invalid, exit=%d\n%s", code, output)
+	}
+	t.Log("KILLED | mutant=one_plugin_accounting | exit=1 | test=TestPerPluginKillAccountingRequiresSeparateNamedFailures/one_plugin")
+}
+
+func TestPartialPluginSurvivorRequiresRealDownstreamBound(t *testing.T) {
+	sourceRoot := t.TempDir()
+	relative := filepath.Join("pkg", "agentic", "curator_context.go")
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(sourceRoot, relative)), 0700); err != nil {
+		t.Fatal(err)
+	}
+	source := `package agentic
+import "errors"
+func validate(argument, name string) error {
+ if argument != "path" && argument != "name" {
+  return errors.New("argument")
+ }
+ if argument != "name" && name != "" {
+  return errors.New("name")
+ }
+ return nil
+}
+`
+	testSource := `package agentic
+import "testing"
+func TestBuildPlanProof(t *testing.T) {for _,plugin:=range []string{"claude","codex"} {t.Run(plugin,func(t *testing.T) {name:="";if plugin=="codex" {name="managed"};if err:=validate("future",name);err==nil {t.Fatal("BuildPlan admitted future argument")}})}}
+`
+	for path, body := range map[string]string{"go.mod": "module validator.proof\n\ngo 1.25.5\n", relative: source, filepath.Join("pkg", "agentic", "proof_test.go"): testSource} {
+		if err := os.WriteFile(filepath.Join(sourceRoot, path), []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, relative, source, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := curatorValidatorClassMember{targetFile: relative, targetFunction: "validate", targetLine: 5, targetGuard: `if argument != "path" && argument != "name"`, targetReturn: `return errors.New("argument")`, exemption: `argument == "future"`}
+	proofs := deriveSameFunctionScalarDownstreamProofs(member, map[string]*parsedSource{relative: {fset: fset, file: file}})
+	if len(proofs) != 1 || proofs[0].guard != `if argument != "name" && name != ""` {
+		t.Fatalf("proofs=%+v", proofs)
+	}
+	for _, tc := range []struct {
+		name      string
+		effective bool
+	}{{"proved", true}, {"reject_ineffective_downstream", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := copyTree(sourceRoot, root); err != nil {
+				t.Fatal(err)
+			}
+			candidate := mutant{name: "partial-plugin", validatorMemberID: "member", file: relative, astFunction: "validate", astGuard: member.targetGuard, astSiteLine: 5, astSiteReturn: member.targetReturn, exemption: member.exemption, testPackage: "./pkg/agentic", testName: "TestBuildPlanProof", runPattern: "^TestBuildPlanProof$/^(claude|codex)$", failureText: "BuildPlan", requiredPlugins: []string{"claude", "codex"}, downstreamProofs: append([]downstreamGuardProof(nil), proofs...)}
+			if !tc.effective {
+				candidate.downstreamProofs[0].exemption = "false"
+			}
+			if err := applyASTNarrowingAtSite(filepath.Join(root, relative), "validate", candidate.astGuard, 5, candidate.astSiteReturn, candidate.exemption); err != nil {
+				t.Fatal(err)
+			}
+			primary, code := runCandidateTests(root, sourceRoot, "", "", candidate)
+			if code != 1 || validatePerPluginKills(candidate, primary) == nil || !strings.Contains(primary, "plugin=claude | exit=1") || !strings.Contains(primary, "plugin=codex | exit=0") {
+				t.Fatalf("partial mutant incorrectly classified: exit=%d\n%s", code, primary)
+			}
+			proof, combined, err := proveValidatorEquivalentMutant(root, sourceRoot, "", "", candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.effective {
+				if proof == nil || validatePerPluginKills(candidate, combined) != nil {
+					t.Fatalf("missing separate-process downstream bound: %+v\n%s", proof, combined)
+				}
+			} else if proof != nil {
+				t.Fatalf("ineffective downstream weakening claimed a bound: %+v", proof)
+			}
+		})
+	}
+}
+
+func TestDownstreamProofRejectsAmbiguousRelocation(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "guard.go")
+	source := `package guard
+func validate(name string) error {
+ if name != "" {return refused()}
+ if name != "" {return refused()}
+ return nil
+}
+`
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	proof := downstreamGuardProof{function: "validate", guard: `if name != ""`, returned: "return refused()", exemption: `name == "future"`}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = applyDownstreamNarrowing(path, proof)
+	if err == nil || !strings.Contains(err.Error(), "not unique") {
+		t.Fatalf("ambiguous downstream triple admitted: %v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("ambiguity rejection changed the source")
+	}
+}
+
+func TestDownstreamRelocationNarrowingMutant(t *testing.T) {
+	source, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := copyTree(source, root); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "tools", "launchcontext-mutants", "main.go")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := `if len(lines) != 1 {
+		return fmt.Errorf("downstream function/guard/return triple is not unique: %d matches", len(lines))`
+	after := `if len(lines) == 0 {
+		return fmt.Errorf("downstream function/guard/return triple is not unique: %d matches", len(lines))`
+	if strings.Count(string(body), before) != 1 {
+		t.Fatal("relocation narrowing site is not unique")
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(body), before, after, 1)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("go", "test", "./tools/launchcontext-mutants", "-count=1", "-v", "-run", "^TestDownstreamProofRejectsAmbiguousRelocation$")
+	command.Dir = root
+	command.Env = append(os.Environ(), "GOWORK=off")
+	output, err := command.CombinedOutput()
+	code := 0
+	if err != nil {
+		if e, ok := err.(*exec.ExitError); ok {
+			code = e.ExitCode()
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if code != 1 || !strings.Contains(string(output), "--- FAIL: TestDownstreamProofRejectsAmbiguousRelocation") || strings.Contains(string(output), "[build failed]") {
+		t.Fatalf("relocation mutant survived or invalid, exit=%d\n%s", code, output)
+	}
+	t.Log("KILLED | mutant=ambiguous_downstream_relocation | exit=1 | test=TestDownstreamProofRejectsAmbiguousRelocation")
 }

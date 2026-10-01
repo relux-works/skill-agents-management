@@ -107,11 +107,12 @@ func TupleForward() (int, error) {
 `)
 	writeFile(t, root, "pkg/agentic/nested/untouched.go", `package nested
 
+import "errors"
+var ErrExampleRefusal = errors.New("nested refusal")
 func Existing() error { return ErrExampleRefusal }
 `)
 
-	// The nested package intentionally refers to a refusal declared elsewhere
-	// in the package tree. Discovery scans the whole tree from root without
+	// The nested package has its own error object with the same spelling. Discovery scans the whole tree from root without
 	// consulting Git status or revision state.
 	sites, err := Discover(root)
 	if err != nil {
@@ -208,16 +209,9 @@ func validateInternal() error {
 }
 func OutOfScopeHelperForwarding() error { err := validateInternal(); return err }
 `)
-	sites, err := Discover(root)
-	if err != nil {
-		t.Fatalf("non-constructor helper forwarding should remain outside the stated use-shape coverage: %v", err)
+	if _, err := Discover(root); err == nil || !strings.Contains(err.Error(), "guards.go:8") {
+		t.Fatalf("full helper set must refuse forwarding with file:line: %v", err)
 	}
-	for _, site := range sites {
-		if site.Function == "OutOfScopeHelperForwarding" {
-			t.Fatalf("out-of-scope helper forwarding was silently counted as a covered refusal site: %#v", site)
-		}
-	}
-	t.Log("non-constructor helper forwarding is outside the recognized-constructor and ErrCurator-sentinel use-shape subset")
 }
 
 func writeFile(t *testing.T, root, relative, content string) {

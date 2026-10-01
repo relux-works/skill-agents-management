@@ -38,28 +38,38 @@ type claudeMCPServer struct {
 // before BuildPlan performs any other plugin preparation. Args calls the same
 // pure builder so direct plugin callers receive identical refusals.
 func (*System) ValidateContextDescriptors(req agentic.LaunchRequest, mode agentic.LaunchMode) error {
-	_, err := buildContextValues(req, mode)
-	return err
+	if _, err := buildContextValues(req, mode); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ValidateCuratorContext is the Claude channel-layer gate for a typed Curator
 // fragment. BuildPlan invokes it before any launch surface is built.
 func (*System) ValidateCuratorContext(req agentic.LaunchRequest, mode agentic.LaunchMode) error {
-	_, err := buildContextValues(req, mode)
-	return err
+	if _, err := buildContextValues(req, mode); err != nil {
+		return err
+	}
+	return nil
 }
 
 func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (contextValues, error) {
 	values := contextValues{}
-	effective, err := req.PermissionMode.Resolve()
-	if err != nil {
+	var effective agentic.PermissionMode
+
+	if effectiveValue, err := req.PermissionMode.Resolve(); err != nil {
 		return values, fmt.Errorf("claude: %w", err)
+	} else {
+		effective = effectiveValue
 	}
 	seen := make(map[agentic.ContextDescriptorKind]bool, len(req.ContextDescriptors))
 	for _, descriptor := range req.ContextDescriptors {
-		payload, err := agentic.DecodeContextDescriptor(descriptor)
-		if err != nil {
+		var payload agentic.ContextDescriptorPayload
+
+		if payloadValue, err := agentic.DecodeContextDescriptor(descriptor); err != nil {
 			return values, err
+		} else {
+			payload = payloadValue
 		}
 		if seen[descriptor.Kind] {
 			return values, contextConflict(descriptor.Kind, "the channel was supplied more than once")
@@ -74,9 +84,12 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 			if err := agentic.ValidateMCPServers(*payload.MCP); err != nil {
 				return values, err
 			}
-			config, servers, err := encodeClaudeMCP(*payload.MCP)
-			if err != nil {
+			var config string
+			var servers []agentic.CompositionServer
+			if encoded, encodedServers, err := encodeClaudeMCP(*payload.MCP); err != nil {
 				return values, err
+			} else {
+				config, servers = encoded, encodedServers
 			}
 			composition := agentic.Composition{Prefix: []string{mcpjson.ConfigFlag, config}, Servers: servers}
 			if err := validateComposition(composition); err != nil {
@@ -102,9 +115,10 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 			if mode != agentic.LaunchModeInteractive {
 				return values, fmt.Errorf("claude: %w: a permission context is valid only for interactive launches", agentic.ErrPermissionModeNotInteractive)
 			}
-			effective, err = payload.Permission.Mode.Resolve()
-			if err != nil {
+			if resolved, err := payload.Permission.Mode.Resolve(); err != nil {
 				return values, fmt.Errorf("claude context: %w", err)
+			} else {
+				effective = resolved
 			}
 			values.hasPermission = true
 		}

@@ -139,9 +139,12 @@ func (r *Registry) RegisterWithDependencies(sys System, dependencies ...plugin.R
 	if again := sys.ID(); again != raw {
 		return fmt.Errorf("%w: ID() returned %q and then %q; System.ID must answer the same value forever, and a plugin that disagrees with itself would be registered under one name and held under another", ErrUnstableSystemID, string(raw), string(again))
 	}
-	id, err := NormalizeSystemID(string(raw))
-	if err != nil {
+	var id SystemID
+
+	if idValue, err := NormalizeSystemID(string(raw)); err != nil {
 		return fmt.Errorf("agentic: registering system: %w", err)
+	} else {
+		id = idValue
 	}
 	if raw != id {
 		return fmt.Errorf("%w: ID() returns %q but normalizes to %q; System.ID must already be its normalized spelling, or a caller holding the plugin and a caller reading the registry see two different names for one system", ErrUnnormalizedSystemID, string(raw), string(id))
@@ -230,9 +233,11 @@ func (r *Registry) Lookup(id SystemID) (System, bool) {
 	if r == nil {
 		return nil, false
 	}
-	normalized, err := NormalizeSystemID(string(id))
-	if err != nil {
+	var normalized SystemID
+	if value, err := NormalizeSystemID(string(id)); err != nil {
 		return nil, false
+	} else {
+		normalized = value
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()

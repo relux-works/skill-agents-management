@@ -129,9 +129,11 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 // assignment protocol: NativeArgs is the caller's verbatim optional prompt and
 // option suffix.
 func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
-	effective, err := req.PermissionMode.Resolve()
-	if err != nil {
+	var effective agentic.PermissionMode
+	if value, err := req.PermissionMode.Resolve(); err != nil {
 		return nil, fmt.Errorf("muse: %w", err)
+	} else {
+		effective = value
 	}
 	var args []string
 	if strings.TrimSpace(req.Model.ID) == "echo" {
@@ -146,14 +148,14 @@ func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
 		args = append(args, "--workspace", req.WorkDir)
 	}
 	if effective == agentic.PermissionModeYolo {
-		mapping, err := permissionMapping(req.ToolRelease, effective)
-		if err != nil {
+		if mapping, err := permissionMapping(req.ToolRelease, effective); err != nil {
 			return nil, err
+		} else {
+			if err := scanMuseNativePolicy(req.NativeArgs); err != nil {
+				return nil, fmt.Errorf("muse: %w", err)
+			}
+			args = append(args, mapping.Flag)
 		}
-		if err := scanMuseNativePolicy(req.NativeArgs); err != nil {
-			return nil, fmt.Errorf("muse: %w", err)
-		}
-		args = append(args, mapping.Flag)
 	}
 	return append(args, append([]string(nil), req.NativeArgs...)...), nil
 }

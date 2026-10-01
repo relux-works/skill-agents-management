@@ -85,13 +85,19 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return nil, fmt.Errorf("codex: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
 			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
 	}
-	localProvider, err := localProviderArgs(req, mode)
-	if err != nil {
+	var localProvider []string
+
+	if localProviderValue, err := localProviderArgs(req, mode); err != nil {
 		return nil, err
+	} else {
+		localProvider = localProviderValue
 	}
-	context, err := buildContextValues(req, mode)
-	if err != nil {
+	var context contextValues
+
+	if contextValue, err := buildContextValues(req, mode); err != nil {
 		return nil, err
+	} else {
+		context = contextValue
 	}
 	model := strings.TrimSpace(req.Model.ID)
 	switch mode {
@@ -177,14 +183,14 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		// scan classifies against it: an unpinned or newer release, and an
 		// empty one, fail closed here, and the scan below never reasons
 		// under a grammar no release verified.
-		mapping, err := permissionMapping(req.ToolRelease, context.permission)
-		if err != nil {
+		if mapping, err := permissionMapping(req.ToolRelease, context.permission); err != nil {
 			return nil, err
+		} else {
+			if err := scanNativePolicy(req.NativeArgs); err != nil {
+				return nil, fmt.Errorf("codex: %w", err)
+			}
+			return append(append(args, mapping.Flag), nativeArgsSuffix(req)...), nil
 		}
-		if err := scanNativePolicy(req.NativeArgs); err != nil {
-			return nil, fmt.Errorf("codex: %w", err)
-		}
-		return append(append(args, mapping.Flag), nativeArgsSuffix(req)...), nil
 	default:
 		return nil, fmt.Errorf("codex: unsupported launch mode %s", mode)
 	}

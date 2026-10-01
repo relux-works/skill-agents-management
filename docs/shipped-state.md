@@ -55,18 +55,41 @@ Claude PTY and Codex app-server entry mapping remains with the session-host
 stream. Curator-spec follow-ups remain issue-only references.
 
 The refusal guard scans all non-test Go files under `pkg/agentic` from the
-module root. Its measured site subset is recognized refusal constructors and
-`ErrCurator`-prefixed sentinels in the two allowed shapes: a direct `return`
-expression or an `if` initializer whose branch returns it. Forwarding through
-other helpers, named-result bare returns and unprefixed sentinels are out of
-scope, tracked by TASK-260930-3txv44; other shapes and non-regular files refuse.
-Mutation accounting: a member counts as killed when a named BuildPlan subtest
-fails on at least one plugin; per-plugin completeness (killed on claude AND
-codex, in separate processes) is out of scope, tracked by TASK-260930-3txv44.
-Managed-home `homeVariable` mutants additionally spot-check both plugins; this
-does not establish per-plugin completeness. The curator validator matrix
-restriction check is best-effort; `t.Skip` and aliased plugin conditions are
-known blind spots, tracked by TASK-260930-3txv44.
+module root and resolves sentinels, error types and the fixed-point helper set
+by `go/types` object identity. Sentinel spelling has no prefix requirement.
+Direct propagation and returning if-init propagation are allowed. If-init,
+switch-init and single-statement consumption may produce non-error outcomes;
+error-protocol methods are identified by their receiver method set and exact
+signature. Local error forwarding, bare named-result forwarding, error storage,
+blank discards and conversion back into errors are refused with file:line.
+Non-error local outcomes are followed through local value bindings to prevent
+error reconstruction. Refusal-derived writes to fields, indices and dereferenced
+targets are refused even for bool-only outcomes, so pre-existing aggregate aliases
+cannot bypass provenance checking. Comparison operands are checked recursively;
+parenthesized calls resolve to the same function object. Raw
+refusal arguments may reach only propagation wrappers, errors.Is/As, string/log
+output or terminal panic; diagnostic helpers cannot retain the original error.
+Every error slot in an init tuple is checked, including blank siblings. Format
+width and precision stars count toward the argument actually wrapped by %w.
+Generics-instantiated helpers and reflection-based calls are outside this
+leaf's contract. Each inventoried site has a named BuildPlan test or an explicit
+one-site behavioral coverage bound; inventory does not claim behavioral
+coverage for the other API surfaces.
+
+The guard's accepted subset is frozen to the scoped-consumption rule, the closed
+call-argument set and the structural storage ban. Further constructions absent
+from this module's production and test code are future hardening, not blocking
+findings; repository constructions and regressions in the promised subset block.
+
+Curator validator members count as killed only when both Claude and Codex fail
+a named negative subtest in separate `go test` processes. Process exits, named
+failures and full logs are retained under `.temp/launch-context-mutants/`.
+Survivors are reported separately; a downstream equivalence claim needs a green
+solo guard mutation and a combined named failure for each plugin, including
+partial primary kills. A later guard is relocated by its unique structural
+function/guard/return identity after formatting, never by a guessed line shift. The static
+matrix restriction check remains best-effort; runtime kill accounting refuses
+missing, skipped or surviving named witnesses.
 
 ## General graph baseline: v0.4.3
 

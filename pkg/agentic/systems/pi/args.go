@@ -36,9 +36,12 @@ func Args(req agentic.LaunchRequest) ([]string, error) {
 // project-local files and is not equivalent. Refusing with
 // ErrPermissionModeUnsupported is Decision 0018's Pi row.
 func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode) ([]string, error) {
-	model, err := nativeModelIdentity(req)
-	if err != nil {
+	var model string
+
+	if modelValue, err := nativeModelIdentity(req); err != nil {
 		return nil, err
+	} else {
+		model = modelValue
 	}
 	if effective == agentic.PermissionModeYolo {
 		// Drift fails closed before support is even asked: an unpinned
@@ -55,9 +58,12 @@ func interactiveArgs(req agentic.LaunchRequest, effective agentic.PermissionMode
 }
 
 func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
-	effective, err := req.PermissionMode.Resolve()
-	if err != nil {
+	var effective agentic.PermissionMode
+
+	if effectiveValue, err := req.PermissionMode.Resolve(); err != nil {
 		return nil, fmt.Errorf("pi: %w", err)
+	} else {
+		effective = effectiveValue
 	}
 	if mode != agentic.LaunchModeInteractive && !req.PermissionMode.IsZero() {
 		return nil, fmt.Errorf("pi: %w: permission mode %q is valid only for interactive launches",
@@ -70,13 +76,19 @@ func args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	if mode == agentic.LaunchModeInteractive {
 		return interactiveArgs(req, effective)
 	}
-	prepared, err := prepareLaunchRequest(req, mode)
-	if err != nil {
+	var prepared agentic.LaunchRequest
+
+	if preparedValue, err := prepareLaunchRequest(req, mode); err != nil {
 		return nil, err
+	} else {
+		prepared = preparedValue
 	}
-	model, err := nativeModelIdentity(prepared)
-	if err != nil {
+	var model string
+
+	if modelValue, err := nativeModelIdentity(prepared); err != nil {
 		return nil, err
+	} else {
+		model = modelValue
 	}
 	prompt := "<prompt>"
 	if mode != agentic.LaunchModeDryRun {
@@ -125,9 +137,12 @@ func prepareLaunchRequest(req agentic.LaunchRequest, mode agentic.LaunchMode) (a
 	if mode == agentic.LaunchModeDryRun {
 		return req, nil
 	}
-	data, err := turnPrompt(req)
-	if err != nil {
+	var data []byte
+
+	if dataValue, err := turnPrompt(req); err != nil {
 		return agentic.LaunchRequest{}, err
+	} else {
+		data = dataValue
 	}
 	prepared := req
 	prepared.PromptPath = ""

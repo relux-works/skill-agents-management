@@ -74,9 +74,12 @@ func BuildMultiNodePlan(primary Plan, primaryDependencies []PlanNodeID, nodes ..
 	all := append(append([]PlanNode(nil), nodes...), primaryNode)
 	byID := make(map[PlanNodeID]PlanNode, len(all))
 	for _, raw := range all {
-		node, err := validatePlanNode(raw)
-		if err != nil {
+		var node PlanNode
+
+		if nodeValue, err := validatePlanNode(raw); err != nil {
 			return Plan{}, err
+		} else {
+			node = nodeValue
 		}
 		if _, duplicate := byID[node.ID]; duplicate {
 			return Plan{}, fmt.Errorf("%w: %q", ErrDuplicatePlanNode, node.ID)

@@ -1310,8 +1310,23 @@ concluding that a missing golden is permission.
 | board-facts mutation harness | narrow every gate the board-facts port added — lifecycle, score, supersession, recommendation, context window, pricing, the vendor-unresolved runtime's rows, the derived lineup and the digest serialization — and confirm the suite goes red naming the right test. Every mutant is a compile-clean NARROWING rather than a deletion, so a kill proves the class is covered rather than the line is present | `python3 .temp/TASK-260824-y7gyco/mutants.py` | `.temp/TASK-260824-y7gyco/mutants-01.log` |
 | regress mutation harness | narrow every gate `make regress` claims to hold, one at a time, and confirm the net goes red naming the right test | `python3 .temp/TASK-260823-4f5t1m/mutants.py` | `.temp/TASK-260823-4f5t1m/mutants-*.log` |
 | refusal-matrix harness | copy the current tree, narrow each raw plugin, typed plan and vendor-registration error class independently, and require its named production-entry negative to fail with exit `1` | `python3 .scripts/verify-refusal-matrix.py` | `.temp/TASK-260830-1jpse1/mutants/{summary.tsv,*.log}` |
-| launch-context mutant harness | walk the complete non-test Go source tree under `pkg/agentic/`, require every refusal-bearing file and every curator site to have named coverage or one-site out-of-contract rationale, derive validator class members from their source AST conditions, then check each named BuildPlan test against its narrowing mutant | `GOWORK=off go run -mod=mod ./tools/launchcontext-mutants -table-out .temp/launch-context-mutants/mutation-table.md`; use `-start N -limit M` for bounded sequential chunks | terminal output and `.temp/launch-context-mutants/mutation-table.md`; isolated mutant copy under `.temp/launch-context-mutants/` is removed after the run |
+| launch-context mutant harness | walk the complete non-test Go source tree under `pkg/agentic/`, require every refusal-bearing file and every curator site to have named coverage or one-site out-of-contract rationale, derive validator class members from their source AST conditions, then check each named BuildPlan test against its narrowing mutant | `GOWORK=off go run -mod=mod ./tools/launchcontext-mutants -table-out .temp/launch-context-mutants/mutation-table.md`; use `-validators-only -start N -limit M` for bounded sequential validator chunks | terminal output, `.temp/launch-context-mutants/mutation-table.md`, and per-plugin exits/full logs in `.temp/launch-context-mutants/process-evidence/`; isolated mutant copy under `.temp/launch-context-mutants/` is removed after the run |
 | Go launch-context tests | exercise the typed fragment and refusal contract through `agentic.BuildPlan` with the Claude and Codex plugins | `env -u TASK_BOARD_DIR go test -mod=mod ./pkg/agentic ./pkg/agentic/systems/claude ./pkg/agentic/systems/codex -count=1` | terminal output; local task logs under `.temp/` |
+
+The refusal scanner uses the standard-library `go/types` checker and compiler
+exports from `go list -mod=readonly -export -deps -json ./pkg/agentic/...`;
+loading cannot rewrite module metadata. Run its structural fixtures, production
+guard attacks and named narrowing mutants with
+`go test ./internal/refusalscan -count=1 -v`. No new module dependency is needed.
+Non-error local conversions are followed through local value bindings; refusal-derived
+field, index and dereferenced writes are refused without alias analysis. Comparison
+operands obey the same consumer rules, and parenthesized callees retain their
+object identity. Raw refusal arguments are limited
+to propagation wrappers, classifiers, string/log output and terminal panic; a
+non-error call result does not establish safe consumption. Partial plugin kills
+remain survivors unless real solo/combined processes prove a downstream bound; ambiguous guard relocation is refused.
+The accepted scoped-consumption contract and behavioral coverage bounds are
+recorded in [docs/shipped-state.md](docs/shipped-state.md).
 
 The vendor context contract tests include an AST-generated inventory of every
 `LaunchRequest` field and its `SpawnRequest` path or declared vendor owner. Run

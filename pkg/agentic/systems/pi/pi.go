@@ -105,9 +105,12 @@ func (s *System) PrepareLaunchRequest(req agentic.LaunchRequest, mode agentic.La
 	if _, err := nativeModelIdentity(req); err != nil {
 		return agentic.LaunchRequestPreparation{}, err
 	}
-	prepared, err := prepareLaunchRequest(req, mode)
-	if err != nil {
+	var prepared agentic.LaunchRequest
+
+	if preparedValue, err := prepareLaunchRequest(req, mode); err != nil {
 		return agentic.LaunchRequestPreparation{}, err
+	} else {
+		prepared = preparedValue
 	}
 	return agentic.LaunchRequestPreparation{PromptPath: prepared.PromptPath, Prompt: prepared.Prompt}, nil
 }

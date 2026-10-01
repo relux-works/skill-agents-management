@@ -277,9 +277,12 @@ type PlanWithEnvironment struct {
 // that same effective request. On error it returns a zero result.
 func BuildPlanWithEnvironment(r *Registry, req LaunchRequest, mode LaunchMode) (PlanWithEnvironment, error) {
 	var owned []string
-	plan, err := buildPlan(r, req, mode, &owned)
-	if err != nil {
+	var plan Plan
+
+	if planValue, err := buildPlan(r, req, mode, &owned); err != nil {
 		return PlanWithEnvironment{}, err
+	} else {
+		plan = planValue
 	}
 	return PlanWithEnvironment{Plan: plan, OwnedEnv: owned}, nil
 }
@@ -304,9 +307,12 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	if r == nil {
 		return Plan{}, errors.New("agentic: cannot build a plan without a registry")
 	}
-	id, err := NormalizeSystemID(string(req.System))
-	if err != nil {
+	var id SystemID
+
+	if idValue, err := NormalizeSystemID(string(req.System)); err != nil {
 		return Plan{}, fmt.Errorf("agentic: building plan: %w", err)
+	} else {
+		id = idValue
 	}
 	sys, ok := r.Lookup(id)
 	if !ok {
@@ -370,9 +376,10 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 			return Plan{}, fmt.Errorf("agentic: %s rejected launch context before planning: %w", id, err)
 		}
 	}
-	req, err = PrepareLaunchRequest(sys, req, mode)
-	if err != nil {
+	if prepared, err := PrepareLaunchRequest(sys, req, mode); err != nil {
 		return Plan{}, fmt.Errorf("agentic: %s rejected the launch request before planning: %w", id, err)
+	} else {
+		req = prepared
 	}
 	if strings.TrimSpace(req.Model.ID) == "" {
 		return Plan{}, fmt.Errorf("%w: %s in %s mode", ErrModelMissing, id, mode)
@@ -441,19 +448,25 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		return Plan{}, fmt.Errorf("%w: %s resolved an empty binary with no error", ErrPluginContract, id)
 	}
 
-	argv, err := sys.Argv(req, mode)
-	if err != nil {
+	var argv []string
+	if args, err := sys.Argv(req, mode); err != nil {
 		return Plan{}, fmt.Errorf("agentic: %s could not build %s argv: %w", id, mode, err)
+	} else {
+		argv = args
 	}
 
-	env, err := sys.ChildEnv(req.Env, req)
-	if err != nil {
+	var env []string
+	if value, err := sys.ChildEnv(req.Env, req); err != nil {
 		return Plan{}, fmt.Errorf("agentic: %s could not build the child environment: %w", id, err)
+	} else {
+		env = value
 	}
 
-	stdin, err := sys.Stdin(req)
-	if err != nil {
+	var stdin StdinPayload
+	if value, err := sys.Stdin(req); err != nil {
 		return Plan{}, fmt.Errorf("agentic: %s could not build its stdin payload: %w", id, err)
+	} else {
+		stdin = value
 	}
 	if !stdin.Attached && len(stdin.Bytes) > 0 {
 		return Plan{}, fmt.Errorf("%w: %s returned %d stdin bytes while reporting nothing attached", ErrPluginContract, id, len(stdin.Bytes))
@@ -467,11 +480,11 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	}
 
 	if owned != nil {
-		snapshot, err := sys.ChildEnv(nil, req)
-		if err != nil {
+		if snapshot, err := sys.ChildEnv(nil, req); err != nil {
 			return Plan{}, fmt.Errorf("agentic: %s could not build the owned environment: %w", id, err)
+		} else {
+			*owned = append([]string(nil), snapshot...)
 		}
-		*owned = append([]string(nil), snapshot...)
 		sort.Strings(*owned)
 	}
 

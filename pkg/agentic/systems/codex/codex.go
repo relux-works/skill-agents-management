@@ -154,9 +154,12 @@ func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, e
 	if req.LocalProvider == nil {
 		return env, nil
 	}
-	home, err := localProviderHome(req)
-	if err != nil {
+	var home string
+
+	if homeValue, err := localProviderHome(req); err != nil {
 		return nil, err
+	} else {
+		home = homeValue
 	}
 	return agentic.SetEnvValue(env, "CODEX_HOME", home), nil
 }

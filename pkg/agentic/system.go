@@ -856,12 +856,12 @@ func PrepareLaunchRequest(system System, req LaunchRequest, mode LaunchMode) (La
 	if !ok {
 		return req, nil
 	}
-	preparation, err := preparer.PrepareLaunchRequest(req, mode)
-	if err != nil {
+	if preparation, err := preparer.PrepareLaunchRequest(req, mode); err != nil {
 		return LaunchRequest{}, err
+	} else {
+		req.PromptPath = preparation.PromptPath
+		req.Prompt = append([]byte(nil), preparation.Prompt...)
 	}
-	req.PromptPath = preparation.PromptPath
-	req.Prompt = append([]byte(nil), preparation.Prompt...)
 	return req, nil
 }
 
