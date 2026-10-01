@@ -1,13 +1,11 @@
 package changelog_test
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -80,75 +78,93 @@ func scriptPath(t *testing.T) string {
 
 // runScript executes the release script in dir and returns its captured
 // output and exit code. A failure to launch the script itself is fatal;
-// a non-zero script exit is an ordinary result.
+// a non-zero script exit is an ordinary result. The run is bounded: a
+// deadline expiry is a named timeout failure, never an exit code.
 func runScript(t *testing.T, dir string, args ...string) (stdout, stderr string, exit int) {
 	t.Helper()
-	var out, errOut bytes.Buffer
-	c := exec.Command(scriptPath(t), args...)
-	c.Dir = dir
-	c.Env = fixtureEnv()
-	c.Stdout = &out
-	c.Stderr = &errOut
-	if err := c.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("running changelog-release.sh %v in %s: %v", args, dir, err)
-		}
-		exit = exitErr.ExitCode()
+	stdout, stderr, exit, err := runChangelogChild(dir, fixtureEnv(t), changelogChildTimeout(), scriptPath(t), args...)
+	if err != nil {
+		t.Fatalf("running changelog-release.sh %v in %s: %v", args, dir, err)
 	}
-	return out.String(), errOut.String(), exit
+	return stdout, stderr, exit
 }
 
 // runScriptEnv executes the release script in dir with extra environment
 // variables (hostile git config injection) and returns its captured output
-// and exit code.
+// and exit code. The run is bounded like runScript.
 func runScriptEnv(t *testing.T, dir string, env []string, args ...string) (stdout, stderr string, exit int) {
 	t.Helper()
-	var out, errOut bytes.Buffer
-	c := exec.Command(scriptPath(t), args...)
-	c.Dir = dir
-	c.Stdout = &out
-	c.Stderr = &errOut
-	c.Env = append(fixtureEnv(), env...)
-	if err := c.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("running changelog-release.sh %v in %s: %v", args, dir, err)
-		}
-		exit = exitErr.ExitCode()
+	stdout, stderr, exit, err := runChangelogChild(dir, append(fixtureEnv(t), env...), changelogChildTimeout(), scriptPath(t), args...)
+	if err != nil {
+		t.Fatalf("running changelog-release.sh %v in %s: %v", args, dir, err)
 	}
-	return out.String(), errOut.String(), exit
+	return stdout, stderr, exit
 }
 
 // runGit executes git in dir and returns its stdout. Any failure is fatal;
 // tests that assert refusal behavior never reach for failing git commands.
+// The run is bounded and never pages.
 func runGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	var out bytes.Buffer
-	c := exec.Command("git", append([]string{"-c", "diff.algorithm=myers", "-c", "color.ui=never"}, args...)...)
-	c.Dir = dir
-	c.Env = fixtureEnv()
-	c.Stdout = &out
-	c.Stderr = &out
-	if err := c.Run(); err != nil {
-		t.Fatalf("running git %v in %s: %v\n%s", args, dir, err, out.String())
+	// maintenance.auto=false and gc.auto=0 skip the fork+stat storm of
+	// post-commit auto-maintenance in these ephemeral fixtures; no test
+	// observes maintenance, and production reads never trigger it.
+	stdout, stderr, exit, err := runChangelogChild(dir, fixtureEnv(t), changelogChildTimeout(),
+		"git", append([]string{"-c", "diff.algorithm=myers", "-c", "color.ui=never",
+			"-c", "maintenance.auto=false", "-c", "gc.auto=0", "--no-pager"}, args...)...)
+	if err != nil {
+		t.Fatalf("running git %v in %s: %v", args, dir, err)
 	}
-	return out.String()
+	if exit != 0 {
+		t.Fatalf("running git %v in %s: exit %d\nstdout: %s\nstderr: %s", args, dir, exit, stdout, stderr)
+	}
+	return stdout
 }
 
-// Fixtures do not inherit Git identity/configuration or shell startup hooks.
-// Hostile inputs are supplied explicitly by runScriptEnv or local config.
-func fixtureEnv() []string {
+// fixtureHomeCache hands each test one isolated HOME for all its children.
+// Nothing under test writes there (no git config, no maintenance, no
+// network), so sharing within a test is safe, and it avoids a mkdir/rmdir
+// pair per child invocation — thousands per suite run.
+var fixtureHomeCache sync.Map // *testing.T -> string
+
+func fixtureHome(t *testing.T) string {
+	t.Helper()
+	if home, ok := fixtureHomeCache.Load(t); ok {
+		return home.(string)
+	}
+	home := t.TempDir()
+	t.Cleanup(func() { fixtureHomeCache.Delete(t) })
+	actual, _ := fixtureHomeCache.LoadOrStore(t, home)
+	return actual.(string)
+}
+
+// Fixtures do not inherit Git identity/configuration, shell startup hooks,
+// or the user's home directory. Hostile inputs are supplied explicitly by
+// runScriptEnv or local config. Every git invocation below this environment
+// is non-interactive: no terminal, pager, editor or credential prompt can
+// block a child, and no system, global or XDG config is read.
+func fixtureEnv(t *testing.T) []string {
+	t.Helper()
 	var env []string
 	for _, entry := range os.Environ() {
 		if strings.HasPrefix(entry, "GIT_") || strings.HasPrefix(entry, "TASK_BOARD_") ||
-			strings.HasPrefix(entry, "BASH_ENV=") || strings.HasPrefix(entry, "LC_ALL=") {
+			strings.HasPrefix(entry, "BASH_ENV=") || strings.HasPrefix(entry, "LC_ALL=") ||
+			strings.HasPrefix(entry, "SSH_ASKPASS=") || strings.HasPrefix(entry, "SSH_ASKPASS_REQUIRE=") {
 			continue
 		}
 		env = append(env, entry)
 	}
-	return append(env, "GIT_CONFIG_COUNT=0", "GIT_CONFIG_GLOBAL=/dev/null",
-		"GIT_CONFIG_SYSTEM=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "LC_ALL=C")
+	// An isolated home closes the reads GIT_CONFIG_GLOBAL=/dev/null does not
+	// name: the XDG config file and any helper resolved relative to $HOME.
+	// One per test: nothing under test writes there.
+	home := fixtureHome(t)
+	return append(env,
+		"HOME="+home,
+		"XDG_CONFIG_HOME="+home,
+		"GIT_CONFIG_COUNT=0", "GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "PAGER=cat", "GIT_EDITOR=true",
+		"LC_ALL=C")
 }
 
 // commitAll stages the whole tree and commits with a fixed test identity.
@@ -356,6 +372,7 @@ func TestCheckRefusesBadName(t *testing.T) {
 	}
 	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			dir := initRepo(t)
 			writeFile(t, filepath.Join(dir, "changelog.d", "good.md"), "- A bullet.\n")
 			writeFile(t, filepath.Join(dir, "changelog.d", name), "- A bullet.\n")
@@ -400,6 +417,7 @@ func TestCheckRefusesMissingTrailingNewline(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			dir := initRepo(t)
 			writeFile(t, filepath.Join(dir, "changelog.d", c.name), c.content)
 			_, stderr, exit := runScript(t, dir, "--check")
@@ -439,6 +457,7 @@ func TestCheckRefusesHeading(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			dir := initRepo(t)
 			writeFile(t, filepath.Join(dir, "changelog.d", c.name), c.content)
 			_, stderr, exit := runScript(t, dir, "--check")
@@ -484,6 +503,7 @@ func TestCheckRefusesNonBulletContent(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			dir := initRepo(t)
 			writeFile(t, filepath.Join(dir, "changelog.d", c.name), c.content)
 			_, stderr, exit := runScript(t, dir, "--check")
@@ -652,6 +672,7 @@ func TestReleaseRefusesInvalidVersion(t *testing.T) {
 	versions := []string{"0.5.39", "v0.5", "v1.2.3.4", "v", "latest", "", "vv1.2.3", "v1.2.x", "v1..2"}
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("version=%q", version), func(t *testing.T) {
+			t.Parallel()
 			dir := initRepo(t)
 			writeFile(t, filepath.Join(dir, "changelog.d", "good.md"), "- A bullet.\n")
 			commitAll(t, dir, "add good")
@@ -686,6 +707,7 @@ func TestReleaseRefusesInvalidDate(t *testing.T) {
 	}
 	for _, date := range dates {
 		t.Run(fmt.Sprintf("date=%q", date), func(t *testing.T) {
+			t.Parallel()
 			dir := initRepo(t)
 			writeFile(t, filepath.Join(dir, "changelog.d", "good.md"), "- A bullet.\n")
 			commitAll(t, dir, "add good")
@@ -707,6 +729,7 @@ func TestReleaseAcceptsValidDates(t *testing.T) {
 	dates := []string{"2026-10-02", "2024-02-29", "2000-02-29"}
 	for _, date := range dates {
 		t.Run(fmt.Sprintf("date=%q", date), func(t *testing.T) {
+			t.Parallel()
 			dir := initRepo(t)
 			writeFile(t, filepath.Join(dir, "changelog.d", "good.md"), "- A bullet.\n")
 			commitAll(t, dir, "add good")
@@ -724,6 +747,7 @@ func TestReleaseAcceptsValidDates(t *testing.T) {
 func TestReleaseRefusesDuplicateVersion(t *testing.T) {
 	t.Parallel()
 	t.Run("second run with the same version refuses", func(t *testing.T) {
+		t.Parallel()
 		dir := releaseFixture(t)
 		if _, _, exit := runScript(t, dir, "v9.9.9", "2026-10-02"); exit != 0 {
 			t.Fatalf("first release exited %d", exit)
@@ -740,6 +764,7 @@ func TestReleaseRefusesDuplicateVersion(t *testing.T) {
 		before.assertUnchanged(t, dir, "duplicate version")
 	})
 	t.Run("legacy bare header collides", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		writeFile(t, filepath.Join(dir, "CHANGELOG.md"), fixtureChangelog+"\n## v8.8.8\n\n- Old.\n")
 		writeFile(t, filepath.Join(dir, "changelog.d", "good.md"), "- A bullet.\n")
@@ -752,6 +777,7 @@ func TestReleaseRefusesDuplicateVersion(t *testing.T) {
 		before.assertUnchanged(t, dir, "duplicate legacy version")
 	})
 	t.Run("legacy unreleased-dash header collides", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		writeFile(t, filepath.Join(dir, "CHANGELOG.md"), fixtureChangelog+"\n## Unreleased — v7.7.7\n\n- Old.\n")
 		writeFile(t, filepath.Join(dir, "changelog.d", "good.md"), "- A bullet.\n")
@@ -766,6 +792,7 @@ func TestReleaseRefusesDuplicateVersion(t *testing.T) {
 func TestReleaseDuplicateCheckIgnoresBulletsAndSubstrings(t *testing.T) {
 	t.Parallel()
 	t.Run("bullet citing a future version does not collide", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		withCitation := strings.Replace(fixtureChangelog,
 			"- Existing unreleased bullet one.",
@@ -779,6 +806,7 @@ func TestReleaseDuplicateCheckIgnoresBulletsAndSubstrings(t *testing.T) {
 		}
 	})
 	t.Run("released longer version does not collide with its prefix", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		withLonger := strings.Replace(fixtureChangelog,
 			"## v0.1.0 — 2026-01-01", "## v2.0.39 — 2026-01-01", 1)
@@ -795,6 +823,7 @@ func TestReleaseDuplicateCheckIgnoresBulletsAndSubstrings(t *testing.T) {
 func TestReleaseRefusesDirtyTree(t *testing.T) {
 	t.Parallel()
 	t.Run("tracked modification", func(t *testing.T) {
+		t.Parallel()
 		dir := releaseFixture(t)
 		before := readFile(t, filepath.Join(dir, "CHANGELOG.md"))
 		writeFile(t, filepath.Join(dir, "CHANGELOG.md"), before+"- Uncommitted bullet.\n")
@@ -813,6 +842,7 @@ func TestReleaseRefusesDirtyTree(t *testing.T) {
 		}
 	})
 	t.Run("untracked file", func(t *testing.T) {
+		t.Parallel()
 		dir := releaseFixture(t)
 		writeFile(t, filepath.Join(dir, "untracked.txt"), "untracked\n")
 		before := snapshot(t, dir)
@@ -830,6 +860,7 @@ func TestReleaseRefusesDirtyTree(t *testing.T) {
 func TestReleaseRefusesEmptyWithoutAllowEmpty(t *testing.T) {
 	t.Parallel()
 	t.Run("carry-over only still refuses", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		before := snapshot(t, dir)
 		_, stderr, exit := runScript(t, dir, "v0.2.0", "2026-10-02")
@@ -842,6 +873,7 @@ func TestReleaseRefusesEmptyWithoutAllowEmpty(t *testing.T) {
 		before.assertUnchanged(t, dir, "empty without --allow-empty")
 	})
 	t.Run("totally empty still refuses", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		writeFile(t, filepath.Join(dir, "CHANGELOG.md"), "# Changelog\n\n## Unreleased\n")
 		commitAll(t, dir, "empty unreleased")
@@ -857,6 +889,7 @@ func TestReleaseRefusesEmptyWithoutAllowEmpty(t *testing.T) {
 func TestReleaseAllowEmpty(t *testing.T) {
 	t.Parallel()
 	t.Run("carry-over only", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		headBefore := runGit(t, dir, "rev-parse", "HEAD")
 		_, stderr, exit := runScript(t, dir, "--allow-empty", "v0.2.0", "2026-10-02")
@@ -876,6 +909,7 @@ func TestReleaseAllowEmpty(t *testing.T) {
 		}
 	})
 	t.Run("totally empty writes an empty section", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		writeFile(t, filepath.Join(dir, "CHANGELOG.md"), "# Changelog\n\n## Unreleased\n")
 		commitAll(t, dir, "empty unreleased")
@@ -1000,6 +1034,7 @@ func hostileStatusEnv() []string {
 func TestReleaseRefusesDirtyTreeUnderHostileStatusConfig(t *testing.T) {
 	t.Parallel()
 	t.Run("untracked fragment", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		writeFile(t, filepath.Join(dir, "changelog.d", "aaa.md"), "- Committed.\n")
 		commitAll(t, dir, "add aaa")
@@ -1018,6 +1053,7 @@ func TestReleaseRefusesDirtyTreeUnderHostileStatusConfig(t *testing.T) {
 		}
 	})
 	t.Run("untracked non-fragment", func(t *testing.T) {
+		t.Parallel()
 		// Proves the dirty gate itself is config-proof, independent of the
 		// fragment-tracked check (which only sees changelog.d entries).
 		dir := releaseFixture(t)
@@ -1033,6 +1069,7 @@ func TestReleaseRefusesDirtyTreeUnderHostileStatusConfig(t *testing.T) {
 		before.assertUnchanged(t, dir, "hostile dirty tree (non-fragment)")
 	})
 	t.Run("untracked hidden by local config file", func(t *testing.T) {
+		t.Parallel()
 		// Hostile status.showUntrackedFiles=no via the repository-local
 		// .git/config file (written directly; the suite never runs git
 		// config). GIT_CONFIG_COUNT=0 cannot clear a file, so only the

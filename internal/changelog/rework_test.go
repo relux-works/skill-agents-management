@@ -71,6 +71,7 @@ func TestReleaseHandlesInvalidLocalDiffAlgorithm(t *testing.T) {
 	t.Parallel()
 	for _, dirty := range []bool{false, true} {
 		t.Run(fmt.Sprintf("dirty_fragment=%t", dirty), func(t *testing.T) {
+			t.Parallel()
 			dir := rootAddFixture(t)
 			if dirty {
 				writeFile(t, filepath.Join(dir, "changelog.d", "zzz.md"), "- UNCOMMITTED replacement.\n")
@@ -82,13 +83,14 @@ func TestReleaseHandlesInvalidLocalDiffAlgorithm(t *testing.T) {
 			invalidConfig := readFile(t, configPath)
 			// Reproduce the panel's actual Git failure independently of the script's
 			// fixed -c overrides. Exit 128 is expected-red, not evidence of cleanliness.
+			// The raw reads run bounded like every other test child.
 			for _, args := range [][]string{{"status", "--porcelain=v1"}, {"log", "--name-only"}} {
-				c := exec.Command("git", args...)
-				c.Dir = dir
-				c.Env = fixtureEnv()
-				out, err := c.CombinedOutput()
-				if e, ok := err.(*exec.ExitError); !ok || e.ExitCode() != 128 {
-					t.Fatalf("raw git %v: want 128, got %v: %s", args, err, out)
+				stdout, stderr, exit, err := runChangelogChild(dir, fixtureEnv(t), changelogChildTimeout(), "git", args...)
+				if err != nil {
+					t.Fatalf("raw git %v: %v", args, err)
+				}
+				if exit != 128 {
+					t.Fatalf("raw git %v: want 128, got %d\nstdout: %s\nstderr: %s", args, exit, stdout, stderr)
 				}
 				t.Logf("expected-red raw git %s exit 128: invalid diff.algorithm", args[0])
 			}
@@ -119,6 +121,7 @@ func TestReleaseLocalConfigCannotChangeDiscoveryOrOrder(t *testing.T) {
 	}
 	for name, config := range configs {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			dir := rootAddFixture(t)
 			if name == "external-diff-textconv" {
 				writeFile(t, filepath.Join(dir, ".gitattributes"), "changelog.d/*.md diff=changelog\n")
@@ -222,6 +225,7 @@ func TestReleaseRefusesEachFailedGitRead(t *testing.T) {
 	}
 	for i, command := range reads {
 		t.Run(fmt.Sprintf("read_%d_%s", i+1, command), func(t *testing.T) {
+			t.Parallel()
 			dir := rootAddFixture(t)
 			before := snapshot(t, dir)
 			env, trace := gitReadShim(t, i+1, "")
@@ -236,6 +240,7 @@ func TestReleaseRefusesEachFailedGitRead(t *testing.T) {
 		})
 	}
 	t.Run("ignored_branch_check_ignore", func(t *testing.T) {
+		t.Parallel()
 		dir := initRepo(t)
 		writeFile(t, filepath.Join(dir, ".gitignore"), "changelog.d/ign.md\n")
 		commitAll(t, dir, "ignore")
@@ -259,6 +264,7 @@ func TestReleaseRefusesPanelStatusAndLogFailures(t *testing.T) {
 	t.Parallel()
 	for _, command := range []string{"status", "log"} {
 		t.Run(command, func(t *testing.T) {
+			t.Parallel()
 			dir := rootAddFixture(t)
 			if command == "status" {
 				writeFile(t, filepath.Join(dir, "dirty.txt"), "untracked\n")
@@ -340,6 +346,7 @@ func TestCheckPanelGrammarProbes(t *testing.T) {
 		{"symlink", "link.md", "", 1},
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			dir := initRepo(t)
 			path := filepath.Join(dir, "changelog.d", c.file)
 			if c.name == "symlink" {
@@ -465,6 +472,7 @@ func TestCheckRefusesSymlinkFragment(t *testing.T) {
 	// must fail there.
 	for _, c := range symlinkIgnoredCases() {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			dir := symlinkIgnoredFixture(t, c.ignore, c.target)
 			before := snapshot(t, dir)
 			_, stderr, exit := runScript(t, dir, "--check")
@@ -483,6 +491,7 @@ func TestReleaseRefusesSymlinkIgnoredTarget(t *testing.T) {
 	t.Parallel()
 	for _, c := range symlinkIgnoredCases() {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			dir := symlinkIgnoredFixture(t, c.ignore, c.target)
 			// The bypass shape, asserted before the refusal: status is
 			// clean while the target holds uncommitted bytes. Without the
@@ -593,6 +602,7 @@ func TestReleaseRefusesHiddenFragmentEdits(t *testing.T) {
 	t.Parallel()
 	for _, flag := range []string{"--assume-unchanged", "--skip-worktree"} {
 		t.Run(flag, func(t *testing.T) {
+			t.Parallel()
 			dir := hiddenEditFixture(t)
 			runGit(t, dir, "update-index", flag, "--", "changelog.d/a.md")
 			writeFile(t, filepath.Join(dir, "changelog.d", "a.md"), "- UNCOMMITTED fragment.\n")
@@ -615,6 +625,7 @@ func TestReleaseRefusesHiddenFragmentEdits(t *testing.T) {
 		})
 	}
 	t.Run("flag-without-edit-still-refuses", func(t *testing.T) {
+		t.Parallel()
 		// The flag gate fires even when bytes currently match: hidden
 		// state alone is unsafe. The byte mutant cannot kill here because
 		// bytes match; only the flag gate refuses.
@@ -635,6 +646,7 @@ func TestReleaseRefusesHiddenFragmentEdits(t *testing.T) {
 func TestReleaseRefusesHiddenChangelogEdits(t *testing.T) {
 	t.Parallel()
 	t.Run("assume-changelog", func(t *testing.T) {
+		t.Parallel()
 		dir := hiddenEditFixture(t)
 		runGit(t, dir, "update-index", "--assume-unchanged", "--", "CHANGELOG.md")
 		writeFile(t, filepath.Join(dir, "CHANGELOG.md"), "# Changelog\n\n## Unreleased\n\n- UNCOMMITTED carry.\n")
@@ -653,6 +665,7 @@ func TestReleaseRefusesHiddenChangelogEdits(t *testing.T) {
 		}
 	})
 	t.Run("ignorestat-changelog", func(t *testing.T) {
+		t.Parallel()
 		dir := hiddenEditFixture(t)
 		appendLocalConfig(t, dir, "[core]\n ignorestat = true\n")
 		runGit(t, dir, "update-index", "--really-refresh")
