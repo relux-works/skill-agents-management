@@ -1139,6 +1139,23 @@ that reason.
 repository's required local validation set. Run them from the exact candidate
 commit so the evidence is bound to the tree being reviewed.
 
+### Changelog
+
+`CHANGELOG.md` is release notes, not a landing log. Landings never edit it;
+each landing adds one fragment under `changelog.d/`, named `<id>.md` (see
+[changelog.d/README.md](changelog.d/README.md) for the grammar), and the
+tagger aggregates the fragments into `CHANGELOG.md` in a single release
+commit right before the tag:
+
+```sh
+.scripts/changelog-release.sh --check            # validate fragments, changes nothing
+.scripts/changelog-release.sh v0.5.39 2026-10-02 # write the section, remove consumed fragments
+```
+
+Release mode refuses an invalid version or date, a duplicate version, a dirty
+tree, or an empty `changelog.d/` (unless `--allow-empty`); it never commits or
+tags — the tagger reviews the diff, commits, and cuts the tag.
+
 ### The regression net
 
 `make regress` runs `internal/regress`, which is not more unit tests. Each
@@ -1291,6 +1308,8 @@ concluding that a missing golden is permission.
 | --- | --- | --- | --- |
 | `make` | build, test, vet, regress and install the CLI | `make build` / `test` / `vet` / `regress` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
 | Go toolchain | package tests and static analysis | `go test -mod=mod ./... -count=1` / `go vet -mod=mod ./...`; `make test` / `make vet` wrap the repository gates | terminal output and task-scoped logs in `.temp/` |
+| changelog release | validate landing fragments; aggregate them before the tagger commits and tags | `.scripts/changelog-release.sh --check`; `.scripts/changelog-release.sh [--allow-empty] <version> <YYYY-MM-DD>` | reads `changelog.d/`; release updates `CHANGELOG.md` and removes consumed fragments |
+| changelog behavioral and mutation tests | drive the release entry point in disposable Git repositories; require named narrowing mutants to fail their behavioral witnesses | `GOWORK=off go test -count=1 -v ./internal/changelog/` | terminal output; task logs in `.temp/`; isolated fixtures and mutant script copies in the Go test temp directory |
 | `golangci-lint` | lint all Go packages | `golangci-lint run ./...` | terminal output; task logs under `.temp/` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | Codex CLI | launch target for `pkg/agentic/systems/codex`; custom local providers are selected with generated config overrides and private `CODEX_HOME/config.toml` entries | `codex --version`; runtime launches execute the `Binary` and `Argv` returned by `agentic.BuildPlan` | child work under the requested `WorkDir`; private settings remain under `CODEX_HOME` |
