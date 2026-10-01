@@ -136,6 +136,14 @@ type SpawnRequest struct {
 	// its own turn (pi --deadline) fences at the caller's budget. Zero means
 	// none declared.
 	Deadline time.Duration
+
+	// Network is the optional typed carrier for a resolved network binding,
+	// forwarded unchanged into LaunchRequest. The vendor layer carries it
+	// without interpreting proxy policy; the shared network gate validates
+	// and admits it before any vendor dispatch, and BuildPlan applies it.
+	// The zero value means unmanaged and leaves every existing plan
+	// byte-identical.
+	Network agentic.Network
 }
 
 // BuildLaunch resolves one launch through both layers.
@@ -146,10 +154,14 @@ type SpawnRequest struct {
 // anywhere. Adding a vendor is a registration, and adding a runtime is a
 // declaration.
 //
-// The order is deliberate. Resolution first, so a refusal names the missing
-// plugin rather than a symptom. Then the model row and the effort word, which
-// are the vendor's own vocabulary and must be validated before a plugin is
-// asked to build anything. Then the plugin's Spawn. Then a fidelity check on
+// The order is deliberate. The shared network gate first, so a refused scope
+// never reaches a vendor, a preparer, an observation or a preflight — the
+// gate's own system lookup is declarations only, and an unresolvable runtime
+// falls through to the resolution refusal below. Then resolution, so a
+// refusal names the missing plugin rather than a symptom. Then the model row
+// and the effort word, which are the vendor's own vocabulary and must be
+// validated before a plugin is asked to build anything. Then the plugin's
+// Spawn. Then a fidelity check on
 // what it returned — a vendor may ADD to a launch (authentication env, a
 // configuration home) and may not REDIRECT it. Then agentic.BuildPlan, which
 // applies the Layer-1 contract checks: the effort transport, the launch mode,
@@ -195,6 +207,25 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	req.LocalProvider = cloneLocalProvider(req.LocalProvider)
 	req.Context = cloneCuratorContext(req.Context)
 	req.ContextDescriptors = cloneContextDescriptors(req.ContextDescriptors)
+	req.Network = req.Network.Clone()
+	// The network gate runs HERE, through the same shared function BuildPlan
+	// uses, before any vendor dispatch, preparation, observation or preflight
+	// (round-3 merged finding W1: preparation and preflight used to run
+	// first, so a refused carrier reached a preparer and a preparer failure
+	// masked the typed refusal). The only plugin call the gate may perform
+	// is the system's Capabilities declaration read. Zero Network returns
+	// before that read, so every existing launch is byte-identical.
+	if err := agentic.GateNetwork(req.Network, func() (agentic.Capabilities, error) {
+		return networkGateCapabilities(r, req.Runtime)
+	}); err != nil {
+		if errors.Is(err, agentic.ErrNetworkProfileInvalid) || errors.Is(err, agentic.ErrNetworkScopeUnsupported) {
+			return agentic.Plan{}, fmt.Errorf("vendorplugin: network gate refused runtime %s: %w", req.Runtime, err)
+		}
+		// Not a network refusal: the runtime or its system did not resolve,
+		// so admission is undecidable. Fall through: the normal path below
+		// reports it exactly as it always has, and nothing plugin-side has
+		// run — the failed lookup touched declarations only.
+	}
 	binding, err := resolveLaunchBinding(r, req.Runtime)
 	if err != nil {
 		return agentic.Plan{}, err
@@ -246,6 +277,7 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 		vendorRequest.LocalProvider = cloneLocalProvider(req.LocalProvider)
 		vendorRequest.Context = cloneCuratorContext(req.Context)
 		vendorRequest.ContextDescriptors = cloneContextDescriptors(req.ContextDescriptors)
+		vendorRequest.Network = req.Network.Clone()
 		launch, err = binding.Vendor.Spawn(SpawnContext{
 			Runtime: runtime,
 			Model:   model,
@@ -351,6 +383,40 @@ func (b launchBinding) SystemOnly() bool { return b.Vendor == nil }
 
 func (b launchBinding) Runtime() Runtime {
 	return Runtime{ID: b.ID, SystemID: b.SystemID, System: b.System, VendorID: b.VendorID, Vendor: b.Vendor, Engine: b.Engine}
+}
+
+// networkGateCapabilities resolves the agentic system for network admission
+// without invoking any plugin method: runtime-declaration and registry lookups
+// only, plus the single permitted Capabilities declaration read. It
+// deliberately resolves the system half alone — no vendor lookup, no model
+// read — because admission is a property of the harness declaration, and the
+// gate must decide before any of those surfaces runs.
+//
+// Any lookup failure returns the resolution error for buildLaunch to fall
+// through on; the normal path then reports it exactly as it always has. That
+// fall-through never masks a network refusal and is never masked by one:
+// GateNetwork validates the carrier shape before this runs, so a malformed
+// carrier is refused even for a runtime that does not resolve, while a
+// well-formed scope for an unresolvable runtime reports the resolution error
+// it cannot be admitted without.
+func networkGateCapabilities(r *Registry, id RuntimeID) (agentic.Capabilities, error) {
+	normalized, err := NormalizeRuntimeID(string(id))
+	if err != nil {
+		return agentic.Capabilities{}, err
+	}
+	declaration, declared := r.RuntimeDeclarationOf(normalized)
+	if !declared {
+		return agentic.Capabilities{}, fmt.Errorf("%w: %s", ErrUnknownRuntime, normalized)
+	}
+	if r.systems == nil {
+		return agentic.Capabilities{}, fmt.Errorf("%w: resolving runtime %s", ErrNoAgenticRegistry, normalized)
+	}
+	system, ok := r.systems.Lookup(declaration.System)
+	if !ok {
+		return agentic.Capabilities{}, fmt.Errorf("%w: runtime %s names agentic system %q, which no plugin in this binary registers",
+			ErrRuntimeSystemUnregistered, normalized, declaration.System)
+	}
+	return system.Capabilities(), nil
 }
 
 // resolveLaunchBinding preserves ResolveRuntime's public strictness while
@@ -502,6 +568,9 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 	}
 	if !reflect.DeepEqual(launch.ContextDescriptors, req.ContextDescriptors) {
 		return fmt.Errorf("%w: vendor %s changed the caller's context descriptors", ErrVendorContract, runtime.VendorID)
+	}
+	if !reflect.DeepEqual(launch.Network, req.Network) {
+		return fmt.Errorf("%w: vendor %s changed the caller's network scope", ErrVendorContract, runtime.VendorID)
 	}
 	if req.LocalProvider != nil && launch.Home != req.Home {
 		return fmt.Errorf("%w: vendor %s redirected the caller's local provider to a different Codex home", ErrVendorContract, runtime.VendorID)

@@ -139,6 +139,51 @@ mapping. Resume checks pass the stored snapshot through
 `CuratorContext.ExpectedProvenance`; `BuildPlan` compares its profile pin,
 managed home, intent and complete fragment identity before returning a plan.
 
+## Passing a resolved network scope
+
+The launch plane carries an optional typed `agentic.Network{Patch, Record}`
+(D4). The process owner resolves the profile on the destination host with
+`curator-network-profiles` (`catalog.Load`, `Catalog.Resolve`, bind), then
+passes the resulting patch and Record through. The module validates the
+carrier, applies the patch once after `ChildEnv`, joins the set half into
+`OwnedEnv`, and exposes the Record as plan provenance:
+
+```go
+plan, err := agentic.BuildPlan(registry, agentic.LaunchRequest{
+    System:  selectedSystem,
+    Model:   selectedModel,
+    WorkDir: workDir,
+    Network: agentic.Network{Patch: patch, Record: record},
+}, agentic.LaunchModeExec)
+if err != nil {
+    return err
+}
+
+record, ok := plan.NetworkProvenanceSnapshot()
+if !ok {
+    return errors.New("network provenance missing from managed plan")
+}
+runRecord.Network = record
+```
+
+The zero `Network` means unmanaged and changes nothing. Every production
+entry point runs the same shared gate first: a malformed carrier is refused
+with typed `network_profile_invalid` before the first plugin invocation of
+any kind, and a scope no verified adapter tuple names is refused with typed
+`network_scope_unsupported` right after the `Capabilities` declaration read
+(the single permitted plugin call before the gate), ahead of any vendor
+dispatch, preparation, observation, preflight or optional surface. A patch
+touching a reserved run-context key or an owned `ChildEnv(nil)` key is refused
+with typed `network_configuration_conflict`; admission is a fail-closed
+allowlist, so a harness whose `Capabilities.NetworkAdapters` does not name
+the Record's exact adapter tuple refuses any non-zero scope and never
+launches without it. No tuple is declared yet, so every harness refuses;
+`muse` stays unsupported until D8 verifies it. Through
+`vendorplugin.BuildLaunch`, set `SpawnRequest.Network` and the vendor layer
+forwards it unchanged; a vendor that changes it is refused with
+`ErrVendorContract`. Persist the Record only — never the patch, the endpoint,
+or the environment.
+
 `Model.CacheBudgetBytes` is an additive optional-positive catalog fact for
 configured local models. A consumer must distinguish `nil` (unrecorded) from a
 present byte count; zero is never a valid declaration. Use the declared value

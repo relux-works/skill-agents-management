@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/curator-network-profiles/pkg/binding"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -65,6 +66,12 @@ func newPangolinSystem() *pangolinSystem {
 			HomeEnvVar:          "PANGOLIN_HOME",
 			DefaultHome:         "~/.pangolin",
 			AuthHint:            "run `pangolin login` and retry",
+			// The double stands in for a harness whose tuple IS verified,
+			// naming exactly the tuple testNetwork bears, so the forwarding
+			// test observes a managed plan rather than the admission gate.
+			NetworkAdapters: []binding.AdapterIdentity{
+				{Adapter: "generic-env-v1", Harness: "pangolin", Build: "0.0.0-test", Entrypoint: "exec"},
+			},
 		},
 	}
 }
@@ -132,6 +139,7 @@ type narwhalVendor struct {
 	spawnSkipAuthEnv   bool
 	spawnLocalProvider *agentic.LocalProviderBinding
 	spawnHome          *string
+	spawnNetwork       *agentic.Network
 }
 
 // narwhalAuthEnv is the vendor's legitimate ADDITION to a launch: the kind of
@@ -225,6 +233,7 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 		Budget:        req.Budget,
 		ServiceTier:   req.ServiceTier,
 		Composition:   req.Composition,
+		Network:       req.Network.Clone(),
 	}
 	if n.spawnSkipAuthEnv {
 		launch.Env = append([]string(nil), req.Env...)
@@ -267,6 +276,9 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 	}
 	if n.spawnHome != nil {
 		launch.Home = *n.spawnHome
+	}
+	if n.spawnNetwork != nil {
+		launch.Network = *n.spawnNetwork
 	}
 	return launch, nil
 }

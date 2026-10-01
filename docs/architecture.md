@@ -285,6 +285,54 @@ and the fidelity check refuses a vendor that changes or drops any of `RunID`,
 `TaskID`, `BoardDir`, or `ContextID`; the resolved system remains the one owner
 that exports those values through `agentic.WithRunContext`.
 
+### Network carrier (D4)
+
+`agentic.LaunchRequest.Network` and `vendorplugin.SpawnRequest.Network` carry
+an optional typed `Network{Patch, Record}` (tb-R148 D4, decided: no callbacks).
+The types come from `github.com/relux-works/curator-network-profiles` at tag
+`v0.1.0` (`docs/integration-contract.md` rev 2, `spec/contract-appendix.md`):
+`envpatch.Patch` is the unset-then-set child-env rewrite and `binding.Record`
+is the manifest-safe binding identity. The module consumes that library by tag,
+with no `replace` and no `go.work` entry.
+
+Every production entry point that can carry a scope — `BuildPlan` and
+`BuildPlanWithEnvironment`, `BuildLaunch` and `BuildLaunchWithEnvironment` —
+runs the same shape and admission gate first, through the one shared function
+`agentic.GateNetwork`, before any vendor dispatch, preparation, observation,
+preflight, dispatch or optional surface. The request-side shape is validated
+before the first plugin invocation of any kind, `Capabilities` included
+(halves travel together, the Record carries its schema and profile identity,
+the patch is syntactically well-formed), so a malformed carrier is refused
+with typed `network_profile_invalid` while the plugin has been touched zero
+times. Admission follows right after the `Capabilities` declaration read that
+states it — the single permitted plugin call before the gate, and the only
+exception — and a scope the declaration does not name is refused with typed
+`network_scope_unsupported` before anything else runs. A runtime that does not
+resolve still refuses a malformed carrier (shape needs nothing); a well-formed
+scope for it reports the resolution error instead, since admission is
+undecidable without the system.
+
+`BuildPlan` applies the patch once, right after `ChildEnv`: unset entries
+remove (case-insensitively, so `Http_Proxy` goes too), set entries override
+and append in patch order, and the set half joins `OwnedEnv` so later layers
+cannot silently override managed proxy state. The Record travels as a separate
+network provenance member on the plan (`Plan.NetworkProvenanceSnapshot`),
+never mixed into env. The zero value means unmanaged and leaves every existing
+plan byte-identical.
+
+A well-formed patch that touches a reserved run-context key or an owned key
+from `ChildEnv(nil)` is refused with typed `network_configuration_conflict`.
+Admission is an explicit allowlist, fail-closed: a scope is honoured only when
+the system's `Capabilities.NetworkAdapters` declaration names the Record's
+exact harness/build/entrypoint/adapter tuple. No new interface hook, and it
+never launches without the scope. This revision no plugin declares a tuple
+(the contract rev 2 verifies none, so there is nothing to declare), which
+means every harness refuses; `muse` additionally keeps its own `ChildEnv`
+refusal as the second line, and stays unsupported until D8 verifies its tuple.
+Its closed parent allowlist is unchanged and a post-filter patch would bypass
+it. `SpawnRequest` forwards the carrier unchanged into `LaunchRequest` and the
+fidelity check refuses a vendor that changes it.
+
 After model selection and before vendor dispatch, `BuildLaunch` resolves the
 runtime/model engine reference through the shared graph and checks an optional
 `SpawnRequest.Engine` expectation exactly. The returned `Plan.Provenance`

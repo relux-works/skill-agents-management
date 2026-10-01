@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/relux-works/curator-network-profiles/pkg/binding"
 )
 
 // pangolinID names an agentic system that exists nowhere else in this module:
@@ -75,6 +77,14 @@ func newPangolin() *pangolinSystem {
 			HomeEnvVar:          "PANGOLIN_HOME",
 			DefaultHome:         "~/.pangolin",
 			AuthHint:            "run `pangolin login` and retry",
+			// The double stands in for a harness whose tuple IS verified,
+			// so the network application tests exercise the application
+			// point rather than the admission gate. It names exactly the
+			// tuple testNetwork bears; a test that wants the gate clears
+			// this field or bears a different identity.
+			NetworkAdapters: []binding.AdapterIdentity{
+				{Adapter: "generic-env-v1", Harness: "pangolin", Build: "0.0.0-test", Entrypoint: "exec"},
+			},
 		},
 		calls:         map[string]int{},
 		seenModel:     map[string]Model{},

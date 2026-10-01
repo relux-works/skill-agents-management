@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/relux-works/curator-network-profiles/pkg/binding"
 	"github.com/relux-works/skill-agents-management/internal/ident"
 )
 
@@ -677,6 +678,15 @@ type LaunchRequest struct {
 	// caller arguments silently is a launch that looks like the one that
 	// was asked for and is not.
 	NativeArgs []string
+
+	// Network is the optional typed carrier for a resolved network binding
+	// (D4 per tb-R148, decided: no callbacks). The patch is applied once by
+	// BuildPlan right after ChildEnv; its set half joins OwnedEnv so later
+	// layers cannot silently override it, and the Record travels as a
+	// separate network provenance member on the plan, never mixed into env.
+	// The zero value means unmanaged — no scope was selected — and leaves
+	// every existing plan byte-identical.
+	Network Network
 }
 
 // RunContext is the caller's identity for one tracked run, carried to the
@@ -906,6 +916,26 @@ type Capabilities struct {
 	// yet, which is different from asserting a remediation that has never
 	// been observed to work.
 	AuthHint string
+
+	// NetworkAdapters is the closed set of verified network adapter tuples
+	// this system honours a managed scope through, D4 per tb-R148. Each
+	// entry is one exact harness/build/entrypoint/adapter tuple from
+	// docs/integration-contract.md rev 2 Q7, spelled in the library's own
+	// binding.AdapterIdentity rather than a second four-string struct here:
+	// a second spelling of that tuple is the shadow-declaration disease,
+	// two shapes that agree until the day one of them gains a member.
+	//
+	// Empty — nil or zero entries — means NO verified network path, and
+	// BuildPlan refuses every non-zero Network for such a system with typed
+	// network_scope_unsupported right after the Capabilities read, before
+	// every dispatch and optional surface. A
+	// managed Record is admitted only when its adapter identity EQUALS one
+	// declared entry member for member (Capabilities.AdmitsNetwork):
+	// generic env support does not certify any harness release, and the
+	// contract verifies exact tuples, not adapter families. No plugin
+	// declares an entry until its tuple is verified; muse is unverified
+	// until D8 (follow-up TASK-261002-14shh7).
+	NetworkAdapters []binding.AdapterIdentity
 }
 
 // SupportsMode reports whether the system declared this launch mode.

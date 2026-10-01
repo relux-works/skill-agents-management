@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/relux-works/curator-network-profiles/pkg/binding"
 	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
 
@@ -51,6 +52,8 @@ type Plan struct {
 
 	curatorContextProvenance *CuratorContextProvenance
 
+	networkProvenance *binding.Record
+
 	// Nodes is empty for the source-compatible single-process plan. A
 	// consumer that needs an inference engine or sidecar calls
 	// BuildMultiNodePlan, which preserves every field above as the primary
@@ -66,6 +69,18 @@ func (p Plan) CuratorContextProvenanceSnapshot() (CuratorContextProvenance, bool
 		return CuratorContextProvenance{}, false
 	}
 	return cloneCuratorProvenance(*p.curatorContextProvenance), true
+}
+
+// NetworkProvenanceSnapshot returns a detached copy of the network binding
+// Record carried by this plan. It reports false when the launch selected no
+// network scope (zero Network): absence of a scope and a scope with no Record
+// are different facts, and the second is refused rather than planned. The
+// Record never enters the child environment; it is provenance only.
+func (p Plan) NetworkProvenanceSnapshot() (binding.Record, bool) {
+	if p.networkProvenance == nil {
+		return binding.Record{}, false
+	}
+	return *p.networkProvenance, true
 }
 
 // ModelIdentity is the pair one plan must keep: the model spelling the caller
@@ -318,7 +333,32 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	if !ok {
 		return Plan{}, fmt.Errorf("%w: %s", ErrUnknownSystem, id)
 	}
-	caps := sys.Capabilities()
+	// The network gate runs HERE, before the first plugin invocation of any
+	// kind, through the single shared function every production entry point
+	// uses (round-3 merged finding W1: the vendorplugin wrapper used to run
+	// preparation and preflight before this gate, and a preparer failure
+	// masked the typed refusal). Shape validation needs no plugin state, so
+	// GateNetwork refuses a malformed carrier before readCaps runs — the
+	// plugin has been touched zero times. Admission needs the declaration,
+	// so readCaps performs the single permitted Capabilities read and
+	// nothing else; the refusal follows before every dispatch and optional
+	// surface (round-2 merged finding N1: the gate used to sit after the
+	// optional dispatches, and a refused carrier reached the pi preparer).
+	// Zero Network skips both halves, so every existing plan stays
+	// byte-identical. The reserved/owned check needs ChildEnv(nil) and runs
+	// at the single application point below.
+	var caps Capabilities
+	capsRead := false
+	if err := GateNetwork(req.Network, func() (Capabilities, error) {
+		caps = sys.Capabilities()
+		capsRead = true
+		return caps, nil
+	}); err != nil {
+		return Plan{}, fmt.Errorf("agentic: network gate refused %s: %w", id, err)
+	}
+	if !capsRead {
+		caps = sys.Capabilities()
+	}
 
 	if !mode.Valid() || !caps.SupportsMode(mode) {
 		return Plan{}, fmt.Errorf("%w: %s does not declare %s", ErrUnsupportedLaunchMode, id, mode)
@@ -462,6 +502,27 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		env = value
 	}
 
+	// THE network application point, and the ONLY one: right after ChildEnv.
+	// Set entries override, unset entries remove, and the set half joins
+	// OwnedEnv below so later layers cannot silently override it. The Record
+	// travels as plan provenance, never mixed into env. Zero Network leaves
+	// env untouched.
+	var networkProvenance *binding.Record
+	var networkOwnedSnapshot []string
+	if !req.Network.IsZero() {
+		if snapshot, err := sys.ChildEnv(nil, req); err != nil {
+			return Plan{}, fmt.Errorf("agentic: %s could not build the owned environment for the network patch: %w", id, err)
+		} else {
+			networkOwnedSnapshot = snapshot
+		}
+		if err := checkNetworkPatchAgainstReservedAndOwned(req.Network.Patch, networkOwnedSnapshot); err != nil {
+			return Plan{}, fmt.Errorf("agentic: building plan for %s: %w", id, err)
+		}
+		env = req.Network.Patch.Apply(env)
+		record := req.Network.Record
+		networkProvenance = &record
+	}
+
 	var stdin StdinPayload
 	if value, err := sys.Stdin(req); err != nil {
 		return Plan{}, fmt.Errorf("agentic: %s could not build its stdin payload: %w", id, err)
@@ -480,7 +541,13 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	}
 
 	if owned != nil {
-		if snapshot, err := sys.ChildEnv(nil, req); err != nil {
+		if !req.Network.IsZero() {
+			// The set half is owned: the same patch that rewrote env rewrites
+			// the owned snapshot, reusing the validation snapshot above so a
+			// managed launch calls ChildEnv(nil) once, not twice.
+			patched := req.Network.Patch.Apply(networkOwnedSnapshot)
+			*owned = append([]string(nil), patched...)
+		} else if snapshot, err := sys.ChildEnv(nil, req); err != nil {
 			return Plan{}, fmt.Errorf("agentic: %s could not build the owned environment: %w", id, err)
 		} else {
 			*owned = append([]string(nil), snapshot...)
@@ -504,5 +571,6 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		Home:                     home,
 		ModelIdentity:            identity,
 		curatorContextProvenance: contextProvenance,
+		networkProvenance:        networkProvenance,
 	}, nil
 }

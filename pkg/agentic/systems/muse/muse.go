@@ -180,7 +180,17 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 // ChildEnv applies Muse's curated parent allowlist, overlays caller run
 // context, and forces auto-update off. See env.go for the exact names and
 // rationale.
+//
+// A non-zero Network is refused with typed network_scope_unsupported: Muse
+// has no verified harness/build/entrypoint/adapter tuple until D8 verifies
+// it, and a post-filter patch would bypass the closed allowlist above. This
+// is the second line — BuildPlan's admission gate refuses first, before any
+// plugin surface is dispatched — held for a caller holding the plugin
+// directly, the same double-refusal pattern ValidateComposition keeps below.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
+	if !req.Network.IsZero() {
+		return nil, agentic.ErrNetworkScopeUnsupported
+	}
 	return childEnv(parent, req), nil
 }
 
