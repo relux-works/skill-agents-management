@@ -73,6 +73,16 @@ func (e *LocalProviderRefusal) Is(target error) bool {
 // LocalProviderBinding explicitly selects a provider entry declared in the
 // private Codex configuration home. A nil pointer keeps the native Codex
 // subscription path unchanged; a non-nil empty ID is a typed unbound request.
+//
+// Snapshot is an optional validated provider snapshot produced by the Codex
+// plugin's exported constructor. When nil, the plugin resolves the ID from
+// the private config.toml on every plan (the ID-only path, byte-identical to
+// before snapshots existed). When non-nil, the plugin uses the snapshot's
+// resolved entry without reading config.toml; any value that is not a
+// snapshot the constructor produced is refused as malformed, and a snapshot
+// bound to a different provider ID is refused as conflicting. The snapshot
+// is immutable, so shallow copies of this binding safely share it.
 type LocalProviderBinding struct {
-	ID string
+	ID       string
+	Snapshot any
 }
