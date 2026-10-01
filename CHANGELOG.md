@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.42 — 2026-10-02
+
+- Declare the verified network tuple for `claude-code`: generic-env-v1,
+  build 2.1.287, exec entrypoint. A managed scope bearing exactly that tuple
+  is admitted; every other build, entrypoint, adapter or harness still
+  refuses with `network_scope_unsupported`.
+
+## Unreleased
+
 ## v0.5.41 — 2026-10-02
 
 - Add the data-only `vendorplugin/benchdata` Bug Hunt and registry accessors.
@@ -208,8 +217,6 @@
   is declared yet (the contract verifies none), so every harness refuses;
   `muse` keeps a second-line `ChildEnv` refusal until D8. Zero Network leaves
   every existing plan byte-identical.
-
-## Unreleased
 
 ## v0.5.24
 
