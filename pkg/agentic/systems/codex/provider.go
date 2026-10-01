@@ -47,6 +47,20 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	} else {
 		root = rootValue
 	}
+	// The snapshot path resolves no config: the binding carries the validated
+	// entry, and the home above is resolved only so a conflicting CODEX_HOME
+	// is still refused here as on the ID-only path. Home resolution reads no
+	// files, so this branch performs zero config reads by construction.
+	if req.LocalProvider.Snapshot != nil {
+		snapshot, ok := req.LocalProvider.Snapshot.(*ProviderSnapshot)
+		if !ok || !snapshot.valid() {
+			return nil, localProviderRefusal(agentic.LocalProviderMalformed, providerID)
+		}
+		if snapshot.providerID != providerID {
+			return nil, localProviderRefusal(agentic.LocalProviderConflicting, providerID)
+		}
+		return providerArgv(providerID, snapshot.entry()), nil
+	}
 	configPath := filepath.Join(root, "config.toml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -67,13 +81,7 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	} else {
 		provider = providerValue
 	}
-	return []string{
-		"-c", "model_provider=" + strconv.Quote(providerID),
-		"-c", "model_providers." + providerID + ".name=" + strconv.Quote(provider.Name),
-		"-c", "model_providers." + providerID + ".base_url=" + strconv.Quote(provider.BaseURL),
-		"-c", "model_providers." + providerID + ".wire_api=\"responses\"",
-		"-c", "model_providers." + providerID + ".requires_openai_auth=false",
-	}, nil
+	return providerArgv(providerID, provider), nil
 }
 
 // localProviderHome resolves the private configuration root once according to

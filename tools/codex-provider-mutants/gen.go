@@ -31,6 +31,7 @@ func main() {
 	fset := token.NewFileSet()
 	paths := []string{
 		"pkg/agentic/systems/codex/provider.go",
+		"pkg/agentic/systems/codex/snapshot.go",
 		"pkg/agentic/localprovider.go",
 	}
 	all := discoverMutations(fset, paths)
