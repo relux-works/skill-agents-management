@@ -41,6 +41,8 @@ import (
 // stream-json control request. None of those is this string.
 var museArgvSignature = []string{
 	"--yolo",
+	"--disable-approval",
+	"--disable-sandbox",
 	"--workspace",
 	"--prompt-file",
 	"--reasoning-effort",
@@ -52,16 +54,24 @@ const codexPolicyFile = "pkg/agentic/systems/codex/policy.go"
 const codexContextFile = "pkg/agentic/systems/codex/context.go"
 
 // museArgvConstructionAllowlist names the only sites permitted to spell a
-// signature literal, each with the reason it is not a second construction.
+// signature literal, each with the reason it is not an additional argv
+// construction. The package constants centralize flag spellings for both
+// builders and the duplicate-policy scanner.
 //
 // Keys are FILE-SCOPED (internal/argvguard.AllowlistKey): several plugins in
 // this module name their construction site Args, so a bare-name allowlist would
 // exempt every Args in the module from every plugin's guard.
 var museArgvConstructionAllowlist = map[string]string{
-	argvguard.AllowlistKey(museArgsFile, "Args"):                          "the single construction site",
-	argvguard.AllowlistKey(codexArgsFile, "yoloAliasFlag"):                "Codex's native alias has the same spelling as Muse's flag; this constant is read by the Codex classifier and is never emitted",
-	argvguard.AllowlistKey(codexPolicyFile, "codexRootOptionIsBoolean"):   "the Codex classifier recognizes the overlapping native alias while reading caller args; it emits no argv",
-	argvguard.AllowlistKey(codexContextFile, "isCodexPermissionSelector"): "the typed-context conflict classifier recognizes the overlapping native alias while reading caller args; it emits no argv",
+	argvguard.AllowlistKey(museArgsFile, "Args"):                                         "the single exec and dry-run construction site",
+	argvguard.AllowlistKey(museArgsFile, "interactiveArgs"):                              "the interactive branch reached only through Args",
+	argvguard.AllowlistKey(museArgsFile, "museYoloFlag"):                                 "the shared yolo spelling used by both builders and the duplicate scanner",
+	argvguard.AllowlistKey(museArgsFile, "museDisableApprovalFlag"):                      "the shared equivalent-posture spelling used by the duplicate scanner",
+	argvguard.AllowlistKey(museArgsFile, "museDisableSandboxFlag"):                       "the shared equivalent-posture spelling used by the duplicate scanner",
+	argvguard.AllowlistKey("pkg/agentic/systems/muse/policy.go", "permissionMapping"):    "returns the release-pinned policy flag mapping but does not construct argv",
+	argvguard.AllowlistKey("pkg/agentic/systems/muse/policy.go", "scanMuseNativePolicy"): "reads caller-owned duplicate posture flags and emits no argv",
+	argvguard.AllowlistKey(codexArgsFile, "yoloAliasFlag"):                               "Codex's native alias has the same spelling as Muse's flag; this constant is read by the Codex classifier and is never emitted",
+	argvguard.AllowlistKey(codexPolicyFile, "codexRootOptionIsBoolean"):                  "the Codex classifier recognizes the overlapping native alias while reading caller args; it emits no argv",
+	argvguard.AllowlistKey(codexContextFile, "isCodexPermissionSelector"):                "the typed-context conflict classifier recognizes the overlapping native alias while reading caller args; it emits no argv",
 }
 
 // moduleGoSources reads every non-test Go file this module's build compiles,

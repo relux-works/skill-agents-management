@@ -10,6 +10,7 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pinative"
 )
 
@@ -32,13 +33,13 @@ import (
 // that is the caller's spelling under Decision 0018 item 4 (raw bypass
 // stays available untracked), not a marker this module emitted.
 //
-// pi is the third mapped system and is NOT here, for a reason this package
-// already enforces: importing its plugin registers it into the default
+// pi is not here, for a reason this package already enforces: importing its
+// plugin registers it into the default
 // registry, and TestEveryLayerOneSystemHasASmokeCase then demands a golden pi
 // cannot have (its Process-A surface was never captured by the source). Its
 // interactive negative lives in pkg/agentic/systems/pi/interactive_test.go
-// with the same marker discipline; this file covers the two systems whose
-// registration this net already carries.
+// with the same marker discipline; this file covers the other systems whose
+// interactive cases this cross-cutting net carries.
 
 // execModeMarkers is the union of the decision's list and each mapped
 // system's own headless grammar.
@@ -48,6 +49,7 @@ var execModeMarkers = []string{
 	"exec", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check",
 	"--sandbox", "--ask-for-approval", "-C", "--add-dir", "-",
 	"spawn", "--prompt", "--deadline", "--result-schema",
+	"--yolo", "--json", "--prompt-file",
 }
 
 func markersOn(argv []string) []string {
@@ -105,6 +107,15 @@ var interactiveCases = map[string]interactiveCase{
 		toolRelease: "0.153.2",
 		exec: func(_ *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest {
 			req.Prompt = []byte("body")
+			return req
+		},
+	},
+	"muse": {
+		system: muse.New(), stub: "muse",
+		yoloFlag:    "--yolo",
+		toolRelease: "1.4.1",
+		exec: func(t *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest {
+			req.PromptPath = paritycase.WritePromptFile(t, workDir, "body")
 			return req
 		},
 	},
@@ -305,7 +316,7 @@ func TestAPlanRefusesAnEmptyModelForEveryMappedSystemInEveryMode(t *testing.T) {
 }
 
 // TestSystemsWithoutTheModeRefuseIt keeps the undeclared set explicit: agy,
-// gemini, muse and qwen were left out of the interactive change deliberately,
+// gemini and qwen were left out of the interactive change deliberately,
 // and the registry's refusal is what stands in for a construction there. It
 // ranges over the default registry, so a plugin that declares the mode without
 // a case in this file — or a case here for a plugin that stopped declaring it

@@ -24,8 +24,8 @@ func TestTheDeclarationIsWhatTheSourceRegistered(t *testing.T) {
 	if normalized, err := agentic.NormalizeSystemID(string(systemID)); err != nil || normalized != systemID {
 		t.Errorf("the plugin id does not normalize to itself: %q -> %q (%v)", systemID, normalized, err)
 	}
-	if !caps.SupportsMode(agentic.LaunchModeExec) || !caps.SupportsMode(agentic.LaunchModeDryRun) {
-		t.Errorf("the source registers muse with a BuildCommand and a DryRunArgs; declared modes are %v", caps.LaunchModes)
+	if !caps.SupportsMode(agentic.LaunchModeExec) || !caps.SupportsMode(agentic.LaunchModeDryRun) || !caps.SupportsMode(agentic.LaunchModeInteractive) {
+		t.Errorf("muse declares exec, dry-run, and the no-subcommand TUI mode; declared modes are %v", caps.LaunchModes)
 	}
 	if caps.SupportsMode(agentic.LaunchModeManagedSession) {
 		t.Error("muse declares a managed-session surface the source has no builder for and the goldens do not cover")

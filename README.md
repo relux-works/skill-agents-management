@@ -95,8 +95,9 @@ The agentic-system plugin contract and its registry.
   with typed errors before preparation. A legacy raw composition remains
   refused in interactive mode (`ErrCompositionNotInteractive`), as do a goal,
   budget, service tier or prompt (`ErrParameterNotInteractive`). The plan holds
-  detached stdin unless its effort transport is stdin. `claude-code`, `codex`
-  and `pi` declare the mode; the other four refuse it with
+  detached stdin unless its effort transport is stdin. `claude-code`, `codex`,
+  `muse`, `pi`, and `pi-native` declare the mode; `agy`, `gemini`, and `qwen`
+  refuse it with
   `ErrUnsupportedLaunchMode`.
 - `LaunchRequest.PermissionMode` is the interactive permission posture
   (curator-spec Decision 0018): the zero value and `native` pass nothing — the
@@ -104,7 +105,8 @@ The agentic-system plugin contract and its registry.
   bypass flag the system maps for its pinned tool release (`claude-code` →
   `--dangerously-skip-permissions`, `codex` →
   `--dangerously-bypass-approvals-and-sandbox`, emitted exactly once after
-  model and effort; `pi` and `pi-native` refuse yolo with
+  model and effort; `muse` maps `--yolo` for release 1.4.1; `pi` and
+  `pi-native` refuse yolo with
   `ErrPermissionModeUnsupported` because pi 0.84.2 documents no such flag).
   `BuildPlan` refuses an unknown value in any mode
   (`ErrPermissionModeUnknown`) and any non-zero value outside interactive
@@ -130,13 +132,14 @@ The agentic-system plugin contract and its registry.
   `LookupReleaseCapability` is the single reader; there is no central map
   keyed by system id (the single-source guard forbids a second binding
   table). Claude and Codex use `permission-grammar-v2`, which adds the known
-  conflict selectors above; Pi keeps `permission-grammar-v1`. The token is
+  conflict selectors above; Muse and Pi use `permission-grammar-v1`. The token is
   passed through the capability row for the launcher to cite:
 
   | environment | verified tool release | grammar | yolo |
   |---|---|---|---|
   | `claude-code` | 2.1.261 | `permission-grammar-v2` | `--dangerously-skip-permissions` |
   | `codex` | 0.153.2 | `permission-grammar-v2` | `--dangerously-bypass-approvals-and-sandbox` |
+  | `muse` | 1.4.1 | `permission-grammar-v1` | `--yolo` |
   | `pi` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
   | `pi-native` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
 
@@ -147,12 +150,15 @@ The agentic-system plugin contract and its registry.
   none established at all — yolo fails closed first with
   `ErrPermissionModeUnverifiedRelease`, while native still forwards verbatim
   with no claims. `pi` has no release probe of its own, so yolo there without
-  an explicitly passed Pi release refuses as unverified. Under yolo the plugin scans the
-  caller's `NativeArgs` against the looked-up release's closed grammar: an
-  unknown codex `-c` key or an unknown claude `--permission-mode` value is
-  refused as usage (`ErrNativePolicyUnknown`, which the caller maps to exit
-  2), never resolved into a policy claim; the mapped bypass flag in flag
-  position is refused as a duplicate. A known conflicting selector is refused
+  an explicitly passed Pi release refuses as unverified. Under yolo, Claude
+  and Codex scan the caller's `NativeArgs` against their release's closed
+  conflict grammar: an unknown codex `-c` key or an unknown claude
+  `--permission-mode` value is refused as usage (`ErrNativePolicyUnknown`,
+  which the caller maps to exit 2), never resolved into a policy claim; the
+  mapped bypass flag in flag position is refused as a duplicate. Muse scans
+  for an active `--yolo` or the complete bare equivalent switch pair
+  `--disable-approval --disable-sandbox` and refuses a duplicate posture.
+  Other native arguments are forwarded. A known conflicting selector is refused
   with `ErrNativePolicyConflict`; invalid values and unknown selectors remain
   fail-closed through `ErrNativePolicyUnknown`. Native performs no inspection
   at all.
@@ -1272,6 +1278,7 @@ concluding that a missing golden is permission.
 | `golangci-lint` | lint all Go packages | `golangci-lint run ./...` | terminal output; task logs under `.temp/` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | Codex CLI | launch target for `pkg/agentic/systems/codex`; custom local providers are selected with generated config overrides and private `CODEX_HOME/config.toml` entries | `codex --version`; runtime launches execute the `Binary` and `Argv` returned by `agentic.BuildPlan` | child work under the requested `WorkDir`; private settings remain under `CODEX_HOME` |
+| Muse Code | launch target for `pkg/agentic/systems/muse`; pinned help verifies the TUI and headless option grammar | `MUSE_NO_AUTO_UPDATE=1 muse --version` / `muse --help` / `muse exec --help` (use a throwaway `HOME` when checking a pinned release) | plans come from `agentic.BuildPlan`; pinned help/version output and task logs under `.temp/` |
 | `curator-engines` | read local engine status for local-model preflight and availability; this package never calls lifecycle-changing commands | `curator-engines status --engine <profile> --json` with the selected project as the working directory | JSON to stdout; validation logs under `.temp/TASK-<id>/` |
 | `pi` | native Pi executable used by retained local-model Exec plans | `--no-approve --no-extensions --no-session --tools read,bash,edit,write --model <provider>/<model> --print <prompt>`; plan resolution uses the launch environment's `PATH` | child stdout/stderr are owned by the launch consumer; dry-run only returns a plan |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |

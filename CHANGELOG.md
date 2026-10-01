@@ -52,7 +52,7 @@
   Contract v1.1.0 adds caller-selected append/replace intent; the plugin applies
   exactly one matching descriptor, keeps the full descriptor list in plan
   provenance, and refuses missing intent, no match, ambiguous channels, stale
-  identity and incompatible launch inputs. Expected release v0.5.28; the
+  identity and incompatible launch inputs. Expected release v0.5.32; the
   orchestrator cuts the tag.
 
 - Add a public release-versioned native-argument classifier for interactive

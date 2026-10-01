@@ -470,15 +470,6 @@ func firstEnvNames(names []string, count int) []string {
 	return names
 }
 
-func sortedEnvNames(values map[string]string) []string {
-	names := make([]string, 0, len(values))
-	for name := range values {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
 func reviewerParentNames() []string {
 	return []string{
 		// Revision 1's admitted, refused, and ambiguous-prefix probes.

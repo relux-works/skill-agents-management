@@ -103,7 +103,7 @@ func isCredentialShapedParentEnvName(name string) bool {
 	}
 
 	tokens := strings.FieldsFunc(upperName, func(r rune) bool {
-		return !((r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
+		return (r < 'A' || r > 'Z') && (r < '0' || r > '9')
 	})
 	for i, token := range tokens {
 		tokens[i] = strings.TrimRight(token, "0123456789")

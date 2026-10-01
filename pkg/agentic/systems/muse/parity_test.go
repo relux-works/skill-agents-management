@@ -276,6 +276,86 @@ func TestPlansMatchTheMuseGoldens(t *testing.T) {
 	}
 }
 
+// interactiveParityCases are plugin-local expected snapshots derived from
+// Muse 1.4.1's pinned root help. They are deliberately separate from
+// pkg/agentic/parity's source-captured JSON set: that set requires source
+// harness provenance, and the extraction harness never constructed a TUI
+// launch. The source exec and dry-run goldens above remain unchanged.
+var interactiveParityCases = []struct {
+	name       string
+	permission agentic.PermissionMode
+	release    string
+	args       []string
+}{
+	{
+		name:       "muse/interactive-native",
+		permission: agentic.PermissionModeNative,
+		args: []string{
+			"--model", parityModel,
+			"--reasoning-effort", "xhigh",
+			"--workspace", "<TMPDIR:1>",
+			"inspect this workspace",
+		},
+	},
+	{
+		name:       "muse/interactive-yolo",
+		permission: agentic.PermissionModeYolo,
+		release:    verifiedMuseRelease,
+		args: []string{
+			"--model", parityModel,
+			"--reasoning-effort", "xhigh",
+			"--workspace", "<TMPDIR:1>",
+			"--yolo",
+			"inspect this workspace",
+		},
+	},
+}
+
+// TestInteractivePlansMatchThePinnedTUIParityCases compares the complete
+// launch surface from the production BuildPlan path. The expected cases add
+// interactive posture coverage without rewriting either source-captured
+// exec/dry-run fixture or claiming the source captured a TUI plan.
+func TestInteractivePlansMatchThePinnedTUIParityCases(t *testing.T) {
+	for _, c := range interactiveParityCases {
+		t.Run(c.name, func(t *testing.T) {
+			dirs := paritycase.Make(t, 1, true)
+			paritycase.WriteStubExecutable(t, dirs.Stub, executableName)
+			req := agentic.LaunchRequest{
+				System:  New().ID(),
+				Model:   agentic.Model{ID: parityModel, Effort: agentic.EffortSupportRequired},
+				Effort:  "xhigh",
+				WorkDir: dirs.Temp[0],
+				Env: []string{
+					"HOME=/home/muse",
+					"PATH=" + dirs.Stub,
+					"TERM=xterm-256color",
+				},
+				Run:            agentic.RunContext{RunID: parityRunID, TaskID: parityTaskID},
+				PermissionMode: c.permission,
+				ToolRelease:    c.release,
+				NativeArgs:     []string{"inspect this workspace"},
+			}
+			plan := paritycase.BuildPlan(t, New(), req, agentic.LaunchModeInteractive)
+			got := parity.Mask(parity.FromPlan(plan, req.Env), dirs.Substitutions())
+			want := parity.Snapshot{
+				Binary: "<PARITY-BIN>/" + executableName,
+				Args:   c.args,
+				EnvAdded: []string{
+					"MUSE_NO_AUTO_UPDATE=1",
+					"TASK_BOARD_RUN_ID=" + parityRunID,
+					"TASK_BOARD_TASK_ID=" + parityTaskID,
+				},
+				StdinKind: parity.StdinNone,
+			}
+			if diffs := parity.Compare(got, want); len(diffs) != 0 {
+				for _, diff := range diffs {
+					t.Errorf("%s differs from its pinned TUI parity case:\n  %s", c.name, diff)
+				}
+			}
+		})
+	}
+}
+
 // TestEveryMuseGoldenIsCovered fails if the fixture set grows a muse case this
 // file does not build.
 func TestEveryMuseGoldenIsCovered(t *testing.T) {

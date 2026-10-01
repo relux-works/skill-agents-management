@@ -19,7 +19,7 @@ import (
 // spelling muse flags — proving it can by narrowing itself onto this file's own
 // Args.
 //
-// # The two modes differ in exactly ONE argument
+// # Exec and dry-run differ in exactly ONE argument
 //
 // museDryRunArgs substitutes `<prompt-file>` for the assignment path when the
 // config carries none. Muse is the only ported system whose assignment is a
@@ -53,15 +53,31 @@ import (
 // promptFilePlaceholder is what a dry run reports where a real launch would
 // name an assignment file that does not exist yet. It is the source's literal
 // (adapter.go, museDryRunArgs).
-const promptFilePlaceholder = "<prompt-file>"
+const (
+	promptFilePlaceholder   = "<prompt-file>"
+	museYoloFlag            = "--yolo"
+	museDisableApprovalFlag = "--disable-approval"
+	museDisableSandboxFlag  = "--disable-sandbox"
+)
 
-// Args builds the muse argv for one launch mode, excluding the binary.
-//
-// It is the single construction site. Every surface of this plugin that needs
-// muse flags calls it: System.Argv for both modes, and nothing else.
+// Args dispatches each supported Muse launch mode to its argv builder,
+// excluding the binary. System.Argv is the only production entry to this
+// package's launch grammar: exec and dry-run are built here, and interactive
+// is delegated to interactiveArgs.
 //
 // The ORDER is the source's, verbatim.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	if mode == agentic.LaunchModeInteractive {
+		return interactiveArgs(req)
+	}
+	if !req.PermissionMode.IsZero() {
+		return nil, fmt.Errorf("muse: %w: permission mode %q is valid only for interactive launches",
+			agentic.ErrPermissionModeNotInteractive, strings.TrimSpace(string(req.PermissionMode)))
+	}
+	if len(req.NativeArgs) != 0 {
+		return nil, fmt.Errorf("muse: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
+			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
+	}
 	promptFile := strings.TrimSpace(req.PromptPath)
 	switch mode {
 	case agentic.LaunchModeExec:
@@ -81,7 +97,9 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	// argv, rather than a silent drop that would produce a launch missing the
 	// servers somebody reviewed.
 	args := append([]string{}, req.Composition.Prefix...)
-	args = append(args, "exec", "--json", "--yolo", "--model", strings.TrimSpace(req.Model.ID))
+	// Exec is Muse's headless-child form, so its bypass posture is fixed. The
+	// dry-run uses this same grammar and therefore reports the same posture.
+	args = append(args, "exec", "--json", museYoloFlag, "--model", strings.TrimSpace(req.Model.ID))
 	if effort := strings.TrimSpace(req.Effort); effort != "" {
 		// Pure TRANSPORT, in the position claude's `--effort` occupies: right
 		// after the model it qualifies. BuildPlan has already refused an effort
@@ -96,4 +114,33 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		args = append(args, "--prompt-file", promptFile)
 	}
 	return args, nil
+}
+
+// interactiveArgs builds the no-subcommand TUI form. The TUI accepts the same
+// model, effort, and workspace options as Muse exec, but it receives no
+// assignment protocol: NativeArgs is the caller's verbatim optional prompt and
+// option suffix.
+func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
+	effective, err := req.PermissionMode.Resolve()
+	if err != nil {
+		return nil, fmt.Errorf("muse: %w", err)
+	}
+	args := []string{"--model", strings.TrimSpace(req.Model.ID)}
+	if effort := strings.TrimSpace(req.Effort); effort != "" {
+		args = append(args, "--reasoning-effort", effort)
+	}
+	if req.WorkDir != "" {
+		args = append(args, "--workspace", req.WorkDir)
+	}
+	if effective == agentic.PermissionModeYolo {
+		mapping, err := permissionMapping(req.ToolRelease, effective)
+		if err != nil {
+			return nil, err
+		}
+		if err := scanMuseNativePolicy(req.NativeArgs); err != nil {
+			return nil, fmt.Errorf("muse: %w", err)
+		}
+		args = append(args, mapping.Flag)
+	}
+	return append(args, append([]string(nil), req.NativeArgs...)...), nil
 }
