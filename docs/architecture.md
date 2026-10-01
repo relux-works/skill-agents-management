@@ -562,3 +562,101 @@ outcomes that are true but easy to lose.
 ### Native Pi effort admission
 
 Native Pi refuses model vocabulary words that Pi 0.84.2 would clamp: `minimal` on `gpt-5.3-codex`/`gpt-5.2`. `BuildLaunch` returns `ErrEffortNotNativelySupported`, naming the model, runtime, native supported vocabulary and row recommendation. Global model vocabularies and Codex support remain unchanged; no translation, clamp or default is injected. Effort-none rows emit no `--thinking`; Pi may apply its own settings default, which the module does not control.
+
+## Advisory subscription usage
+
+`pkg/providerquota.Reader` is an optional system interface, separate from the
+closed `agentic.System`. `providerquota.Dispatch` type-asserts it without a
+system-name branch. A reader returns a `QuotaPlan` value and parses stdout with
+explicit clocks and normalized identity evidence. It starts no process. A
+consumer owns execution, empty scratch cwd creation, environment scoping,
+handshake ordering, stdin closure, timeouts, and one pull per key per TTL.
+A plan marked `Ready: false` must be refused before any process starts.
+
+The import guard walks the shared package, the four quota entry points and
+all their transitive helpers across platform arms. Its explicit `os/exec`
+exceptions cover the Task AC's legacy liveness and local runtime files, plus
+pre-existing toolprobe and providerlimits start-time helpers reached through
+reader packages. Quota entry points never invoke those process helpers. A
+planted helper-mediated exec import must fail the guard.
+The shared identity value and hash are held in `internal/provideridentity`;
+`providerlimits.Identity` remains an alias and its identity hash is unchanged.
+The quota parsers have no filesystem capability. Identity comparison uses
+path strings and never resolves symlinks or opens a harness home. Quota binary
+resolution uses an instance-local filesystem interface: it checks candidates
+before Lstat, reads only allowed links, checks their targets before following
+them, and bounds link hops. Default and environment-selected harness roots,
+caller identity homes and additional forbidden roots cause `protected_root`
+refusals, including empty PATH entries and managed-package candidates.
+Root aliases are learned from HOME and root ancestors to a bounded fixed
+point, registering each alias before descending through its target. Unknown
+ancestry retains the lexical root and conservatively refuses candidate path
+components sharing that root's basename when exclusion cannot be proved.
+Resolution returns the checked absolute executable, including relative PATH
+and managed-package inputs, so an empty execution cwd cannot change its meaning.
+Wire timestamp strings use explicit UTC parsing in readers, stored records,
+windows, failures and router projections. Numeric offsets never initialize
+ambient Local or load a TZ-selected file; prose reset zones use embedded data.
+
+`NewStore` requires a caller-supplied clock and returns `clock_required` when
+it is missing. It never substitutes the ambient clock.
+
+Records use the limits identity key for a declared home, or `runtime-<id>`
+with an absent identity pointer and an explicit reason otherwise. The store
+lives at `<state>/task-board/provider-quota`, with one `<key>.quota.json` and
+`<key>.quota.lock`, no index. O_EXCL locks are nonblocking and independent of
+limit leases: a contending consumer retries, then rechecks its cached record
+under the lock. Only a readable, positive, dead PID older than thirty seconds
+is broken; that event is returned on the lock and retained in failure history
+by `Write` and `Merge`. A consumer using `Acquire`/`Commit` records the event
+itself. Corrupt or possibly live locks remain held.
+
+Each window retains the vendor id and scope. `kind` retains the Codex slot so
+primary and secondary windows sharing an id remain distinct. Percentages
+above 100 are valid; negative, nonfinite percentages and fractions outside
+0–1 are refused. Over-quota windows have no derived remaining percentage.
+A successful pull replaces all windows. A push replaces only matching
+`(id, kind, scope)` windows. Failed updates preserve every window, its source
+measurement time, the record's oldest measurement time, source and digest,
+and append timed failures. History retains the latest sixteen entries.
+
+Codex windows use the explicit live read time; Muse windows use `observedAtMs`
+and state `last_observed`. Claude prefers structured `usage_report` rows when
+present, preserving explicit source timestamps. Prose has no measurement
+time and may represent cached bars: it has no `observed_at`, even when no
+last-known note is present. Antigravity's observed envelope likewise states no
+measurement timestamp; retrieval time is never substituted. If any window
+has unknown measurement time, the record's aggregate time is absent.
+`retrieved_at` records delivery only. Consumer freshness checks use individual
+window times and treat unknown, stale, expired or invalid windows as unknown.
+
+`RouterProjection` is the router contract: an opaque identity, runtime,
+boolean-or-unknown authentication, grade/state, plan, windows, optional
+credits, oldest observation, delivery time, TTL seconds, source, timed
+failures and a digest over canonical parsed windows only. It omits operator
+homes, inventory diagnostics, checked command descriptions, flags and harness
+version text. The record store verifies the trusted runtime/key, digest and
+clock tolerance before returning facts; an invalid file yields an
+`unavailable` failure with no windows. This projection carries advisory
+facts only: quota cannot change admission or execute a refresh in a spawn
+validation gate.
+
+Muse implements Reader over the pinned 1.4.2 stable `usage/read` schema;
+`SubscriptionUsage` is unchanged from 1.4.1. The logged echo-provider probe
+establishes newline-delimited JSON-RPC 2.0 objects in both directions. The
+JSONL plan is `Ready: true`, with initialize, initialized and usage/read only.
+Absent usage returns `unavailable` with `no_observation`, no windows and
+authentication `unknown`. The synthetic present-usage golden is labeled as such.
+The fresh echo-host golden returns `{}`, proving no observation in that case.
+`TODO(decision)`: L1 §5 item 1 asks whether a subscription host observes
+usage without key minting or inference; the reader contains no `session/start`
+and never submits a turn. `TODO(decision)`: L1 §5 item 3 asks for a captured
+Claude structured twin and its timestamp field names in print mode; the
+structured fixture is synthetic, and absent source times remain unknown.
+
+Direct router projection recomputes the parsed-window digest, refuses a
+mismatch, validates projected enums and applies the window privacy check to
+all projected strings. Codex's present limit-id map is authoritative; only an
+absent map uses a keyed legacy view, and an unkeyed legacy view refuses
+`limit_id_missing`. Claude requires separate unscoped session and all-model
+weekly rows; additional scoped rows preserve their vendor scope.

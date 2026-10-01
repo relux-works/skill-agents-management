@@ -1,0 +1,2 @@
+{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"muse","version":"1.4.2"},"userAgent":"muse-build/1.4.2 (non-interactive; macos-x86_64; build b538db0a2c30f911d99d75a35b89b14447bceacb)","museHome":"<redacted>","platformFamily":"unix","platformOs":"macos","schema":{"version":1,"fingerprint":"sha256:61afea3112e0906e9dc3a536144278a74cb4b36fc6e20901a91d4432ba3568e2"},"grantedCapabilities":[],"experimentalApi":false,"sessionDurability":"ephemeral"}}
+{"jsonrpc":"2.0","id":2,"result":{}}

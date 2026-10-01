@@ -91,18 +91,15 @@ import (
 // Runtime is the part of the Antigravity preflight's result a launch plan
 // needs: the exact executable the probe selected.
 //
-// The source's AgyRuntimeEvidence also carries Version, and its absence here is
-// deliberate. The version is evidence the RUN records — it is what a later
-// reader consults to explain why a launch was admitted — and nothing in a Plan
-// reads it. A field this layer never looks at would make this type read as the
-// evidence store it is not, and would invite a caller to treat the plugin as
-// the place that remembers what the preflight found.
+// Version is optional for ordinary launch plans and required for quota plans,
+// which pin the observed headless usage contract without running a probe.
 type Runtime struct {
 	// Executable is the exact binary the preflight selected, already absolute.
 	// Empty means no preflight has run, which is a different fact from a
 	// preflight that found nothing: the latter never produces a Runtime at all,
 	// because ProbeAgyRuntime returns an error instead.
 	Executable string
+	Version    string
 }
 
 // IsZero reports whether no preflight evidence was supplied.

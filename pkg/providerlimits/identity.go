@@ -1,8 +1,6 @@
 package providerlimits
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/provideridentity"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
@@ -55,12 +54,7 @@ import (
 // Home is the normalised path; nothing inside it is ever opened. HomeDisplay is
 // the same path with $HOME collapsed to ~, and it is the only form any surface
 // prints.
-type Identity struct {
-	Key         string `json:"identity"`
-	Provider    string `json:"provider"`
-	Home        string `json:"-"`
-	HomeDisplay string `json:"home_display"`
-}
+type Identity = provideridentity.Identity
 
 // IdentityKey is hex(sha256(provider || 0x00 || normalizedHome))[:16].
 //
@@ -74,8 +68,7 @@ type Identity struct {
 // with no error anywhere — see docs/architecture.md invariant 2, and
 // crossbinary_test.go, which pins it against real pre-extraction state files.
 func IdentityKey(provider, normalizedHome string) string {
-	sum := sha256.Sum256([]byte(provider + "\x00" + normalizedHome))
-	return hex.EncodeToString(sum[:])[:16]
+	return provideridentity.Key(provider, normalizedHome)
 }
 
 // DefaultProviderHome is the provider home before normalisation, resolved

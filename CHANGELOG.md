@@ -2,8 +2,27 @@
 
 ## Unreleased
 
+- Enforce protected roots throughout quota binary resolution, validate router
+  projection digests and enums, require an explicit store clock, and correct
+  Codex optional legacy limit ids and Claude unscoped lane validation. Learn
+  protected ancestor aliases to a bounded fixed point, refuse unresolved root
+  evidence, return absolute plan binaries, and decode quota timestamp strings
+  with explicit UTC locations without loading the ambient time zone.
+
 - Disable Claude Code prompt suggestions in every launch mode by setting
   `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`, overriding inherited values (#46).
+- Add advisory `providerquota` records, atomic storage, independent O_EXCL
+  locks, bounded timed failures and pull/push/failure merge rules. Optional
+  system Readers declare command plans and pure parsers for Codex, Claude,
+  Antigravity and Muse; no quota process is executed by this module. Preserve
+  over-quota percentages, vendor scopes and individual measurement times;
+  router projections exclude operator home and account diagnostics. Muse's
+  MSP plan uses verified JSONL framing and the pinned 1.4.2 schema; a fresh
+  host's absent usage returns `no_observation`. Observation before key mint
+  remains an explicit decision; no session start or inference is added.
+  Consumers adding `quota_snapshot` to their frozen fields will change
+  existing preflight digests once; that consumer change and the module release
+  tag belong to the follow-up lane.
 
 - Decode the released curator-engines v0.1.0 runtime.start_time object as
   Unix seconds and microseconds, refusing missing, non-integer, or out-of-range

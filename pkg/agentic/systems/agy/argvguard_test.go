@@ -54,7 +54,9 @@ const agyArgsFile = "pkg/agentic/systems/agy/args.go"
 // this module name their construction site Args, so a bare-name allowlist would
 // exempt every Args in the module from every plugin's guard.
 var agyArgvConstructionAllowlist = map[string]string{
-	argvguard.AllowlistKey(agyArgsFile, "Args"): "the single construction site",
+	argvguard.AllowlistKey(agyArgsFile, "Args"):                                      "the single launch construction site",
+	argvguard.AllowlistKey("pkg/agentic/systems/agy/quota.go", "QuotaPlan"):          "the separate prompt-free quota plan, pinned by TestQuotaFrozenPlanPreflightAndVersion",
+	argvguard.AllowlistKey("pkg/agentic/systems/agy/quota.go", "RequiredQuotaFlags"): "the consumer preflight flag contract; emits no argv",
 }
 
 // moduleGoSources reads every non-test Go file this module's build compiles,

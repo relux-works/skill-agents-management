@@ -35,9 +35,9 @@ var forbiddenImports = []string{
 	"internal/sessionmanager",
 }
 
-// allowedIntraModuleImports is the pinned exception list, and it is two
-// entries because this module splits across two layers what the extraction
-// source kept in one place plus a table of its own.
+// allowedIntraModuleImports pins two registry dependencies and the shared
+// credential-free identity value. The registries split across two layers what
+// the extraction source kept in one place plus a table of its own.
 //
 //   - pkg/vendorplugin owns the frozen (runtime, vendor) table — the vocabulary
 //     HasClassifier and DefaultGroups resolve broker facts from (design D4) —
@@ -51,13 +51,16 @@ var forbiddenImports = []string{
 //     which is invariant 5 and is why the import exists at all. See
 //     identity.go's block comment above DefaultProviderHome.
 //
-// Neither carries business logic in behind it, which is the property the
-// carve-out is worth anything for and which
+// The registry imports carry no business logic in behind them, which is the
+// property the carve-out is worth anything for and which
 // TestTheVendorpluginDependencyCarriesNoBusinessLogic checks over the real
 // compiled package graph.
 var allowedIntraModuleImports = map[string]bool{
-	"github.com/relux-works/skill-agents-management/pkg/vendorplugin": true,
-	"github.com/relux-works/skill-agents-management/pkg/agentic":      true,
+	// Identity value and hash are shared with quota without importing the limit
+	// store back through system plugins (which would create a test import cycle).
+	"github.com/relux-works/skill-agents-management/internal/provideridentity": true,
+	"github.com/relux-works/skill-agents-management/pkg/vendorplugin":          true,
+	"github.com/relux-works/skill-agents-management/pkg/agentic":               true,
 }
 
 func TestModuleImportsNothingFromTheCLIOrTheExtractionSource(t *testing.T) {
@@ -131,7 +134,7 @@ func TestTheOnlyIntraModuleImportIsVendorplugin(t *testing.T) {
 			}
 			seen[path] = true
 			if !allowedIntraModuleImports[path] {
-				t.Errorf("%s imports %q; the limit plane may import only pkg/vendorplugin and pkg/agentic, and everything else has to arrive as a parameter", entry.Name(), path)
+				t.Errorf("%s imports %q; the limit plane may import only the pinned registries and shared identity value; other behavior must arrive as a parameter", entry.Name(), path)
 			}
 		}
 	}

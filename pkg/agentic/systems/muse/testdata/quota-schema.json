@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "InitializeParams": {
+      "description": "`initialize` request params (SS1.4.1).",
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/ClientCapabilities",
+          "description": "Capability posture; absent means all defaults."
+        },
+        "clientInfo": {
+          "$ref": "#/$defs/ClientInfo",
+          "description": "Client identification."
+        }
+      },
+      "required": [
+        "clientInfo"
+      ],
+      "type": "object"
+    },
+    "ClientInfo": {
+      "description": "Client identification inside `initialize` params (SS1.4.1). Diagnostics\nand telemetry attribution only; never an authority claim (SS1.10).",
+      "properties": {
+        "name": {
+          "description": "Machine identifier, `[a-z0-9_]+` (SS1.4.1).",
+          "pattern": "^[a-z0-9_]+$",
+          "type": "string"
+        },
+        "title": {
+          "description": "Human display name.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Client version string.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "UsageReadResult": {
+      "description": "`usage/read` result: `{usage?}` \u2014 omitted, never `null`, when the host\nhas observed nothing (ADR 32563 D2: truthful absence, no\n\"nothing observed\" error).",
+      "properties": {
+        "usage": {
+          "$ref": "#/$defs/SubscriptionUsage",
+          "description": "The last-observed subscription usage window, when one exists."
+        }
+      },
+      "type": "object"
+    },
+    "SubscriptionUsage": {
+      "description": "The one usage payload shape: the `usage/read` result's `usage` member and\nthe `usage/changed` params (ADR 32563 D2/D3). The numbers are\npoint-in-time \u2014 `observedAtMs` is the host's arrival stamp, so a client\nrenders \"as of\", never implies live data (spec 18742 US-FR-004).",
+      "properties": {
+        "observedAtMs": {
+          "description": "When the host RECEIVED this observation (frame arrival or mint\nrequest-send), epoch milliseconds.",
+          "type": "integer"
+        },
+        "tier": {
+          "description": "The provider's subscription tier id, verbatim.",
+          "type": "string"
+        },
+        "weekly": {
+          "$ref": "#/$defs/SubscriptionUsageWeekly",
+          "description": "The rolling weekly block."
+        },
+        "window": {
+          "$ref": "#/$defs/SubscriptionUsageWindow",
+          "description": "The current window."
+        }
+      },
+      "required": [
+        "observedAtMs",
+        "tier",
+        "weekly",
+        "window"
+      ],
+      "type": "object"
+    },
+    "SubscriptionUsageWindow": {
+      "description": "The current usage window (the provider's 5-hour-class block): verbatim\nprovider percentages with the reset stamp normalized to epoch\nmilliseconds (ADR 32563 D2).",
+      "properties": {
+        "resetsAtMs": {
+          "description": "When the window resets, epoch milliseconds.",
+          "type": "integer"
+        },
+        "usedPercent": {
+          "description": "Percent of the window's budget used: an integer \u2265 0, verbatim from\nthe provider \u2014 over-quota values above 100 are valid.",
+          "type": "integer"
+        },
+        "windowDurationMins": {
+          "description": "The window's length in minutes (> 0).",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "resetsAtMs",
+        "usedPercent",
+        "windowDurationMins"
+      ],
+      "type": "object"
+    },
+    "SubscriptionUsageWeekly": {
+      "description": "The rolling weekly block: same semantics as\n[`SubscriptionUsageWindow`] without a duration (ADR 32563 D2).",
+      "properties": {
+        "resetsAtMs": {
+          "description": "When the weekly window resets, epoch milliseconds.",
+          "type": "integer"
+        },
+        "usedPercent": {
+          "description": "Percent of the weekly budget used (integer \u2265 0, may exceed 100).",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "resetsAtMs",
+        "usedPercent"
+      ],
+      "type": "object"
+    }
+  }
+}
