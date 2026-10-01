@@ -65,7 +65,10 @@ const (
 // package's launch grammar: exec and dry-run are built here, and interactive
 // is delegated to interactiveArgs.
 //
-// The ORDER is the source's, verbatim.
+// The ORDER for Meta is the source's, verbatim. The Muse-specific pseudo-model
+// "echo" selects the offline provider through the existing Model.ID contract;
+// Muse 1.4.1 documents model and reasoning-effort flags for non-echo and
+// Meta providers respectively, so echo emits neither flag.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
 	if mode == agentic.LaunchModeInteractive {
 		return interactiveArgs(req)
@@ -99,8 +102,13 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	args := append([]string{}, req.Composition.Prefix...)
 	// Exec is Muse's headless-child form, so its bypass posture is fixed. The
 	// dry-run uses this same grammar and therefore reports the same posture.
-	args = append(args, "exec", "--json", museYoloFlag, "--model", strings.TrimSpace(req.Model.ID))
-	if effort := strings.TrimSpace(req.Effort); effort != "" {
+	args = append(args, "exec", "--json", museYoloFlag)
+	if strings.TrimSpace(req.Model.ID) == "echo" {
+		args = append(args, "--provider", "echo")
+	} else {
+		args = append(args, "--model", strings.TrimSpace(req.Model.ID))
+	}
+	if effort := strings.TrimSpace(req.Effort); effort != "" && strings.TrimSpace(req.Model.ID) != "echo" {
 		// Pure TRANSPORT, in the position claude's `--effort` occupies: right
 		// after the model it qualifies. BuildPlan has already refused an effort
 		// this system could not carry and refused a required-effort model with
@@ -125,8 +133,13 @@ func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("muse: %w", err)
 	}
-	args := []string{"--model", strings.TrimSpace(req.Model.ID)}
-	if effort := strings.TrimSpace(req.Effort); effort != "" {
+	var args []string
+	if strings.TrimSpace(req.Model.ID) == "echo" {
+		args = append(args, "--provider", "echo")
+	} else {
+		args = append(args, "--model", strings.TrimSpace(req.Model.ID))
+	}
+	if effort := strings.TrimSpace(req.Effort); effort != "" && strings.TrimSpace(req.Model.ID) != "echo" {
 		args = append(args, "--reasoning-effort", effort)
 	}
 	if req.WorkDir != "" {

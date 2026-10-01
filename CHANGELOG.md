@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Allow Muse offline echo plans through `Model.ID: "echo"`: interactive, exec
+  and dry-run argv select `--provider echo` without model or reasoning-effort
+  flags. Preserve Meta argv and interactive permission posture.
+
 - Enforce protected roots throughout quota binary resolution, validate router
   projection digests and enums, require an explicit store clock, and correct
   Codex optional legacy limit ids and Claude unscoped lane validation. Learn

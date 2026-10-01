@@ -464,6 +464,13 @@ no goal, budget or service tier.
 The Muse CLI, proven against both muse goldens. It is the one system whose
 plugin id and runtime id are the same spelling.
 
+For offline echo through `agentic.BuildPlan`, select the Muse-specific
+pseudo-model `agentic.Model{ID: "echo", Effort: agentic.EffortSupportNone}`.
+Interactive, exec and dry-run plans emit `--provider echo`, omitting `--model`
+and the Meta-only `--reasoning-effort` even if an effort was supplied. Other
+model identities retain the existing Meta grammar. This is a system-level
+selection; the vendor runtime catalog and its admitted pairs are unchanged.
+
 - **The assignment is a PATH in argv** (`--prompt-file`), so muse attaches no
   stdin at all — `muse/exec` records `stdin_kind: none`, and the mutant that
   streams the assignment as well must fail in `StdinKind`. Because the path is
