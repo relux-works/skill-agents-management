@@ -610,19 +610,20 @@ func TestReviewReproDeadlineWithDescendantHoldingStdout(t *testing.T) {
 		t.Skip("process-group kill is unix-only; windows bounds the direct child plus WaitDelay")
 	}
 	family := modelCheckDescendantFamilyByName(t, "background-plus-foreground")
-	proof := proveModelCheckDescendantKill(t, family.script, family.markers, modelCheckDescendantReadyBound, modelCheckDescendantWindow)
+	fixture := prepareModelCheckDescendantFixture(t, "pi", family.script)
+	proof := proveModelCheckDescendantKill(t, fixture, family.markers, modelCheckDescendantReadyBound, modelCheckDescendantWindow, modelCheckPiDescendantLaunch(fixture))
 	if proof.ReadyErr != nil {
-		t.Fatalf("child/descendant readiness not observed within %v: cannot attest the group kill (result=%+v)",
-			modelCheckDescendantReadyBound, proof.Result)
+		t.Fatalf("child/descendant readiness not observed within %v: cannot attest the group kill (err=%v)",
+			modelCheckDescendantReadyBound, proof.Err)
 	}
 	// Fixed behavior closes at the window (~0.3s). Without the group kill,
 	// Wait blocks on the pipe until WaitDelay (~2.3s). The threshold
 	// separates the two by a wide margin on either side.
 	if proof.Elapsed >= modelCheckDescendantKillThreshold {
-		t.Fatalf("300ms window closed after %v (started=%v): the group kill did not fire", proof.Elapsed, proof.Result.Started)
+		t.Fatalf("300ms window closed after %v (err=%v): the group kill did not fire", proof.Elapsed, proof.Err)
 	}
-	if !proof.Result.Started || !errors.Is(proof.Result.Err, context.Canceled) {
-		t.Fatalf("process result = %+v, want started process stopped by the window close", proof.Result)
+	if !errors.Is(proof.Err, context.Canceled) {
+		t.Fatalf("process err = %v, want a started process stopped by the window close", proof.Err)
 	}
 }
 
@@ -1213,36 +1214,57 @@ func TestModelCheckEmptyOutputRefuses(t *testing.T) {
 // pipe must still die at the caller deadline. Rev2 took 3.1s against a
 // 300ms deadline because the observation runner killed only the direct
 // child; the process-group kill returns at the deadline.
+//
+// BUG-261002-13ll6s: the runRoot shape opened the caller deadline before the
+// descendant inherited the pipe, so the G1-adapter mutant survived whenever
+// startup lost the race. The witness now shares the rev-5 readiness-gated
+// proof: it drives the production adapter wiring (newModelCheckEngineAdapters
+// with the real subprocess runner) under a cancellable context, waits for
+// the child and descendant readiness markers, and only then opens the
+// measured window. The window close cancels the observation context; exec's
+// Cancel path — group kill plus WaitDelay — is identical for cancellation
+// and for a true caller deadline, only the surfaced error differs
+// (context.Canceled here, attributed by ObserveEngine). The refusal mapping
+// to caller_deadline_exceeded stays pinned by the stubbed deadline tests.
 func TestModelCheckAdapterDeadlineDescendantRefuses(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("process-group kill is unix-only; windows bounds the direct child plus WaitDelay")
 	}
-	dir := t.TempDir()
-	script := filepath.Join(dir, "curator-engines")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\n(/bin/sleep 3) & /bin/sleep 3\n"), 0o755); err != nil {
-		t.Fatalf("write fake curator-engines: %v", err)
+	family := modelCheckDescendantFamilyByName(t, "background-plus-foreground")
+	fixture := prepareModelCheckDescendantFixture(t, "curator-engines", family.script)
+	t.Setenv("PATH", fixture.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("MODELCHECK_READY_DIR", fixture.ReadyDir)
+	engine := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
+	scope := modelCheckEngineScope{
+		Runtime: vendorplugin.RuntimeID(modelCheckTestRuntime),
+		Model:   vendorplugin.ModelID(modelCheckTestModel),
+		Project: fixture.Dir,
+		Profile: "model-check-test",
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	reader := &modelCheckTestStatusReader{status: localruntime.Status{BrokerState: "serving", BrokerSource: localruntime.SourceAttested}}
-	calls := 0
-	setModelCheckTestDeps(t, localmodels.ConfigResult{Config: modelCheckTestConfig(true)}, reader, func(context.Context, agentic.Plan) modelCheckProcessResult {
-		calls++
-		return modelCheckProcessResult{}
+	adapters, err := newModelCheckEngineAdapters(engine, scope)
+	if err != nil {
+		t.Fatalf("production engine adapters: %v", err)
+	}
+	if len(adapters) != 1 {
+		t.Fatalf("production engine adapters = %d, want exactly 1", len(adapters))
+	}
+	query := vendorplugin.EngineObservationQuery{Engine: engine, Runtime: scope.Runtime, Model: scope.Model, Profile: scope.Profile}
+	proof := proveModelCheckDescendantKill(t, fixture, family.markers, modelCheckDescendantReadyBound, modelCheckDescendantWindow, func(ctx context.Context) error {
+		_, err := adapters[0].ObserveEngine(ctx, query)
+		return err
 	})
-	setModelCheckEngineAdapters(t, newModelCheckEngineAdapters)
-	start := time.Now()
-	stdout, _, err := runRoot(t, modelCheckTestArgs(filepath.Join(dir, "evidence.json"), "300ms")...)
-	elapsed := time.Since(start)
-	report := decodeModelCheckReport(t, stdout)
-	t.Logf("elapsed=%v report=%+v pi_calls=%d err=%v", elapsed, report, calls, err)
-	if refusal := requireModelCheckRefusal(t, err); refusal.reason != "caller_deadline_exceeded" {
-		t.Fatalf("refusal reason = %q, want caller_deadline_exceeded", refusal.reason)
+	if proof.ReadyErr != nil {
+		t.Fatalf("child/descendant readiness not observed within %v: cannot attest the group kill (err=%v)",
+			modelCheckDescendantReadyBound, proof.Err)
 	}
-	if report.PiStarted || calls != 0 {
-		t.Fatalf("deadline report=%+v pi_calls=%d; Pi must not start", report, calls)
+	// Fixed behavior closes at the window (~0.3s). Without the group kill,
+	// Wait blocks on the pipe until WaitDelay (~2.3s). The threshold
+	// separates the two by a wide margin on either side.
+	if proof.Elapsed >= modelCheckDescendantKillThreshold {
+		t.Fatalf("300ms window closed after %v (err=%v): the group kill did not fire", proof.Elapsed, proof.Err)
 	}
-	if elapsed > time.Second {
-		t.Fatalf("300ms caller deadline took %v through production adapter", elapsed)
+	if !errors.Is(proof.Err, context.Canceled) {
+		t.Fatalf("observation err = %v, want context.Canceled from the window close", proof.Err)
 	}
 }
 
@@ -1251,36 +1273,46 @@ func TestModelCheckAdapterDeadlineDescendantRefuses(t *testing.T) {
 // retained status-reader path: the same descendant-held pipe through the
 // real CLIStatusReader must die at the caller deadline. Rev2 took 3.1s
 // against an 800ms deadline on this path too.
+//
+// BUG-261002-13ll6s: same race as the adapter witness — the runRoot caller
+// deadline opened before the descendant inherited the pipe. The witness now
+// shares the rev-5 readiness-gated proof over the production CLIStatusReader
+// with its real subprocess runner. The status reader wraps its killed read
+// as ErrStatusReadFailed without caller-context attribution, so the witness
+// asserts that production shape plus the group-kill/WaitDelay timing split;
+// the refusal mapping to caller_deadline_exceeded stays pinned by the
+// stubbed deadline tests.
 func TestModelCheckStatusReaderDeadlineDescendantRefuses(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("process-group kill is unix-only; windows bounds the direct child plus WaitDelay")
 	}
-	dir := t.TempDir()
-	script := filepath.Join(dir, "curator-engines")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\n(/bin/sleep 3) & /bin/sleep 3\n"), 0o755); err != nil {
-		t.Fatalf("write fake curator-engines: %v", err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	family := modelCheckDescendantFamilyByName(t, "background-plus-foreground")
+	fixture := prepareModelCheckDescendantFixture(t, "curator-engines", family.script)
+	t.Setenv("PATH", fixture.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("MODELCHECK_READY_DIR", fixture.ReadyDir)
 	reader := localruntime.NewCLIStatusReader()
-	calls := 0
-	setModelCheckTestDeps(t, localmodels.ConfigResult{Config: modelCheckTestConfig(false)}, reader, func(context.Context, agentic.Plan) modelCheckProcessResult {
-		calls++
-		return modelCheckProcessResult{Output: []byte("expected-fragment-for-test"), Started: true}
+	query := localruntime.StatusQuery{
+		Runtime:               localruntime.RuntimeID(modelCheckTestRuntime),
+		Model:                 localruntime.ModelID(modelCheckTestModel),
+		CuratorEnginesProject: fixture.Dir,
+		CuratorEnginesProfile: "model-check-test",
+	}
+	proof := proveModelCheckDescendantKill(t, fixture, family.markers, modelCheckDescendantReadyBound, modelCheckDescendantWindow, func(ctx context.Context) error {
+		_, err := reader.Status(ctx, query)
+		return err
 	})
-	setModelCheckEngineAdapters(t, newModelCheckEngineAdapters)
-	start := time.Now()
-	stdout, _, err := runRoot(t, modelCheckTestArgs(filepath.Join(dir, "evidence.json"), "800ms")...)
-	elapsed := time.Since(start)
-	report := decodeModelCheckReport(t, stdout)
-	t.Logf("elapsed=%v report=%+v pi_calls=%d err=%v", elapsed, report, calls, err)
-	if refusal := requireModelCheckRefusal(t, err); refusal.reason != "caller_deadline_exceeded" {
-		t.Fatalf("refusal reason = %q, want caller_deadline_exceeded", refusal.reason)
+	if proof.ReadyErr != nil {
+		t.Fatalf("child/descendant readiness not observed within %v: cannot attest the group kill (err=%v)",
+			modelCheckDescendantReadyBound, proof.Err)
 	}
-	if report.PiStarted || calls != 0 {
-		t.Fatalf("deadline report=%+v pi_calls=%d; Pi must not start", report, calls)
+	// Fixed behavior closes at the window (~0.3s). Without the group kill,
+	// Wait blocks on the pipe until WaitDelay (~2.3s). The threshold
+	// separates the two by a wide margin on either side.
+	if proof.Elapsed >= modelCheckDescendantKillThreshold {
+		t.Fatalf("300ms window closed after %v (err=%v): the group kill did not fire", proof.Elapsed, proof.Err)
 	}
-	if elapsed > 1500*time.Millisecond {
-		t.Fatalf("800ms caller deadline took %v through production status reader", elapsed)
+	if !errors.Is(proof.Err, localruntime.ErrStatusReadFailed) {
+		t.Fatalf("status err = %v, want ErrStatusReadFailed from the killed read", proof.Err)
 	}
 }
 
