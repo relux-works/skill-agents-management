@@ -325,9 +325,9 @@ from `ChildEnv(nil)` is refused with typed `network_configuration_conflict`.
 Admission is an explicit allowlist, fail-closed: a scope is honoured only when
 the system's `Capabilities.NetworkAdapters` declaration names the Record's
 exact harness/build/entrypoint/adapter tuple. No new interface hook, and it
-never launches without the scope. This revision no plugin declares a tuple
-(the contract rev 2 verifies none, so there is nothing to declare), which
-means every harness refuses; `muse` additionally keeps its own `ChildEnv`
+never launches without the scope. This revision `claude-code` declares exactly
+its one verified tuple (generic-env-v1, build 2.1.287, exec) and every other
+harness refuses; `muse` additionally keeps its own `ChildEnv`
 refusal as the second line, and stays unsupported until D8 verifies its tuple.
 Its closed parent allowlist is unchanged and a post-filter patch would bypass
 it. `SpawnRequest` forwards the carrier unchanged into `LaunchRequest` and the

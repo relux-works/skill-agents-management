@@ -177,8 +177,9 @@ touching a reserved run-context key or an owned `ChildEnv(nil)` key is refused
 with typed `network_configuration_conflict`; admission is a fail-closed
 allowlist, so a harness whose `Capabilities.NetworkAdapters` does not name
 the Record's exact adapter tuple refuses any non-zero scope and never
-launches without it. No tuple is declared yet, so every harness refuses;
-`muse` stays unsupported until D8 verifies it. Through
+launches without it. Only `claude-code` declares a tuple yet — exactly its
+verified generic-env-v1 tuple (build 2.1.287, exec) — so every other harness
+refuses; `muse` stays unsupported until D8 verifies it. Through
 `vendorplugin.BuildLaunch`, set `SpawnRequest.Network` and the vendor layer
 forwards it unchanged; a vendor that changes it is refused with
 `ErrVendorContract`. Persist the Record only — never the patch, the endpoint,

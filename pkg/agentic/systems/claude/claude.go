@@ -43,6 +43,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/relux-works/curator-network-profiles/pkg/binding"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -137,6 +138,16 @@ func (*System) Capabilities() agentic.Capabilities {
 		// (provider_capability.go), which its adapter renders as
 		// Message + "; " + Remediation.
 		AuthHint: "Claude authentication is unavailable; run `claude login` and retry the goal-bound spawn",
+		// The ONE verified network tuple: network-profiles verified
+		// claude-code build 2.1.287 over generic-env-v1 in exec mode
+		// (sink plus SIGKILL sandbox; MCP stdio children keep the
+		// proxy variables). Admission is exact-tuple — any other
+		// build, entrypoint, adapter or harness still refuses
+		// network_scope_unsupported — and nothing else about this
+		// system changes by declaring it.
+		NetworkAdapters: []binding.AdapterIdentity{
+			{Adapter: "generic-env-v1", Harness: "claude-code", Build: "2.1.287", Entrypoint: "exec"},
+		},
 	}
 }
 

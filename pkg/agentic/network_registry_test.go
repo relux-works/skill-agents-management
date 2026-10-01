@@ -21,9 +21,11 @@ import (
 )
 
 // TestBuildPlanRefusesNetworkScopeForEverySystemWithoutAVerifiedAdapter is the
-// round-1 V1 gate over the REAL registry: every registered plugin refuses a
-// well-formed non-zero Network with typed network_scope_unsupported, because
-// no plugin declares a verified adapter tuple in this revision.
+// round-1 V1 gate over the REAL registry: every registered plugin refuses
+// THIS carrier — a well-formed scope bearing a codex tuple — with typed
+// network_scope_unsupported. Seven systems declare nothing at all;
+// claude-code declares exactly its own verified claude-code tuple, which this
+// carrier does not bear, so the gate fires there too.
 //
 // The table is the registry, not a hand-picked list: it ranges over
 // Default.IDs(), so a ninth plugin is covered the moment it registers — and
@@ -36,10 +38,12 @@ import (
 // that subtest.
 func TestBuildPlanRefusesNetworkScopeForEverySystemWithoutAVerifiedAdapter(t *testing.T) {
 	ids := agentic.Default.IDs()
-	// The closed set this revision verifies: nothing. A new registration
-	// fails here until its author states the declaration beside it — the
-	// loop above already refuses it, and this is the acknowledgement that
-	// the refusal is the intent, not an accident of an empty table.
+	// The closed set this revision verifies: exactly the claude-code tuple
+	// (generic-env-v1, build 2.1.287, exec), declared by the claude-code
+	// system alone. A new registration fails here until its author states
+	// the declaration beside it — the loop above already refuses it, and
+	// this is the acknowledgement that the refusal is the intent, not an
+	// accident of an empty table.
 	want := []agentic.SystemID{
 		"antigravity", "claude-code", "codex", "gemini-cli",
 		"muse", "pi", "pi-native", "qwen-code",
@@ -106,9 +110,10 @@ func TestBuildPlanRefusesNetworkBeforePiPreparation(t *testing.T) {
 }
 
 // registryNetworkCarrier is a well-formed scope naming a REAL harness tuple —
-// generic-env-v1 over codex — so the refusal on every system, codex included,
-// is the admission gate firing on an undeclared plugin, not the shape gate
-// firing on a malformed carrier.
+// generic-env-v1 over codex — which no system declares (claude-code declares
+// only its own claude-code tuple), so the refusal on every system is the
+// admission gate firing on an undeclared identity, not the shape gate firing
+// on a malformed carrier.
 func registryNetworkCarrier() agentic.Network {
 	return agentic.Network{
 		Patch: envpatch.Patch{

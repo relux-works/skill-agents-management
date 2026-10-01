@@ -113,10 +113,11 @@ var (
 	// ErrNetworkScopeUnsupported refuses a non-zero Network on a harness with
 	// no verified network path. GateNetwork returns it for every system whose
 	// NetworkAdapters declaration admits no tuple matching the Record — this
-	// revision every plugin refuses, and muse carries it until D8 verifies
-	// its harness/build/entrypoint/adapter tuple. It is a *refusal.Refusal
-	// carrying code network_scope_unsupported, so errors.Is matches on the
-	// code and refusal.CodeOf reports it.
+	// revision every plugin but claude-code refuses (claude-code declares
+	// exactly its verified generic-env-v1 tuple), and muse carries it until
+	// D8 verifies its harness/build/entrypoint/adapter tuple. It is a
+	// *refusal.Refusal carrying code network_scope_unsupported, so errors.Is
+	// matches on the code and refusal.CodeOf reports it.
 	ErrNetworkScopeUnsupported = &refusal.Refusal{Code: refusal.CodeScopeUnsupported}
 	// ErrNetworkProfileInvalid refuses a malformed network patch or Record:
 	// bad names, duplicate set entries, a set-only patch, or halves that do
