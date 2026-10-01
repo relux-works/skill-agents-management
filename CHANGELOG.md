@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Probe Muse Code's running release with the launch binary and curated child
+  environment, keeping auto-update disabled. Recognize the 1.4.1 and 1.4.2
+  version output and qualify 1.4.2 for native and yolo permission mapping;
+  unverified releases remain refused.
+
 - Allow Muse offline echo plans through `Model.ID: "echo"`: interactive, exec
   and dry-run argv select `--provider echo` without model or reasoning-effort
   flags. Preserve Meta argv and interactive permission posture.

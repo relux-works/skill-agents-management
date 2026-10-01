@@ -7,11 +7,12 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
-// verifiedReleases is Muse's per-release permission table. The sole row is
-// Muse Code 1.4.1, whose pinned TUI help documents --yolo. Later releases must
-// be verified before this table can map yolo for them.
+// verifiedReleases is Muse's per-release permission table. The rows are
+// Muse Code 1.4.1 and 1.4.2, whose pinned TUI help documents --yolo. Later
+// releases must be verified before this table can map yolo for them.
 var verifiedReleases = []agentic.ReleaseCapability{
 	{Release: "1.4.1", Grammar: agentic.PermissionGrammarV1, YoloSupported: true},
+	{Release: "1.4.2", Grammar: agentic.PermissionGrammarV1, YoloSupported: true},
 }
 
 // PermissionMapping exposes the release-pinned Muse posture mapping without

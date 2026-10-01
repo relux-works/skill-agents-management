@@ -105,7 +105,7 @@ The agentic-system plugin contract and its registry.
   bypass flag the system maps for its pinned tool release (`claude-code` →
   `--dangerously-skip-permissions`, `codex` →
   `--dangerously-bypass-approvals-and-sandbox`, emitted exactly once after
-  model and effort; `muse` maps `--yolo` for release 1.4.1; `pi` and
+  model and effort; `muse` maps `--yolo` for releases 1.4.1 and 1.4.2; `pi` and
   `pi-native` refuse yolo with
   `ErrPermissionModeUnsupported` because pi 0.84.2 documents no such flag).
   `BuildPlan` refuses an unknown value in any mode
@@ -139,15 +139,17 @@ The agentic-system plugin contract and its registry.
   |---|---|---|---|
   | `claude-code` | 2.1.261 | `permission-grammar-v2` | `--dangerously-skip-permissions` |
   | `codex` | 0.153.2 | `permission-grammar-v2` | `--dangerously-bypass-approvals-and-sandbox` |
-  | `muse` | 1.4.1 | `permission-grammar-v1` | `--yolo` |
+  | `muse` | 1.4.1, 1.4.2 | `permission-grammar-v1` | `--yolo` |
   | `pi` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
   | `pi-native` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
 
   The caller establishes the running release by probing the resolved binary
   (`ProbeToolRelease`: `<binary> --version` against the launch environment —
   fake binaries in tests, never a real provider) and passes it on
-  `LaunchRequest.ToolRelease`. On drift — an unpinned or newer release, or
-  none established at all — yolo fails closed first with
+  `LaunchRequest.ToolRelease`. Muse parses the release triple from
+  `Muse Code <release> (<release>-R<revision>)` and probes with its curated
+  child environment, including the forced `MUSE_NO_AUTO_UPDATE=1` pin. On drift —
+  an unpinned or newer release, or none established at all — yolo fails closed first with
   `ErrPermissionModeUnverifiedRelease`, while native still forwards verbatim
   with no claims. `pi` has no release probe of its own, so yolo there without
   an explicitly passed Pi release refuses as unverified. Under yolo, Claude

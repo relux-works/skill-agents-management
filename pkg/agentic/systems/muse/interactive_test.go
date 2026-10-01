@@ -88,7 +88,7 @@ func TestMuseInteractiveYoloEmitsOneFlagAndForwardsNativeArgs(t *testing.T) {
 func TestMuseInteractiveYoloRefusesAnUnlistedRelease(t *testing.T) {
 	req := museInteractiveRequest(t)
 	req.PermissionMode = agentic.PermissionModeYolo
-	req.ToolRelease = "1.4.2"
+	req.ToolRelease = "1.5.0"
 
 	_, err := tryBuildMusePlan(t, New(), req, agentic.LaunchModeInteractive)
 	if !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
@@ -220,7 +220,7 @@ func TestMuseInteractiveDuplicateYoloNarrowingMutantIsDetected(t *testing.T) {
 func TestMuseInteractiveUnlistedReleaseWideningMutantIsDetected(t *testing.T) {
 	req := museInteractiveRequest(t)
 	req.PermissionMode = agentic.PermissionModeYolo
-	req.ToolRelease = "1.4.2"
+	req.ToolRelease = "1.5.0"
 	if err := requireMuseUnlistedReleaseRefusal(New(), req); err != nil {
 		t.Fatalf("unmutated policy did not refuse the unlisted release: %v", err)
 	}
@@ -230,12 +230,14 @@ func TestMuseInteractiveUnlistedReleaseWideningMutantIsDetected(t *testing.T) {
 }
 
 func TestMuseInteractivePolicyPinsOnlyTheVerifiedRelease(t *testing.T) {
-	if len(verifiedReleases) != 1 {
-		t.Fatalf("Muse permission policy has %d rows, want exactly the pinned TUI release", len(verifiedReleases))
+	if len(verifiedReleases) != 2 {
+		t.Fatalf("Muse permission policy has %d rows, want exactly the two pinned TUI releases", len(verifiedReleases))
 	}
-	row := verifiedReleases[0]
-	if row.Release != verifiedMuseRelease || !row.YoloSupported {
-		t.Fatalf("Muse permission policy row = %#v, want release %q with yolo supported", row, verifiedMuseRelease)
+	for i, release := range []string{verifiedMuseRelease, "1.4.2"} {
+		row := verifiedReleases[i]
+		if row.Release != release || row.Grammar != agentic.PermissionGrammarV1 || !row.YoloSupported {
+			t.Fatalf("Muse permission policy row = %#v, want release %q with grammar v1 and yolo supported", row, release)
+		}
 	}
 }
 
@@ -344,7 +346,7 @@ func (m duplicateYoloMutant) Argv(req agentic.LaunchRequest, mode agentic.Launch
 type unlistedReleaseMutant struct{ agentic.System }
 
 func (m unlistedReleaseMutant) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
-	if mode == agentic.LaunchModeInteractive && req.PermissionMode == agentic.PermissionModeYolo && req.ToolRelease == "1.4.2" {
+	if mode == agentic.LaunchModeInteractive && req.PermissionMode == agentic.PermissionModeYolo && req.ToolRelease == "1.5.0" {
 		req.ToolRelease = verifiedMuseRelease
 	}
 	return m.System.Argv(req, mode)
