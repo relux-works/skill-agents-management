@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/relux-works/skill-agents-management/pkg/vendorplugin/benchdata"
 )
 
 // The ONE benchmark every capability score in this module is anchored on.
@@ -40,26 +42,24 @@ import (
 // BugHuntBenchSource names the leaderboard every measured and interpolated
 // score rests on. The URL and the leaderboard date are in the string so a
 // reader can open the page and see whether it moved.
-const BugHuntBenchSource = "Bug Hunt Bench leaderboard, https://bughunt.productcompass.pm/ (updated 2026-09-13): planted bugs fixed out of 105, verified blind, unplanted fixes never counted"
+const BugHuntBenchSource = benchdata.BugHuntBenchSource
 
 // BugHuntBenchTotal is the denominator of every measured observation.
-const BugHuntBenchTotal = 105
+const BugHuntBenchTotal = benchdata.BugHuntBenchTotal
 
 // BugHuntBenchFloor is the anchor an interpolated row names below itself when
 // nothing in its lineup sits under it. It is a NAMED anchor rather than an
 // omitted one so the consistency test can resolve it to 0 and hold the row's
 // score strictly above it.
-const BugHuntBenchFloor = "the bench floor (0/105)"
+const BugHuntBenchFloor = benchdata.BugHuntBenchFloor
 
 // BughuntMeasured is the evidence for a row the leaderboard measured: the
 // fixed count at the effort setting the count was taken at, which must be the
 // row's BEST setting — other settings are cost or latency evidence, recorded
 // through BughuntCost, never the capability claim.
 func BughuntMeasured(effort string, fixed int) RankEvidence {
-	return RankEvidence{
-		Source:      BugHuntBenchSource,
-		Observation: fmt.Sprintf("fixed %d/%d at %s", fixed, BugHuntBenchTotal, effort),
-	}
+	evidence := benchdata.BughuntMeasured(effort, fixed)
+	return RankEvidence{Source: evidence.Source, Observation: evidence.Observation}
 }
 
 // BughuntMeasuredAs is BughuntMeasured for a row the leaderboard lists under a
@@ -68,10 +68,8 @@ func BughuntMeasured(effort string, fixed int) RankEvidence {
 // observation so the consistency test resolves the claim against the
 // leaderboard rather than against the row's own id.
 func BughuntMeasuredAs(benchID string, effort string, fixed int) RankEvidence {
-	return RankEvidence{
-		Source:      BugHuntBenchSource,
-		Observation: fmt.Sprintf("fixed %d/%d at %s, measured as %s", fixed, BugHuntBenchTotal, effort, benchID),
-	}
+	evidence := benchdata.BughuntMeasuredAs(benchID, effort, fixed)
+	return RankEvidence{Source: evidence.Source, Observation: evidence.Observation}
 }
 
 // BughuntInterpolated is the evidence for a row the leaderboard did not
@@ -83,11 +81,8 @@ func BughuntMeasuredAs(benchID string, effort string, fixed int) RankEvidence {
 // row sits where it does — the vendor's own tiering, a kept registry order, a
 // tie with a neighbour.
 func BughuntInterpolated(above, below string, note string) RankEvidence {
-	observation := fmt.Sprintf("interpolated between %s and %s", above, below)
-	if strings.TrimSpace(note) != "" {
-		observation += "; " + note
-	}
-	return RankEvidence{Source: BugHuntBenchSource, Observation: observation}
+	evidence := benchdata.BughuntInterpolated(above, below, note)
+	return RankEvidence{Source: evidence.Source, Observation: evidence.Observation}
 }
 
 // BughuntCost records a leaderboard observation that is NOT the capability

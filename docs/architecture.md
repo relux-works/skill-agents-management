@@ -18,6 +18,14 @@ currently carries native MCP, additional system-prompt and permission channel
 values for Claude and Codex, but not the Curator fragment descriptor union or
 its profile, lock, managed-home and provenance identity.
 
+`pkg/vendorplugin/benchdata` owns the compiled model declarations shared by the
+vendor adapters and the unresolved-runtime model list. `BugHuntRows()` and
+`RegistryFacts()` return deep copies sorted by claim key and model id. The leaf
+imports no executable plugin or agentic package and performs no registration,
+process, file, network or clock access. Benchmark denominators describe the
+fixed metric scale; unknown interpolation efforts stay absent, cost claims
+stay separate, and the source version identifies the benchmark publication.
+
 ## The plugin graph
 
 `pkg/plugin.Registry` stores `plugin.Declaration{ID, Kind, Dependencies}`.

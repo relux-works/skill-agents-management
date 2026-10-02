@@ -23,11 +23,12 @@ var observerBoundaryAllowedImports = map[string]bool{
 	"errors": true, "fmt": true, "math": true, "math/rand": true,
 	"reflect": true, "regexp": true, "sort": true, "strings": true, "sync": true,
 	"testing": true, "time": true,
-	"github.com/relux-works/skill-agents-management/internal/ident":      true,
-	"github.com/relux-works/skill-agents-management/pkg/agentic":         true,
-	"github.com/relux-works/skill-agents-management/pkg/inferenceengine": true,
-	"github.com/relux-works/skill-agents-management/pkg/plugin":          true,
-	"github.com/relux-works/skill-agents-management/pkg/vendorplugin":    true,
+	"github.com/relux-works/skill-agents-management/internal/ident":             true,
+	"github.com/relux-works/skill-agents-management/pkg/agentic":                true,
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine":        true,
+	"github.com/relux-works/skill-agents-management/pkg/plugin":                 true,
+	"github.com/relux-works/skill-agents-management/pkg/vendorplugin":           true,
+	"github.com/relux-works/skill-agents-management/pkg/vendorplugin/benchdata": true,
 }
 
 // TestObserverBoundaryHasNoLiveProbeSurface keeps this task's production and

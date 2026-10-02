@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add the data-only `vendorplugin/benchdata` Bug Hunt and registry accessors.
+  Share model declarations with vendor and unresolved-runtime adapters; retain
+  all benchmark keys, aliases, unknown efforts and list-cost evidence.
+
 - Probe Muse Code's running release with the launch binary and curated child
   environment, keeping auto-update disabled. Recognize the 1.4.1 and 1.4.2
   version output and qualify 1.4.2 for native and yolo permission mapping;

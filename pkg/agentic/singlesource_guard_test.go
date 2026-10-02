@@ -233,15 +233,15 @@ var bindingHomes = map[string]string{
 	"VendorID":  "pkg/vendorplugin/registry.go",
 	"RuntimeID": "pkg/vendorplugin/registry.go",
 
-	"anthropic models": "pkg/vendorplugin/vendors/anthropic/models.go",
-	"openai models":    "pkg/vendorplugin/vendors/openai/models.go",
-	"alibaba models":   "pkg/vendorplugin/vendors/alibaba/models.go",
-	"google models":    "pkg/vendorplugin/vendors/google/models.go",
+	"anthropic models": "pkg/vendorplugin/benchdata/anthropic.go",
+	"openai models":    "pkg/vendorplugin/benchdata/openai.go",
+	"alibaba models":   "pkg/vendorplugin/benchdata/alibaba.go",
+	"google models":    "pkg/vendorplugin/benchdata/google.go",
 
 	// The muse rows, which belong to NO vendor. Their runtime's broker was
 	// looked for and never established, so there is no vendor plugin to put
-	// them in and they live on the vendor-unresolved runtime declaration
-	// itself. They are the same KIND of fact as the four above — a model list
+	// them in; benchdata owns their facts and the vendor-unresolved runtime
+	// declaration projects them. They are the same KIND of fact as the four above — a model list
 	// declaring which harness drives each row — so they get the same treatment:
 	// exactly one home, named here, and a "muse" spelled in a composite literal
 	// anywhere else still fails.
@@ -249,7 +249,7 @@ var bindingHomes = map[string]string{
 	// This entry is what makes that home a permission rather than an accident.
 	// Without it the rows could not be written at all; with a second file for
 	// them, the guard reports the second.
-	"muse models": "pkg/vendorplugin/runtime.go",
+	"muse models": "pkg/vendorplugin/benchdata/muse.go",
 }
 
 // dispatchKeyTypes are the entries of bindingHomes that name a Go type the
@@ -261,10 +261,10 @@ var dispatchKeyTypes = []string{"SystemID", "VendorID", "RuntimeID"}
 // plugin. It is written out separately so "one binding file per vendor" is a
 // checkable claim rather than a pattern a reader has to notice.
 var vendorBindingHomes = map[string]string{
-	"anthropic": "pkg/vendorplugin/vendors/anthropic/models.go",
-	"openai":    "pkg/vendorplugin/vendors/openai/models.go",
-	"alibaba":   "pkg/vendorplugin/vendors/alibaba/models.go",
-	"google":    "pkg/vendorplugin/vendors/google/models.go",
+	"anthropic": "pkg/vendorplugin/benchdata/anthropic.go",
+	"openai":    "pkg/vendorplugin/benchdata/openai.go",
+	"alibaba":   "pkg/vendorplugin/benchdata/alibaba.go",
+	"google":    "pkg/vendorplugin/benchdata/google.go",
 }
 
 // singleSourceAllowlist names the sites permitted to spell a plugin id outside
@@ -1296,10 +1296,10 @@ func TestSingleSourceGuardScansTheWholeModule(t *testing.T) {
 		// reaches for a second copy of "which harness drives this", and a scan
 		// that did not reach these files would leave four tables unguarded
 		// while every other assertion here stayed green.
-		"pkg/vendorplugin/vendors/anthropic/models.go",
-		"pkg/vendorplugin/vendors/openai/models.go",
-		"pkg/vendorplugin/vendors/alibaba/models.go",
-		"pkg/vendorplugin/vendors/google/models.go",
+		"pkg/vendorplugin/benchdata/anthropic.go",
+		"pkg/vendorplugin/benchdata/openai.go",
+		"pkg/vendorplugin/benchdata/alibaba.go",
+		"pkg/vendorplugin/benchdata/google.go",
 		"tools/agents-management/cmd/plugins.go",
 		"tools/agents-management/cmd/root.go",
 		"tools/agents-management/main.go",
@@ -1356,15 +1356,14 @@ func TestSingleSourceGuardRulesFireOnRealCode(t *testing.T) {
 	// stayed green.
 	// Every layer's real registry AND every id-spelling home. The vendor
 	// tables are here for the same reason the registries are: displaced, each
-	// one's `[]agentic.SystemID{"claude-code"}` is a plugin id spelled outside
+	// one's system-id slice contains a plugin id spelled outside
 	// a home, so a file that stays silent under displacement is a file the
 	// composite-literal rule cannot see — and its silence in the real run
 	// would then mean nothing at all.
-	// pkg/vendorplugin/runtime.go is required alongside the vendor tables even
-	// though it is not one: it holds the muse rows, whose home is granted by
-	// bindingHomes just as theirs are, and a home nothing fires on under
-	// displacement is a permission the guard cannot see being used.
-	required := []string{"pkg/agentic/registry.go", "pkg/vendorplugin/registry.go", "pkg/vendorplugin/runtime.go"}
+	// benchdata/muse.go is required alongside the vendor tables: it owns the
+	// unresolved-runtime model bindings. Displacing that home must report the
+	// real declarations, just as it does for every vendor's model bindings.
+	required := []string{"pkg/agentic/registry.go", "pkg/vendorplugin/registry.go", "pkg/vendorplugin/benchdata/muse.go"}
 	for _, home := range vendorBindingHomes {
 		required = append(required, home)
 	}

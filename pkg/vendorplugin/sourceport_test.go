@@ -1008,10 +1008,10 @@ func TestEveryModelHasAUsageDescription(t *testing.T) {
 // repository keeps writing tests against. Deleting the note fails here.
 func TestUsageDescriptionsAreMarkedAuthoredHere(t *testing.T) {
 	homes := map[vendorplugin.VendorID]string{
-		"anthropic": "vendors/anthropic/models.go",
-		"openai":    "vendors/openai/models.go",
-		"alibaba":   "vendors/alibaba/models.go",
-		"google":    "vendors/google/models.go",
+		"anthropic": "benchdata/anthropic.go",
+		"openai":    "benchdata/openai.go",
+		"alibaba":   "benchdata/alibaba.go",
+		"google":    "benchdata/google.go",
 	}
 	for vendor, path := range homes {
 		raw, err := os.ReadFile(filepath.FromSlash(path))
