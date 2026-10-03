@@ -146,11 +146,19 @@ func googleDeclaredRank(score int, bench RankEvidence, note string, declaration 
 }
 
 // googleArgonOperatorDeclaration records an instruction, not a catalogue read.
-const googleArgonOperatorDeclaration = "operator declaration of 2026-10-02 naming gemini-4-argon for the agy runtime; not publicly released yet; `agy models` was not read because agy is not installed on the declaring machine"
+const googleArgonOperatorDeclaration = "operator declaration of 2026-10-02 naming gemini-4-argon for the agy runtime; not publicly released yet; `agy models` was not read because agy is not installed on the declaring machine. Per-effort ids follow the agy (base, effort) convention by the owner's 2026-10-04 decision; they were not read from `agy models`"
 
 var googleArgonRank = googleDeclaredRank(45,
 	BughuntInterpolated("gpt-6-astra", "claude-fable-5-1", "unmeasured; operator places Argon at frontier level between Astra and Fable"),
 	"preview frontier placement, interpolated rather than measured", googleArgonOperatorDeclaration)
+
+var googleArgonMediumRank = googleDeclaredRank(42,
+	BughuntInterpolated("gemini-4-argon-high", "gemini-3.8-flash-high", "unmeasured; medium Argon interpolated between high Argon and measured Flash high (20)"),
+	"preview medium placement, interpolated rather than measured", googleArgonOperatorDeclaration)
+
+var googleArgonLowRank = googleDeclaredRank(39,
+	BughuntInterpolated("gemini-4-argon-high", "gemini-3.8-flash-high", "unmeasured; low Argon interpolated between high Argon and measured Flash high (20)"),
+	"preview low placement, interpolated rather than measured", googleArgonOperatorDeclaration)
 
 // Argon joins the previously Flash-only agy lineup on 2026-10-02.
 // The agy Pro rows were retired on 2026-09-23: gemini-3.1-pro-high and
@@ -168,8 +176,33 @@ func googleEffortNone() EffortDeclaration {
 // models is the declaration itself, most capable first.
 var googleModels = []Model{
 	{
+		ID:          "gemini-4-argon-high",
+		Description: "Preview Antigravity frontier model pinned to high effort; not publicly released yet",
+		Rank:        googleArgonRank,
+		Lifecycle:   LifecyclePreview,
+		Effort:      googleEffortNone(),
+		Systems:     []string{"antigravity"},
+	},
+	{
+		ID:          "gemini-4-argon-medium",
+		Description: "Preview Antigravity frontier model pinned to medium effort; not publicly released yet",
+		Rank:        googleArgonMediumRank,
+		Lifecycle:   LifecyclePreview,
+		Effort:      googleEffortNone(),
+		Systems:     []string{"antigravity"},
+	},
+	{
+		ID:          "gemini-4-argon-low",
+		Description: "Preview Antigravity frontier model pinned to low effort; not publicly released yet",
+		Rank:        googleArgonLowRank,
+		Lifecycle:   LifecyclePreview,
+		Effort:      googleEffortNone(),
+		Systems:     []string{"antigravity"},
+	},
+	{
 		ID:          "gemini-4-argon",
-		Description: "Preview Antigravity frontier model; not publicly released yet",
+		AliasOf:     "gemini-4-argon-high",
+		Description: "The compatible Antigravity Argon spelling; it executes as gemini-4-argon-high",
 		Rank:        googleArgonRank,
 		Lifecycle:   LifecyclePreview,
 		Effort:      googleEffortNone(),
@@ -177,8 +210,8 @@ var googleModels = []Model{
 	},
 	{
 		ID:          "argon",
-		AliasOf:     "gemini-4-argon",
-		Description: "The floating Antigravity Argon spelling; it executes as gemini-4-argon",
+		AliasOf:     "gemini-4-argon-high",
+		Description: "The floating Antigravity Argon spelling; it executes as gemini-4-argon-high",
 		Rank:        googleArgonRank,
 		Lifecycle:   LifecyclePreview,
 		Effort:      googleEffortNone(),

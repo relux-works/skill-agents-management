@@ -152,12 +152,12 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 		}
 		historical = append(historical, row)
 	}
-	// The frozen export predates exactly the two Argon declarations. Pin their
+	// The frozen export predates the five Argon declarations. Pin their
 	// additions independently; do not rewrite the historical capture.
 	denominator := int64(105)
-	for _, id := range []string{"argon", "gemini-4-argon"} {
+	for id, score := range map[string]float64{"argon": 45, "gemini-4-argon": 45, "gemini-4-argon-high": 45, "gemini-4-argon-medium": 42, "gemini-4-argon-low": 39} {
 		historical = append(historical, benchdata.BugHuntRow{
-			Key: id + ":0", ModelID: id, Kind: "interpolated", Value: 45,
+			Key: id + ":0", ModelID: id, Kind: "interpolated", Value: score,
 			Denominator: &denominator, OriginRef: "bug-hunt:" + id,
 			SourceVersion: "bug-hunt-bench@2026-09-13",
 		})
@@ -176,10 +176,10 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 		counts[row.Kind]++
 		keys[row.Key] = true
 	}
-	if len(rows) != 60 || len(keys) != 60 || counts["measured"] != 12 || counts["interpolated"] != 47 || counts["cost"] != 1 {
+	if len(rows) != 63 || len(keys) != 63 || counts["measured"] != 12 || counts["interpolated"] != 50 || counts["cost"] != 1 {
 		t.Fatalf("claim counts: %d rows, %d keys, %v", len(rows), len(keys), counts)
 	}
-	if len(facts) != 59 {
+	if len(facts) != 62 {
 		t.Fatalf("registry count: %d", len(facts))
 	}
 	// Measured aliases retain shared source origins and remain separate keys.
@@ -190,7 +190,7 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 	if origins["astra:0"] != origins["gpt-6-astra:0"] || origins["muse-spark:0"] != origins["muse-spark-1.3-contributor:0"] {
 		t.Fatal("alias source origin drift")
 	}
-	t.Log("parity: 60 distinct keys; 12 measured / 47 interpolated / 1 cost; 59 registry facts; adapters and historical fixture plus exactly two Argon rows agree")
+	t.Logf("parity: %d distinct keys; %d measured / %d interpolated / %d cost; %d registry facts; adapters and historical fixture plus exactly five Argon rows agree", len(keys), counts["measured"], counts["interpolated"], counts["cost"], len(facts))
 }
 
 func TestBenchdataParityRejectsDropDuplicateAndFieldDrift(t *testing.T) {

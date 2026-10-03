@@ -604,13 +604,18 @@ Plugin id `pi-native`; the frozen runtimes that bind it are `pi-anthropic`,
 The Antigravity CLI, proven against both agy goldens. Plugin id `antigravity`,
 runtime id `agy`.
 
-The lineup is the nine Flash rows plus `gemini-4-argon` and its `argon` alias.
-Argon is preview, agy only, with no effort axis, published context size or
-pricing. Its score 45 is interpolated between measured Astra (48) and Fable
-(43), from the operator declaration of 2026-10-02: no public release yet,
-and `agy models` was not read because agy is not installed on the declaring
-machine. The display pick remains `gemini-3.6-flash-high`. Neither Argon
-spelling is in the Pi native catalog.
+The lineup is the nine Flash rows plus `gemini-4-argon-high`,
+`gemini-4-argon-medium` and `gemini-4-argon-low`, with `gemini-4-argon` and
+`argon` aliasing the high row. Argon is preview, agy only, with effort encoded
+in each id and no separate effort axis, published context size or pricing.
+High scores 45, interpolated between measured Astra (48) and Fable (43);
+medium (42) and low (39) are interpolated between Argon high and measured
+Flash high (20). These are unmeasured placements. The operator declaration
+of 2026-10-02 names Argon; the owner's 2026-10-04 decision adds per-effort ids
+following agy's (base, effort) convention. No public release yet, and
+`agy models` was not read because agy is not installed on the declaring
+machine. The display pick remains `gemini-3.6-flash-high`. No Argon row is in
+the Pi native catalog.
 
 - **The binary comes from a PREFLIGHT, and agy has no `PATH` fallback at all.**
   The source's probe runs `agy --version` and `agy --help` and validates a
@@ -969,10 +974,11 @@ NOT contain rather than for what it does.
 ### Alias identity resolution
 
 A model row may declare `AliasOf`: the identity it is a short spelling of.
-Eight rows do today — `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
+Nine rows do today — `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
 `gpt-6-astra`, `sol` → `gpt-6.1-sol`, `luna` → `gpt-6-luna`, `opus` →
 `claude-opus-5-5`, `sonnet` → `claude-sonnet-5-5`, `gemini-flash` →
-`gemini-3.8-flash-high` and `argon` → `gemini-4-argon` — and all exist for the same reason: the alias is a name
+`gemini-3.8-flash-high`, `argon` → `gemini-4-argon-high` and
+`gemini-4-argon` → `gemini-4-argon-high` — and all exist for the same reason: the alias is a name
 operators, configuration and spawn ceilings use and the provider does not have.
 
 Measured, not assumed. A spawn of `--model muse-spark --reasoning-effort high`

@@ -78,11 +78,14 @@ import (
 // Code CLI. Each pair is one model under two names, and each pair's shared
 // score is legal for the reason the astra pair's is.
 var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
-	"gemini-4-argon": "google",
-	"argon":          "google",
-	"gpt-6-astra":    "openai",
-	"astra":          "openai",
-	"gpt-6-sol":      "openai",
+	"gemini-4-argon-high":   "google",
+	"gemini-4-argon-medium": "google",
+	"gemini-4-argon-low":    "google",
+	"gemini-4-argon":        "google",
+	"argon":                 "google",
+	"gpt-6-astra":           "openai",
+	"astra":                 "openai",
+	"gpt-6-sol":             "openai",
 	// gpt-6.1-sol, read off codex-cli 0.159.0 on 2026-09-29; `sol` moved to it.
 	"gpt-6.1-sol":     "openai",
 	"sol":             "openai",

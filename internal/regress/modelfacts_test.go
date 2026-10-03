@@ -48,6 +48,7 @@ const boardModelCount = 45
 // vendor package holds each of these to its own evidence rule — see
 // pkg/vendorplugin/declaredhere_test.go.
 var declaredHereRows = []vendorplugin.ModelID{
+	"gemini-4-argon-high", "gemini-4-argon-medium", "gemini-4-argon-low",
 	"gemini-4-argon", "argon",
 	"gpt-6-astra", "astra",
 	"gpt-6-sol", "sol", "gpt-6.1-sol",

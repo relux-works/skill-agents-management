@@ -707,9 +707,10 @@ func TestRuntimeModelsScopeToTheHarnessThatDrivesThem(t *testing.T) {
 		{runtime: "qwen", system: "qwen-code", count: 5, holds: "qwen3.7-plus", excedes: "qwen3.7-plus-via-codex"},
 		{runtime: "qwen-codex", system: "codex", count: 1, holds: "qwen3.7-plus-via-codex", excedes: "qwen3.7-plus"},
 		{runtime: "gemini", system: "gemini-cli", count: 7, holds: "gemini-2.5-pro", excedes: "gemini-3.6-flash-high"},
-		// 11: the two 3.1 Pro rows retired, the 3.8/3.7 Flash heads and the
-		// gemini-flash alias declared, plus Argon and its alias (declaredhere_test.go).
-		{runtime: "agy", system: "antigravity", count: 11, holds: "gemini-3.6-flash-high", excedes: "gemini-2.5-pro"},
+		// 14: the two 3.1 Pro rows retired, the 3.8/3.7 Flash heads and the
+		// gemini-flash alias declared, plus three Argon effort ids and two aliases
+		// (declaredhere_test.go).
+		{runtime: "agy", system: "antigravity", count: 14, holds: "gemini-3.6-flash-high", excedes: "gemini-2.5-pro"},
 		// 14, not the source table's 12: gpt-6-astra and its `astra` alias are
 		// both declared ahead of the board's registry and are both real openai
 		// rows the codex harness drives. An alias is INDEXED like any other
