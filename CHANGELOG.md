@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.5.45 — 2026-10-04
+
+- Declare preview Antigravity Argon ids `gemini-4-argon-high`,
+  `gemini-4-argon-medium` and `gemini-4-argon-low` with unmeasured interpolated
+  ranks 45, 42 and 39. Effort is encoded in the id; explicit reasoning effort
+  is refused. Retain `gemini-4-argon` and `argon` as aliases of the high id.
+
+- Deny `AskUserQuestion` on every supported Claude launch plan with the
+  module's own unconditional `--disallowedTools=AskUserQuestion` occurrence.
+  Caller occurrences stay byte-for-byte; a duplicate deny is accepted and the
+  earlier conditional emission is removed. Refuse explicit re-enable attempts
+  in allow flags and the effective `--settings` input with typed errors;
+  tokenize rules with the pinned native ECMAScript grammar. Refuse eager-scan
+  versus Commander-parse settings disagreements with the typed `ambiguous`
+  settings kind; distinguish unreadable settings from invalid settings. Follow
+  pinned Claude 2.1.288 option arity and the eager scanner skip sets so scalar
+  values are never policy flags. Add production plan regressions, skippable
+  native differential comparisons and registered narrowing mutants for the
+  denial, tokenization, eager scan and refusal gates.
+
+- Carry local-model effort vocabularies and recommendations from `ModelEntry`
+  and `local-models.toml` into vendor declarations. Required rows must declare
+  both a nonempty vocabulary and an in-vocabulary recommendation to register,
+  and launch with an explicit supported effort; effortless rows remain strict.
+  Recommendations are guidance only and are never injected as defaults.
+- Refuse local Codex rows whose declared vocabulary exceeds native catalog
+  reasoning levels on both ID and snapshot paths, with consumer-shaped launch
+  regressions and narrowing mutation evidence.
+
+## Unreleased
+
 ## v0.5.44 — 2026-10-04
 
 - Declare the verified network tuple for `codex`: codex-env-v1, build
@@ -37,8 +68,6 @@
   launch argv and environment are unchanged. The semantic refusal census
   includes propagation, and the bounded mutation runner reports kills,
   survivors and source bounds.
-
-## Unreleased
 
 ## v0.5.43 — 2026-10-04
 
