@@ -10,7 +10,7 @@ import (
 )
 
 // This file holds the 2026-09-23 changes to what BuildLaunch admits: the agy
-// lineup is Flash-only with gemini-3.8-flash-high at its head and
+// original lineup was Flash-only with gemini-3.8-flash-high at its head and
 // `gemini-flash` floating over it, and the `ultra` effort word is refused by
 // every row of every runtime.
 
@@ -54,7 +54,7 @@ func TestTheGeminiFlashSpellingLaunchesTheAgyFlashHead(t *testing.T) {
 	}
 }
 
-// TestTheAgyLineupIsFlashOnly holds the retirement: the runtime indexes no
+// TestTheAgyLineupIsFlashOnly now pins Flash plus Argon: the runtime indexes no
 // Pro row, and a launch of a retired id is refused as an unknown model.
 func TestTheAgyLineupIsFlashOnly(t *testing.T) {
 	registry := isolatedRegistry(t, nil)
@@ -62,9 +62,21 @@ func TestTheAgyLineupIsFlashOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveRuntime(agy): %v", err)
 	}
-	for id := range vendorplugin.RuntimeModels(resolved) {
-		if id != "gemini-flash" && !containsWord(string(id), "flash") {
-			t.Errorf("the agy runtime indexes %q, which is not a Flash row", id)
+	want := map[vendorplugin.ModelID]bool{
+		"gemini-3.8-flash-high": true, "gemini-flash": true, "gemini-3.7-flash-high": true,
+		"gemini-3.6-flash-high": true, "gemini-3.6-flash-medium": true, "gemini-3.6-flash-low": true,
+		"gemini-3.5-flash-high": true, "gemini-3.5-flash-medium": true, "gemini-3.5-flash-low": true,
+		"gemini-4-argon": true, "argon": true,
+	}
+	got := vendorplugin.RuntimeModels(resolved)
+	for id := range got {
+		if !want[id] {
+			t.Errorf("unexpected agy row %q", id)
+		}
+	}
+	for id := range want {
+		if _, ok := got[id]; !ok {
+			t.Errorf("missing agy row %q", id)
 		}
 	}
 	for id := range retiredHereRows {
@@ -72,15 +84,6 @@ func TestTheAgyLineupIsFlashOnly(t *testing.T) {
 			t.Errorf("BuildLaunch(agy, retired %s) = %v, want ErrUnknownModel", id, err)
 		}
 	}
-}
-
-func containsWord(id, word string) bool {
-	for i := 0; i+len(word) <= len(id); i++ {
-		if id[i:i+len(word)] == word {
-			return true
-		}
-	}
-	return false
 }
 
 // TestTheRetiredUltraIsRefusedEverywhere sweeps every row of every runtime:

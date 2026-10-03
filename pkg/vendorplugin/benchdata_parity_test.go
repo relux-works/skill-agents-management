@@ -152,6 +152,18 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 		}
 		historical = append(historical, row)
 	}
+	// The frozen export predates exactly the two Argon declarations. Pin their
+	// additions independently; do not rewrite the historical capture.
+	denominator := int64(105)
+	for _, id := range []string{"argon", "gemini-4-argon"} {
+		historical = append(historical, benchdata.BugHuntRow{
+			Key: id + ":0", ModelID: id, Kind: "interpolated", Value: 45,
+			Denominator: &denominator, OriginRef: "bug-hunt:" + id,
+			SourceVersion: "bug-hunt-bench@2026-09-13",
+		})
+		fixture.Models = append(fixture.Models, benchdata.RegistryFact{ModelID: id, Efforts: []string{"none"}})
+	}
+	sort.Slice(fixture.Models, func(i, j int) bool { return fixture.Models[i].ModelID < fixture.Models[j].ModelID })
 	if err := compareBenchRows(rows, historical); err != nil {
 		t.Fatalf("historical export parity: %v", err)
 	}
@@ -164,10 +176,10 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 		counts[row.Kind]++
 		keys[row.Key] = true
 	}
-	if len(rows) != 58 || len(keys) != 58 || counts["measured"] != 12 || counts["interpolated"] != 45 || counts["cost"] != 1 {
+	if len(rows) != 60 || len(keys) != 60 || counts["measured"] != 12 || counts["interpolated"] != 47 || counts["cost"] != 1 {
 		t.Fatalf("claim counts: %d rows, %d keys, %v", len(rows), len(keys), counts)
 	}
-	if len(facts) != 57 {
+	if len(facts) != 59 {
 		t.Fatalf("registry count: %d", len(facts))
 	}
 	// Measured aliases retain shared source origins and remain separate keys.
@@ -178,7 +190,7 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 	if origins["astra:0"] != origins["gpt-6-astra:0"] || origins["muse-spark:0"] != origins["muse-spark-1.3-contributor:0"] {
 		t.Fatal("alias source origin drift")
 	}
-	t.Log("parity: 58 distinct keys; 12 measured / 45 interpolated / 1 cost; 57 registry facts; every adapter and historical fixture field agrees")
+	t.Log("parity: 60 distinct keys; 12 measured / 47 interpolated / 1 cost; 59 registry facts; adapters and historical fixture plus exactly two Argon rows agree")
 }
 
 func TestBenchdataParityRejectsDropDuplicateAndFieldDrift(t *testing.T) {
@@ -196,7 +208,7 @@ func TestBenchdataParityRejectsDropDuplicateAndFieldDrift(t *testing.T) {
 	for _, mutate := range []func(*benchdata.BugHuntRow){
 		func(r *benchdata.BugHuntRow) { r.ModelID = "other" },
 		func(r *benchdata.BugHuntRow) { r.Effort = "other" },
-		func(r *benchdata.BugHuntRow) { r.Kind = "interpolated" },
+		func(r *benchdata.BugHuntRow) { r.Kind = "forged" },
 		func(r *benchdata.BugHuntRow) { r.Value++ },
 		func(r *benchdata.BugHuntRow) { r.Denominator = nil },
 		func(r *benchdata.BugHuntRow) { *r.Denominator = 104 },

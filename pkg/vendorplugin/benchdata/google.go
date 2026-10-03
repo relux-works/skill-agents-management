@@ -33,9 +33,9 @@ import "strconv"
 // the score was the source registry's own PolicyRank — hand-ordered 60..10
 // with nothing behind it but the author's placing. Every score below is now a
 // bench point (planted bugs fixed out of 105, vendorplugin.bench.go), and
-// every one of them is INTERPOLATED: the only google row the leaderboard
+// The original rows were INTERPOLATED: the only google row the leaderboard
 // measured, gemini-3.8-flash at high (20), is in neither harness's catalogue
-// here, so the whole lineup is anchored BELOW that measured row, keeping the
+// here, so that original lineup was anchored BELOW that measured row, keeping the
 // registry's order and its ties, down to the bench floor. The top row's upper
 // anchor is therefore a bench id rather than a lineup id, and the consistency
 // test resolves it against the leaderboard. If gemini-3.8-flash reaches the
@@ -43,7 +43,9 @@ import "strconv"
 // is still quoted on every row, because it is still true of the registry, but
 // as the registry's number on its own scale and never as the score.
 // pkg/vendorplugin/bughunt_test.go holds each score against an independent
-// transcription of the leaderboard.
+// transcription of the leaderboard. The later Argon preview rows instead
+// interpolate between measured Astra and Fable; their operator evidence is
+// separate from the Flash declarations.
 //
 // THE FIVE TIES. Every one of them is a gemini-cli row scoring the same as an
 // antigravity row: the source's scores are per BROKER and the two harnesses
@@ -132,14 +134,26 @@ const googleOperatorDeclaration = "operator declaration of 2026-09-23 naming gem
 // declaredRank builds a capability rank for a row NO capture of the board's
 // registry contains. It never quotes a source PolicyRank, because the source
 // registry holds no row for it.
-func googleDeclaredRank(score int, bench RankEvidence, note string) CapabilityRank {
+func googleDeclaredRank(score int, bench RankEvidence, note string, declaration ...string) CapabilityRank {
+	source := googleOperatorDeclaration
+	if len(declaration) != 0 {
+		source = declaration[0]
+	}
 	return CapabilityRank{Score: score, Basis: []RankEvidence{
 		bench,
-		{Source: googleOperatorDeclaration, Observation: note},
+		{Source: source, Observation: note},
 	}}
 }
 
-// The agy lineup is Flash-only since 2026-09-23: gemini-3.1-pro-high and
+// googleArgonOperatorDeclaration records an instruction, not a catalogue read.
+const googleArgonOperatorDeclaration = "operator declaration of 2026-10-02 naming gemini-4-argon for the agy runtime; not publicly released yet; `agy models` was not read because agy is not installed on the declaring machine"
+
+var googleArgonRank = googleDeclaredRank(45,
+	BughuntInterpolated("gpt-6-astra", "claude-fable-5-1", "unmeasured; operator places Argon at frontier level between Astra and Fable"),
+	"preview frontier placement, interpolated rather than measured", googleArgonOperatorDeclaration)
+
+// Argon joins the previously Flash-only agy lineup on 2026-10-02.
+// The agy Pro rows were retired on 2026-09-23: gemini-3.1-pro-high and
 // gemini-3.1-pro-low were RETIRED from this vendor (they were ported from the
 // board's registry, and pkg/vendorplugin/declaredhere_test.go names them in
 // retiredHereRows so the port pins account for their absence).
@@ -153,6 +167,23 @@ func googleEffortNone() EffortDeclaration {
 
 // models is the declaration itself, most capable first.
 var googleModels = []Model{
+	{
+		ID:          "gemini-4-argon",
+		Description: "Preview Antigravity frontier model; not publicly released yet",
+		Rank:        googleArgonRank,
+		Lifecycle:   LifecyclePreview,
+		Effort:      googleEffortNone(),
+		Systems:     []string{"antigravity"},
+	},
+	{
+		ID:          "argon",
+		AliasOf:     "gemini-4-argon",
+		Description: "The floating Antigravity Argon spelling; it executes as gemini-4-argon",
+		Rank:        googleArgonRank,
+		Lifecycle:   LifecyclePreview,
+		Effort:      googleEffortNone(),
+		Systems:     []string{"antigravity"},
+	},
 	{
 		ID:          "gemini-3.8-flash-high",
 		Description: "The strongest Antigravity row: Gemini 3.8 Flash pinned to high effort",
