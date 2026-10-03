@@ -18,7 +18,8 @@ import (
 var providerIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // localProviderArgs resolves the explicitly selected entry from the private
-// CODEX_HOME config and returns Codex-supported -c overrides. With no binding,
+// CODEX_HOME config and returns Codex-supported -c overrides: the provider
+// pin plus the validated catalog path for the launch model. With no binding,
 // it is a no-op so ordinary subscription launches retain their exact argv.
 func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
 	if req.LocalProvider == nil {
@@ -40,6 +41,9 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	if !providerIDPattern.MatchString(providerID) {
 		return nil, localProviderRefusal(agentic.LocalProviderMalformed, "provider id")
 	}
+	if strings.TrimSpace(req.Model.ID) == "" {
+		return nil, localProviderRefusal(agentic.LocalProviderUnbound, providerID)
+	}
 	var root string
 
 	if rootValue, err := localProviderHome(req); err != nil {
@@ -47,10 +51,11 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	} else {
 		root = rootValue
 	}
-	// The snapshot path resolves no config: the binding carries the validated
-	// entry, and the home above is resolved only so a conflicting CODEX_HOME
-	// is still refused here as on the ID-only path. Home resolution reads no
-	// files, so this branch performs zero config reads by construction.
+	// The snapshot path resolves no config and no catalog: the binding
+	// carries the validated entry, catalog path and effort vocabulary, and
+	// the home above is resolved only so a conflicting CODEX_HOME is still
+	// refused here as on the ID-only path. Home resolution reads no files,
+	// so this branch performs zero config reads by construction.
 	if req.LocalProvider.Snapshot != nil {
 		snapshot, ok := req.LocalProvider.Snapshot.(*ProviderSnapshot)
 		if !ok || !snapshot.valid() {
@@ -59,7 +64,17 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 		if snapshot.providerID != providerID {
 			return nil, localProviderRefusal(agentic.LocalProviderConflicting, providerID)
 		}
-		return providerArgv(providerID, snapshot.entry()), nil
+		if snapshot.modelSlug != strings.TrimSpace(req.Model.ID) {
+			return nil, localCatalogRefusal(agentic.LocalProviderConflicting, snapshot.catalogPath, providerID)
+		}
+		if err := checkLocalEffort(req.Effort, snapshot.effortVocab, snapshot.catalogPath, providerID); err != nil {
+			return nil, err
+		}
+		if path, err := materializeCatalog([]byte(snapshot.catalogData), providerID); err != nil {
+			return nil, err
+		} else {
+			return append(providerArgv(providerID, snapshot.entry()), catalogArgv(path)...), nil
+		}
 	}
 	configPath := filepath.Join(root, "config.toml")
 	data, err := os.ReadFile(configPath)
@@ -81,7 +96,20 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	} else {
 		provider = providerValue
 	}
-	return providerArgv(providerID, provider), nil
+	var catalog resolvedCatalog
+	if catalogValue, err := resolveLocalCatalog(config, root, codexPolicyEnvValue(req.Env, "HOME"), req.Model.ID, providerID); err != nil {
+		return nil, err
+	} else {
+		catalog = catalogValue
+	}
+	if err := checkLocalEffort(req.Effort, catalog.vocab, catalog.path, providerID); err != nil {
+		return nil, err
+	}
+	if path, err := materializeCatalog(catalog.data, providerID); err != nil {
+		return nil, err
+	} else {
+		return append(providerArgv(providerID, provider), catalogArgv(path)...), nil
+	}
 }
 
 // localProviderHome resolves the private configuration root once according to

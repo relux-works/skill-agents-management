@@ -1,0 +1,174 @@
+{
+  "model": "gpt-6-luna",
+  "input": [
+    {
+      "type": "additional_tools",
+      "id": "at_redacted",
+      "role": "developer",
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "functions",
+          "tools": [
+            {
+              "type": "custom",
+              "name": "exec",
+              "schema": "<redacted>"
+            },
+            {
+              "type": "function",
+              "name": "wait",
+              "schema": "<redacted>"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input",
+              "schema": "<redacted>"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input_async",
+              "schema": "<redacted>"
+            }
+          ]
+        },
+        {
+          "type": "namespace",
+          "name": "clock",
+          "tools": [
+            {
+              "type": "function",
+              "name": "sleep",
+              "schema": "<redacted>"
+            }
+          ]
+        },
+        {
+          "type": "namespace",
+          "name": "collaboration",
+          "tools": [
+            {
+              "type": "function",
+              "name": "followup_task",
+              "schema": "<redacted>"
+            },
+            {
+              "type": "function",
+              "name": "interrupt_agent",
+              "schema": "<redacted>"
+            },
+            {
+              "type": "function",
+              "name": "list_agents",
+              "schema": "<redacted>"
+            },
+            {
+              "type": "function",
+              "name": "send_message",
+              "schema": "<redacted>"
+            },
+            {
+              "type": "function",
+              "name": "spawn_agent",
+              "schema": "<redacted>"
+            },
+            {
+              "type": "function",
+              "name": "wait_agent",
+              "schema": "<redacted>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_redacted",
+      "role": "developer",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "<redacted>"
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_redacted",
+      "role": "developer",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "<redacted>"
+        },
+        {
+          "type": "input_text",
+          "text": "<redacted>"
+        },
+        {
+          "type": "input_text",
+          "text": "<redacted>"
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_redacted",
+      "role": "developer",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "<redacted>"
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_redacted",
+      "role": "developer",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "<redacted>"
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_redacted",
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "<redacted>"
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_redacted",
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "<redacted>"
+        }
+      ]
+    }
+  ],
+  "tool_choice": "auto",
+  "parallel_tool_calls": false,
+  "reasoning": {
+    "effort": "max",
+    "context": "all_turns"
+  },
+  "store": false,
+  "stream": true,
+  "include": [
+    "reasoning.encrypted_content"
+  ],
+  "text": {
+    "verbosity": "low"
+  },
+  "_provenance": "Sanitized from TASK-261001-8bxu4q_exact-failing-request.json (67995 bytes). Keeps item structure; drops long tool schemas, message text, prompt_cache_key and client_metadata (operator paths/IDs)."
+}

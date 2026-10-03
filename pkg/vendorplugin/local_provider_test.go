@@ -2,6 +2,7 @@ package vendorplugin_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,7 +20,12 @@ func TestBuildLaunchCarriesCodexLocalProviderBindingToTheCLI(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write Codex stub: %v", err)
 	}
+	catalog := nativeLocalCatalogFixture(t, "gpt-6-astra", []string{"low", "high"})
+	if err := os.WriteFile(filepath.Join(home, "catalog.local.json"), []byte(catalog), 0o600); err != nil {
+		t.Fatalf("write private catalog: %v", err)
+	}
 	config := `model_provider = "openai"
+model_catalog_json = "catalog.local.json"
 
 [model_providers.local-proof]
 name = "Task local proof"
@@ -73,7 +79,12 @@ func TestBuildLaunchPinsLocalProviderHomeForTheCodexChild(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write Codex stub: %v", err)
 	}
+	catalog := nativeLocalCatalogFixture(t, "gpt-6-astra", []string{"low", "high"})
+	if err := os.WriteFile(filepath.Join(home, "catalog.local.json"), []byte(catalog), 0o600); err != nil {
+		t.Fatalf("write validated private catalog: %v", err)
+	}
 	config := `model_provider = "openai"
+model_catalog_json = "catalog.local.json"
 
 [model_providers.local-proof]
 name = "Task local proof"
@@ -141,3 +152,27 @@ func containsProviderConfig(args []string, expected string) bool {
 }
 
 func bypassFlag() string { return "--dangerously-bypass-approvals-and-sandbox" }
+
+func nativeLocalCatalogFixture(t *testing.T, slug string, vocab []string) string {
+	t.Helper()
+	raw, err := os.ReadFile("../agentic/systems/codex/testdata/native-local-catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog map[string]any
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatal(err)
+	}
+	row := catalog["models"].([]any)[0].(map[string]any)
+	row["slug"] = slug
+	levels := []map[string]string{}
+	for _, effort := range vocab {
+		levels = append(levels, map[string]string{"effort": effort, "description": "Test"})
+	}
+	row["supported_reasoning_levels"] = levels
+	data, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}

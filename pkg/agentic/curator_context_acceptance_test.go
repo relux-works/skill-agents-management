@@ -1,6 +1,7 @@
 package agentic_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -139,7 +140,16 @@ func TestBuildPlanCodexCuratorContextComposesWithLocalProviderTransport(t *testi
 	context.SystemPrompt.Path = filepath.Join(home, ".agent-context", "system-prompt.md")
 	req := curatorRequest(t, plugin, &context)
 	req.LocalProvider = &agentic.LocalProviderBinding{ID: "local-story"}
-	config := "model_provider = \"openai\"\n\n" +
+	req.Effort = "low"
+	// A local-provider launch requires native catalog metadata for the
+	// launch slug (TASK-261003-3rgdmh AC1); without the catalog pin the
+	// plan below refuses unbound instead of composing.
+	catalog := nativeLocalCatalogFixture(t, "curator-context-test", []string{"low"})
+	if err := os.WriteFile(filepath.Join(home, "catalog.local.json"), []byte(catalog), 0o600); err != nil {
+		t.Fatalf("write local-model catalog: %v", err)
+	}
+	config := "model_provider = \"openai\"\n" +
+		"model_catalog_json = \"catalog.local.json\"\n\n" +
 		"[model_providers.local-story]\n" +
 		"name = \"task local provider\"\n" +
 		"base_url = \"http://127.0.0.1:38171/v1\"\n" +
@@ -1863,4 +1873,28 @@ func appendSystemPromptFileFlagFor(plugin curatorPluginCase) string {
 		return ""
 	}
 	return "--append-system-prompt-file"
+}
+
+func nativeLocalCatalogFixture(t *testing.T, slug string, vocab []string) string {
+	t.Helper()
+	raw, err := os.ReadFile("systems/codex/testdata/native-local-catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog map[string]any
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatal(err)
+	}
+	row := catalog["models"].([]any)[0].(map[string]any)
+	row["slug"] = slug
+	levels := []map[string]string{}
+	for _, effort := range vocab {
+		levels = append(levels, map[string]string{"effort": effort, "description": "Test"})
+	}
+	row["supported_reasoning_levels"] = levels
+	data, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }

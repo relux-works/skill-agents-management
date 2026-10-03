@@ -53,6 +53,7 @@ type Plan struct {
 	curatorContextProvenance *CuratorContextProvenance
 
 	networkProvenance *binding.Record
+	execVerifier      ExecPlanVerifier
 
 	// Nodes is empty for the source-compatible single-process plan. A
 	// consumer that needs an inference engine or sidecar calls
@@ -560,7 +561,7 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		home = caps.DefaultHome
 	}
 
-	return Plan{
+	plan := Plan{
 		System:                   id,
 		Mode:                     mode,
 		Binary:                   binary,
@@ -572,5 +573,13 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		ModelIdentity:            identity,
 		curatorContextProvenance: contextProvenance,
 		networkProvenance:        networkProvenance,
-	}, nil
+	}
+	if sealer, ok := sys.(ExecPlanSealer); ok {
+		if verifier, err := sealer.SealExecPlan(plan); err != nil {
+			return Plan{}, err
+		} else {
+			plan.execVerifier = verifier
+		}
+	}
+	return plan, nil
 }

@@ -17,6 +17,7 @@ func providerRequest(t *testing.T, home, workDir, providerID string) agentic.Lau
 	writeStubExecutable(t, layout.binDir, executableName)
 	return agentic.LaunchRequest{
 		System:        New().ID(),
+		Effort:        "low",
 		Model:         agentic.Model{ID: "Qwen3.8-27B-Q4_K_M"},
 		WorkDir:       workDir,
 		Home:          home,
@@ -27,10 +28,15 @@ func providerRequest(t *testing.T, home, workDir, providerID string) agentic.Lau
 
 func writeProviderConfig(t *testing.T, home, providerID, baseURL, wireAPI string, requiresAuth bool) string {
 	t.Helper()
+	// Every success-path local launch needs native catalog metadata for the
+	// test slug; failure-path tests fail provider validation first, so the
+	// catalog never masks their expected kind.
+	catalogName := writeLocalCatalog(t, home, "Qwen3.8-27B-Q4_K_M", []string{"low"})
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatalf("create Codex home: %v", err)
 	}
-	content := "model_provider = \"openai\"\n\n" +
+	content := "model_provider = \"openai\"\n" +
+		"model_catalog_json = \"" + catalogName + "\"\n\n" +
 		"[model_providers." + providerID + "]\n" +
 		"name = \"task local provider\"\n" +
 		"base_url = \"" + baseURL + "\"\n" +
@@ -81,6 +87,7 @@ func TestBuildPlanSelectsOnlyTheExplicitPrivateLocalProvider(t *testing.T) {
 
 	nativeRequest := localRequest
 	nativeRequest.LocalProvider = nil
+	nativeRequest.Effort = ""
 	nativePlan, err := buildCodexPlan(t, nativeRequest)
 	if err != nil {
 		t.Fatalf("BuildPlan(native subscription): %v", err)
@@ -310,6 +317,23 @@ requires_openai_auth = false
 			},
 		},
 		{
+			name: "malformed_provider_name_leading_control_character",
+			kind: agentic.LocalProviderMalformed,
+			want: agentic.ErrLocalProviderMalformed,
+			configure: func(t *testing.T, req *agentic.LaunchRequest) {
+				t.Helper()
+				if err := os.MkdirAll(req.Home, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				// Control at index 0: IndexFunc returns 0, and >= 0 catches
+				// it while >= 1 would not (mutant M-provider.go-L151-O4-C1).
+				config := "model_provider = \"openai\"\n\n[model_providers.local-story]\nname = \"\\u0001task provider\"\nbase_url = \"http://127.0.0.1:38171/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = false\n"
+				if err := os.WriteFile(filepath.Join(req.Home, "config.toml"), []byte(config), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
 			name: "malformed_provider_entry_type",
 			kind: agentic.LocalProviderMalformed,
 			want: agentic.ErrLocalProviderMalformed,
@@ -338,6 +362,19 @@ requires_openai_auth = false
 			configure: func(t *testing.T, req *agentic.LaunchRequest) {
 				writeProviderConfigBody(t, req.Home, `[model_providers.local-story]
 name = ""
+base_url = "http://127.0.0.1:38171/v1"
+wire_api = "responses"
+requires_openai_auth = false
+`)
+			},
+		},
+		{
+			name: "malformed_provider_name_type",
+			kind: agentic.LocalProviderMalformed,
+			want: agentic.ErrLocalProviderMalformed,
+			configure: func(t *testing.T, req *agentic.LaunchRequest) {
+				writeProviderConfigBody(t, req.Home, `[model_providers.local-story]
+name = 123
 base_url = "http://127.0.0.1:38171/v1"
 wire_api = "responses"
 requires_openai_auth = false
@@ -384,6 +421,14 @@ requires_openai_auth = false
 			want: agentic.ErrLocalProviderMalformed,
 			configure: func(t *testing.T, req *agentic.LaunchRequest) {
 				writeProviderConfig(t, req.Home, "local-story", "http://127.0.0.1:70000/v1", "responses", false)
+			},
+		},
+		{
+			name: "endpoint_port_65536_is_malformed",
+			kind: agentic.LocalProviderMalformed,
+			want: agentic.ErrLocalProviderMalformed,
+			configure: func(t *testing.T, req *agentic.LaunchRequest) {
+				writeProviderConfig(t, req.Home, "local-story", "http://127.0.0.1:65536/v1", "responses", false)
 			},
 		},
 		{
@@ -679,6 +724,20 @@ requires_openai_auth = false
 	}
 }
 
+// TestLocalProviderPortBoundariesAdmit1And65535 pins the valid port edges:
+// 1 and 65535 succeed (mutants M-provider.go-L203-O2-C1 and -O3-C1 refuse or
+// admit the wrong edge).
+func TestLocalProviderPortBoundariesAdmit1And65535(t *testing.T) {
+	t.Parallel()
+	for _, port := range []string{"1", "65535"} {
+		home, workDir := t.TempDir(), t.TempDir()
+		writeProviderConfig(t, home, "local-story", "http://127.0.0.1:"+port+"/v1", "responses", false)
+		if _, err := buildCodexPlan(t, providerRequest(t, home, workDir, "local-story")); err != nil {
+			t.Fatalf("BuildPlan(port %s) = %v, want success", port, err)
+		}
+	}
+}
+
 func TestBuildPlanRefusesAnEmptyLocalProviderBinding(t *testing.T) {
 	t.Parallel()
 	req := providerRequest(t, t.TempDir(), t.TempDir(), "")
@@ -688,6 +747,19 @@ func TestBuildPlanRefusesAnEmptyLocalProviderBinding(t *testing.T) {
 	}
 	if !reflect.DeepEqual(plan, agentic.Plan{}) {
 		t.Fatalf("unbound request returned a plan: %#v", plan)
+	}
+}
+
+// TestPluginArgvRefusesAnEmptyLocalProviderBindingDirectly drives the
+// plugin's own empty-ID gate for a caller holding the plugin directly.
+// BuildPlan refuses empty bindings before dispatch, so this site is
+// unreachable via BuildPlan; without this test the guard has no mapped
+// negative for provider.go's blank-binding return.
+func TestPluginArgvRefusesAnEmptyLocalProviderBindingDirectly(t *testing.T) {
+	t.Parallel()
+	req := providerRequest(t, t.TempDir(), t.TempDir(), "   ")
+	if _, err := New().Argv(req, agentic.LaunchModeExec); !errors.Is(err, agentic.ErrLocalProviderUnbound) {
+		t.Fatalf("Argv(empty provider ID) = %v, want %v", err, agentic.ErrLocalProviderUnbound)
 	}
 }
 

@@ -349,10 +349,53 @@ proven against all four codex launch-surface goldens through the real
   provider identifiers are refused. Nil keeps the native subscription argv
   unchanged. The plugin validates the entry, requires a loopback HTTP endpoint and the Responses
   API with OpenAI account auth disabled, then pins those values with Codex's
-  supported `-c` overrides. The child also receives the validated canonical
-  root as `CODEX_HOME`, so a same-id provider under `HOME/.codex` cannot add
-  unvalidated credentials or headers. Missing, malformed, conflicting-home, unbound and
-  unsupported entries return typed refusals before a plan is produced.
+  supported `-c` overrides. The private home also carries the native model
+  metadata: `model_catalog_json` points at an operator-owned native catalog.
+  Every row must fit the Codex 0.159 `ModelInfo` schema; the selected row must
+  explicitly disable Responses Lite, search and the reasoning-summary
+  parameter, and use direct tools with multi-agent v1. Missing catalog or
+  selected-model metadata reports typed `absent`, independently of provider
+  binding. The local effort must be explicit and in the row's vocabulary.
+  Exec and dry-run are supported on POSIX; local managed sessions and
+  interactive launches retain typed `unsupported` refusals. Hosted launches
+  retain their existing argv, environment and effort behavior.
+
+  `ProviderSnapshot` retains validated catalog bytes and their digest. Plans
+  materialize those bytes into a process-owned private temporary directory
+  (`0700`) and a content-addressed catalog (`0400`), then pass that path with
+  `-c model_catalog_json`. Changes to the operator catalog cannot change a
+  snapshotted or already-built launch. Snapshot planning reads no operator
+  config or catalog. Operator symlinks resolve to regular files; FIFOs,
+  devices, sockets, directories and catalogs over 4 MiB refuse using bounded,
+  nonblocking reads. Windows local catalog reads currently fail closed.
+
+  Launchers MUST call `plan.VerifyBeforeExec()` immediately before starting
+  their own child with the plan binary and argv. This exec-free hook verifies
+  the sealed binary, argv, artifact permissions and digest. The model-check
+  CLI uses this boundary; the module never owns process start. Callers retain ownership of
+  I/O, cancellation and process groups; process-owned catalog copies remain
+  available for the lifetime of their plans and are removed by normal system
+  temporary-file cleanup. A hostile process with the same OS identity that
+  changes a file after verification remains outside the file-permission
+  guarantee. Hosted plans carry no local artifact seal.
+
+  The native-readable subset includes nested model messages, service tiers,
+  upgrades and Guardian V2 messages. Non-null `guardian` policy and
+  `available_access_programs` are refused; optional retirement timestamps
+  must be strings. Unknown fields follow native serde's ignore behavior
+  after string spelling is validated.
+  Both validation and row selection read one exact-key parse: a repeated
+  recognized field refuses typed `malformed`, and a case-variant key is an
+  unknown field that can neither override nor stand in for its canonical
+  spelling. Before token normalization, all keys and values must have valid
+  UTF-8, valid JSON escapes, paired surrogate escapes and no raw C0 control
+  characters. This includes unknown fields at every depth: the accepted
+  subset is deliberately stricter than native serde's ignored-value fast path,
+  which can skip an unpaired surrogate in an unknown value. Valid surrogate
+  pairs, literal U+FFFD and ordinary escaped controls remain accepted.
+  See [the pinned schema](pkg/agentic/systems/codex/native-schema.json) and
+  [fixture provenance](pkg/agentic/systems/codex/testdata/README.md).
+
 - **Environment filtering by EXACT KEY**, never by prefix, including two
   pointers whose VALUES name the credential variables to block. The parity
   package's two permanent negatives — a whole-environment wipe and a
@@ -1409,3 +1452,16 @@ See [the readings contract](docs/observed-process-contract.md) for keys and rang
 | Tool | Purpose | Command | Artifacts |
 | --- | --- | --- | --- |
 | profile-policy mutation suite | prove v2 refusals through named ValidateReadings tests | `python3 .scripts/verify-profile-policy-v2.py` (optionally `--start N --limit M`) | `.temp/TASK-261002-3tyn1e/mutants/` logs and TSV tables |
+
+### Local Codex refusal evidence tools
+
+- `go test -mod=mod ./pkg/agentic/systems/codex ./internal/refusalscan`: local
+  regression tests and semantic refusal census, including propagation and a
+  dropped-mapping negative. Fixtures use temporary homes, never operator config.
+- `go run ./tools/codex-provider-mutants`: print AST-derived sites and members,
+  with undecidable domains explicitly bounded. Redirect to `.temp/`.
+- `go run ./tools/codex-provider-mutants --run --start 0 --limit 30 --out
+  .temp/codex-mutants-01.json`: run a bounded inventory slice in an isolated
+  `.temp/codex-provider-mutants/` copy. One child at a time (maximum two allowed),
+  90-second child deadline, 256 KiB captured-output cap; a kill requires a named
+  failing behavioral test. Survivors and truncated logs are reported honestly.

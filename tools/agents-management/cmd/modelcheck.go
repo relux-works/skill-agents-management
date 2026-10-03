@@ -447,6 +447,9 @@ func runModelCheckProcess(ctx context.Context, plan agentic.Plan) modelCheckProc
 		return nil
 	}
 	command.WaitDelay = modelCheckWaitDelay
+	if err := plan.VerifyBeforeExec(); err != nil {
+		return modelCheckProcessResult{ExitCode: 1, Err: err}
+	}
 	if err := command.Start(); err != nil {
 		return modelCheckProcessResult{ExitCode: 1, Err: err}
 	}

@@ -106,7 +106,16 @@ func SourceFiles(root string) ([]string, error) {
 // Discover enumerates every typed refusal return in every function in every
 // non-test Go source file below pkg/agentic. Refusal symbols come from package
 // declarations and from the returned expressions themselves.
-func Discover(root string) ([]Site, error) {
+func Discover(root string) ([]Site, error) { return discover(root, "", "") }
+
+// DiscoverType uses the same go/types fixed-point propagation as Discover,
+// starting from one named error type rather than all module error symbols.
+// It never matches call spelling or constructor names.
+func DiscoverType(root, packageID, typeName string) ([]Site, error) {
+	return discover(root, packageID, typeName)
+}
+
+func discover(root, packageID, typeName string) ([]Site, error) {
 	sourceFiles, err := SourceFiles(root)
 	if err != nil {
 		return nil, err
@@ -116,6 +125,19 @@ func Discover(root string) ([]Site, error) {
 		return nil, err
 	}
 	errors, errorTypes := refusalSymbols(files)
+	if typeName != "" {
+		errors.objects = make(map[types.Object]bool)
+		selected := make(map[types.Object]bool)
+		for object := range errorTypes.objects {
+			if object.Pkg() != nil && object.Pkg().Path() == packageID && object.Name() == typeName {
+				selected[object] = true
+			}
+		}
+		if len(selected) != 1 {
+			return nil, fmt.Errorf("refusalscan: named error type not uniquely resolved: %s.%s", packageID, typeName)
+		}
+		errorTypes.objects = selected
+	}
 	helpers := refusalHelpers(files, errors, errorTypes)
 	if err := validateRefusalUseShapes(files, errors, errorTypes, helpers); err != nil {
 		return nil, err
