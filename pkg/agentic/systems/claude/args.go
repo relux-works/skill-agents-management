@@ -69,7 +69,8 @@ const (
 //
 // LaunchModeInteractive (curator-spec Decision 0013 §5) is the terminal session
 // a human drives, and its argv is `--model <id>` plus the effort transport when
-// an effort was requested — and, when the request carries PermissionMode
+// an effort was requested, plus the single AskUserQuestion denial
+// (toolpolicy.go) — and, when the request carries PermissionMode
 // "yolo", the ONE bypass flag above (curator-spec Decision 0018). NOTHING else:
 // no `-p`, no `--output-format`, no budget, no composition prefix, no goal
 // pair. Typed context descriptors are resolved and rendered here by the
@@ -131,6 +132,13 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		args = append(args, "--max-budget-usd", fmt.Sprintf("%.2f", req.Budget.USD))
 	}
 	args = append(args, bypassPermissionsFlag)
+	// The AskUserQuestion denial lands after the bypass flag and before the
+	// goal pair, which stays last: the `/goal` directive is the child's user
+	// turn and everything after it would be read as part of it. The `=`
+	// form is load-bearing — the flag is variadic (`<tools...>`), and the
+	// separate form would eat the directive as another tool. toolpolicy.go
+	// owns the spelling and the proof.
+	args = append(args, disallowedToolsDenial)
 
 	if req.Goal == nil {
 		return args, nil
@@ -174,11 +182,24 @@ func interactiveArgs(req agentic.LaunchRequest, context contextValues) ([]string
 	if context.hasSystemPrompt {
 		args = append(args, context.systemPromptFlag, context.systemPrompt)
 	}
+	// Refuse explicit re-enable attempts before either posture can launch.
+	if tool, placement, found := findReenabledTool(req.NativeArgs); found {
+		return nil, deniedToolRefusal(tool, placement)
+	}
+	if err := checkSettingsPolicy(req); err != nil {
+		return nil, err
+	}
+	// The module denial is unconditional: its own occurrence is emitted in
+	// every launch mode without inspecting caller deny lists, and caller
+	// occurrences stay byte-for-byte below. A duplicate deny in native is
+	// harmless and accepted; a conditional emission is an omission class.
+	args = append(args, disallowedToolsDenial)
+	rest := append([]string(nil), req.NativeArgs...)
 	if context.permission != agentic.PermissionModeYolo {
-		// Native forwards the caller's arguments with no inspection at
-		// all: the raw contract is unchanged and no claim is made over
-		// them (curator-spec Decision 0018 item 4).
-		return append(args, nativeArgsSuffix(req)...), nil
+		// Native forwards the caller's remaining arguments with no further
+		// inspection: the raw contract is unchanged past the denial above
+		// and no claim is made over them (curator-spec Decision 0018 item 4).
+		return append(args, rest...), nil
 	}
 	// Yolo appends the bypass flag AFTER model and effort, mirroring the exec
 	// grammar's relative order (model, effort, bypass) and landing before the
@@ -206,10 +227,11 @@ func interactiveArgs(req agentic.LaunchRequest, context contextValues) ([]string
 	} else {
 		mapping = mappingValue
 	}
+	// The yolo scan shares the pinned option ownership parser.
 	if err := scanNativePolicy(req.NativeArgs); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
-	return append(append(args, mapping.Flag), nativeArgsSuffix(req)...), nil
+	return append(append(args, mapping.Flag), rest...), nil
 }
 
 // appendEffort appends the effort transport when an effort was requested. Both
@@ -234,11 +256,4 @@ func appendEffort(args []string, req agentic.LaunchRequest) []string {
 // launcher that appends to it.
 func compositionArgvPrefix(req agentic.LaunchRequest) []string {
 	return append([]string{}, req.Composition.Prefix...)
-}
-
-// nativeArgsSuffix returns the caller's native arguments for the verbatim
-// interactive suffix, copied for the same reason: the plan's argv must not
-// alias the request's backing array.
-func nativeArgsSuffix(req agentic.LaunchRequest) []string {
-	return append([]string{}, req.NativeArgs...)
 }

@@ -46,7 +46,7 @@ func (*System) ClassifyNonInteractiveArgs(toolRelease string, suffix []string) (
 	} else {
 		capability = capabilityValue
 	}
-	for _, index := range nativeargs.FlagIndexes(suffix) {
+	for _, index := range claudeFlagIndexes(suffix) {
 		name, _, _ := nativeargs.SplitFlagValue(suffix[index])
 		if name == printShortFlag || name == printLongFlag {
 			return agentic.NativeArgsClassification{Form: agentic.NonInteractiveFormPrint, Grammar: capability.Grammar}, nil
@@ -106,7 +106,7 @@ var knownPermissionModes = map[string]bool{
 
 // scanNativePolicy classifies the flag positions of the caller's native
 // arguments under yolo, against the pinned release's closed grammar.
-// nativeargs.FlagIndexes is the only positions reader: prompt text —
+// claudeFlagIndexes is the only positions reader: prompt text —
 // after `--`, or never dash-leading — is never classified, however
 // flag-like it reads.
 //
@@ -118,10 +118,10 @@ var knownPermissionModes = map[string]bool{
 // `=` form, because the plan would otherwise emit it twice.
 //
 // Everything else is forwarded verbatim with no claim, including unknown
-// top-level flags. Flag positions come only from nativeargs.FlagIndexes, so
+// top-level flags. Flag positions come only from claudeFlagIndexes, so
 // prompt text after `--` is not inspected.
 func scanNativePolicy(args []string) error {
-	for _, i := range nativeargs.FlagIndexes(args) {
+	for _, i := range claudeFlagIndexes(args) {
 		el := args[i]
 		name, value, hasValue := nativeargs.SplitFlagValue(el)
 		if name == permissionModeFlag {

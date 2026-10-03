@@ -670,10 +670,13 @@ type LaunchRequest struct {
 	// key, a new claude `--permission-mode` value — is refused with
 	// ErrNativePolicyUnknown, which the caller maps to usage (exit 2),
 	// never resolved into a policy claim (Decision 0018 choice 3). Under
-	// native they are forwarded with no inspection at all: raw bypass may
-	// remain available untracked, and the interface stays UX rather than a
-	// perimeter (Decision 0018 item 4). Any non-empty value outside
-	// LaunchModeInteractive is refused with ErrNativeArgsNotInteractive:
+	// native they are forwarded with no policy-grammar inspection at all:
+	// raw bypass may remain available untracked, and the interface stays
+	// UX rather than a perimeter (Decision 0018 item 4) — with the ONE
+	// exception of a system's denied-tool gate, which scans both postures
+	// and refuses a re-enable attempt with ErrDeniedToolReEnabled. Any
+	// non-empty value outside LaunchModeInteractive is refused with
+	// ErrNativeArgsNotInteractive:
 	// no other grammar has a verbatim suffix to carry it, and dropping
 	// caller arguments silently is a launch that looks like the one that
 	// was asked for and is not.

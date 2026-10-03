@@ -62,7 +62,9 @@ func assertNoExecMarker(t *testing.T, argv []string) {
 
 // TestTheInteractiveArgvIsModelAndEffortOnly is the positive golden, pinned as
 // a whole argv rather than as substrings: an argv with a flag appended passes
-// a Contains sweep and is a different session.
+// a Contains sweep and is a different session. "Only" is the mode's shape —
+// model, effort, the single AskUserQuestion denial — as opposed to the exec
+// grammar's flags, which the marker sweep below still forbids here.
 func TestTheInteractiveArgvIsModelAndEffortOnly(t *testing.T) {
 	t.Parallel()
 	workDir := tempSlot(t)
@@ -73,7 +75,7 @@ func TestTheInteractiveArgvIsModelAndEffortOnly(t *testing.T) {
 
 	plan := buildParityPlan(t, New(), req, agentic.LaunchModeInteractive)
 
-	if want := []string{"--model", parityModel, "--effort", parityEffort}; !reflect.DeepEqual(plan.Argv, want) {
+	if want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}; !reflect.DeepEqual(plan.Argv, want) {
 		t.Errorf("Argv = %#v, want %#v", plan.Argv, want)
 	}
 	if plan.Binary != binDir+"/"+executableName {
@@ -104,7 +106,7 @@ func TestTheInteractiveArgvIsModelAndEffortOnly(t *testing.T) {
 		r.Model.Effort = agentic.EffortSupportNone
 		r.Effort = ""
 		got := buildParityPlan(t, New(), r, agentic.LaunchModeInteractive).Argv
-		if want := []string{"--model", parityModel}; !reflect.DeepEqual(got, want) {
+		if want := []string{"--model", parityModel, disallowedToolsDenial}; !reflect.DeepEqual(got, want) {
 			t.Errorf("Argv = %#v, want %#v", got, want)
 		}
 	})
@@ -238,7 +240,7 @@ func TestTheYoloArgvAppendsTheBypassFlagOnce(t *testing.T) {
 
 	plan := buildParityPlan(t, New(), req, agentic.LaunchModeInteractive)
 
-	if want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag}; !reflect.DeepEqual(plan.Argv, want) {
+	if want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag}; !reflect.DeepEqual(plan.Argv, want) {
 		t.Fatalf("Argv = %#v, want %#v", plan.Argv, want)
 	}
 	if n := countFlag(plan.Argv, bypassPermissionsFlag); n != 1 {
@@ -253,7 +255,7 @@ func TestTheYoloArgvAppendsTheBypassFlagOnce(t *testing.T) {
 		r.Model.Effort = agentic.EffortSupportNone
 		r.Effort = ""
 		got := buildParityPlan(t, New(), r, agentic.LaunchModeInteractive).Argv
-		if want := []string{"--model", parityModel, bypassPermissionsFlag}; !reflect.DeepEqual(got, want) {
+		if want := []string{"--model", parityModel, disallowedToolsDenial, bypassPermissionsFlag}; !reflect.DeepEqual(got, want) {
 			t.Errorf("Argv = %#v, want %#v", got, want)
 		}
 	})
@@ -265,7 +267,7 @@ func TestTheYoloArgvAppendsTheBypassFlagOnce(t *testing.T) {
 		zero.PermissionMode = ""
 		gotNative := buildParityPlan(t, New(), native, agentic.LaunchModeInteractive).Argv
 		gotZero := buildParityPlan(t, New(), zero, agentic.LaunchModeInteractive).Argv
-		if want := []string{"--model", parityModel, "--effort", parityEffort}; !reflect.DeepEqual(gotNative, want) || !reflect.DeepEqual(gotZero, want) {
+		if want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}; !reflect.DeepEqual(gotNative, want) || !reflect.DeepEqual(gotZero, want) {
 			t.Errorf("native = %#v, zero = %#v, want both %#v", gotNative, gotZero, want)
 		}
 	})

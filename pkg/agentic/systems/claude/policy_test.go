@@ -49,16 +49,19 @@ func TestYoloForwardsNativeArgsVerbatimAfterTheBypassFlag(t *testing.T) {
 	req.NativeArgs = []string{"--verbose", "deploy the thing", "-d"}
 
 	got := argvFor(t, req, agentic.LaunchModeInteractive)
-	want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag, "--verbose", "deploy the thing", "-d"}
+	want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag, "--verbose", "deploy the thing", "-d"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Argv = %#v, want %#v", got, want)
 	}
 }
 
-// Native performs no argv inspection at all: unknown policy forms, the
+// Native performs no policy-grammar inspection: unknown policy forms, the
 // bypass flag itself, and an unverified or missing release all pass
 // through verbatim. The interface is UX, not a perimeter (Decision
-// 0018 item 4), and the raw contract is unchanged.
+// 0018 item 4), and the raw contract is unchanged past the module's one
+// addition — the AskUserQuestion denial, which is emitted argv rather than
+// forwarded caller text, and the denied-tool gate, which scans both
+// postures and is pinned in askuserquestion_test.go.
 func TestNativeForwardsEverythingVerbatimWithoutInspection(t *testing.T) {
 	t.Parallel()
 	workDir := tempSlot(t)
@@ -80,7 +83,7 @@ func TestNativeForwardsEverythingVerbatimWithoutInspection(t *testing.T) {
 			req.ToolRelease = c.release
 			req.NativeArgs = native
 			got := argvFor(t, req, agentic.LaunchModeInteractive)
-			want := append([]string{"--model", parityModel, "--effort", parityEffort}, native...)
+			want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, native...)
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("Argv = %#v, want %#v", got, want)
 			}
@@ -197,7 +200,7 @@ func TestPermissionModeConflictMatrix(t *testing.T) {
 				req.ToolRelease = "2.1.261"
 				req.NativeArgs = form.args
 				got := argvFor(t, req, agentic.LaunchModeInteractive)
-				want := append([]string{"--model", parityModel, "--effort", parityEffort}, form.args...)
+				want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, form.args...)
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("Argv = %#v, want %#v", got, want)
 				}
@@ -244,7 +247,7 @@ func TestOtherKnownClaudePolicyConflicts(t *testing.T) {
 			req.ToolRelease = "2.1.261"
 			req.NativeArgs = row.args
 			got := argvFor(t, req, agentic.LaunchModeInteractive)
-			want := append([]string{"--model", parityModel, "--effort", parityEffort}, row.args...)
+			want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, row.args...)
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("Argv = %#v, want %#v", got, want)
 			}
@@ -260,7 +263,7 @@ func TestYoloForwardsKnownNonConflictingClaudeSelectors(t *testing.T) {
 	req.ToolRelease = "2.1.261"
 	req.NativeArgs = []string{"--debug", "--verbose", "-d"}
 	got := argvFor(t, req, agentic.LaunchModeInteractive)
-	want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag, "--debug", "--verbose", "-d"}
+	want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag, "--debug", "--verbose", "-d"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Argv = %#v, want %#v", got, want)
 	}
@@ -296,7 +299,7 @@ func TestPromptTextIsNeverParsedAsAFlag(t *testing.T) {
 	}
 	t.Run("an unknown mode after the separator is prompt, not policy", func(t *testing.T) {
 		got := argvFor(t, yolo([]string{"--", "--permission-mode", "ultrastrict"}), agentic.LaunchModeInteractive)
-		want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag, "--", "--permission-mode", "ultrastrict"}
+		want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag, "--", "--permission-mode", "ultrastrict"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Argv = %#v, want %#v", got, want)
 		}
@@ -306,7 +309,7 @@ func TestPromptTextIsNeverParsedAsAFlag(t *testing.T) {
 	})
 	t.Run("the bypass flag after the separator is prompt, not a duplicate", func(t *testing.T) {
 		got := argvFor(t, yolo([]string{"--", bypassPermissionsFlag}), agentic.LaunchModeInteractive)
-		want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag, "--", bypassPermissionsFlag}
+		want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag, "--", bypassPermissionsFlag}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Argv = %#v, want %#v", got, want)
 		}
@@ -316,14 +319,14 @@ func TestPromptTextIsNeverParsedAsAFlag(t *testing.T) {
 	})
 	t.Run("a positional that never led with a dash is prompt", func(t *testing.T) {
 		got := argvFor(t, yolo([]string{"ultrastrict", "deploy"}), agentic.LaunchModeInteractive)
-		want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag, "ultrastrict", "deploy"}
+		want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag, "ultrastrict", "deploy"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Argv = %#v, want %#v", got, want)
 		}
 	})
 	t.Run("and a lone dash is positional too", func(t *testing.T) {
 		got := argvFor(t, yolo([]string{"-"}), agentic.LaunchModeInteractive)
-		want := []string{"--model", parityModel, "--effort", parityEffort, bypassPermissionsFlag, "-"}
+		want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag, "-"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Argv = %#v, want %#v", got, want)
 		}

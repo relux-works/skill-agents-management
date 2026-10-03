@@ -473,6 +473,13 @@ var curatorRefusalCoverageTable = []curatorRefusalCoverageRow{
 	{file: "systems/codex/provider.go", function: "localProviderArgs", guard: "if err != nil", returned: "return nil, err", occurrence: 5, outOfContract: "TASK-261003-3rgdmh local catalog/exec boundary; outside Curator validator AC. Local negative tests and semantic census cover this site."},
 	{file: "systems/codex/provider.go", function: "localProviderArgs", guard: "if err != nil", returned: "return nil, err", occurrence: 6, outOfContract: "TASK-261003-3rgdmh local catalog/exec boundary; outside Curator validator AC. Local negative tests and semantic census cover this site."},
 	{file: "systems/codex/catalog.go", function: "checkLocalEffort", guard: "if trimmed == \"\"", returned: "return localCatalogRefusal(agentic.LocalProviderUnsupported, catalogPath, providerID)", occurrence: 0, outOfContract: "TASK-261003-3rgdmh AC2: absent local effort refuses unsupported; driven by TestLocalEffortOutOfVocabularyRefuses. Outside Curator validator AC."},
+	{file: "systems/claude/toolpolicy.go", function: "deniedToolRefusal", guard: "unconditional", returned: "return &agentic.DeniedToolReEnabledError{Tool: tool, Placement: placement}", occurrence: 0, testName: "TestReEnablingAskUserQuestionIsRefused"},
+	{file: "systems/claude/args.go", function: "interactiveArgs", guard: "if found", returned: "return nil, deniedToolRefusal(tool, placement)", occurrence: 0, testName: "TestReEnablingAskUserQuestionIsRefused"},
+	{file: "systems/claude/args.go", function: "interactiveArgs", guard: "if err != nil", returned: "return nil, err", occurrence: 1, testName: "TestAskUserQuestionSettingsPolicy"},
+	{file: "systems/claude/toolpolicy.go", function: "checkSettingsPolicy", guard: `if kind != ""`, returned: "return settingsPolicyRefusal(kind)", occurrence: 0, testName: "TestAskUserQuestionSettingsReadFailure"},
+	{file: "systems/claude/toolpolicy.go", function: "checkSettingsPolicy", guard: "if nativeToolName(trimmed) == deniedToolAskUserQuestion", returned: "return deniedToolRefusal(trimmed, agentic.NativePolicyPlacementSettings)", occurrence: 0, testName: "TestAskUserQuestionSettingsPolicy"},
+	{file: "systems/claude/toolpolicy.go", function: "checkSettingsPolicy", guard: "if eagerOK != cmdOK || (eagerOK && eagerVal != cmdVal)", returned: "return settingsPolicyRefusal(agentic.SettingsPolicyAmbiguous)", occurrence: 0, testName: "TestAskUserQuestionEagerSettingsAmbiguity"},
+	{file: "systems/claude/toolpolicy.go", function: "settingsPolicyRefusal", guard: "unconditional", returned: "return &agentic.SettingsPolicyError{Kind: kind}", occurrence: 0, testName: "TestAskUserQuestionSettingsReadFailure"},
 }
 
 type curatorNarrowingMutationMember struct {

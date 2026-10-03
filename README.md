@@ -132,9 +132,15 @@ recipe](docs/consuming-the-module.md#passing-a-resolved-network-scope).
   Codex `-a`/`--ask-for-approval`, `-s`/`--sandbox`, `--approve-for-me`, every
   `--dangerously-bypass-*` flag, and `-c`/`--config` keys `approval_policy`,
   `sandbox_mode`, and `sandbox_permissions`. Codex selectors are checked both
-  at top level and after `exec`. Native mode performs no argv inspection and
-  forwards the raw arguments unchanged; known non-conflicting selectors keep
-  forwarding under yolo.
+  at top level and after `exec`. Native mode performs no policy-grammar
+  inspection and forwards the raw arguments unchanged past the one exception
+  below; known non-conflicting selectors keep forwarding under yolo.
+  A system's denied-tool gate scans both postures: `claude-code` denies
+  `AskUserQuestion` on every argv it builds, preserving caller deny occurrences
+  byte-for-byte and refusing explicit argv or settings re-enable attempts
+  with the typed `ErrDeniedToolReEnabled` before launch. Parser disagreement
+  over the effective `--settings` source refuses with the typed `ambiguous`
+  settings kind.
 - The versioned provider-capability table (curator-spec Decision 0018
   choices 3 and 6) keys (environment, tool release) to a permission-grammar
   version. Each plugin holds its own environment's rows and
@@ -171,8 +177,9 @@ recipe](docs/consuming-the-module.md#passing-a-resolved-network-scope).
   `--disable-approval --disable-sandbox` and refuses a duplicate posture.
   Other native arguments are forwarded. A known conflicting selector is refused
   with `ErrNativePolicyConflict`; invalid values and unknown selectors remain
-  fail-closed through `ErrNativePolicyUnknown`. Native performs no inspection
-  at all.
+  fail-closed through `ErrNativePolicyUnknown`. Native performs no
+  policy-grammar inspection at all; the denied-tool gate above is the one
+  exception.
   Prompt text is never parsed as a flag (`internal/nativeargs` owns the
   rule): `--` ends flag parsing, a lone `-` and anything never dash-leading
   are positional, and `=`-forms read as their flag. Known non-conflicting
@@ -463,6 +470,65 @@ frozen RUNTIME id `claude`; `parity_test.go` maps between them in one place.
   the guard counts it module-wide at exactly two sites — this const and agy's
   pre-existing exec spelling — since the AST signature must keep excluding
   the flag agy's exec grammar shares.
+- **AskUserQuestion is denied on every supported launch plan.** Exec,
+  goal-bound exec, dry-run and interactive native/yolo plans carry the
+  module's own `--disallowedTools=AskUserQuestion` occurrence, emitted
+  unconditionally without inspecting caller deny lists. `BuildPlan` and
+  `BuildPlanWithEnvironment` use the same constructor. Claude does not declare
+  managed-session support; that mode is refused before argv construction.
+  Caller deny occurrences stay byte-for-byte in their original order, including
+  repeated flags, aliases, comma/space lists and malformed qualifiers. A
+  duplicate deny beside a caller occurrence is harmless and accepted; the
+  earlier conditional emission was removed with its dedup logic because a
+  missed inspection is an omission class.
+- **Explicit re-enable attempts refuse before launch.** `--allowedTools` and
+  `--allowed-tools`, including qualified tool rules, refuse with
+  `ErrDeniedToolReEnabled`. Rule lists tokenize with the pinned native
+  ECMAScript grammar: U+FEFF and the other ECMAScript trimmables around a rule
+  refuse like the bare tool, while U+0085 — which Go trims and ECMAScript
+  preserves — stays a literal rule character. The effective `--settings`
+  input is inspected too: the pinned native eager scan (which never decomposes
+  combined short switches) and the Commander-style parse must agree on the
+  effective source, else the launch refuses with the typed `ambiguous`
+  settings kind. Last occurrence wins under each parser; earlier overwritten
+  inputs are not read. ECMAScript-trimmed values starting with `{` and ending
+  with `}` select inline JSON; other values select files resolved against the
+  launch working directory. A matching `permissions.allow` rule refuses with
+  the denied-tool error and `settings` placement. An unreadable source or
+  invalid JSON/permission shape refuses with `SettingsPolicyError`, with
+  distinct `unreadable` and `invalid` kinds. Errors contain no settings
+  contents or paths.
+  Native tool names are case-sensitive: `askuserquestion` is not
+  `AskUserQuestion`. Unanchored allow globs (`*`, `Ask*`) do not match native
+  built-in tools; unrelated rules pass. Implicit configuration, later file
+  changes and session-time permission updates are outside this plan-time check.
+- **Policy options follow pinned native value ownership.** The Claude 2.1.288
+  help arity table is embedded from `claude-2.1.288-options.tsv` by
+  `nativegrammar.go`. Required scalar options consume
+  even dash-leading values; variadic options own the first value and stop later
+  values at flags. Optional values stop at flags (`--remote-control=...` owns
+  its attached text; `--remote-control --allowedTools=...` does not).
+  The eager scanner skip sets are embedded from
+  `claude-2.1.288-eager.tsv`, transcribed from the pinned binary.
+  An attached deny value keeps the module denial from consuming the goal or
+  positional prompt. Known hidden scalar prompt/settings options are included;
+  unknown future native options are forwarded without a grammar claim.
+  `TestPinnedClaudeNativeGrammarComparison` compares the help table and
+  ownership with the installed pinned parser, and checks the native caller
+  rule set after production planning.
+  `TestPinnedClaudeNativeListAndSettingsComparison` differentially compares
+  rule tokenization, eager settings selection and the embedded eager sets
+  against the installed pinned functions. Both skip absent/drifted Claude or
+  absent Node. Node executes the pinned functions directly; it starts no
+  session and accesses no operator settings or credentials.
+
+Run the policy gates with
+`go test ./pkg/agentic/... ./internal/refusalscan ./tools/launchcontext-mutants ./pkg/vendorplugin/... ./pkg/providerquota`.
+Run an individual registered narrowing member with
+`go run ./tools/launchcontext-mutants -name claude-toolpolicy-settings-bare-skipped -table-out .temp/policy-mutants.md`.
+The normal mutation harness runs isolated source copies and records the named
+failing test and real exit status; logs and optional tables belong under `.temp/`.
+CR validation runs `make vet` and `make test`.
 
 ### The qwen plugin: `pkg/agentic/systems/qwen`
 

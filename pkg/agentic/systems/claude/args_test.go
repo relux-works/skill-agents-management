@@ -333,7 +333,11 @@ func TestBuildPlanKeepsNativePromptAfterVariadicMCPConfig(t *testing.T) {
 	if configAt < 0 {
 		t.Fatalf("BuildPlan argv = %#v, want one attached %s=<json> argument", args, mcpConfigFlag)
 	}
-	if configAt+1 > len(args) || strings.Join(args[configAt+1:], "\x00") != strings.Join(req.NativeArgs, "\x00") {
-		t.Fatalf("BuildPlan argv suffix after MCP config = %#v, want native prompt verbatim %q", args[configAt+1:], req.NativeArgs)
+	// The single AskUserQuestion denial sits between the attached config
+	// and the prompt: also one `=` token, so neither variadic spelling
+	// swallows what follows it.
+	wantSuffix := append([]string{disallowedToolsDenial}, req.NativeArgs...)
+	if configAt+1 > len(args) || strings.Join(args[configAt+1:], "\x00") != strings.Join(wantSuffix, "\x00") {
+		t.Fatalf("BuildPlan argv suffix after MCP config = %#v, want the denial plus the native prompt verbatim %q", args[configAt+1:], wantSuffix)
 	}
 }

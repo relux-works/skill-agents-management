@@ -59,7 +59,8 @@
       "claude-opus-5",
       "--effort",
       "high",
-      "--dangerously-skip-permissions"
+      "--dangerously-skip-permissions",
+      "--disallowedTools=AskUserQuestion"
     ],
     "env_added": [
       "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false",

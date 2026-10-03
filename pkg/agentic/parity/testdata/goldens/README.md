@@ -25,6 +25,19 @@ and `TestPromptSuggestionDisabledForInteractive` tests independently pin the
 literal and inherited-value override through `agentic.BuildPlan`; dry-run and
 interactive environments have no historical capture.
 
+TASK-261004-35kt5t appends `--disallowedTools=AskUserQuestion` to `args` in
+both Claude fixtures, after `--dangerously-skip-permissions` and — in
+goal-mode — before the `--append-system-prompt-file` pair. This entry is a
+deliberate plugin contract update, not a recapture of the historical source:
+AskUserQuestion is denied on every argv this module builds. The `=` form is
+load-bearing, not cosmetic — the flag is variadic (`<tools...>`) and the
+separate form would eat the goal directive as another tool. The named
+`TestAskUserQuestionDeniedForExec`, `TestAskUserQuestionDeniedForGoalMode`,
+`TestAskUserQuestionDeniedForDryRun` and
+`TestAskUserQuestionDeniedForInteractive` tests independently pin the single
+emission and its position through `agentic.BuildPlan`; dry-run and
+interactive argvs have no historical capture.
+
 ## Why the source captures them and this repository only compares
 
 A golden captured by code that lives next to the port proves only that the new

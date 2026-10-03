@@ -194,8 +194,20 @@ var (
 	// claude `--permission-mode` value, or a malformed value in one of
 	// those positions. It is refused as usage — the caller maps it to
 	// exit 2 — never resolved into a policy claim. Native performs no
-	// argv inspection at all, so the same arguments pass there verbatim.
+	// policy-grammar inspection at all, so the same arguments pass there
+	// verbatim; the denied-tool gate below is the one exception, and it is
+	// not this sentinel.
 	ErrNativePolicyUnknown = errors.New("agentic: unknown native policy form")
+	// ErrDeniedToolReEnabled is returned, by the plugin, when native
+	// arguments re-enable a tool the module denies for every launch of
+	// that system — claude's AskUserQuestion, denied on every argv this
+	// module builds. Unlike the policy-grammar refusals above it fires in
+	// EVERY interactive posture, native included: the denial is an
+	// operator requirement on the launch surface, not a posture claim, so
+	// native's verbatim forwarding does not extend to it. Callers use
+	// errors.Is for stable classification and errors.As to recover the
+	// tool and argv placement from DeniedToolReEnabledError.
+	ErrDeniedToolReEnabled = errors.New("agentic: native arguments re-enable a denied tool")
 	// ErrNativeArgsNotInteractive is returned when a non-interactive
 	// launch carries native arguments. Only the interactive grammar has
 	// a verbatim suffix to forward them through; anywhere else they
@@ -245,6 +257,49 @@ func (e *NativePolicyConflictError) Error() string {
 }
 
 func (e *NativePolicyConflictError) Unwrap() error { return ErrNativePolicyConflict }
+
+// SettingsPolicyFailureKind distinguishes a failed read from invalid JSON or
+// an invalid permissions.allow shape in the effective explicit settings
+// source. Ambiguous means the pinned native eager settings scan and the
+// Commander-style option parse select different effective --settings sources
+// (or one selects a source the other never yields), so no single source is
+// authoritative and the launch refuses before either is trusted.
+type SettingsPolicyFailureKind string
+
+const (
+	SettingsPolicyUnreadable      SettingsPolicyFailureKind = "unreadable"
+	SettingsPolicyInvalid         SettingsPolicyFailureKind = "invalid"
+	SettingsPolicyAmbiguous       SettingsPolicyFailureKind = "ambiguous"
+	NativePolicyPlacementSettings NativePolicyPlacement     = "settings"
+)
+
+var ErrSettingsPolicy = errors.New("agentic: explicit settings tool policy cannot be inspected")
+
+type SettingsPolicyError struct{ Kind SettingsPolicyFailureKind }
+
+func (e *SettingsPolicyError) Error() string { return fmt.Sprintf("%s: %s", ErrSettingsPolicy, e.Kind) }
+func (e *SettingsPolicyError) Unwrap() error { return ErrSettingsPolicy }
+
+// DeniedToolReEnabledError carries the denied tool a caller tried to allow
+// back and the argv form the attempt took. Tool is the offending member as
+// written, rule qualifier included when one was present
+// ("AskUserQuestion" or "AskUserQuestion(*)"); Placement is equals when the
+// member rode a `--flag=value` token and separate-token when it rode any
+// following value token. It unwraps to ErrDeniedToolReEnabled, so callers
+// may use errors.Is for stable classification and errors.As for details.
+type DeniedToolReEnabledError struct {
+	Tool      string
+	Placement NativePolicyPlacement
+}
+
+func (e *DeniedToolReEnabledError) Error() string {
+	if e == nil {
+		return ErrDeniedToolReEnabled.Error()
+	}
+	return fmt.Sprintf("%s: tool %q in %s form", ErrDeniedToolReEnabled, e.Tool, e.Placement)
+}
+
+func (e *DeniedToolReEnabledError) Unwrap() error { return ErrDeniedToolReEnabled }
 
 // refuseNonInteractiveParameters is the interactive grammar's request-side
 // gate, applied once here so no plugin can forget the shared exclusions.

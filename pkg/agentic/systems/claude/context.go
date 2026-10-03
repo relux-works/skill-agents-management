@@ -244,7 +244,7 @@ func encodeClaudeMCP(context agentic.MCPServersContext) (string, []agentic.Compo
 }
 
 func rejectNativeContextConflicts(args []string, values contextValues) error {
-	for _, index := range nativeargs.FlagIndexes(args) {
+	for _, index := range claudeFlagIndexes(args) {
 		name, _, _ := nativeargs.SplitFlagValue(args[index])
 		if (values.hasMCP || values.hasCuratorMCP) && name == mcpjson.ConfigFlag {
 			return contextConflict(agentic.ContextMCPServers, "native arguments already set the MCP configuration")

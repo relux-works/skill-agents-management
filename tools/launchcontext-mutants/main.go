@@ -70,6 +70,7 @@ func main() {
 	tableOutput := flag.String("table-out", "", "write the killed mutant table to this Markdown path")
 	start := flag.Int("start", 0, "zero-based candidate offset for bounded sequential runs")
 	limit := flag.Int("limit", 0, "maximum candidates to execute; zero means all remaining candidates")
+	selectedName := flag.String("name", "", "execute one registered mutant by exact name")
 	validatorsOnly := flag.Bool("validators-only", false, "execute only AST-derived curator validator members")
 	flag.Parse()
 	root, err := os.Getwd()
@@ -108,13 +109,34 @@ func main() {
 		fatal(err)
 	}
 	candidates = append(candidates, generated...)
-	validatorMutants, err := generatedCuratorValidatorMutants(root, taskScratch, gitDir, gitIndex)
-	if err != nil {
-		fatal(err)
+	var validatorMutants []mutant
+	matched := false
+	for _, candidate := range candidates {
+		if candidate.name == *selectedName {
+			matched = true
+		}
 	}
-	candidates = append(candidates, validatorMutants...)
+	if *selectedName == "" || !matched || *validatorsOnly {
+		validatorMutants, err = generatedCuratorValidatorMutants(root, taskScratch, gitDir, gitIndex)
+		if err != nil {
+			fatal(err)
+		}
+		candidates = append(candidates, validatorMutants...)
+	}
 	if *validatorsOnly {
 		candidates = validatorMutants
+	}
+	if *selectedName != "" {
+		var selected []mutant
+		for _, candidate := range candidates {
+			if candidate.name == *selectedName {
+				selected = append(selected, candidate)
+			}
+		}
+		if len(selected) != 1 {
+			fatal(fmt.Errorf("mutant name %q resolves to %d members", *selectedName, len(selected)))
+		}
+		candidates = selected
 	}
 	if *start < 0 || *start > len(candidates) || *limit < 0 {
 		fatal(fmt.Errorf("invalid candidate range start=%d limit=%d for %d candidates", *start, *limit, len(candidates)))
@@ -5090,7 +5112,7 @@ func narrowingMutants() []mutant {
 			}
 		}
 	}
-	return append(base, gateMutants...)
+	return append(append(base, gateMutants...), claudeToolPolicyMutants()...)
 }
 
 func fatal(err error) {
@@ -5229,4 +5251,54 @@ func applyDownstreamNarrowing(path string, proof downstreamGuardProof) error {
 		return fmt.Errorf("downstream function/guard/return triple is not unique: %d matches", len(lines))
 	}
 	return applyASTNarrowingAtSite(path, proof.function, proof.guard, lines[0], proof.returned, proof.exemption)
+}
+
+// Each member weakens one policy class while leaving the gate in place.
+// These run production BuildPlan assertions, not a stripping-wrapper counter.
+func claudeToolPolicyMutants() []mutant {
+	policy := func(name, file, before, after, testName, pattern, message, narrows string) mutant {
+		return mutant{name: "claude-toolpolicy-" + name, file: file, gate: "Claude AskUserQuestion policy", member: name, narrows: narrows,
+			replacements: []replacement{{before: before, after: after}}, testPackage: "./pkg/agentic/systems/claude", testName: testName, runPattern: pattern, failureText: message, preflightPkg: "./pkg/agentic/systems/claude", preflightName: "TestClaudeArgvHasExactlyOneConstructionSite", preflightMatch: "^TestClaudeArgvHasExactlyOneConstructionSite$"}
+	}
+	return []mutant{
+		policy("dryrun-deny", "pkg/agentic/systems/claude/args.go",
+			"args = append(args, disallowedToolsDenial)\n\n\tif req.Goal == nil", "if mode != agentic.LaunchModeDryRun {args = append(args, disallowedToolsDenial)}\n\n\tif req.Goal == nil",
+			"TestAskUserQuestionDeniedForDryRun", "^TestAskUserQuestionDeniedForDryRun$", "dry run spells a different grammar", "omits denial only for dry-run; exec and interactive retain it"),
+		policy("caller-read-dropped", "pkg/agentic/systems/claude/args.go",
+			"rest := append([]string(nil), req.NativeArgs...)", "rest := append([]string(nil), req.NativeArgs...); for i, token := range rest {if token == disallowedToolsFlag+\"=Read\" {rest = append(rest[:i],rest[i+1:]...);break}}",
+			"TestReviewerCallerOccurrencesPreserved", "^TestReviewerCallerOccurrencesPreserved$", "caller bytes changed", "drops only caller attached Read deny occurrence"),
+		policy("allow-bare-skipped", "pkg/agentic/systems/claude/args.go",
+			"findReenabledTool(req.NativeArgs); found {", "findReenabledTool(req.NativeArgs); found && tool != deniedToolAskUserQuestion {",
+			"TestReEnablingAskUserQuestionIsRefused/native/separate_value", "^TestReEnablingAskUserQuestionIsRefused$/^native$/^separate_value$", "want ErrDeniedToolReEnabled", "admits bare allow member while retaining qualified re-enable checks"),
+		policy("settings-bare-skipped", "pkg/agentic/systems/claude/toolpolicy.go",
+			"if trimmed := ecmaTrim(rule); nativeToolName(trimmed) == deniedToolAskUserQuestion {", "if trimmed := ecmaTrim(rule); nativeToolName(trimmed) == deniedToolAskUserQuestion && trimmed != deniedToolAskUserQuestion {",
+			"TestAskUserQuestionSettingsPolicy/native/inline/exact", "^TestAskUserQuestionSettingsPolicy$/^native$/^inline$/^exact$", "want typed settings re-enable refusal", "admits bare settings allow while retaining qualified rules"),
+		policy("settings-unreadable-admitted", "pkg/agentic/systems/claude/toolpolicy.go",
+			"if kind != \"\" {", "if kind != \"\" && kind != agentic.SettingsPolicyUnreadable {",
+			"TestAskUserQuestionSettingsReadFailure/missing", "^TestAskUserQuestionSettingsReadFailure$/^missing$", "want unreadable settings refusal", "treats unreadable effective source as absent; invalid JSON still refuses"),
+		policy("settings-invalid-admitted", "pkg/agentic/systems/claude/toolpolicy.go",
+			"if kind != \"\" {", "if kind != \"\" && kind != agentic.SettingsPolicyInvalid {",
+			"TestAskUserQuestionSettingsPolicy/native/inline/invalid_json", "^TestAskUserQuestionSettingsPolicy$/^native$/^inline$/^invalid_json$", "want settings invalid refusal", "admits invalid JSON while retaining unreadable source refusal"),
+		policy("scalar-value-classified", "pkg/agentic/systems/claude/nativegrammar.go",
+			"if i+1 < len(args) {", "if i+1 < len(args) && name != appendSystemPromptFlag {",
+			"TestAskUserQuestionScalarOwnership/--append-system-prompt/--allowedTools=AskUserQuestion", "^TestAskUserQuestionScalarOwnership$/^--append-system-prompt$/^--allowedTools=AskUserQuestion$", "scalar value classified", "misclassifies dash-leading append-system-prompt value; other scalar ownership remains"),
+		policy("trimspace-restored", "pkg/agentic/systems/claude/toolpolicy.go",
+			"rule := ecmaTrim(current.String())", "rule := strings.TrimSpace(current.String())",
+			"TestAskUserQuestionECMAScriptRuleTokenization/native/allow_BOM_prefix", "^TestAskUserQuestionECMAScriptRuleTokenization$/^native$/^allow_BOM_prefix$", "want typed re-enable refusal", "restores Go TrimSpace in list tokenization; the BOM allow is admitted while ASCII rules still refuse"),
+		policy("settings-rule-trim-restored", "pkg/agentic/systems/claude/toolpolicy.go",
+			"if trimmed := ecmaTrim(rule); nativeToolName(trimmed) == deniedToolAskUserQuestion {", "if trimmed := strings.TrimSpace(rule); nativeToolName(trimmed) == deniedToolAskUserQuestion {",
+			"TestAskUserQuestionSettingsECMAScriptRules/native/settings_BOM_rule_refused", "^TestAskUserQuestionSettingsECMAScriptRules$/^native$/^settings_BOM_rule_refused$", "want typed settings re-enable refusal", "restores Go TrimSpace for settings allow rules; the BOM settings rule is admitted while ASCII rules still refuse"),
+		policy("settings-inline-trim-restored", "pkg/agentic/systems/claude/toolpolicy.go",
+			"trimmed := ecmaTrim(value)", "trimmed := strings.TrimSpace(value)",
+			"TestAskUserQuestionSettingsECMAScriptRules/native/settings_inline_BOM_wrapped_refused", "^TestAskUserQuestionSettingsECMAScriptRules$/^native$/^settings_inline_BOM_wrapped_refused$", "want typed settings re-enable refusal", "restores Go TrimSpace for inline-JSON detection; BOM-wrapped inline settings read as a file path while plain inline JSON still parses"),
+		policy("eager-settings-dropped", "pkg/agentic/systems/claude/toolpolicy.go",
+			"eagerVal, eagerOK := lastSettingsValue(eagerSettingsValues(req.NativeArgs))", "eagerVal, eagerOK := \"\", false",
+			"TestAskUserQuestionEagerSettingsAmbiguity/native/eager_only_separate_cn", "^TestAskUserQuestionEagerSettingsAmbiguity$/^native$/^eager_only_separate_cn$", "want typed settings ambiguity refusal", "drops the eager settings scan; combined-short eager sources never disagree while Commander-visible sources still refuse"),
+		policy("ambiguity-skipped", "pkg/agentic/systems/claude/toolpolicy.go",
+			"if eagerOK != cmdOK || (eagerOK && eagerVal != cmdVal) {\n\t\treturn settingsPolicyRefusal(agentic.SettingsPolicyAmbiguous)\n\t}", "if eagerOK != cmdOK || (eagerOK && eagerVal != cmdVal) {\n\t\tif eagerOK && !cmdOK {\n\t\t\treturn nil\n\t\t}\n\t\treturn settingsPolicyRefusal(agentic.SettingsPolicyAmbiguous)\n\t}",
+			"TestAskUserQuestionEagerSettingsAmbiguity/native/eager_only_separate_cn", "^TestAskUserQuestionEagerSettingsAmbiguity$/^native$/^eager_only_separate_cn$", "want typed settings ambiguity refusal", "admits eager-only parser disagreements; other disagreements still refuse ambiguous"),
+		policy("conditional-deny", "pkg/agentic/systems/claude/args.go",
+			"args = append(args, disallowedToolsDenial)\n\trest := append([]string(nil), req.NativeArgs...)", "hasCallerDenial := false\n\tfor _, token := range req.NativeArgs {\n\t\tif strings.Contains(token, deniedToolAskUserQuestion) {\n\t\t\thasCallerDenial = true\n\t\t}\n\t}\n\tif !hasCallerDenial {\n\t\targs = append(args, disallowedToolsDenial)\n\t}\n\trest := append([]string(nil), req.NativeArgs...)",
+			"TestAskUserQuestionDenialUnconditionalBesideCallerValues/--disallowedTools=AskUserQuestion", "^TestAskUserQuestionDenialUnconditionalBesideCallerValues$/^--disallowedTools=AskUserQuestion$", "module denial missing beside caller denial", "restores conditional emission; caller denials suppress the module denial while other inputs keep it"),
+	}
 }

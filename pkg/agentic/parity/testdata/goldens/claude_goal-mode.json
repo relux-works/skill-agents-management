@@ -61,6 +61,7 @@
       "--effort",
       "high",
       "--dangerously-skip-permissions",
+      "--disallowedTools=AskUserQuestion",
       "--append-system-prompt-file",
       "\u003cTMPDIR:2\u003e/prompt.md",
       "/goal Own the latest active revision of board goal **GOAL-260717-CLD001** for run **RUN-parity-claude-goal** through its board-defined success predicate. Before nested spawn, at every directive checkpoint, and before claiming success, run `task-board spawn goal RUN-parity-claude-goal`; treat the returned objective, resolved scope, and revision as authoritative and surface them with the required board acceptance evidence. A stale revision, cancelled/superseded goal, or missing scoped acceptance evidence is not success."

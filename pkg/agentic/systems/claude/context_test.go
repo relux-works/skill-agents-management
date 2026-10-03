@@ -26,6 +26,7 @@ func TestBuildPlanTranslatesClaudeContextChannels(t *testing.T) {
 		"--effort", parityEffort,
 		mcpConfigFlag + `={"mcpServers":{"board":{"type":"http","url":"https://mcp.example.test"},"local":{"type":"stdio","command":"mcp-tool","args":["serve"]}}}`,
 		appendSystemPromptFlag, "Keep the repository instructions in force.",
+		disallowedToolsDenial,
 		bypassPermissionsFlag,
 	}
 	if !reflect.DeepEqual(plan.Argv, want) {

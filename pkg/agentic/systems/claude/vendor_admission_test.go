@@ -128,7 +128,7 @@ func TestBuildLaunchWithEnvironmentCarriesPermissionRequestThroughVendorAdmissio
 				req.ToolRelease = "native-unpinned-release"
 				req.NativeArgs = []string{"--permission-mode", "default", "literal task"}
 			},
-			wantArgv: []string{"--model", string(permissionAdmissionModel), "--effort", "high", "--permission-mode", "default", "literal task"},
+			wantArgv: []string{"--model", string(permissionAdmissionModel), "--effort", "high", disallowedToolsDenial, "--permission-mode", "default", "literal task"},
 		},
 		{
 			name: "yolo maps the verified release before caller arguments",
@@ -136,7 +136,7 @@ func TestBuildLaunchWithEnvironmentCarriesPermissionRequestThroughVendorAdmissio
 				req.PermissionMode = agentic.PermissionModeYolo
 				req.NativeArgs = []string{"--verbose", "literal task"}
 			},
-			wantArgv: []string{"--model", string(permissionAdmissionModel), "--effort", "high", bypassPermissionsFlag, "--verbose", "literal task"},
+			wantArgv: []string{"--model", string(permissionAdmissionModel), "--effort", "high", disallowedToolsDenial, bypassPermissionsFlag, "--verbose", "literal task"},
 		},
 		{
 			name: "yolo refuses a conflicting native selector",
