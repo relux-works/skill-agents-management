@@ -77,6 +77,15 @@ values.
 
 The agentic-system plugin contract and its registry.
 
+The typed network carrier uses the public
+`github.com/relux-works/curator-network-profiles` module at `v0.2.0`, its first
+public release, with no `replace` or credential requirement. The retired
+`v0.1.0` is in the private development repository. Existing launch gates also
+carry direct unset-only patches and inherited Record origins; the process
+owner still resolves the profile. See [the network carrier
+contract](docs/architecture.md#network-carrier-d4) and [the consumer
+recipe](docs/consuming-the-module.md#passing-a-resolved-network-scope).
+
 - `System` is the plugin interface: identity, a static `Capabilities`
   declaration (launch modes, effort transport, goal/budget/service-tier
   support, composition grammar, home, auth hint), and five dispatch surfaces —

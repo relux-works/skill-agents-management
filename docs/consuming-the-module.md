@@ -144,7 +144,8 @@ managed home, intent and complete fragment identity before returning a plan.
 
 The launch plane carries an optional typed `agentic.Network{Patch, Record}`
 (D4). The process owner resolves the profile on the destination host with
-`curator-network-profiles` (`catalog.Load`, `Catalog.Resolve`, bind), then
+the public `github.com/relux-works/curator-network-profiles` at `v0.2.0`
+(`catalog.Load`, `Catalog.Resolve`, bind), then
 passes the resulting patch and Record through. The module validates the
 carrier, applies the patch once after `ChildEnv`, joins the set half into
 `OwnedEnv`, and exposes the Record as plan provenance:
@@ -185,6 +186,13 @@ refuses; `muse` stays unsupported until D8 verifies it. Through
 forwards it unchanged; a vendor that changes it is refused with
 `ErrVendorContract`. Persist the Record only — never the patch, the endpoint,
 or the environment.
+
+`v0.2.0` is the first public network-profiles release and resolves through the
+Go proxy and checksum database without credentials; `v0.1.0` is retired to the
+private development repository. Named direct profiles produce an unset-only
+patch and retain their Record; an inherited origin is preserved unchanged.
+Neither is an unmanaged launch. Selection, confirmation and re-resolution on
+the destination host remain the process owner's responsibility.
 
 `Model.CacheBudgetBytes` is an additive optional-positive catalog fact for
 configured local models. A consumer must distinguish `nil` (unrecorded) from a

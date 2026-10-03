@@ -23,8 +23,8 @@ import (
 // existed still matches.
 //
 // Types come from github.com/relux-works/curator-network-profiles at tag
-// v0.1.0 (docs/integration-contract.md rev 2, spec/contract-appendix.md). The
-// module is consumed by tag; there is no replace and no go.work entry.
+// v0.2.0 (docs/integration-contract.md rev 2, spec/contract-appendix.md). The
+// public module is consumed by tag; there is no replace and no go.work entry.
 type Network struct {
 	Patch  envpatch.Patch
 	Record binding.Record

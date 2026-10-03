@@ -291,10 +291,18 @@ that exports those values through `agentic.WithRunContext`.
 `agentic.LaunchRequest.Network` and `vendorplugin.SpawnRequest.Network` carry
 an optional typed `Network{Patch, Record}` (tb-R148 D4, decided: no callbacks).
 The types come from `github.com/relux-works/curator-network-profiles` at tag
-`v0.1.0` (`docs/integration-contract.md` rev 2, `spec/contract-appendix.md`):
+`v0.2.0`, its first public release (`docs/integration-contract.md` rev 2,
+`spec/contract-appendix.md`):
 `envpatch.Patch` is the unset-then-set child-env rewrite and `binding.Record`
 is the manifest-safe binding identity. The module consumes that library by tag,
 with no `replace` and no `go.work` entry.
+The retired `v0.1.0` belongs to the private `curator-network-profiles-dev`
+history. The public tag resolves through the Go proxy and checksum database
+without credentials. Its direct unset-only patches and inherited Record origins
+fit the existing carrier; profile selection remains the process owner's job.
+The [migration comparison](network-profiles-v0.2.0-migration.md) records the
+used API differences and section 2.1's evidence limits against the contract
+revision used to accept the separate Codex adapter.
 
 Every production entry point that can carry a scope — `BuildPlan` and
 `BuildPlanWithEnvironment`, `BuildLaunch` and `BuildLaunchWithEnvironment` —
