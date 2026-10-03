@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.5.44 — 2026-10-04
+
+- Declare the verified network tuple for `codex`: codex-env-v1, build
+  0.159.0, exec entrypoint. A managed scope bearing exactly that tuple is
+  admitted; every other build, entrypoint, adapter or harness still refuses
+  with `network_scope_unsupported`.
+- Inject the managed patch's set half into each command-backed MCP entry's
+  env block on `codex` launches, through the shared `agentic` merge the
+  adapters reuse; unset names are removed there too and untouched members
+  survive. Coverage is every entry the harness will launch: request-declared
+  entries in their pair streams plus the effective home's config and the
+  selected profile's entries through per-key config overrides. An entry that
+  cannot be covered reliably — an unaddressable name, a configured member no
+  override can remove, an unreadable inventory, or verbatim native MCP
+  configuration — refuses the whole managed launch with a typed refusal.
+  The codex composition grammar admits a caller-supplied per-server `env`
+  table, stdio entries only. Zero-network plans and every other plugin stay
+  byte-identical.
+
+- Local-provider Codex exec and dry-run launches now carry validated native
+  metadata from the private operator catalog: Lite off, direct tools,
+  multi-agent v1, no search or reasoning-summary parameter, and an explicit
+  in-vocabulary effort. Missing metadata reports typed `absent`. The complete
+  native-readable catalog subset is checked over every row from a single
+  exact-key parse: duplicate recognized fields refuse typed `malformed`,
+  matching native Codex, and case-variant keys are ignored rather than
+  overriding protocol values. String spelling is checked before token
+  normalization: invalid UTF-8, unpaired surrogate escapes, invalid escapes
+  and raw control characters refuse typed `malformed` in keys and values,
+  including ignored fields. Non-regular and oversized inputs refuse through
+  bounded nonblocking reads. Snapshots retain catalog bytes, and plans use
+  private content-addressed copies verified by the exec-free
+  `Plan.VerifyBeforeExec` hook immediately before consumer-owned exec. Local
+  managed-session and interactive launches remain typed `unsupported`; hosted
+  launch argv and environment are unchanged. The semantic refusal census
+  includes propagation, and the bounded mutation runner reports kills,
+  survivors and source bounds.
+
+## Unreleased
+
 ## v0.5.43 — 2026-10-04
 
 - Add the standalone `agents-management model-check` diagnostic: one bounded
@@ -56,8 +96,6 @@
 - Require the first public `curator-network-profiles` release, `v0.2.0`, instead
   of the retired private `v0.1.0`; preserve the typed network carrier and exact
   adapter admission, including direct unset-only patches and inherited origins.
-
-## Unreleased
 
 ## v0.5.42 — 2026-10-02
 
