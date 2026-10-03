@@ -67,6 +67,9 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 		if snapshot.modelSlug != strings.TrimSpace(req.Model.ID) {
 			return nil, localCatalogRefusal(agentic.LocalProviderConflicting, snapshot.catalogPath, providerID)
 		}
+		if err := checkLocalEffortVocabulary(req.Model.EffortVocabulary, snapshot.effortVocab, snapshot.catalogPath, providerID); err != nil {
+			return nil, err
+		}
 		if err := checkLocalEffort(req.Effort, snapshot.effortVocab, snapshot.catalogPath, providerID); err != nil {
 			return nil, err
 		}
@@ -101,6 +104,9 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 		return nil, err
 	} else {
 		catalog = catalogValue
+	}
+	if err := checkLocalEffortVocabulary(req.Model.EffortVocabulary, catalog.vocab, catalog.path, providerID); err != nil {
+		return nil, err
 	}
 	if err := checkLocalEffort(req.Effort, catalog.vocab, catalog.path, providerID); err != nil {
 		return nil, err

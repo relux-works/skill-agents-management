@@ -851,3 +851,35 @@ func TestDownstreamRelocationNarrowingMutant(t *testing.T) {
 	}
 	t.Log("KILLED | mutant=ambiguous_downstream_relocation | exit=1 | test=TestDownstreamProofRejectsAmbiguousRelocation")
 }
+
+func TestLocalEffortSubsetRefusalIsInFullCensus(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := generatedCuratorConflictMutants(root); err != nil {
+		t.Fatalf("full refusal census: %v", err)
+	}
+	sites, err := refusalscan.LocalCodexSites(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, site := range sites {
+		if site.Function == "checkLocalEffortVocabulary" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("local declared vocabulary gate missing from semantic census")
+	}
+	for _, candidate := range narrowingMutants() {
+		if candidate.name == "local-effort-declared-max-admitted" {
+			if candidate.testPackage != "./pkg/vendorplugin/vendors/local-models" || !strings.Contains(candidate.replacements[0].after, "slices.Contains(native, word)") {
+				t.Fatal("local narrowing mutant must preserve the inspected token and run consumer behavior")
+			}
+			return
+		}
+	}
+	t.Fatal("local declared vocabulary gate has no consumer narrowing mutant")
+}

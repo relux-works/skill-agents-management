@@ -4846,6 +4846,22 @@ func narrowingMutants() []mutant {
 	const systemTest = "./pkg/agentic/systems/claude"
 	base := []mutant{
 		{
+			name: "local-effort-declared-max-admitted", narrows: "admits only the declared max word absent from native catalog levels", file: "pkg/agentic/systems/codex/catalog.go",
+			replacements: []replacement{{before: "if !slices.Contains(native, word) {", after: "if !slices.Contains(native, word) && word != \"max\" {"}},
+			testPackage:  "./pkg/vendorplugin/vendors/local-models", testName: "TestLocalModelsDeclaredVocabularyMustFitNativeCatalog", runPattern: "^TestLocalModelsDeclaredVocabularyMustFitNativeCatalog$", failureText: "want ErrLocalProviderUnsupported",
+		},
+		{
+			name: "local-effort-id-max-bypasses-subset", narrows: "admits only the low/max row on the ID path; keeps snapshot subset checking", file: "pkg/agentic/systems/codex/provider.go",
+			replacements: []replacement{{before: "if err := checkLocalEffortVocabulary(req.Model.EffortVocabulary, catalog.vocab, catalog.path, providerID); err != nil {", after: "if err := checkLocalEffortVocabulary(req.Model.EffortVocabulary, catalog.vocab, catalog.path, providerID); err != nil && !(len(req.Model.EffortVocabulary) == 2 && req.Model.EffortVocabulary[0] == \"low\" && req.Model.EffortVocabulary[1] == \"max\") {"}},
+			testPackage:  "./pkg/vendorplugin/vendors/local-models", testName: "TestLocalModelsDeclaredVocabularyMustFitNativeCatalog", runPattern: "^TestLocalModelsDeclaredVocabularyMustFitNativeCatalog$/^dry-run$/^id$", failureText: "want ErrLocalProviderUnsupported",
+		},
+		{
+			name: "local-effort-snapshot-max-bypasses-subset", narrows: "admits only the low/max row on the snapshot path; keeps ID subset checking", file: "pkg/agentic/systems/codex/provider.go",
+			replacements: []replacement{{before: "if err := checkLocalEffortVocabulary(req.Model.EffortVocabulary, snapshot.effortVocab, snapshot.catalogPath, providerID); err != nil {", after: "if err := checkLocalEffortVocabulary(req.Model.EffortVocabulary, snapshot.effortVocab, snapshot.catalogPath, providerID); err != nil && !(len(req.Model.EffortVocabulary) == 2 && req.Model.EffortVocabulary[0] == \"low\" && req.Model.EffortVocabulary[1] == \"max\") {"}},
+			testPackage:  "./pkg/vendorplugin/vendors/local-models", testName: "TestLocalModelsDeclaredVocabularyMustFitNativeCatalog", runPattern: "^TestLocalModelsDeclaredVocabularyMustFitNativeCatalog$/^dry-run$/^snapshot$", failureText: "want ErrLocalProviderUnsupported",
+		},
+
+		{
 			name:         "curator-validator-matrix-codex-skip",
 			narrows:      "skips every generated Curator validator malformed-fragment case for Codex",
 			file:         "pkg/agentic/curator_context_acceptance_test.go",

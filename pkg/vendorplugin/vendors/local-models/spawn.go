@@ -41,6 +41,9 @@ func (v *Vendor) Spawn(sc vendorplugin.SpawnContext) (agentic.LaunchRequest, err
 	}
 
 	launch := vendorplugin.PassthroughLaunch(sc)
+	// This local row declares an axis for native catalog compatibility. Hosted
+	// vendor rows keep their existing selected-effort-only local binding rule.
+	launch.Model.EffortVocabulary = append([]string(nil), sc.Model.Effort.Vocabulary...)
 	if sc.Runtime.SystemID == "pi" {
 		launch.SystemModelIdentity = pointer.PiModelIdentity
 	}

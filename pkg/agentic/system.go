@@ -310,11 +310,17 @@ type StdinPayload struct {
 }
 
 // Model is the vendor-layer fact this layer needs, and nothing more: which
-// model was selected, and whether it requires an effort. The vocabulary, the
-// ranking, the pricing and the availability all stay with the vendor plugin.
+// model was selected and its effort axis. The vendor owns the vocabulary;
+// its projection lets a local harness check the entire axis against native
+// metadata. Ranking, pricing and availability stay with the vendor plugin.
 type Model struct {
 	ID     string
 	Effort EffortSupport
+
+	// EffortVocabulary is a local vendor axis projected for native validation.
+	// Nil means no local vocabulary was projected (hosted or direct callers);
+	// the local harness still validates the selected effort against its catalog.
+	EffortVocabulary []string
 
 	// AliasOf is the model identity this id STANDS FOR, empty when the id is
 	// already the identity. A launch is admitted, audited and displayed under

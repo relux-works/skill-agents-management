@@ -1,0 +1,1 @@
+Free hunt: explicit empty recommendation, duplicate/blank vocabulary word and case-mismatched recommendation refuse ErrEffortDeclaration through ParseConfig -> Registry.Register. free-hunt-02.log exit 0. Initial scratch fixture lacked required lifecycle and failed before the intended gate; free-hunt.log is diagnostic, not a passing attack.

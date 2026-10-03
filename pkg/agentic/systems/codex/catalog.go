@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/relux-works/skill-agents-management/internal/catalogfile"
@@ -197,6 +198,18 @@ func validateCatalogEntry(entry codexCatalogModel, catalogPath, providerID strin
 		vocab = append(vocab, level.Effort)
 	}
 	return vocab, nil
+}
+
+// checkLocalEffortVocabulary checks the whole declared vendor axis, not only
+// the selected effort. A row advertising a word absent from native metadata
+// is incompatible even when this launch selects a supported word.
+func checkLocalEffortVocabulary(declared, native []string, catalogPath, providerID string) error {
+	for _, word := range declared {
+		if !slices.Contains(native, word) {
+			return localCatalogRefusal(agentic.LocalProviderUnsupported, catalogPath, providerID)
+		}
+	}
+	return nil
 }
 
 // checkLocalEffort refuses an out-of-vocabulary effort for a local launch.

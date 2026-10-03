@@ -1357,6 +1357,56 @@ form carries the broker provenance — which source was checked, and that nothin
 established a vendor — because "unresolved" is only honest when the search
 behind it is visible.
 
+### Local-model effort configuration
+
+The machine-local `~/.agents/.configs/local-models.toml` declares each row's
+reasoning axis through `effort_support`, `effort_vocabulary`, and
+`recommended_effort`. The public `localmodels.ModelEntry` fields are
+`EffortSupport`, `EffortVocabulary`, and `RecommendedEffort`; `Models()`
+projects them into `vendorplugin.EffortDeclaration`.
+
+```toml
+[runtimes.local-codex]
+system = "codex"
+
+[runtimes.local-codex.models."unique-local-model"]
+description = "Local Codex model"
+lifecycle = "current"
+effort_support = "required"
+# Mandatory for required rows: a nonempty vocabulary ...
+effort_vocabulary = ["low", "high"]
+# ... and a nonempty recommendation inside that vocabulary. Guidance only.
+recommended_effort = "high"
+
+[runtimes.local-codex.models."unique-local-model".pointer]
+curator_engines_project = "/absolute/path/to/engine-project"
+curator_engines_profile = "local-codex"
+```
+
+A `required` row must declare BOTH a nonempty `effort_vocabulary` AND a
+nonempty in-vocabulary `recommended_effort`; omitting either refuses
+registration with `vendorplugin.ErrEffortDeclaration`. The recommendation is
+guidance only and is NEVER injected as a default for a request that names no
+effort, matching the existing hosted and local no-default policy. `BuildLaunch`
+requires an explicit effort just as hosted required-effort rows do: absence
+returns `vendorplugin.ErrEffortMissing`, and an unsupported word returns
+`vendorplugin.ErrEffortNotInVocabulary`. With `effort_support = "none"`, omit
+both added fields; a supplied effort still refuses. Contradictory declarations
+refuse registration with `vendorplugin.ErrEffortDeclaration`.
+
+For a local Codex binding, **every** word in the declared vocabulary must
+appear in that model's native catalog `supported_reasoning_levels`. A mismatch
+returns `agentic.ErrLocalProviderUnsupported`, even when the selected word is
+supported. The ID path uses validated catalog bytes; the snapshot path uses
+its retained vocabulary. Local-models rows in both dry-run and exec plans enforce the subset rule
+and the selected-effort rule. Direct `BuildPlan` callers can carry the row axis
+in `agentic.Model.EffortVocabulary`; without a projected local axis, hosted rows and direct callers retain the existing
+native selected-effort validation, including empty-effort refusal.
+
+Consumers must supply a `LocalProvider` binding and the private Codex home with
+validated provider and catalog metadata. Plan construction starts no process;
+call `plan.VerifyBeforeExec()` immediately before starting an exec plan.
+
 `local-runtime status` reads `localmodels.Peek()`'s memoized-forever result —
 the SAME loader a launch's conditional registration decision reads — and
 reports whether `~/.agents/.configs/local-models.toml` was found and parsed,

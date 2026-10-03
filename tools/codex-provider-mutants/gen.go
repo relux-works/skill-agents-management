@@ -80,6 +80,13 @@ func discoverMutations(root string) ([]mutation, error) {
 				row.Bound = ""
 			}
 		}
+		// Admit only max outside the native set while preserving the searched
+		// predicate. The real BuildPlan subset negative must go red.
+		if member.Site.Function == "checkLocalEffortVocabulary" && member.Expression == "!slices.Contains(native, word)" {
+			row.Replacement = "(" + member.Expression + ") && word != \"max\""
+			row.Bound = ""
+		}
+
 		rows = append(rows, row)
 	}
 	extra, err := bindingAndReadMutations(root, sites)
@@ -229,7 +236,7 @@ func execute(root string, r result) result {
 	return r
 }
 
-const behaviorPattern = `^(TestLocal(Launch|Effort|ProviderEmptyModel|Catalog)|TestCatalog|TestIDPlan|TestHosted|TestSnapshot|TestReadProviderSnapshot|TestManagedSessionRefuses|TestBuildPlan.*LocalProvider|TestPluginArgvRefusesAnEmptyLocalProvider|TestProviderArgv|TestTomlDecodeShape)`
+const behaviorPattern = `^(TestLocal(Launch|Effort|DeclaredVocabulary|ProviderEmptyModel|Catalog)|TestCatalog|TestIDPlan|TestHosted|TestSnapshot|TestReadProviderSnapshot|TestManagedSessionRefuses|TestBuildPlan.*LocalProvider|TestPluginArgvRefusesAnEmptyLocalProvider|TestProviderArgv|TestTomlDecodeShape)`
 
 func copyTree(root, destination string) error {
 	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {

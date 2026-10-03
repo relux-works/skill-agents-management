@@ -21,7 +21,7 @@ func buildModels(cfg Config) []vendorplugin.Model {
 				Description:         vendorplugin.UsageDescription(entry.Description),
 				Rank:                localCapabilityRank(),
 				Lifecycle:           entry.Lifecycle,
-				Effort:              vendorplugin.EffortDeclaration{Support: entry.EffortSupport},
+				Effort:              vendorplugin.EffortDeclaration{Support: entry.EffortSupport, Vocabulary: append([]string(nil), entry.EffortVocabulary...), Recommended: entry.RecommendedEffort},
 				ContextWindowTokens: entry.ContextWindowTokens,
 				Publisher:           entry.Publisher,
 				Family:              entry.Family,

@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/relux-works/skill-agents-management/internal/refusalscan"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -79,5 +80,32 @@ func TestLexicalMutantsIncludeRemovalAndNarrowing(t *testing.T) {
 		if !seen[id] {
 			t.Fatal("missing AST-derived lexical mutant", id)
 		}
+	}
+}
+
+func TestDeclaredVocabularySubsetHasNarrowingMember(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := discoverMutations(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row.Site.Function == "checkLocalEffortVocabulary" && row.Expression == "!slices.Contains(native, word)" {
+			if row.Replacement != "("+row.Expression+") && word != \"max\"" || row.Bound != "" {
+				t.Fatalf("subset member lacks narrowing: %+v", row)
+			}
+			return
+		}
+	}
+	t.Fatal("subset predicate absent from semantic mutant census")
+}
+
+func TestBehaviorPatternIncludesDeclaredVocabularyNegative(t *testing.T) {
+	matched, err := regexp.MatchString(behaviorPattern, "TestLocalDeclaredVocabularyMustFitNativeCatalog")
+	if err != nil || !matched {
+		t.Fatalf("behavioral mask excludes the subset gate negative: matched=%v err=%v", matched, err)
 	}
 }

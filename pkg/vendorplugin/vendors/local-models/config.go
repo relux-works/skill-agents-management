@@ -61,6 +61,8 @@ type ModelEntry struct {
 	ContextWindowTokens int
 	CacheBudgetBytes    *int64
 	EffortSupport       agentic.EffortSupport
+	EffortVocabulary    []string
+	RecommendedEffort   string
 	Pointer             Pointer
 	Engine              plugin.Ref
 }
@@ -221,6 +223,8 @@ type wireModel struct {
 	ContextWindowTokens int         `toml:"context_window_tokens"`
 	CacheBudgetBytes    *int64      `toml:"cache_budget_bytes"`
 	EffortSupport       string      `toml:"effort_support"`
+	EffortVocabulary    []string    `toml:"effort_vocabulary"`
+	RecommendedEffort   string      `toml:"recommended_effort"`
 	Engine              *string     `toml:"engine"`
 	Pointer             wirePointer `toml:"pointer"`
 }
@@ -321,6 +325,8 @@ func parseModel(cfg Config, runtimeID, modelID string, wireM wireModel) (ModelEn
 		Lifecycle:           lifecycle,
 		ContextWindowTokens: wireM.ContextWindowTokens,
 		EffortSupport:       effort,
+		EffortVocabulary:    append([]string(nil), wireM.EffortVocabulary...),
+		RecommendedEffort:   wireM.RecommendedEffort,
 		Engine:              engine,
 		Pointer: Pointer{
 			CuratorEnginesProject: project,
