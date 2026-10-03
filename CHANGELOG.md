@@ -1,13 +1,70 @@
 # Changelog
 
+## v0.5.43 — 2026-10-04
+
+- Add the standalone `agents-management model-check` diagnostic: one bounded
+  managed-Pi/model expectation round-trip through the production
+  `vendorplugin.BuildLaunch` path, with caller-deadline process-group
+  isolation, nonzero exit on unmet expectations, and secret-safe mode-0600
+  exclusive evidence. Engine-bound runtimes are observed through the new
+  `pkg/engineobservation` adapter over `curator-engines status --json`
+  readings (observed-process/v3); failed, stale, malformed or not-observed
+  readings refuse before Pi starts. The launch gate now validates v3 adapter
+  readings under their declared contract.
+
+- Fix the flaky `model-check` deadline/descendant witnesses: the observation-adapter
+  and status-reader witnesses now share the readiness-gated descendant-kill
+  proof, so the measured window opens only after the child and its descendant
+  both started and hold the pipe, under a hard outer bound, with the
+  group-kill close distinguished from the WaitDelay close. Test-only; no
+  production behavior changes.
+
+- Bound every `internal/changelog` test child process (mutant child runs,
+  script runs, syntax checks, git reads) under a per-run deadline with
+  process-group kill and `WaitDelay`; a deadline expiry is a named `TIMEOUT`
+  failure with command, elapsed time and captured output, never a kill.
+  Process-group cleanup runs after every child return, including `WaitDelay`
+  expiry, so no descendant outlives the bound; sticky out-of-band timeout
+  attestation propagates
+  across child test boundaries, independent of diagnostic truncation; nested
+  process groups register under a tree supervisor and shared launch lock.
+  A nested timeout is refused, never credited
+  as a mutation kill. Fixture git invocations are non-interactive and
+  isolated from user, global, system and XDG configuration. Aggregate load
+  is bounded too: at most two test children run at once package-wide
+  (overridable), mutant subtests run sequentially, and each captured
+  stream is capped at 1 MiB keeping its head and tail.
+
+- Add a validated local-provider snapshot input to the Codex plugin:
+  `codex.ReadProviderSnapshot` performs one read+parse+resolve of the private
+  `config.toml` and returns the resolved provider entry with the SHA-256
+  digest of the bytes it was parsed from, or the same typed refusals as the
+  ID-only path. `LocalProviderBinding` gains an optional `Snapshot`; when
+  present, Exec and DryRun plans use the pinned entry without reading
+  `config.toml`, so a config mutated between plan and exec cannot change the
+  launch while the manifest records the old digest. The ID-only path and the
+  managed-session refusal are byte-identical to before.
+
+- Measure changelog test child elapsed time before arming its deadline, so timeout assertions include command setup and cannot undershoot the configured bound; add a deterministic setup-skew regression.
+
+- Declare preview agy-only `gemini-4-argon` and floating alias `argon`, with no effort axis and interpolated score 45 between Astra and Fable. Evidence is the operator declaration of 2026-10-02, not a public release or an `agy models` read. Keep the Flash display pick; pin the exact agy lineup and test launch identity and effort refusal.
+
+- Give changelog test Go-tool children a 10-minute default bound for cold
+  compilation, while scripts, Git and already-built test binaries retain the
+  2-minute bound; `CHANGELOG_TEST_CHILD_TIMEOUT` overrides both defaults.
+
+- Require the first public `curator-network-profiles` release, `v0.2.0`, instead
+  of the retired private `v0.1.0`; preserve the typed network carrier and exact
+  adapter admission, including direct unset-only patches and inherited origins.
+
+## Unreleased
+
 ## v0.5.42 — 2026-10-02
 
 - Declare the verified network tuple for `claude-code`: generic-env-v1,
   build 2.1.287, exec entrypoint. A managed scope bearing exactly that tuple
   is admitted; every other build, entrypoint, adapter or harness still
   refuses with `network_scope_unsupported`.
-
-## Unreleased
 
 ## v0.5.41 — 2026-10-02
 

@@ -1,1 +1,0 @@
-- Declare preview agy-only `gemini-4-argon` and floating alias `argon`, with no effort axis and interpolated score 45 between Astra and Fable. Evidence is the operator declaration of 2026-10-02, not a public release or an `agy models` read. Keep the Flash display pick; pin the exact agy lineup and test launch identity and effort refusal.
