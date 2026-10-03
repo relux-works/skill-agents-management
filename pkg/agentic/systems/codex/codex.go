@@ -37,6 +37,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/relux-works/curator-network-profiles/pkg/binding"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -117,6 +118,17 @@ func (*System) Capabilities() agentic.Capabilities {
 		HomeEnvVar:  "CODEX_HOME",
 		DefaultHome: "~/.codex",
 		AuthHint:    "Codex authentication is unavailable; run `codex login`, then relaunch via `task-board codex` and retry",
+		// The ONE verified network tuple: network-profiles verified
+		// codex-cli build 0.159.0 over codex-env-v1 in exec mode
+		// (model and startup traffic through the proxy; MCP stdio
+		// children need the set half injected into each server
+		// entry's env block, R4b). Admission is exact-tuple — any
+		// other build, entrypoint, adapter or harness still refuses
+		// network_scope_unsupported — and nothing else about this
+		// system changes by declaring it.
+		NetworkAdapters: []binding.AdapterIdentity{
+			{Adapter: "codex-env-v1", Harness: "codex-cli", Build: "0.159.0", Entrypoint: "exec"},
+		},
 	}
 }
 
@@ -149,19 +161,28 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 // then write the run context and the resolved service tier. A local-provider
 // launch also binds CODEX_HOME to the root whose provider table was validated;
 // without that pin, Codex could load a same-id entry from HOME/.codex instead.
+//
+// Under a managed network scope the result is additionally deduped so exactly
+// one `key=value` entry exists per name: the inventory and the child both
+// resolve config-selecting keys from this array, and duplicates reached the
+// child last-wins while the inventory read first (round-4 K1). Unmanaged
+// envs keep their bytes verbatim.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
 	env := childEnv(parent, req)
-	if req.LocalProvider == nil {
+	if req.LocalProvider != nil {
+		var home string
+
+		if homeValue, err := localProviderHome(req); err != nil {
+			return nil, err
+		} else {
+			home = homeValue
+		}
+		env = agentic.SetEnvValue(env, "CODEX_HOME", home)
+	}
+	if req.Network.IsZero() {
 		return env, nil
 	}
-	var home string
-
-	if homeValue, err := localProviderHome(req); err != nil {
-		return nil, err
-	} else {
-		home = homeValue
-	}
-	return agentic.SetEnvValue(env, "CODEX_HOME", home), nil
+	return dedupeManagedEnv(env), nil
 }
 
 // Stdin is codex's prompt transport: the assignment prompt is streamed on

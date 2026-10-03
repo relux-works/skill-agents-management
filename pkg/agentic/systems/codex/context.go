@@ -18,6 +18,7 @@ type configOverride struct {
 
 type contextValues struct {
 	mcpOverrides        []configOverride
+	mcpServers          []agentic.CompositionServer
 	curatorMCPArgs      []string
 	hasCuratorMCP       bool
 	systemPrompt        string
@@ -74,10 +75,11 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 			if !req.Composition.IsZero() {
 				return values, contextConflict(agentic.ContextMCPServers, "the legacy composition already supplies launch configuration")
 			}
-			if overrides, err := encodeCodexMCP(*payload.MCP); err != nil {
+			if overrides, servers, err := encodeCodexMCP(*payload.MCP); err != nil {
 				return values, err
 			} else {
 				values.mcpOverrides = overrides
+				values.mcpServers = servers
 			}
 		case payload.SystemPrompt != nil:
 			if strings.TrimSpace(payload.SystemPrompt.Text) == "" {
@@ -126,7 +128,7 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 		}
 	}
 	values.permission = effective
-	if err := rejectNativeContextConflicts(req.NativeArgs, values); err != nil {
+	if err := rejectNativeContextConflicts(req.NativeArgs, values, !req.Network.IsZero()); err != nil {
 		return values, err
 	}
 	return values, nil
@@ -189,9 +191,9 @@ func codexSystemPromptDescriptorSupported(descriptor *agentic.CuratorChannelDesc
 		descriptor.Semantics == agentic.CuratorSystemPromptReplace
 }
 
-func encodeCodexMCP(context agentic.MCPServersContext) ([]configOverride, error) {
+func encodeCodexMCP(context agentic.MCPServersContext) ([]configOverride, []agentic.CompositionServer, error) {
 	if err := agentic.ValidateMCPServers(context); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	overrides := make([]configOverride, 0, len(context.Servers)*2)
 	metadata := make([]agentic.CompositionServer, 0, len(context.Servers))
@@ -207,29 +209,29 @@ func encodeCodexMCP(context agentic.MCPServersContext) ([]configOverride, error)
 		metadata = append(metadata, agentic.CompositionServer{Name: server.Name, Transport: server.Transport, BearerTokenEnvVar: server.BearerTokenEnvVar})
 		if server.Transport == agentic.MCPTransportHTTP {
 			if err := add(server.Name, "url", server.URL); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if server.BearerTokenEnvVar != "" {
 				if err := add(server.Name, "bearer_token_env_var", server.BearerTokenEnvVar); err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 			}
 			continue
 		}
 		if err := add(server.Name, "command", server.Command); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if len(server.Args) > 0 {
 			if err := add(server.Name, "args", server.Args); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
 	composition := codexComposition(overrides, metadata)
 	if err := validateComposition(composition); err != nil {
-		return nil, invalidContext(agentic.ContextMCPServers, fmt.Sprintf("Codex MCP configuration failed its plugin grammar: %v", err))
+		return nil, nil, invalidContext(agentic.ContextMCPServers, fmt.Sprintf("Codex MCP configuration failed its plugin grammar: %v", err))
 	}
-	return overrides, nil
+	return overrides, metadata, nil
 }
 
 func codexComposition(overrides []configOverride, servers []agentic.CompositionServer) agentic.Composition {
@@ -257,17 +259,31 @@ func encodeTOMLValue(value any) (string, error) {
 	}
 }
 
-func rejectNativeContextConflicts(args []string, values contextValues) error {
+// rejectNativeContextConflicts refuses native arguments that collide with the
+// request's own channels. Under a managed network scope it additionally
+// refuses native arguments that SELECT or CONFIGURE MCP entries — a profile
+// selector or an mcp_servers.* override: the native channel is forwarded
+// verbatim by contract, so its servers cannot be inventoried or injected
+// into, and admitting the launch would start them without the managed env.
+// The managed fix is the request's own channels (Profile, MCP descriptors),
+// which the adapter covers.
+func rejectNativeContextConflicts(args []string, values contextValues, managed bool) error {
 	for _, index := range nativeargs.FlagIndexes(args) {
 		el := args[index]
 		name, _, _ := nativeargs.SplitFlagValue(el)
 		if values.hasCuratorMCP && (name == "-p" || name == "--profile" || isAttachedProfileValue(el)) {
 			return contextConflict(agentic.ContextMCPServers, "native arguments already select a Codex profile")
 		}
+		if managed && (name == "-p" || name == "--profile" || isAttachedProfileValue(el)) {
+			return fmt.Errorf("codex: codex-env-v1 cannot cover the MCP servers native argument %s would select: the native channel is forwarded verbatim: %w", formatNativeMCPSelector(nativeProfileFlag(el), ""), agentic.ErrNetworkScopeUnsupported)
+		}
 		configSelector := name == configFlagLong || name == configFlag || isAttachedConfigValue(el)
 		if configSelector {
 			key, ok := nativeConfigKeyAt(args, index)
 			if ok {
+				if managed && (key == "mcp_servers" || strings.HasPrefix(key, mcpServersKeyPrefix)) {
+					return fmt.Errorf("codex: codex-env-v1 cannot cover the MCP servers native argument %s would configure: the native channel is forwarded verbatim: %w", formatNativeMCPSelector(nativeConfigFlag(el), key), agentic.ErrNetworkScopeUnsupported)
+				}
 				if values.hasSystemPrompt && key == developerInstructionsConfigKey {
 					return contextConflict(agentic.ContextSystemPrompt, "native arguments already set developer instructions")
 				}
@@ -287,6 +303,42 @@ func rejectNativeContextConflicts(args []string, values contextValues) error {
 		}
 	}
 	return nil
+}
+
+// formatNativeMCPSelector renders one native MCP selector for a refusal:
+// the flag spelling plus, for config overrides, the config key. Values
+// never appear: an attached `-c...=VALUE`, `--config=...=VALUE` or
+// `--profile=...` token carries endpoints, credentials or the profile
+// name, and formatting the whole token discloses them verbatim
+// (round-2 H2). Every managed native refusal uses this one formatter so
+// no path can reintroduce the raw token.
+func formatNativeMCPSelector(flag, key string) string {
+	if key == "" {
+		return fmt.Sprintf("flag %q", flag)
+	}
+	return fmt.Sprintf("flag %q key %q", flag, key)
+}
+
+// nativeProfileFlag extracts the flag spelling from a profile selector
+// element without its value: `-pwork` and `--profile=work` both render
+// as their flag alone.
+func nativeProfileFlag(el string) string {
+	if isAttachedProfileValue(el) {
+		return "-p"
+	}
+	name, _, _ := nativeargs.SplitFlagValue(el)
+	return name
+}
+
+// nativeConfigFlag extracts the flag spelling from a config override
+// element without its value: `-ckey=value` renders as `-c`,
+// `--config=key=value` as `--config`.
+func nativeConfigFlag(el string) string {
+	if isAttachedConfigValue(el) {
+		return configFlag
+	}
+	name, _, _ := nativeargs.SplitFlagValue(el)
+	return name
 }
 
 func nativeConfigKeyAt(args []string, index int) (string, bool) {

@@ -85,6 +85,12 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return nil, fmt.Errorf("codex: %w: %d native argument(s) reach no verbatim suffix outside an interactive launch",
 			agentic.ErrNativeArgsNotInteractive, len(req.NativeArgs))
 	}
+	// The network admission second line: BuildPlan's gate refuses first, and
+	// a scope that reaches here admitted carries the codex-env-v1 injection
+	// below. An unadmitted scope is refused rather than launched without it.
+	if err := refuseUnadmittedNetwork(req.Network); err != nil {
+		return nil, err
+	}
 	var localProvider []string
 
 	if localProviderValue, err := localProviderArgs(req, mode); err != nil {
@@ -99,11 +105,41 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	} else {
 		context = contextValue
 	}
+	// The codex-env-v1 argv half: the set half reaches every MCP server
+	// entry's env block, in every mode that renders MCP pairs. The generic
+	// process patch is BuildPlan's application point, not this function's;
+	// the two halves compose there, as ChildEnv and Args always have.
+	//
+	// The file half — the entries codex loads from its own config — is read
+	// once here and spliced per mode below. It runs for every mode because
+	// every mode launches the same files; unmanaged launches skip it
+	// entirely and never touch the filesystem.
+	var fileServerPairs []string
+	if !req.Network.IsZero() {
+		if overrides, err := injectNetworkEnvIntoOverrides(context.mcpOverrides, context.mcpServers, req.Network.Patch); err != nil {
+			return nil, err
+		} else {
+			context.mcpOverrides = overrides
+		}
+		if pairs, err := managedFileServerEnvPairs(req, context, mode); err != nil {
+			return nil, err
+		} else {
+			fileServerPairs = pairs
+		}
+	}
 	model := strings.TrimSpace(req.Model.ID)
 	switch mode {
 	case agentic.LaunchModeExec, agentic.LaunchModeDryRun:
 		args := compositionArgvPrefix(req)
+		if !req.Network.IsZero() {
+			if injected, err := injectNetworkEnvIntoPrefix(args, req.Composition.Servers, req.Network.Patch); err != nil {
+				return nil, err
+			} else {
+				args = injected
+			}
+		}
 		args = appendContextConfigOverrides(args, context)
+		args = append(args, fileServerPairs...)
 		args = append(args, "--search", "-a", "never")
 		args = append(args, context.curatorMCPArgs...)
 		if profile := strings.TrimSpace(req.Profile); profile != "" {
@@ -125,6 +161,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		return args, nil
 	case agentic.LaunchModeManagedSession:
 		args := appendContextConfigOverrides([]string{}, context)
+		args = append(args, fileServerPairs...)
 		args = append(args, context.curatorMCPArgs...)
 		args = append(args,
 			"--model", model,
@@ -151,6 +188,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 			return nil, fmt.Errorf("codex: an interactive launch carries no service tier; %q would reach no override", tier)
 		}
 		args := appendContextConfigOverrides([]string{}, context)
+		args = append(args, fileServerPairs...)
 		args = append(args, context.curatorMCPArgs...)
 		args = append(args, "-m", model)
 		// With the tier refused above, appendReasoningAndTier contributes the

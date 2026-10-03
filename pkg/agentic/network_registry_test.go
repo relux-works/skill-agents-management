@@ -39,10 +39,12 @@ import (
 func TestBuildPlanRefusesNetworkScopeForEverySystemWithoutAVerifiedAdapter(t *testing.T) {
 	ids := agentic.Default.IDs()
 	// The closed set this revision verifies: exactly the claude-code tuple
-	// (generic-env-v1, build 2.1.287, exec), declared by the claude-code
-	// system alone. A new registration fails here until its author states
-	// the declaration beside it — the loop above already refuses it, and
-	// this is the acknowledgement that the refusal is the intent, not an
+	// (generic-env-v1, build 2.1.287, exec) and the codex tuple
+	// (codex-env-v1, build 0.159.0, exec), each declared by its own system
+	// alone. The carrier below bears neither, so the loop refuses on every
+	// system. A new registration fails here until its author states the
+	// declaration beside it — the loop above already refuses it, and this
+	// is the acknowledgement that the refusal is the intent, not an
 	// accident of an empty table.
 	want := []agentic.SystemID{
 		"antigravity", "claude-code", "codex", "gemini-cli",

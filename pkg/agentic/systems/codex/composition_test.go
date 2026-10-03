@@ -38,14 +38,28 @@ func stdioComposition() agentic.Composition {
 	}
 }
 
+// stdioCompositionWithEnv is the stdio entry plus a caller-supplied env block:
+// one member the network patch preserves, one it overwrites, one it removes.
+func stdioCompositionWithEnv() agentic.Composition {
+	c := stdioComposition()
+	c.Prefix = append(c.Prefix, "-c", `mcp_servers.local.env={KEEP="1",HTTP_PROXY="http://wrong:1",ALL_PROXY="socks5://stale:1080"}`)
+	return c
+}
+
 // TestAValidCompositionIsAdmitted is the reachability half. Without it, every
 // refusal below would be equally consistent with a validator that says no to
 // everything.
 func TestAValidCompositionIsAdmitted(t *testing.T) {
 	t.Parallel()
 	for name, c := range map[string]agentic.Composition{
-		"http with a bearer": httpComposition(),
-		"stdio with args":    stdioComposition(),
+		"http with a bearer":      httpComposition(),
+		"stdio with args":         stdioComposition(),
+		"stdio with an env block": stdioCompositionWithEnv(),
+		"stdio with an empty env block": func() agentic.Composition {
+			c := stdioComposition()
+			c.Prefix = append(c.Prefix, "-c", `mcp_servers.local.env={}`)
+			return c
+		}(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := New().ValidateComposition(c); err != nil {
@@ -119,13 +133,68 @@ func TestCompositionRefusals(t *testing.T) {
 			// caught exactly that: disabling the field check left the suite
 			// green until this case existed.
 			mutate: func(c *agentic.Composition) {
-				c.Prefix = append(c.Prefix, "-c", `mcp_servers.board.env="LEAK=1"`)
+				c.Prefix = append(c.Prefix, "-c", `mcp_servers.board.shadow="LEAK=1"`)
 			},
 		},
 		{
 			name:   "an unknown field standing IN for a required one",
 			lets:   "an http server composed with no url at all, under a key nobody reviewed",
-			mutate: func(c *agentic.Composition) { c.Prefix[1] = `mcp_servers.board.env="LEAK=1"` },
+			mutate: func(c *agentic.Composition) { c.Prefix[1] = `mcp_servers.board.shadow="LEAK=1"` },
+		},
+		{
+			name:    "an env value that is a string rather than a table",
+			lets:    "a value the harness cannot merge into the server entry, failing at launch rather than at validation",
+			compose: stdioComposition,
+			mutate: func(c *agentic.Composition) {
+				c.Prefix = append(c.Prefix, "-c", `mcp_servers.local.env="LEAK=1"`)
+			},
+		},
+		{
+			name:    "an env value holding a number rather than a string",
+			lets:    "an env member whose value is not a value",
+			compose: stdioComposition,
+			mutate: func(c *agentic.Composition) {
+				c.Prefix = append(c.Prefix, "-c", `mcp_servers.local.env={PORT=8080}`)
+			},
+		},
+		{
+			name:    "an env value holding a nested table",
+			lets:    "a structured value where the harness expects a flat string mapping",
+			compose: stdioComposition,
+			mutate: func(c *agentic.Composition) {
+				c.Prefix = append(c.Prefix, "-c", `mcp_servers.local.env={NESTED={A="1"}}`)
+			},
+		},
+		{
+			name:    "an env block with an empty member name",
+			lets:    "a member no environment can carry",
+			compose: stdioComposition,
+			mutate: func(c *agentic.Composition) {
+				c.Prefix = append(c.Prefix, "-c", `mcp_servers.local.env={"KEEP"="1",""="2"}`)
+			},
+		},
+		{
+			name:    "an env block naming one member twice",
+			lets:    "two values for one variable, where which one wins is the TOML parser's business rather than the reviewer's",
+			compose: stdioComposition,
+			mutate: func(c *agentic.Composition) {
+				c.Prefix = append(c.Prefix, "-c", `mcp_servers.local.env={"DUP"="1","DUP"="2"}`)
+			},
+		},
+		{
+			name: "an env block on an http server",
+			lets: "an env block for an entry with no child process, which codex accepts only for stdio servers",
+			mutate: func(c *agentic.Composition) {
+				c.Prefix = append(c.Prefix, "-c", `mcp_servers.board.env={KEEP="1"}`)
+			},
+		},
+		{
+			name:    "the same env block assigned twice",
+			lets:    "two blocks for one entry, where which one wins is codex's parser's business rather than the reviewer's",
+			compose: stdioCompositionWithEnv,
+			mutate: func(c *agentic.Composition) {
+				c.Prefix = append(c.Prefix, "-c", `mcp_servers.local.env={OTHER="2"}`)
+			},
 		},
 		{
 			name: "the same field assigned twice",
@@ -235,6 +304,34 @@ func TestCompositionRefusals(t *testing.T) {
 	}
 }
 
+// TestNonHTTPTransportsValidateAsCommandBacked pins the validator half of
+// the shared predicate: every transport word but the exact "http" takes the
+// stdio shape — a command pair admits it, a url pair refuses it — and the
+// injection visits exactly that same class (network_test.go's spelling
+// table pins the joint behavior through BuildPlan).
+func TestNonHTTPTransportsValidateAsCommandBacked(t *testing.T) {
+	t.Parallel()
+	for _, spelling := range []string{"", "stdio", "STDIO", "unknown"} {
+		t.Run("transport_"+spelling, func(t *testing.T) {
+			commandShaped := stdioComposition()
+			commandShaped.Servers[0].Transport = spelling
+			if err := New().ValidateComposition(commandShaped); err != nil {
+				t.Errorf("transport %q with a command pair was refused: %v", spelling, err)
+			}
+			urlShaped := httpComposition()
+			urlShaped.Servers[0].Transport = spelling
+			if err := New().ValidateComposition(urlShaped); err == nil {
+				t.Errorf("transport %q with a url pair was admitted; non-http words take the stdio shape", spelling)
+			}
+		})
+	}
+	httpWord := stdioComposition()
+	httpWord.Servers[0].Transport = "http"
+	if err := New().ValidateComposition(httpWord); err == nil {
+		t.Error("transport http with a command pair was admitted; the http word takes the http shape")
+	}
+}
+
 // TestTheGrammarIsDeclaredAndEnforcedThroughBuildPlan proves the validator is
 // reached from production rather than only from this file.
 //
@@ -301,6 +398,58 @@ func TestValidateTOMLStringArrayUsesARealParser(t *testing.T) {
 		if err := validateTOMLStringArray(value); err == nil {
 			t.Errorf("validateTOMLStringArray(%q) admitted a value that is not a TOML string array", value)
 		}
+	}
+}
+
+// TestParseTOMLStringTableUsesARealParser narrows the env check onto the same
+// reason the args check takes a dependency: the shapes a hand-rolled reader
+// would disagree with the real codex config parser about.
+func TestParseTOMLStringTableUsesARealParser(t *testing.T) {
+	t.Parallel()
+	valid := map[string]map[string]string{
+		`{A="1",B="2"}`:   {"A": "1", "B": "2"},
+		`{}`:              {},
+		`{A = "1" , }`:    {"A": "1"},
+		`{'sq'='v'}`:      {"sq": "v"},
+		`{A="a=b,c;d:e"}`: {"A": "a=b,c;d:e"},
+	}
+	for value, want := range valid {
+		got, err := parseTOMLStringTable(value)
+		if err != nil {
+			t.Errorf("parseTOMLStringTable(%q) refused a valid TOML string table: %v", value, err)
+			continue
+		}
+		if len(got) != len(want) {
+			t.Errorf("parseTOMLStringTable(%q) = %v, want %v", value, got, want)
+			continue
+		}
+		for key, wantValue := range want {
+			if got[key] != wantValue {
+				t.Errorf("parseTOMLStringTable(%q)[%q] = %q, want %q", value, key, got[key], wantValue)
+			}
+		}
+	}
+	invalid := []string{
+		`"just a string"`,
+		`[1, 2]`,
+		`not-a-table`,
+		`{A="unterminated}`,
+		`{A=1}`,
+		`{A=true}`,
+		`{A={B="c"}}`,
+		`{"DUP"="1","DUP"="2"}`,
+		`{"KEEP"="1",""="2"}`,
+		// No multi-line vector: the composition validator refuses
+		// newline-bearing values before the parser ever sees them, so which
+		// newline positions the parser tolerates is unreachable trivia.
+	}
+	for _, value := range invalid {
+		if got, err := parseTOMLStringTable(value); err == nil {
+			t.Errorf("parseTOMLStringTable(%q) admitted %v, which is not a TOML string table with named members", value, got)
+		}
+	}
+	if got, err := parseTOMLStringTable(`{}`); err != nil || got == nil {
+		t.Errorf("parseTOMLStringTable(`{}`) = %v, %v; the empty block is valid and the map is never nil", got, err)
 	}
 }
 
