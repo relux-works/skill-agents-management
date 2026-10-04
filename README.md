@@ -86,6 +86,51 @@ owner still resolves the profile. See [the network carrier
 contract](docs/architecture.md#network-carrier-d4) and [the consumer
 recipe](docs/consuming-the-module.md#passing-a-resolved-network-scope).
 
+Muse's `muse-env-v1` network adapter supports exactly **1.4.1-R4503.1** and
+**1.4.2-R4684.1**, with the Record tuple `{adapter: muse-env-v1, harness: muse,
+build: <exact build>, entrypoint: exec}`. The process owner establishes that
+build in the Record. `ToolRelease`, when supplied, must match either that full
+build or its release triple (the existing permission prober returns a triple).
+The triple is only a consistency check; it cannot certify a build revision. Exec and
+its dry-run mirror receive the generic patch after `ChildEnv`, including
+`OwnedEnv`. The owned snapshot reuses the immutable request projection; changed
+config on reuse of the identical request refuses rather than mixing snapshots. Other tuples and interactive replay refuse
+`network_scope_unsupported`.
+
+The adapter inventories settings from the exact deduplicated child env:
+`$XDG_CONFIG_HOME/muse/settings.json`, falling back to
+`$HOME/.config/muse/settings.json`. It creates a private XDG config, injects
+all managed set values into every stdio MCP env block (removing stale proxy
+family members), and wraps every settings/managed-file hook shell command as
+`env <set half> <original shell> -c <quoted command>`. HOME is preserved;
+auth and trust pass through file links, without reading auth. Shared files
+are never rewritten. Private files are sealed and verified by
+`Plan.VerifyBeforeExec`, which the process owner must call immediately before
+starting the child. Keep owner-side final patch application after overlays.
+
+The supported JSON subset is duplicate-free objects, command-backed MCP
+entries with optional string args/env, canonical HTTP entries without stdio
+fields, and Claude-compatible hook event/group/command objects. Unknown or
+ambiguous shapes, unreadable/dangling inputs, alternate MCP/hook spellings,
+unknown config siblings, project `.mcp.json`/`.muse` hook/settings sources (including ancestors),
+and plugin installations refuse typed rather than getting partial coverage.
+Managed hook files are copied and wrapped; relative paths resolve against
+the original settings directory. No Keychain automation or auth mutations
+are used; `MUSE_NO_AUTO_UPDATE=1` remains forced.
+
+**R7b gap:** shell/tool children remain unverified, owned by tb-muse. This
+adapter is cooperative routing, not network containment. The v0.2.0 contract's
+R0–R6 observations remain their historical transport bounds: R6 covers the
+model catalog fetch, not a completed model turn; R4b observed two values on
+1.4.1 only; hook wrapping is required mitigation, not an imported live pass.
+The plan tests exercise the mitigation on both builds without a live Muse turn.
+
+Targeted checks:
+`go test ./pkg/agentic/... ./pkg/vendorplugin/... ./internal/refusalscan ./tools/launchcontext-mutants -count=1`.
+Named mutants use
+`go run ./tools/launchcontext-mutants -name muse-network-mcp-injection-skipped -table-out .temp/muse-mutants.md`;
+logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`.
+
 - `System` is the plugin interface: identity, a static `Capabilities`
   declaration (launch modes, effort transport, goal/budget/service-tier
   support, composition grammar, home, auth hint), and five dispatch surfaces —

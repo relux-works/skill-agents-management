@@ -131,6 +131,7 @@ func (*System) Capabilities() agentic.Capabilities {
 			agentic.LaunchModeDryRun,
 			agentic.LaunchModeInteractive,
 		},
+		NetworkAdapters:     networkAdapters(),
 		EffortTransport:     agentic.EffortTransportArgv,
 		SupportsGoal:        false,
 		SupportsBudget:      false,
@@ -163,6 +164,9 @@ func (*System) Capabilities() agentic.Capabilities {
 // while a real launch resolved something else, and nothing compared them until
 // a parity capture did.
 func (*System) ResolveBinary(req agentic.LaunchRequest) (string, error) {
+	if !req.Network.IsZero() && hasDuplicatePath(req.Env) {
+		return "", networkRefusal("duplicate PATH before binary resolution")
+	}
 	return resolveBinary(req.Env)
 }
 
@@ -181,15 +185,11 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 // context, and forces auto-update off. See env.go for the exact names and
 // rationale.
 //
-// A non-zero Network is refused with typed network_scope_unsupported: Muse
-// has no verified harness/build/entrypoint/adapter tuple until D8 verifies
-// it, and a post-filter patch would bypass the closed allowlist above. This
-// is the second line — BuildPlan's admission gate refuses first, before any
-// plugin surface is dispatched — held for a caller holding the plugin
-// directly, the same double-refusal pattern ValidateComposition keeps below.
+// A managed scope materializes a private XDG config and deduplicates the env.
+// BuildPlan applies the generic patch afterwards, including OwnedEnv.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
 	if !req.Network.IsZero() {
-		return nil, agentic.ErrNetworkScopeUnsupported
+		return networkChildEnv(parent, req)
 	}
 	return childEnv(parent, req), nil
 }

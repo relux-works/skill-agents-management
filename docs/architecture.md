@@ -338,17 +338,19 @@ exact harness/build/entrypoint/adapter tuple. No new interface hook, and it
 never launches without the scope. This revision `claude-code` declares exactly
 its one verified tuple (generic-env-v1, build 2.1.287, exec) and `codex`
 declares exactly its one verified tuple (codex-env-v1, build 0.159.0, exec);
-every other harness refuses. `codex` additionally injects the patch's set half
+`muse` declares its two exact muse-env-v1 tuples (1.4.1-R4503.1 and
+1.4.2-R4684.1, exec); every other harness refuses. `codex` additionally injects the patch's set half
 into each command-backed MCP entry's env block — request-declared entries in
 their pair streams, file entries from the effective home and selected profile
 through per-key config overrides — through the shared
 `agentic.ApplyNetworkPatchToServerEnvs` the adapters reuse, and fails a
 managed launch closed with a typed refusal naming the server when any entry
-cannot be covered reliably. `muse` keeps its
-own `ChildEnv` refusal as the second line, and stays unsupported until D8
-verifies its tuple.
-Its closed parent allowlist is unchanged and a post-filter patch would bypass
-it. `SpawnRequest` forwards the carrier unchanged into `LaunchRequest` and the
+cannot be covered reliably. `muse` uses the same env-block merger in a
+launch-private XDG config, wraps settings and managed hooks, and links auth
+without replacing HOME. Unsupported tuples and uncovered config sources
+refuse before launch. Its parent allowlist stays unchanged; the declared
+adapter applies the scoped network patch after filtering. The README states
+the supported config subset and the retained R7b shell/tool-child gap. `SpawnRequest` forwards the carrier unchanged into `LaunchRequest` and the
 fidelity check refuses a vendor that changes it.
 
 After model selection and before vendor dispatch, `BuildLaunch` resolves the

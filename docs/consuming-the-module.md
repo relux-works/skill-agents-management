@@ -182,8 +182,11 @@ allowlist, so a harness whose `Capabilities.NetworkAdapters` does not name
 the Record's exact adapter tuple refuses any non-zero scope and never
 launches without it. `claude-code` declares exactly its verified generic-env-v1
 tuple (build 2.1.287, exec) and `codex` declares exactly its verified
-codex-env-v1 tuple (build 0.159.0, exec), so every other harness refuses;
-`muse` stays unsupported until D8 verifies it. On `codex` the set half is
+codex-env-v1 tuple (build 0.159.0, exec). `muse` declares muse-env-v1 for
+1.4.1-R4503.1 and 1.4.2-R4684.1, exec; other harnesses refuse. Muse creates a
+private XDG settings projection with per-server injection and hook wrapping,
+links auth without replacing HOME, and requires `Plan.VerifyBeforeExec`. See
+the README for the supported config subset and R7b gap. On `codex` the set half is
 additionally injected into each command-backed MCP entry's env block —
 request-declared entries, the effective home's config entries, and the
 selected profile's entries — and a managed launch whose entries cannot all

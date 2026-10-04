@@ -178,3 +178,15 @@ func TestIsRegularFileAndIsExecutableFile(t *testing.T) {
 		t.Error("a missing path was reported as a regular file")
 	}
 }
+
+func TestLookupReadsEffectiveLastValue(t *testing.T) {
+	t.Parallel()
+	for _, key := range []string{"PATH", "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "SHELL", "MUSE_NO_AUTO_UPDATE"} {
+		for _, last := range []string{"last", ""} {
+			env := []string{key + "=first", key + "_SUFFIX=near-miss", key + "=" + last, key}
+			if got, ok := LookupEffective(env, key); !ok || got != last {
+				t.Fatalf("%s lookup=(%q,%v), want effective last value %q", key, got, ok, last)
+			}
+		}
+	}
+}

@@ -35,5 +35,5 @@ var ErrNoPathInLaunchEnvironment = launchenv.ErrNoPath
 
 // resolveBinary returns the exact executable a launch will run.
 func resolveBinary(env []string) (string, error) {
-	return launchenv.LookPath(env, executableName)
+	return launchenv.LookPathEffective(env, executableName)
 }

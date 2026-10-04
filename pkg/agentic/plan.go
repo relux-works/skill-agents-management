@@ -536,9 +536,11 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	req.Model.ID = identity.Launched
 	req.Model.AliasOf = ""
 
-	binary, err := sys.ResolveBinary(req)
-	if err != nil {
+	var binary string
+	if resolved, err := sys.ResolveBinary(req); err != nil {
 		return Plan{}, fmt.Errorf("agentic: %s could not resolve its binary: %w", id, err)
+	} else {
+		binary = resolved
 	}
 	if strings.TrimSpace(binary) == "" {
 		return Plan{}, fmt.Errorf("%w: %s resolved an empty binary with no error", ErrPluginContract, id)

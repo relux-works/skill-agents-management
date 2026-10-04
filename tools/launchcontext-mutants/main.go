@@ -489,7 +489,24 @@ func markdownCell(value string) string {
 // for every plugin, so an unexecuted or surviving plugin fails closed.
 func runCandidateTests(root, sourceRoot, gitDir, gitIndex string, candidate mutant) (string, int) {
 	if candidate.validatorMemberID == "" {
-		return runGoTestMode(root, sourceRoot, gitDir, gitIndex, candidate.testPackage, candidate.runPattern, candidate.runPattern != "")
+		output, code := runGoTestMode(root, sourceRoot, gitDir, gitIndex, candidate.testPackage, candidate.runPattern, candidate.runPattern != "")
+		evidenceRoot := filepath.Join(sourceRoot, ".temp", "launch-context-mutants", "process-evidence")
+		if err := os.MkdirAll(evidenceRoot, 0700); err != nil {
+			fatal(err)
+		}
+		evidence, err := os.CreateTemp(evidenceRoot, processEvidencePrefix(candidate.name)+"-*.log")
+		if err != nil {
+			fatal(err)
+		}
+		record := fmt.Sprintf("MUTANT_PROCESS | mutant=%s | exit=%d | package=%s | pattern=%s\n", candidate.name, code, candidate.testPackage, candidate.runPattern)
+		if _, err := evidence.WriteString(record + output); err != nil {
+			fatal(err)
+		}
+		if err := evidence.Close(); err != nil {
+			fatal(err)
+		}
+		fmt.Printf("%sPROCESS_LOG | %s\n", record, evidence.Name())
+		return output, code
 	}
 	var output strings.Builder
 	exit := 0
@@ -5128,7 +5145,7 @@ func narrowingMutants() []mutant {
 			}
 		}
 	}
-	return append(append(base, gateMutants...), claudeToolPolicyMutants()...)
+	return append(append(append(base, gateMutants...), claudeToolPolicyMutants()...), museNetworkMutants()...)
 }
 
 func fatal(err error) {

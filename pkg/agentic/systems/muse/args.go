@@ -70,6 +70,12 @@ const (
 // Muse 1.4.1 documents model and reasoning-effort flags for non-echo and
 // Meta providers respectively, so echo emits neither flag.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	if err := admitNetwork(req); err != nil {
+		return nil, err
+	}
+	if !req.Network.IsZero() && mode == agentic.LaunchModeInteractive {
+		return nil, agentic.ErrNetworkScopeUnsupported
+	}
 	if mode == agentic.LaunchModeInteractive {
 		return interactiveArgs(req)
 	}

@@ -130,3 +130,27 @@ func IsExecutableFile(path string) bool {
 	mode := info.Mode()
 	return mode.IsRegular() && mode.Perm()&0o111 != 0
 }
+
+// LookupEffective returns the last value of key, matching os/exec's child
+// environment. Lookup retains its legacy first-match contract for existing
+// consumers; adapters requiring an effective child view use this reader.
+func LookupEffective(env []string, key string) (string, bool) {
+	prefix := key + "="
+	for i := len(env) - 1; i >= 0; i-- {
+		entry := env[i]
+		if strings.HasPrefix(entry, prefix) {
+			return strings.TrimPrefix(entry, prefix), true
+		}
+	}
+	return "", false
+}
+
+// LookPathEffective resolves against the effective last PATH. Projecting its
+// one resolved value lets LookPath reuse its existing executable-search rules
+// without a second deciding read of the original environment.
+func LookPathEffective(env []string, name string) (string, error) {
+	if path, present := LookupEffective(env, "PATH"); present {
+		return LookPath([]string{"PATH=" + path}, name)
+	}
+	return LookPath(nil, name)
+}
