@@ -102,7 +102,7 @@ func main() {
 		fatal(fmt.Errorf("locate worktree git index: %w", err))
 	}
 
-	candidates := narrowingMutants()
+	candidates := append(narrowingMutants(), hostedResumeMutants()...)
 	fmt.Println("ACCOUNTING | a validator member counts as killed only when each plugin fails a named BuildPlan subtest in its own go test process | managed-home homeVariable mutants additionally spot-check both plugin failures | matrix restriction check is best-effort; t.Skip and aliased plugin conditions are blind spots (TASK-260930-3txv44)")
 	generated, err := generatedCuratorConflictMutants(root)
 	if err != nil {
@@ -738,6 +738,13 @@ func generatedCuratorConflictMutants(root string) ([]mutant, error) {
 			return nil, fmt.Errorf("duplicate Curator refusal coverage row %q", key)
 		}
 		coverage[key] = catalogCoverage{testName: testName, generated: row["generated"] == "true", outOfContract: outOfContract}
+	}
+	for _, row := range refusalscan.HostedResumeCoverage() {
+		key := row.Site.Key()
+		if _, exists := coverage[key]; exists {
+			return nil, fmt.Errorf("duplicate hosted refusal row %s", key)
+		}
+		coverage[key] = catalogCoverage{testName: row.TestName}
 	}
 	for _, site := range sites {
 		if _, ok := coverage[site.Key()]; !ok {

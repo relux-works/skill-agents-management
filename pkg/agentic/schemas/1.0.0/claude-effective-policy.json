@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:relux:agents-management:claude-effective-policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "data"
+  ],
+  "properties": {
+    "schema": {
+      "const": "urn:relux:agents-management:claude-effective-policy"
+    },
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relaxations",
+        "source_paths"
+      ],
+      "properties": {
+        "relaxations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "permissions.defaultMode",
+              "permissions.allow",
+              "permissions.additionalDirectories"
+            ]
+          }
+        },
+        "source_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^/",
+            "maxLength": 4096
+          }
+        }
+      }
+    }
+  }
+}

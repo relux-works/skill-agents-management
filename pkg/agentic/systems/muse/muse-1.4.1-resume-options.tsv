@@ -1,0 +1,35 @@
+# Pinned Muse Code 1.4.1 `muse --help` root option inventory.
+# `muse resume --help` adds only --last; root options may appear on either
+# side of resume. Cardinality: exactly resume | resume --last |
+# resume <session-ref>; any second positional refuses. `-w, --worktree`
+# takes an optional value (off|create|existing) and is classified in code.
+--agents	required
+--provider	required
+--preset	required
+--model	required
+--reasoning-effort	required
+--base-url	required
+--image	required
+--workspace	required
+--worktree-base	required
+--worktree-existing	required
+--approval-mode	required
+--permission-profile	required
+--approval-judge	required
+--echo-delay-ms	required
+--sandbox-network	required
+--help	none
+-h	none
+--version	none
+-V	none
+--parallel-tool-calls	none
+--no-parallel-tool-calls	none
+--subagent-worktree-isolation	none
+--no-session-log	none
+--yolo	none
+--trust-workspace	none
+--disable-approval	none
+--disable-sandbox	none
+--disable-write	none
+--disable-shell	none
+--enable-shell-tool	none

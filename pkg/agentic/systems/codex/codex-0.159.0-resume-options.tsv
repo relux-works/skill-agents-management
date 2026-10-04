@@ -1,0 +1,46 @@
+# Pinned codex-cli 0.159.0 `codex resume --help` option inventory.
+# Usage: codex resume [OPTIONS] [SESSION_ID] [PROMPT]
+# Cardinality: at most one SESSION_ID positional and at most one PROMPT
+# positional, in order; --last occupies no positional slot. A further
+# positional refuses (native: "unexpected argument"). `--` ends option
+# parsing only: the first positional after it still binds SESSION_ID and
+# the next binds PROMPT.
+# This resume-subcommand table applies after the resume command; the root
+# grammar in policy.go applies before it. Root-only spellings
+# (--remote-auth-token, --not-so-yolo, --yolo) are absent here on purpose.
+-c	required
+--config	required
+--enable	required
+--disable	required
+--remote	required
+--remote-auth-token-env	required
+-i	required
+--image	required
+-m	required
+--model	required
+--local-provider	required
+-p	required
+--profile	required
+-s	required
+--sandbox	required
+-C	required
+--cd	required
+--add-dir	required
+-a	required
+--ask-for-approval	required
+--last	none
+--all	none
+--include-non-interactive	none
+--strict-config	none
+--oss	none
+--approve-for-me	none
+--dangerously-bypass-approvals-and-sandbox	none
+--dangerously-bypass-hook-trust	none
+--worktree	none
+--search	none
+--no-alt-screen	none
+--no-daemon	none
+-h	none
+--help	none
+-V	none
+--version	none

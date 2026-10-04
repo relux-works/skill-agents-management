@@ -1632,3 +1632,65 @@ See [the readings contract](docs/observed-process-contract.md) for keys and rang
   `.temp/codex-provider-mutants/` copy. One child at a time (maximum two allowed),
   90-second child deadline, 256 KiB captured-output cap; a kill requires a named
   failing behavioral test. Survivors and truncated logs are reported honestly.
+
+### Hosted resume and Claude restart contract (1.0.0)
+
+Hosted consumers call `agentic.ElevateResumeIntent(registry, system, wrapperArgs,
+nativeArgs)` before building a plan. Claude, Codex, and Muse implement
+`agentic.ResumeSelectorElevator`; the plugin owns option arity. `wrapperArgs`
+contains only `resume`, `resume SES-HANDLE`, or `--resume ID`; the native suffix
+is separate. The detached result has typed `new`, `latest`, `handle`,
+`claude_uuid`, `codex_thread`, or `muse_session` intent and the remaining native
+tokens in their original byte order. New/latest carry a null identity. UUIDs
+use the UUID lexical shape, handles use `SES-` plus an ASCII identifier, and
+Muse IDs use an ASCII alphanumeric/hyphen/underscore identifier up to 128
+characters. Existence, location, recency, and handle lookup belong to consumers.
+
+Claude elevates `--resume UUID`, `-r UUID`, attached forms, and continue;
+Codex elevates `resume THREAD`, `--resume THREAD`, and `resume --last`; Muse
+elevates `resume ID` and `resume --last`. Options that own values keep them,
+even when a value looks like a selector. `--` ends option parsing only: the
+first positional after it still binds the session identity (Codex
+`[SESSION_ID]`, then one `[PROMPT]`; Muse `<session-ref>`), and selectors
+after it stay literal prompt text. Codex binds at most `[SESSION_ID]
+[PROMPT]` in order; Muse's native grammar admits `resume`, `resume --last`, or
+`resume <session-ref>`; bare `resume` is a picker and refuses hosted elevation.
+Claude selectors are flag-only. Repeated selectors,
+wrapper/native conflicts, picker selection, malformed identity, surplus
+positionals, ambiguous combined Claude short selectors, options outside
+the pinned inventory, and attached values on boolean options refuse
+`session_resume_invalid`. Attached long names are checked before the first
+`=`; value-taking options retain the complete token and tokens after `--`
+remain data. Claude reuses its pinned 2.1.288 Commander table; Codex applies
+its root scalar/boolean
+grammar before the resume command and the pinned 0.159.0 resume-subcommand
+inventory after it; Muse carries the 1.4.1 root help grammar as embedded
+parsing data. Native-mode `BuildPlan` semantics remain unchanged; elevation
+does not enable hosting for providers beyond Phase 1.
+
+After composition, `claude.System.ExportRestartTemplate(finalArgv)` snapshots
+selector-free argv (excluding argv[0]) under
+`urn:relux:agents-management:claude-restart`, version `1.0.0`. Its
+`data.identity_slot` declares `--resume` at index zero. Consumers call
+`ValidateRestartTransformation(template, argv, selectedUUID)` before restart:
+a nil identity requires exact argv equality; a selected UUID permits exactly
+that flag/UUID pair at the declared index and no other edit. The validator
+also refuses out-of-range slots, unsupported versions, selectors left in the
+template, and insertion positions hidden inside option values or after `--`.
+It neither recomposes nor starts a process. Binary/MCP/prompt checks and late
+artifact verification remain the consumer's responsibility.
+
+`agentic.PinnedHostedSchema(id, version)` returns detached local Draft 2020-12
+schemas for `exec-guard`, `claude-restart`, and `claude-effective-policy` under
+`urn:relux:agents-management:`. Files live in `pkg/agentic/schemas/1.0.0/`;
+all objects are closed and there are no network references. Frozen-byte tests
+hold 1.0.0 unchanged; a changed closed shape requires a new version. These are
+schema artifacts for consumer ingress validation, not a JSON decoder that
+accepts unknown fields. The exec-guard schema admits only Phase 1 `unsealed`;
+sealed transport APIs are a separate contract.
+
+| Tool | Purpose | Command | Evidence |
+| --- | --- | --- | --- |
+| Go hosted contract tests | selector, restart, schema, exec-free and refusal properties | `go test ./pkg/agentic -run 'TestResume\|TestClaudeRestart\|TestPinnedHosted\|TestAgenticProduction\|TestCuratorPluginRefusalSites' -count=1` | terminal output; `.temp/` task logs |
+| Hosted mutant harness | execute a named narrowing witness against public API tests | `go run ./tools/launchcontext-mutants --name second-insertion-admitted --table-out .temp/hosted-mutants/second-insertion.md` | `.temp/hosted-mutants/` and `.temp/launch-context-mutants/process-evidence/` |
+| Go validation | validate the Change Request candidate | `make vet`; `make test`; `make regress` | terminal output; `.temp/` task logs |

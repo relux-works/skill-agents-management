@@ -22,6 +22,7 @@ type curatorRefusalCoverageRow struct {
 	testName      string
 	generated     bool
 	outOfContract string
+	entryPoint    string
 }
 
 // This catalog is intentionally keyed to the production guard expression. The
@@ -571,7 +572,7 @@ func TestCuratorPluginRefusalSitesHaveNamedBuildPlanCoverage(t *testing.T) {
 		t.Fatalf("derive refusal sites from the full agentic source tree: %v", err)
 	}
 	coverage := make(map[string]curatorRefusalCoverageRow, len(curatorRefusalCoverageTable))
-	for _, row := range curatorRefusalCoverageTable {
+	for _, row := range append(curatorRefusalCoverageTable, hostedResumeCoverageRows()...) {
 		site, ok := resolveCuratorRefusalMapping(row, sites)
 		if !ok {
 			t.Errorf("refusal coverage row does not resolve to exactly one return site in the full source enumeration: %s :: %s :: %s :: %s", row.file, row.function, row.guard, row.returned)
@@ -595,6 +596,12 @@ func TestCuratorPluginRefusalSitesHaveNamedBuildPlanCoverage(t *testing.T) {
 		if !ok || row.outOfContract != "" {
 			continue
 		}
+		if row.entryPoint != "" {
+			if !testReachesHostedEntryPoint(row.testName, row.entryPoint, functions) {
+				t.Errorf("mapped test %s does not reach %s", row.testName, row.entryPoint)
+			}
+			continue
+		}
 		if !testReachesBuildPlan(row.testName, functions, map[string]bool{}) {
 			t.Errorf("mapped test %s for %s does not reach agentic.BuildPlan", row.testName, key)
 		}
@@ -605,11 +612,17 @@ func TestCuratorPluginRefusalSitesHaveNamedBuildPlanCoverage(t *testing.T) {
 		}
 	}
 	namedBuildPlanSites := 0
+	namedHostedSites := 0
 	for _, row := range coverage {
+		if row.entryPoint != "" {
+			namedHostedSites++
+			continue
+		}
 		if row.testName != "" {
 			namedBuildPlanSites++
 		}
 	}
+	t.Logf("hosted API refusal-site coverage: %d of %d sites have named public-entry tests", namedHostedSites, len(refusalscan.HostedResumeCoverage()))
 	t.Logf("refusal-site coverage: %d of %d sites have named BuildPlan tests; every sentinel and fixed-point helper is resolved by go/types object identity; scoped consumption and error-protocol methods are allowed; local forwarding, bare named-result forwarding, storage and non-regular files refuse", namedBuildPlanSites, len(sites))
 
 	membersBySite := make(map[string]int)

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:relux:agents-management:claude-restart",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "data"
+  ],
+  "properties": {
+    "schema": {
+      "const": "urn:relux:agents-management:claude-restart"
+    },
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "argv",
+        "identity_slot"
+      ],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "identity_slot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "index",
+            "flag"
+          ],
+          "properties": {
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "flag": {
+              "const": "--resume"
+            }
+          }
+        }
+      }
+    }
+  }
+}
