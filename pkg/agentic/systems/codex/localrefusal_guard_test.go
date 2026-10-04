@@ -115,6 +115,11 @@ var localRefusalCoverageTable = []localRefusalCoverageRow{
 	{file: "pkg/agentic/systems/codex/catalog.go", function: "checkLocalEffortVocabulary", guard: "if !slices.Contains(native, word)", returned: "return localCatalogRefusal(agentic.LocalProviderUnsupported, catalogPath, providerID)", occurrence: 0, testName: "TestLocalDeclaredVocabularyMustFitNativeCatalog"},
 	{file: "pkg/agentic/systems/codex/provider.go", function: "localProviderArgs", guard: "if err != nil", returned: "return nil, err", occurrence: 7, testName: "TestLocalEffortOutOfVocabularyRefuses"},
 	{file: "pkg/agentic/systems/codex/provider.go", function: "localProviderArgs", guard: "if err != nil", returned: "return nil, err", occurrence: 8, testName: "TestIDPlanBindsBytesAndRefusesArtifactTamperBeforeExec"},
+	{file: "pkg/agentic/systems/codex/seal.go", function: "catalogExecSeal.VerifySealedArtifacts", guard: "unconditional", returned: "return verifyLaunchCatalog(seal.path, seal.digest, seal.providerID)", occurrence: 0, testName: "TestFinalizeSealedPlanPreservesOriginalDigest"},
+	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if len(data.Artifacts) != 1 || data.Artifacts[0].Name != sealedCatalogName", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestImportSealedDataRefusesMalformedArtifacts"},
+	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if !filepath.IsAbs(artifact.Path)", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestImportSealedDataRefusesMalformedArtifacts"},
+	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if !ok", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestImportSealedDataRefusesMalformedArtifacts"},
+	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestImportSealRefusesSwappedCatalog"},
 }
 
 type localRefusalSite struct {

@@ -368,6 +368,71 @@ instead. See below.
 The contract is also proven by one test double registered through the public
 API, so the interface stays exercisable without any plugin compiled in.
 
+#### Exec-guard seals: export, import, finalization
+
+`Plan.ExportSeal()` returns `{schema, schema_version, data}` under
+`urn:relux:agents-management:exec-guard 1.0.0`. `DecodeSeal(bytes)` is the
+byte ingress with typed refusals, including truncated JSON. `json.Unmarshal`
+also applies the module's strict lexical/structural checks to a `Seal`, but
+Go may return its own syntax error before calling the module for malformed
+JSON. `ImportSeal(system, seal)` rebuilds the verifier. Call
+`VerifyBeforeExec` immediately before starting the process; production
+`pkg/agentic` owns no exec.
+
+- Claude's base guard is exactly `{"kind":"unsealed"}` and imports only for
+  a plugin with no sealer and an explicit opt-in. Muse refuses; Codex cannot
+  downgrade. Only that unchanged closed marker is hosted-admissible.
+- Sealed/local-provider guards preserve the original artifact digests,
+  binary and ordered argv; import checks the artifact on disk without
+  resealing it. They are local-only until closed hosted schemas land.
+- `FinalizePlan(base, overlays, bindings)` first refuses a base binary or argv
+  that cannot survive guard JSON, then checks the BuildPlan process snapshot,
+  rejecting a prechanged binary, argv or env. It validates fragment env,
+  prompt env, native tail and typed bindings in that order. Binding kinds
+  remain unsupported. It binds the exact final binary, ordered argv and full
+  ordered environment, including entries outside the overlays. It preserves
+  artifact digests without reading/resealing disk during finalization;
+  artifact drift still refuses at verification/import.
+- Finalized sealed and Claude verifiers use the same process binding list at
+  export/import. A finalized Claude guard uses kind `unsealed-bound` and carries
+  a local-only `binding`; `HostedAdmissible()` is false. This projection does
+  not extend the frozen hosted marker schema. No hosted consumer is changed
+  by this leaf.
+- Environment values never enter guards. Names and HMAC-SHA256 commitments
+  use the contract's `relux.hosted.literal.v1` domain. The key stays outside
+  guards, records and logs. The default `SealCommitmentKey` is random and
+  process-local. Cross-process consumers supply the same nonzero key through
+  the optional key argument to both `FinalizePlan` and `ImportSeal`, over
+  their private ephemeral channel. Missing/wrong keys refuse typed; import
+  never adopts the incoming process as a replacement binding.
+- BuildPlan, FinalizePlan, ExportSeal, DecodeSeal and typed ImportSeal share
+  one lossless JSON string predicate. Typed import checks every original
+  string (including envelope, artifacts, selectors and both binding forms)
+  before its first marshal; invalid UTF-8 refuses as ErrSealMalformed rather
+  than accepting a repaired projection. Valid Unicode retains its bytes.
+- Decode refuses duplicate members (including null shadows), unknown members
+  at every object, explicit null members and kind-crossing projections,
+  invalid UTF-8/lone surrogates, depth above 16, wire above
+  1 MiB and versioned data above 64 KiB. Import applies bounds to typed
+  envelopes too. Export/import deep-copy every slice and map. Required
+  collections export as `[]`/`{}` even when empty, never null, so an
+  untouched empty environment round-trips; null for a required member still
+  refuses.
+- Guard JSON cannot carry invalid UTF-8, so the producer refuses it typed
+  before acceptance: `BuildPlan` for binary, argv and child env,
+  `FinalizePlan` for base binary/argv and every overlay layer, `ExportSeal`
+  for sealed payloads including artifact paths. Valid Unicode round-trips
+  exactly. WorkDir, Home and stdin bytes carry no seal binding and stay
+  outside this gate.
+
+Integrity digests are **transient integrity, not authentication**. Anyone
+who can rewrite a guard can recompute its public SHA256 and rebind ordinary
+binary/argv metadata. Tests explicitly pin this acceptance bound; they do
+not claim forgery prevention. The trust boundary is **private stdin plus the
+authenticated socket**. Consumers own transport authorization, credential-free
+argv/path policy and hosted schema admission. Never persist raw guards,
+commitment keys or full secret-dependent digests.
+
 ### The codex plugin: `pkg/agentic/systems/codex`
 
 The Codex CLI, ported from `skill-project-management`'s spawn adapter and

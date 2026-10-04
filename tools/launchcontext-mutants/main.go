@@ -5152,7 +5152,55 @@ func narrowingMutants() []mutant {
 			}
 		}
 	}
+	base = append(base, sealMutants()...)
 	return append(append(append(base, gateMutants...), claudeToolPolicyMutants()...), museNetworkMutants()...)
+}
+
+// sealMutants narrows the exec-guard seal import and finalization gates
+// (TASK-261004-s9mfhu). Each member weakens one gate to admit exactly one
+// member of the class it must reject while leaving the gate in place.
+func sealMutants() []mutant {
+	return []mutant{
+		{
+			name: "seal-import-skips-catalog-digest", gate: "Exec-guard seal import", member: "import-time catalog verification",
+			narrows: "admits exactly the catalog artifact unverified at import; other artifacts still verify", file: "pkg/agentic/systems/codex/seal.go",
+			replacements: []replacement{{before: `if err := verifyLaunchCatalog(artifact.Path, digest, ""); err != nil {`, after: `if err := verifyLaunchCatalog(artifact.Path, digest, ""); err != nil && artifact.Name != sealedCatalogName {`}},
+			testPackage:  "./pkg/agentic/systems/codex", testName: "TestImportSealRefusesSwappedCatalog", runPattern: "^TestImportSealRefusesSwappedCatalog$", failureText: "swapped catalog admitted at import",
+		},
+		{
+			name: "seal-finalize-admits-extra-argv", gate: "Finalized process binding", member: "exact final argv",
+			narrows: "admits exactly one extra trailing argv element; removals, swaps and shorter argv still refuse", file: "pkg/agentic/finalize.go",
+			replacements: []replacement{{before: `if !slices.Equal(plan.Argv, b.argv) {`, after: `if !slices.Equal(plan.Argv, b.argv) && !(len(plan.Argv) == len(b.argv)+1 && slices.Equal(plan.Argv[:len(b.argv)], b.argv)) {`}},
+			testPackage:  "./pkg/agentic", testName: "TestFinalizedPlanBindsExactFinalArgv", runPattern: "^TestFinalizedPlanBindsExactFinalArgv$", failureText: "appended argv element admitted",
+		},
+		{
+			name: "seal-muse-accepts-unsealed", gate: "Unsealed guard admission", member: "sealer no-downgrade",
+			narrows: "admits exactly Muse past the sealer gate it actually reaches; the opt-in gate still refuses, so the refusal reason changes; other sealed systems still refuse at the sealer gate", file: "pkg/agentic/seal.go",
+			replacements: []replacement{{before: `if _, sealed := sys.(ExecPlanSealer); sealed {`, after: `if _, sealed := sys.(ExecPlanSealer); sealed && sys.ID() != "muse" {`}},
+			testPackage:  "./pkg/agentic", testName: "TestImportSealAdmitsUnsealedForClaudeOnly", runPattern: "^TestImportSealAdmitsUnsealedForClaudeOnly$", failureText: "muse sealer refusal lost",
+		},
+		{name: "seal-finalize-skips-base-verification", gate: "Exec guard rework", member: "seal-finalize-skips-base-verification", narrows: "allows exactly the appended OUTSIDE=changed env entry; binary and ordered argv checks remain", file: "pkg/agentic/seal_binding.go", replacements: []replacement{{file: "pkg/agentic/seal_binding.go", before: "if p.Binary != s.binary || !slices.Equal(p.Argv, s.argv) || !slices.Equal(p.Env, s.env) {", after: "if p.Binary != s.binary || !slices.Equal(p.Argv, s.argv) || (!slices.Equal(p.Env, s.env) && !(len(p.Env) == len(s.env)+1 && slices.Equal(p.Env[:len(s.env)], s.env) && p.Env[len(s.env)] == \"OUTSIDE=changed\")) {"}}, testPackage: "./pkg/agentic", testName: "TestFinalizeRejectsPrechangedBase", runPattern: "^TestFinalizeRejectsPrechangedBase$", failureText: "prechanged env admitted"},
+		{name: "seal-import-drops-one-binding", gate: "Exec guard rework", member: "seal-import-drops-one-binding", narrows: "drops only imported binary equality; argv and complete ordered env still bind", file: "pkg/agentic/seal_binding.go", replacements: []replacement{{file: "pkg/agentic/seal_binding.go", before: "return finalizedBindings{binary: p.Binary, argv:", after: "return finalizedBindings{binary: \"\", argv:"}, {file: "pkg/agentic/finalize.go", before: "if plan.Binary != b.binary {", after: "if plan.Binary != b.binary && b.binary != \"\" {"}}, testPackage: "./pkg/agentic", testName: "TestImportedBindingsExactParity", runPattern: "^TestImportedBindingsExactParity$", failureText: "binding binary lost"},
+		{name: "seal-strict-decoder-unknown-member", gate: "Exec guard rework", member: "seal-strict-decoder-unknown-member", narrows: "admits only extra unknown members; duplicate and other unknown members still refuse", file: "pkg/agentic/seal_wire.go", replacements: []replacement{{file: "pkg/agentic/seal_wire.go", before: "if seen[key] || !known {", after: "if seen[key] || (!known && key != \"extra\") {"}, {file: "pkg/agentic/seal_wire.go", before: "seen[key] = true", after: "if key == \"extra\" { child = \"any\" }; seen[key] = true"}}, testPackage: "./pkg/agentic", testName: "TestStrictSealWireRefusals", runPattern: "^TestStrictSealWireRefusals$", failureText: "invalid wire unknown-member admitted"},
+		{name: "seal-selector-carries-value", gate: "Exec guard rework", member: "seal-selector-carries-value", narrows: "exports only PROMPT_SECRET value; other selectors retain keyed commitments", file: "pkg/agentic/seal_binding.go", replacements: []replacement{{file: "pkg/agentic/seal_binding.go", before: "mac := hmac.New(sha256.New, key[:])", after: "if name == \"PROMPT_SECRET\" { return value }; mac := hmac.New(sha256.New, key[:])"}}, testPackage: "./pkg/agentic", testName: "TestGuardNeverExportsCredentialValues", runPattern: "^TestGuardNeverExportsCredentialValues$", failureText: "guard carries credential value"},
+		{name: "seal-export-returns-alias", gate: "Exec guard rework", member: "seal-export-returns-alias", narrows: "aliases only the singleton catalog artifact collection; other collections still copy", file: "pkg/agentic/seal_binding.go", replacements: []replacement{{file: "pkg/agentic/seal_binding.go", before: "data.Artifacts = slices.Clone(data.Artifacts)", after: "if len(data.Artifacts) != 1 || data.Artifacts[0].Name != \"catalog.json\" { data.Artifacts = slices.Clone(data.Artifacts) }"}}, testPackage: "./pkg/agentic/systems/codex", testName: "TestSealedExportCollectionsNeverAlias", runPattern: "^TestSealedExportCollectionsNeverAlias$", failureText: "sealed export collection aliases retained verifier"},
+		{name: "seal-exec-boundary-allows-blank", gate: "Exec-free boundary", member: "blank import", narrows: "admits exactly a blank os/exec import while aliased and dot imports still refuse; the import-path token stays", file: "pkg/agentic/exec_boundary_test.go", replacements: []replacement{{before: "if strings.Trim(spec.Path.Value, `\"`) == importPath {", after: "if strings.Trim(spec.Path.Value, `\"`) == importPath && (spec.Name == nil || spec.Name.Name != \"_\") {"}}, testPackage: "./pkg/agentic", testName: "TestExecBoundaryDetectsAliasedImports", runPattern: "^(TestExecBoundaryDetectsAliasedImports|TestImportedBindingsExactParity)$", failureText: "want the three planted imports"},
+		{name: "seal-unsealed-admits-binding-member", gate: "Kind-specific seal wire", member: "unsealed binding", narrows: "admits only a non-null binding on unsealed; sealed member, nulls and other kind crossings still refuse", file: "pkg/agentic/seal_wire.go", replacements: []replacement{{before: `return !seen["sealed"] && !seen["binding"]`, after: `return !seen["sealed"]`}}, testPackage: "./pkg/agentic", testName: "TestSealWireUnsealedKindClosure", runPattern: "^TestSealWireUnsealedKindClosure$", failureText: "kind-crossing binding-object admitted"},
+
+		{name: "seal-hosted-admits-unknown-version", gate: "Hosted guard admission", member: "unknown guard version", narrows: "admits only version 2.0.0 as well as the closed supported marker", file: "pkg/agentic/seal.go", replacements: []replacement{{before: "s.SchemaVersion == ExecGuardVersion && s.Data.Kind", after: "(s.SchemaVersion == ExecGuardVersion || s.SchemaVersion == \"2.0.0\") && s.Data.Kind"}}, testPackage: "./pkg/agentic", testName: "TestHostedAdmissionClosedMarker", runPattern: "^TestHostedAdmissionClosedMarker$", failureText: "non-closed version marker hosted-admissible"},
+		{name: "seal-export-admits-invalid-utf8-binding", gate: "Export guard representability", member: "unsealed-bound binary", narrows: "exports only synthetic bad-0xff binary from a finalized unsealed guard; all other invalid positions still refuse", file: "pkg/agentic/seal.go", replacements: []replacement{{before: `}
+	if !sealRepresentable(seal) {`, after: `}
+	copy := seal
+	if seal.Data.Kind == SealKindUnsealedBound && seal.Data.Binding != nil && seal.Data.Binding.Binary == "bad-\xff" { copy.Data.Binding = cloneProcessBinding(seal.Data.Binding); copy.Data.Binding.Binary = "binary" }
+	if !sealRepresentable(copy) {`}}, testPackage: "./pkg/agentic", testName: "TestExportSealRefusesUnrepresentableEnvelope", runPattern: "^TestExportSealRefusesUnrepresentableEnvelope$", failureText: "invalid finalized export admitted"},
+		{name: "seal-typed-import-admits-invalid-utf8", gate: "Typed guard representability", member: "unsealed-bound binary", narrows: "admits only the synthetic bad-0xff binary in an otherwise representable unsealed-bound guard; all other invalid positions still refuse", file: "pkg/agentic/seal.go", replacements: []replacement{{before: `// projection must never validate a different binding than we retain.
+	if !sealRepresentable(seal) {`, after: `// projection must never validate a different binding than we retain.
+	copy := seal
+	if seal.Data.Kind == SealKindUnsealedBound && seal.Data.Binding != nil && seal.Data.Binding.Binary == "bad-\xff" { copy.Data.Binding = cloneProcessBinding(seal.Data.Binding); copy.Data.Binding.Binary = "binary" }
+	if !sealRepresentable(copy) {`}}, testPackage: "./pkg/agentic", testName: "TestTypedImportRefusesUnrepresentableStrings", runPattern: "^TestTypedImportRefusesUnrepresentableStrings$", failureText: "typed import invalid UTF-8 binding-binary admitted"},
+		{name: "seal-export-collapses-empty-selectors", gate: "Exec guard rework", member: "seal-export-collapses-empty-selectors", narrows: "collapses only empty selector maps to nil, restoring null export; absent maps stay nil and nonempty maps still copy", file: "pkg/agentic/seal.go", replacements: []replacement{{file: "pkg/agentic/seal.go", before: "if selectors == nil {", after: "if len(selectors) == 0 {"}}, testPackage: "./pkg/agentic", testName: "TestFinalizedEmptyEnvRoundTrips", runPattern: "^TestFinalizedEmptyEnvRoundTrips$", failureText: "empty selectors collapsed"},
+		{name: "seal-finalize-admits-invalid-utf8-tail", gate: "Exec guard rework", member: "seal-finalize-admits-invalid-utf8-tail", narrows: "admits only the 0xff witness tail token; NUL and every other unrepresentable string still refuse", file: "pkg/agentic/finalize.go", replacements: []replacement{{file: "pkg/agentic/finalize.go", before: `if !guardStringsRepresentable(token) {`, after: `if !guardStringsRepresentable(token) && token != "\xff" {`}}, testPackage: "./pkg/agentic", testName: "TestFinalizePlanRefusesUnrepresentableStrings", runPattern: "^TestFinalizePlanRefusesUnrepresentableStrings$", failureText: "invalid UTF-8 tail admitted"},
+	}
 }
 
 func fatal(err error) {

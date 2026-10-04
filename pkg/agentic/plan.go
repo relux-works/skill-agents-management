@@ -54,6 +54,7 @@ type Plan struct {
 
 	networkProvenance *binding.Record
 	execVerifier      ExecPlanVerifier
+	baseProcess       *processSnapshot
 
 	// Nodes is empty for the source-compatible single-process plan. A
 	// consumer that needs an inference engine or sidecar calls
@@ -598,6 +599,25 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		return Plan{}, fmt.Errorf("%w: %s attached %d stdin bytes to an interactive launch under effort transport %s", ErrPluginContract, id, len(stdin.Bytes), caps.EffortTransport)
 	}
 
+	// Guard JSON cannot carry invalid UTF-8: encoding/json repairs it on
+	// marshal, so an accepted plan would export a different process than it
+	// bound. The producer refuses such strings typed instead of emitting a
+	// guard that cannot round-trip. WorkDir, Home and stdin bytes carry no
+	// seal binding and stay outside this gate.
+	if !guardStringsRepresentable(binary) {
+		return Plan{}, fmt.Errorf("%w: %s resolved a binary that cannot survive guard JSON", ErrPluginContract, id)
+	}
+	for _, token := range argv {
+		if !guardStringsRepresentable(token) {
+			return Plan{}, fmt.Errorf("%w: %s built argv carrying a string that cannot survive guard JSON", ErrPluginContract, id)
+		}
+	}
+	for _, entry := range env {
+		if !guardStringsRepresentable(entry) {
+			return Plan{}, fmt.Errorf("%w: %s built a child environment carrying a string that cannot survive guard JSON", ErrPluginContract, id)
+		}
+	}
+
 	if owned != nil {
 		if !req.Network.IsZero() {
 			// The set half is owned: the same patch that rewrote env rewrites
@@ -637,6 +657,15 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		} else {
 			plan.execVerifier = verifier
 		}
+	} else if _, unsealed := sys.(UnsealedExecGuard); unsealed {
+		// An unsealed plan carries an explicit no-op verifier rather than
+		// a nil one: unsealed is the plugin's positive declaration, while
+		// nil means no plugin bound anything at all. VerifyBeforeExec
+		// behaves identically either way; ExportSeal tells them apart.
+		plan.execVerifier = unsealedVerifier{}
+	}
+	if plan.execVerifier != nil {
+		plan.baseProcess = snapshotProcess(plan)
 	}
 	return plan, nil
 }
