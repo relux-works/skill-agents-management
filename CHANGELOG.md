@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.5.47 — 2026-10-04
+
+- Add exec-free typed resume selector elevation for Claude, Codex, Muse, and
+  wrapper selectors, with provider-owned option arity and fail-closed identity
+  and conflict validation. Codex classifies resume-subcommand options under the
+  pinned 0.159.0 inventory, `--` ends option parsing without ending positional
+  binding, and surplus positionals refuse under each plugin's pinned
+  cardinality. Attached unknown names and values on boolean options refuse;
+  attached values on value-taking options and post-separator data retain bytes.
+- Export Claude's closed 1.0.0 restart template and validate exact new-process
+  equality or one declared flag-plus-UUID insertion without recomposition.
+- Publish frozen local Draft 2020-12 exec-guard, claude-restart, and
+  claude-effective-policy schemas, with refusal census and named narrowing
+  mutants for the hosted launch contract.
+
+## Unreleased
+
 ## v0.5.46 — 2026-10-04
 
 - Support muse-env-v1 for exactly Muse 1.4.1-R4503.1 and 1.4.2-R4684.1 exec:
@@ -8,8 +25,6 @@
   HOME, link auth only, and refuse unsupported tuples or uncovered config shapes.
   Retain the documented R7b shell/tool-child gap. Add production-plan regressions,
   refusal mappings, and named narrowing mutants.
-
-## Unreleased
 
 ## v0.5.45 — 2026-10-04
 
