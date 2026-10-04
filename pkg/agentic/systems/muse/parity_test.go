@@ -319,7 +319,7 @@ func TestInteractivePlansMatchThePinnedTUIParityCases(t *testing.T) {
 	for _, c := range interactiveParityCases {
 		t.Run(c.name, func(t *testing.T) {
 			dirs := paritycase.Make(t, 1, true)
-			paritycase.WriteStubExecutable(t, dirs.Stub, executableName)
+			writeMuseStubExecutable(t, dirs.Stub)
 			req := agentic.LaunchRequest{
 				System:  New().ID(),
 				Model:   agentic.Model{ID: parityModel, Effort: agentic.EffortSupportRequired},

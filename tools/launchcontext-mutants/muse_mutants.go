@@ -2,6 +2,79 @@ package main
 
 // Behavioral mutants preserve the admission/injection/wrapping tokens. Every
 // member narrows coverage to admit one unsupported shape, never deletes a gate.
+//
+// The interactive seal mutants below narrow the Muse exec-plan sealer
+// (TASK-261004-2hdguc): each weakens one sealed-class check to admit
+// exactly one member of the class it must reject while leaving the gate
+// in place. The revision-2 mutants additionally pin the establishment,
+// build-identity, finalized-import, finalized-release and guard-hygiene
+// classes. The resume mutant drops the pinned 1.4.2 capture row.
+func museSealMutants() []mutant {
+	member := func(name, file, before, after, test, pattern, failure, bound string) mutant {
+		return mutant{name: "muse-seal-" + name, file: "pkg/agentic/systems/muse/" + file, replacements: []replacement{{before: before, after: after}}, testPackage: "./pkg/agentic/systems/muse", testName: test, runPattern: pattern, failureText: failure, narrows: bound}
+	}
+	return []mutant{
+		member("binary-hash-skipped", "seal.go", `	if err := verifyMuseUpdaterPin(plan.Env); err != nil {
+		return err // base verifier: pin before hash and probe
+	}
+	var digest string
+	if hashed, err := hashInteractiveSealBinary(plan.Binary); err != nil {
+		return fmt.Errorf("%w: sealed binary cannot be re-read: %v", ErrMuseSealBinaryChanged, err)
+	} else {
+		digest = hashed
+	}
+	if digest != seal.digest {`, `	if err := verifyMuseUpdaterPin(plan.Env); err != nil {
+		return err // base verifier: pin before hash and probe
+	}
+	var digest string
+	if hashed, err := hashInteractiveSealBinary(plan.Binary); err != nil {
+		return fmt.Errorf("%w: sealed binary cannot be re-read: %v", ErrMuseSealBinaryChanged, err)
+	} else {
+		digest = hashed
+	}
+	if digest != seal.digest && digest != "878df98063d8951e538cdf03ac1e5de0d4d600eb5ed50b5a33c8c5633ff62c41" {`, "TestMuseInteractiveSealRefusesBinarySwap", "^TestMuseInteractiveSealRefusesBinarySwap$/^bytes-swapped$", "swapped binary bytes admitted", "admits only the fixed witness digest; every other byte swap still refuses"),
+		member("release-mismatch-skipped", "seal.go", `if release != seal.release {`, `if release != seal.release && release != "1.4.2-R4684.1" {`, "TestMuseInteractiveSealRefusesReleaseMismatch", "^TestMuseInteractiveSealRefusesReleaseMismatch$/^to-1-4-2$", "same-bytes release swap admitted", "admits only a same-bytes swap to 1.4.2-R4684.1; 1.5.0 and every other release still refuse"),
+		member("unverified-plan-admitted-unsealed", "seal.go", `	if err := verifySealedBuild(probed); err != nil {
+		return nil, err`, `	if err := verifySealedBuild(probed); err != nil {
+		if probed == "1.5.0-R9999.1" {
+			return nil, nil
+		}
+		return nil, err`, "TestMuseInteractiveSealRefusesUnverifiedRelease", "^TestMuseInteractiveSealRefusesUnverifiedRelease$/^native-1-5-0$", "admitted without a seal", "admits only 1.5.0-R9999.1 unsealed; every other unverified build still refuses"),
+		member("short-release-bound", "seal.go", `func sealBuildIdentity(probed string) string { return probed }`, `func sealBuildIdentity(probed string) string { build, _, _ := strings.Cut(probed, "-R"); return build }`, "TestMuseInteractiveSealRefusesBuildRevisionDrift", "^TestMuseInteractiveSealRefusesBuildRevisionDrift$", "same-triple build drift admitted", "binds only the short triple; cross-triple drift still refuses"),
+		member("finalized-import-refused", "seal.go", `	release, ok := data.Selectors[sealedReleaseKey]
+	if !ok {`, `	release, ok := data.Selectors[sealedReleaseKey]
+	if !ok || (data.Binding != nil && release == "1.4.2-R4684.1") {`, "TestMuseFinalizedSealImports", "^TestMuseFinalizedSealImports$/^1.4.2-R4684.1$", "seal refused import", "refuses finalized imports only for the 1.4.2 build; 1.4.1 finalized and all base imports still succeed"),
+		member("finalized-release-check-skipped", "seal.go", `if current != seal.release {`, `if current != seal.release && current != "1.5.0-R9999.1" {`, "TestMuseFinalizedSealRefusesReleaseDrift", "^TestMuseFinalizedSealRefusesReleaseDrift$", "finalized plan admits release drift refused by base", "admits only drift to 1.5.0-R9999.1 after finalization; 1.4.2 drift still refuses"),
+		{name: "muse-seal-finalized-pin-check-skipped", file: "pkg/agentic/systems/muse/seal.go", replacements: []replacement{{before: `	if err := verifyMuseUpdaterPin(plan.Env); err != nil {
+		return err // finalized verifier: pin before hash and probe
+	}`, after: `	if err := verifyMuseUpdaterPin(plan.Env); err != nil && envValue(plan.Env, museNoAutoUpdateEnv) != "0" {
+		return err // finalized verifier: pin before hash and probe
+	}`}, {before: `	if !seal.envIdentityMatches(identity) {
+		return fmt.Errorf("%w: XDG_*/%s identity differs from the sealed identity", ErrMuseSealEnvChanged, museNoAutoUpdateEnv) // finalized verifier: sealed identity before hash and probe
+	}`, after: `	if !seal.envIdentityMatches(identity) && envValue(plan.Env, museNoAutoUpdateEnv) != "0" {
+		return fmt.Errorf("%w: XDG_*/%s identity differs from the sealed identity", ErrMuseSealEnvChanged, museNoAutoUpdateEnv) // finalized verifier: sealed identity before hash and probe
+	}`}}, testPackage: "./pkg/agentic/systems/muse", testName: "TestMuseFinalizedVerifierRefusesUnpinnedEnv", runPattern: "^TestMuseFinalizedVerifierRefusesUnpinnedEnv$/^1.4.1-R4503.1$/^pin-zeroed$", failureText: "unpinned finalized plan admitted", narrows: "admits only pin=0 in the finalized verifier, at both the pin check and the identity comparison; pin removal, other values and duplicates still refuse, and the base verifier still refuses pin=0"},
+		member("finalized-xdg-single-layer-admitted", "seal.go", `	for _, entry := range overlays.FragmentEnv {
+		if name, _, ok := strings.Cut(entry, "="); ok && isInteractiveSealSelector(name) {`, `	for _, entry := range overlays.FragmentEnv {
+		if name, _, ok := strings.Cut(entry, "="); ok && isInteractiveSealSelector(name) && name != "XDG_CACHE_HOME" {`, "TestMuseFinalizedXDGIdentityImmutable", "^TestMuseFinalizedXDGIdentityImmutable$/^1.4.1-R4503.1$/^fragment$/^change-XDG_CACHE_HOME$", "XDG identity overlay admitted", "admits only a fragment-layer XDG_CACHE_HOME touch; prompt-layer touches, every other selector and the finalized-verifier comparison still refuse"),
+		member("finalized-xdg-identity-check-skipped", "seal.go", `	if !seal.envIdentityMatches(identity) {
+		return fmt.Errorf("%w: XDG_*/%s identity differs from the sealed identity", ErrMuseSealEnvChanged, museNoAutoUpdateEnv) // finalized verifier: sealed identity before hash and probe
+	}`, `	if !seal.envIdentityMatches(identity) && identity["XDG_CACHE_HOME"] != "/final/cache" {
+		return fmt.Errorf("%w: XDG_*/%s identity differs from the sealed identity", ErrMuseSealEnvChanged, museNoAutoUpdateEnv) // finalized verifier: sealed identity before hash and probe
+	}`, "TestMuseFinalizedXDGIdentityImmutable", "^TestMuseFinalizedXDGIdentityImmutable$/^1.4.1-R4503.1$/^verify$/^change-XDG_CACHE_HOME$", "finalized XDG identity drift admitted", "admits only a finalized cache drift to /final/cache; every other identity drift, the overlay validator and the base verifier still refuse"),
+		{name: "muse-seal-keyed-import-wrong-key-admitted", file: "pkg/agentic/systems/muse/seal.go", replacements: []replacement{{before: `if keyID != expectedKeyID {`, after: `if keyID != expectedKeyID && !(keyed && key[0] == 99) {`}, {file: "pkg/agentic/seal_binding.go", before: `if p.KeyID != commitmentKeyID(key) {`, after: `if p.KeyID != commitmentKeyID(key) && key[0] != 99 {`}}, testPackage: "./pkg/agentic/systems/muse", testName: "TestMuseFinalizedSealCrossProcessKeyRoundTrip", runPattern: "^TestMuseFinalizedSealCrossProcessKeyRoundTrip$/^1.4.1-R4503.1$/^different-key-refuses$", failureText: "wrong commitment key admitted", narrows: "admits only imports whose first key byte is 99, at both the plugin and binding checks; same-key accept, other wrong keys and missing keys still behave, and non-keyed imports are unchanged"},
+		member("env-value-in-selector", "seal.go", `		selectors[name] = agentic.CommitSealLiteral(name, value)`, `		if name == "XDG_CACHE_HOME" {
+			selectors[name] = value
+		} else {
+			selectors[name] = agentic.CommitSealLiteral(name, value)
+		}`, "TestMuseSealExportCarriesNoEnvironmentValues", "^TestMuseSealExportCarriesNoEnvironmentValues$", "exported guard contains literal environment canary", "leaks only the XDG_CACHE_HOME literal; all other selectors stay committed"),
+		member("duplicate-xdg-config-admitted", "seal.go", `return strings.HasPrefix(name, "XDG_")`, `return strings.HasPrefix(name, "XDG_") && name != "XDG_CONFIG_HOME"`, "TestMuseInteractiveSealRefusesEnvChange", "^TestMuseInteractiveSealRefusesEnvChange$/^dup-config-same$", "duplicate XDG_CONFIG_HOME admitted", "admits only XDG_CONFIG_HOME duplicates; all other sensitive duplicates still refuse"),
+		member("env-cache-home-unchecked", "seal.go", `return strings.HasPrefix(name, "XDG_")`, `return strings.HasPrefix(name, "XDG_") && name != "XDG_CACHE_HOME"`, "TestMuseInteractiveSealRefusesEnvChange", "^TestMuseInteractiveSealRefusesEnvChange$/^value-cache-changed$", "changed XDG_CACHE_HOME admitted", "ignores only XDG_CACHE_HOME in every identity; all other selectors still bind"),
+		member("argv-extra-admitted", "seal.go", `if !slices.Equal(plan.Argv, seal.argv) {`, `if !slices.Equal(plan.Argv, seal.argv) && !(len(plan.Argv) == len(seal.argv)+1 && slices.Equal(plan.Argv[:len(seal.argv)], seal.argv)) {`, "TestMuseInteractiveSealRefusesArgvChange", "^TestMuseInteractiveSealRefusesArgvChange$/^appended$", "appended argv element admitted", "admits exactly one extra trailing argv element; removals, swaps and shorter argv still refuse"),
+		{name: "muse-resume-1-4-2-row-removed", file: "pkg/agentic/systems/muse/resume.go", replacements: []replacement{{before: `//go:embed muse-1.4.2-resume-options.tsv`, after: `// 1.4.2 resume row removed`}}, testPackage: "./pkg/agentic/systems/muse", testName: "TestMuseResumeGrammarPinsBothReleases", runPattern: "^TestMuseResumeGrammarPinsBothReleases$", failureText: "1.4.2 resume inventory lost", narrows: "drops only the 1.4.2 capture row; the 1.4.1 inventory still parses"},
+	}
+}
+
 func museNetworkMutants() []mutant {
 	member := func(name, file, before, after, test, pattern, failure, bound string) mutant {
 		return mutant{name: "muse-network-" + name, file: "pkg/agentic/systems/muse/" + file, replacements: []replacement{{before: before, after: after}}, testPackage: "./pkg/agentic/systems/muse", testName: test, runPattern: pattern, failureText: failure, narrows: bound}

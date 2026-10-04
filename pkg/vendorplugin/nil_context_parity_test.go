@@ -133,10 +133,22 @@ func nilContextParityFixture(t *testing.T) nilContextFixture {
 	t.Helper()
 	dir := t.TempDir()
 	// Executable fixtures cover binary resolution only; no agent is launched.
-	for _, name := range []string{"codex", "claude", "qwen", "gemini", "muse", "pi"} {
+	for _, name := range []string{"codex", "claude", "qwen", "gemini", "pi"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// Muse seals every interactive plan at BuildPlan time and refuses an
+	// unprobeable binary, so its fixture attests a module-verified build.
+	// A version probe must never start a session or carry another argument.
+	museStub := "#!/bin/sh\n" +
+		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ]; then\n" +
+		"printf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\n" +
+		"exit 0\n" +
+		"fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "muse"), []byte(museStub), 0700); err != nil {
+		t.Fatal(err)
 	}
 	prompt := filepath.Join(dir, "assignment.md")
 	if err := os.WriteFile(prompt, []byte("assignment"), 0600); err != nil {

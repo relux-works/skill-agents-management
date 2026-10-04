@@ -138,6 +138,38 @@ type ExecArtifactVerifier interface {
 	VerifySealedArtifacts() error
 }
 
+// ExecFinalizedPlanVerifier is implemented by sealed verifiers whose
+// final-process checks go beyond re-hashing artifacts: the finalized
+// wrapper calls VerifyFinalizedPlan with the final plan after the process
+// binding verifies, instead of VerifySealedArtifacts. A verifier that
+// needs no plan-aware check leaves this unimplemented and the wrapper
+// falls back to VerifySealedArtifacts.
+type ExecFinalizedPlanVerifier interface {
+	ExecArtifactVerifier
+	VerifyFinalizedPlan(Plan) error
+}
+
+// ExecSealKeyedExporter is implemented by sealed verifiers whose exported
+// selectors commit under an explicit commitment key. FinalizePlan calls it
+// with the finalization key so plugin selectors travel under the same key
+// as the process binding: a consumer holding that key verifies in its own
+// process. A verifier that leaves this unimplemented keeps the
+// process-local export and stays same-process-only.
+type ExecSealKeyedExporter interface {
+	ExecSealExporter
+	ExportSealedDataWithKey(SealCommitmentKey) SealedData
+}
+
+// ExecSealKeyedImporter is implemented by system plugins that rebuild a
+// sealed verifier under an explicit commitment key. ImportSeal calls it
+// with the caller-supplied key (or the process-local key when the caller
+// supplies none) so cross-process guards verify if and only if the caller
+// holds the committing key. A different or missing key refuses typed.
+type ExecSealKeyedImporter interface {
+	ExecSealImporter
+	ImportSealedDataWithKey(SealedData, SealCommitmentKey) (ExecPlanVerifier, error)
+}
+
 // UnsealedExecGuard is implemented by system plugins whose unsealed plans
 // may be exported and verified under the unsealed guard. Phase 1 admits
 // Claude only: a plugin declaring no sealer and no opt-in (notably Muse)
@@ -271,8 +303,37 @@ func importSealedGuard(sys System, data *SealedData, keys []SealCommitmentKey) (
 	if !ok {
 		return nil, fmt.Errorf("%w: system %q implements no sealed importer", ErrSealImportRefused, string(sys.ID()))
 	}
+	pluginData := cloneSealedData(*data)
+	if pluginData.Binding != nil {
+		// The finalized projection merges the final-process commitments
+		// into the top-level selectors beside the plugin's own; the
+		// plugin importer sees only its own keys. The envelope digest
+		// already authenticates both maps, so the strip set is trusted,
+		// and a colliding plugin key strips to a missing selector the
+		// importer refuses malformed.
+		for key := range pluginData.Binding.Selectors {
+			delete(pluginData.Selectors, key)
+		}
+	}
 	var verifier ExecPlanVerifier
-	if imported, err := importer.ImportSealedData(cloneSealedData(*data)); err != nil {
+	if keyed, ok := sys.(ExecSealKeyedImporter); ok {
+		// A keyed plugin verifies its selectors under the caller-supplied
+		// key (or the process-local key when the caller supplies none),
+		// so a finalized guard committed under an explicit key verifies
+		// in another process holding that same key, while a different or
+		// missing key refuses typed at the key-id comparison.
+		var selected SealCommitmentKey
+		if key, err := selectCommitmentKey(keys); err != nil {
+			return nil, err
+		} else {
+			selected = key
+		}
+		if imported, err := keyed.ImportSealedDataWithKey(pluginData, selected); err != nil {
+			return nil, err
+		} else {
+			verifier = imported
+		}
+	} else if imported, err := importer.ImportSealedData(pluginData); err != nil {
 		return nil, err
 	} else {
 		verifier = imported
@@ -283,6 +344,14 @@ func importSealedGuard(sys System, data *SealedData, keys []SealCommitmentKey) (
 	artifacts, ok := verifier.(ExecArtifactVerifier)
 	if !ok {
 		return nil, fmt.Errorf("%w: imported verifier binds no artifacts for %d selectors", ErrSealImportRefused, len(data.Selectors))
+	}
+	if data.Binding == nil {
+		// Plugin-opaque selectors with no finalized binding: the importer
+		// consumed them and no finalized process exists to wrap, so the
+		// importer's own artifact-backed verifier stands alone. The
+		// artifact-basis gate above still refuses selectors that no
+		// verifier re-verifies.
+		return verifier, nil
 	}
 	var binding finalizedBindings
 	if imported, err := importProcessBinding(data.Binding, keys); err != nil {

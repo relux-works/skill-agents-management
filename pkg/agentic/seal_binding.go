@@ -46,7 +46,43 @@ func literalCommitment(key SealCommitmentKey, name, value string) string {
 	mac.Write([]byte("relux.hosted.literal.v1\x00" + name + "\x00" + value))
 	return fmt.Sprintf("hmac-sha256:%x", mac.Sum(nil))
 }
-func commitmentKeyID(key SealCommitmentKey) string { return fmt.Sprintf("%x", sha256.Sum256(key[:])) }
+
+// CommitSealLiteral binds one environment name=value pair under the
+// process-local commitment key, in the contract's relux.hosted.literal.v1
+// domain. Base (unfinalized) sealed guards use it so literal environment
+// values never enter exported guards; finalized guards commit through
+// their own process bindings instead. The key never leaves the process:
+// importers compare LocalCommitmentKeyID and refuse a guard committed
+// under a key they do not hold rather than verifying under the wrong one.
+func CommitSealLiteral(name, value string) string {
+	return literalCommitment(processCommitmentKey, name, value)
+}
+
+// LocalCommitmentKeyID identifies the process-local commitment key. It
+// travels in guards so an importer can refuse a guard committed under a
+// key it does not hold; the key itself never serializes.
+func LocalCommitmentKeyID() string {
+	return commitmentKeyID(processCommitmentKey)
+}
+
+// CommitSealLiteralWithKey binds one environment name=value pair under the
+// caller's explicit commitment key, in the same relux.hosted.literal.v1
+// domain as CommitSealLiteral. Finalized sealed guards use it so plugin
+// selectors travel under the finalization key: a consumer holding the same
+// explicit key verifies in its own process, while a different or missing
+// key refuses typed. The key itself never serializes; only its ID travels.
+func CommitSealLiteralWithKey(key SealCommitmentKey, name, value string) string {
+	return literalCommitment(key, name, value)
+}
+
+// CommitmentKeyID identifies an explicit commitment key the same way
+// LocalCommitmentKeyID identifies the process-local one: the SHA-256 of
+// the key bytes, hex-encoded. Guards carry the ID so an importer can
+// refuse a guard committed under a key it was not given.
+func CommitmentKeyID(key SealCommitmentKey) string { return commitmentKeyID(key) }
+func commitmentKeyID(key SealCommitmentKey) string {
+	return fmt.Sprintf("%x", sha256.Sum256(key[:]))
+}
 func environmentNames(env []string) []string {
 	names := make([]string, len(env))
 	for i, entry := range env {

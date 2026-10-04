@@ -1,4 +1,9 @@
-# Pinned Muse Code 1.4.1 `muse --help` root option inventory.
+# Pinned Muse Code 1.4.2 `muse --help` root option inventory.
+# Captured from the channel-pinned 1.4.2-R4684.1 binary (checksum-verified
+# against the stable channel manifest, 2026-10-04): `muse resume --help` is
+# byte-identical to 1.4.1's, and `muse --help` differs only by the added
+# `model-profile` subcommand. Every root option below keeps its 1.4.1
+# arity, so ElevateResumeIntent classifies both verified releases alike.
 # `muse resume --help` adds only --last; root options may appear on either
 # side of resume. Cardinality: exactly resume --last |
 # resume <session-ref>; bare `resume` is the picker form and stays refused

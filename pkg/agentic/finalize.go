@@ -61,6 +61,16 @@ type TypedBinding struct {
 	Value string
 }
 
+// ExecFinalizeOverlayValidator is implemented by sealed verifiers whose
+// invariants forbid some otherwise well-formed overlays: a Muse seal
+// refuses any overlay touching the updater pin, for example, because the
+// base already pins it and any mention is a change or duplicate intent.
+// FinalizePlan calls it before applying overlays; a verifier that leaves
+// this unimplemented admits every well-formed overlay.
+type ExecFinalizeOverlayValidator interface {
+	ValidateFinalizeOverlays(FinalizeOverlays) error
+}
+
 // FinalizePlan validates the permitted overlays and typed bindings against
 // the sealed base plan, applies them in native overlay order, and returns
 // the final plan with a verifier bound to the EXACT final process. The
@@ -106,7 +116,7 @@ func FinalizePlan(base Plan, overlays FinalizeOverlays, bindings []TypedBinding,
 		if !exports || !verifies {
 			return Plan{}, fmt.Errorf("%w: system %q", ErrFinalizeNoSealBasis, string(base.System))
 		}
-		return finalizeSealedPlan(base, artifacts, exporter.ExportSealedData(), overlays, bindings, key)
+		return finalizeSealedPlan(base, artifacts, exporter, overlays, bindings, key)
 	}
 }
 
@@ -129,7 +139,24 @@ func finalizeUnsealedPlan(base Plan, overlays FinalizeOverlays, bindings []Typed
 	return final, nil
 }
 
-func finalizeSealedPlan(base Plan, artifacts ExecArtifactVerifier, data SealedData, overlays FinalizeOverlays, bindings []TypedBinding, key SealCommitmentKey) (Plan, error) {
+func finalizeSealedPlan(base Plan, artifacts ExecArtifactVerifier, exporter ExecSealExporter, overlays FinalizeOverlays, bindings []TypedBinding, key SealCommitmentKey) (Plan, error) {
+	// A plugin with overlay invariants (a Muse updater pin) refuses
+	// forbidden overlays before anything is applied or bound: the binding
+	// would otherwise attest the forbidden value as the final process.
+	if validator, ok := artifacts.(ExecFinalizeOverlayValidator); ok {
+		if err := validator.ValidateFinalizeOverlays(overlays); err != nil {
+			return Plan{}, err
+		}
+	}
+	// A keyed plugin commits its selectors under the finalization key so
+	// the finalized guard verifies cross-process with that same key; any
+	// other plugin keeps its process-local export.
+	var data SealedData
+	if keyed, ok := exporter.(ExecSealKeyedExporter); ok {
+		data = keyed.ExportSealedDataWithKey(key)
+	} else {
+		data = exporter.ExportSealedData()
+	}
 	var env []string
 	var selectors map[string]string
 	if applied, appliedSelectors, err := applyFinalizeOverlays(base.Env, overlays); err != nil {
@@ -148,7 +175,20 @@ func finalizeSealedPlan(base Plan, artifacts ExecArtifactVerifier, data SealedDa
 	data = cloneSealedData(data)
 	b := bindFinalProcess(final, key)
 	data.Binding = b.export()
-	data.Selectors = cloneSealSelectors(b.selectors)
+	// The finalized projection carries the plugin's own selectors beside
+	// the final-process commitments: the plugin importer needs its
+	// selectors back to rebuild an equivalent verifier at import, and the
+	// binding commitments stay where the finalized shape has always
+	// carried them. Import strips the binding keys before plugin dispatch,
+	// so plugins never see them. (Binding keys are dense "0".."N" indices;
+	// no plugin emits numeric selector keys, and a colliding plugin key
+	// would strip to a missing selector and refuse malformed at import.)
+	if data.Selectors == nil {
+		data.Selectors = make(map[string]string, len(b.selectors))
+	}
+	for key, value := range b.selectors {
+		data.Selectors[key] = value
+	}
 	final.execVerifier = finalizedSealedVerifier{sealed: data, bindings: b, artifacts: artifacts}
 	return final, nil
 }
@@ -352,13 +392,17 @@ func (v finalizedSealedVerifier) VerifyBeforeExec(plan Plan) error {
 	if err := v.bindings.verify(plan); err != nil {
 		return err
 	}
+	// A plugin with plan-aware final checks (a release re-probe) runs
+	// them against the final plan; anything else re-verifies artifacts.
+	if final, ok := v.artifacts.(ExecFinalizedPlanVerifier); ok {
+		return final.VerifyFinalizedPlan(plan)
+	}
 	return v.artifacts.VerifySealedArtifacts()
 }
 
 func (v finalizedSealedVerifier) ExportSealedData() SealedData {
 	data := cloneSealedData(v.sealed)
 	data.Argv = append([]string(nil), v.bindings.argv...)
-	data.Selectors = cloneSealSelectors(v.bindings.selectors)
 	data.Binding = v.bindings.export()
 	return data
 }

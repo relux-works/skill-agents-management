@@ -2,6 +2,7 @@ package regress
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -89,6 +90,12 @@ type interactiveCase struct {
 	// against (Decision 0018 choice 6). The yolo sweep below carries it;
 	// the drift test carries anything but.
 	toolRelease string
+	// stubVersion, when non-empty, is the --version answer the fixture
+	// binary prints. Muse seals every interactive plan at BuildPlan time
+	// and refuses an unprobeable binary, so its fixture attests a
+	// module-verified build; the asserted properties (markers, posture,
+	// native-verbatim request release) do not depend on the answer.
+	stubVersion string
 }
 
 var interactiveCases = map[string]interactiveCase{
@@ -114,6 +121,7 @@ var interactiveCases = map[string]interactiveCase{
 		system: muse.New(), stub: "muse",
 		yoloFlag:    "--yolo",
 		toolRelease: "1.4.1",
+		stubVersion: "Muse Code 1.4.1 (1.4.1-R4503.1)",
 		exec: func(t *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest {
 			req.PromptPath = paritycase.WritePromptFile(t, workDir, "body")
 			return req
@@ -127,7 +135,11 @@ var interactiveCases = map[string]interactiveCase{
 
 func interactiveRequest(t *testing.T, c interactiveCase, workDir, binDir string) agentic.LaunchRequest {
 	t.Helper()
-	paritycase.WriteStubExecutable(t, binDir, c.stub)
+	if c.stubVersion == "" {
+		paritycase.WriteStubExecutable(t, binDir, c.stub)
+	} else {
+		writeVersionStubExecutable(t, binDir, c.stub, c.stubVersion)
+	}
 	req := agentic.LaunchRequest{
 		System:  c.system.ID(),
 		Model:   agentic.Model{ID: "model-under-test", Effort: agentic.EffortSupportRequired},
@@ -141,6 +153,25 @@ func interactiveRequest(t *testing.T, c interactiveCase, workDir, binDir string)
 	}
 	req.Vendor = c.vendor
 	return req
+}
+
+// writeVersionStubExecutable installs a fixture binary that answers
+// --version with the given line and otherwise drains stdin and exits 0,
+// like the shared parity stub. A version probe must never start a
+// session or carry another argument.
+func writeVersionStubExecutable(t *testing.T, dir, name, version string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	script := "#!/bin/sh\n" +
+		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ]; then\n" +
+		"printf '%s\\n' '" + version + "'\n" +
+		"exit 0\n" +
+		"fi\n" +
+		"cat >/dev/null\nexit 0\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("writing the version stub %s: %v", name, err)
+	}
+	return path
 }
 
 func TestAnInteractivePlanCarriesNoExecMarkerForAnyMappedSystem(t *testing.T) {

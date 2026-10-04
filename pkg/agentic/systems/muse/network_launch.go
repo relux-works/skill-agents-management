@@ -133,7 +133,7 @@ type networkExecSeal struct {
 
 func (*System) SealExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error) {
 	if _, managed := plan.NetworkProvenanceSnapshot(); !managed {
-		return nil, nil
+		return sealInteractiveExecPlan(plan)
 	}
 	root := envValue(plan.Env, "XDG_CONFIG_HOME")
 	networkConfigs.Lock()

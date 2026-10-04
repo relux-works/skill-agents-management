@@ -15,6 +15,13 @@ var verifiedReleases = []agentic.ReleaseCapability{
 	{Release: "1.4.2", Grammar: agentic.PermissionGrammarV1, YoloSupported: true},
 }
 
+// verifiedBuilds is the closed list of module-verified Muse builds the
+// interactive exec-plan sealer binds: full build identities (release plus
+// revision), not the short triples the permission table keys. A binary
+// attesting any other build — including an unpinned revision of a
+// verified triple — seals nothing and refuses at plan time.
+var verifiedBuilds = []string{"1.4.1-R4503.1", "1.4.2-R4684.1"}
+
 // PermissionMapping exposes the release-pinned Muse posture mapping without
 // building a launch plan. Native contributes no flag; yolo maps to Muse's
 // documented bypass flag for a verified release.

@@ -2,6 +2,7 @@ package muse
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -495,7 +496,7 @@ func TestArgsDoesNotAliasTheCallersPrefix(t *testing.T) {
 func launchRequest(t *testing.T, body string) agentic.LaunchRequest {
 	t.Helper()
 	binDir, workDir := t.TempDir(), t.TempDir()
-	paritycase.WriteStubExecutable(t, binDir, executableName)
+	writeMuseStubExecutable(t, binDir)
 	req := agentic.LaunchRequest{
 		System:  New().ID(),
 		Model:   agentic.Model{ID: parityModel},
@@ -507,6 +508,27 @@ func launchRequest(t *testing.T, body string) agentic.LaunchRequest {
 		req.PromptPath = paritycase.WritePromptFile(t, workDir, body)
 	}
 	return req
+}
+
+// writeMuseStubExecutable installs the fixture binary every muse launch
+// request resolves. Unlike the shared parity stub it answers --version
+// with the pinned release: interactive plans seal at BuildPlan time and
+// sealing probes, so a silent stub would refuse every interactive plan.
+// Any other invocation keeps the shared stub's drain-and-exit behavior,
+// which exec and dry-run plans never observe either way.
+func writeMuseStubExecutable(t *testing.T, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, executableName)
+	script := "#!/bin/sh\n" +
+		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ]; then\n" +
+		"printf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\n" +
+		"exit 0\n" +
+		"fi\n" +
+		"cat >/dev/null\nexit 0\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("writing the muse stub: %v", err)
+	}
+	return path
 }
 
 func withPrompt(req agentic.LaunchRequest, prompt []byte) agentic.LaunchRequest {

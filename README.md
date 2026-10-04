@@ -392,7 +392,10 @@ JSON. `ImportSeal(system, seal)` rebuilds the verifier. Call
   remain unsupported. It binds the exact final binary, ordered argv and full
   ordered environment, including entries outside the overlays. It preserves
   artifact digests without reading/resealing disk during finalization;
-  artifact drift still refuses at verification/import.
+  artifact drift still refuses at verification/import. A Muse seal
+  additionally refuses any overlay touching a sealed selector (the updater
+  pin or any `XDG_*` name), and its finalized verifier re-checks the
+  sealed XDG/pin identity before the release re-probe.
 - Finalized sealed and Claude verifiers use the same process binding list at
   export/import. A finalized Claude guard uses kind `unsealed-bound` and carries
   a local-only `binding`; `HostedAdmissible()` is false. This projection does
@@ -404,7 +407,10 @@ JSON. `ImportSeal(system, seal)` rebuilds the verifier. Call
   process-local. Cross-process consumers supply the same nonzero key through
   the optional key argument to both `FinalizePlan` and `ImportSeal`, over
   their private ephemeral channel. Missing/wrong keys refuse typed; import
-  never adopts the incoming process as a replacement binding.
+  never adopts the incoming process as a replacement binding. Finalized Muse
+  seals commit their plugin selectors under that same finalization key, so a
+  consumer holding it re-imports and verifies in its own process; base
+  (unfinalized) Muse seals stay process-local and a foreign key id refuses.
 - BuildPlan, FinalizePlan, ExportSeal, DecodeSeal and typed ImportSeal share
   one lossless JSON string predicate. Typed import checks every original
   string (including envelope, artifacts, selectors and both binding forms)

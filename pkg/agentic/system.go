@@ -836,7 +836,11 @@ type LaunchRequestPreparer interface {
 // can be established by probing the binary the system resolves: the plugin
 // runs `<binary> --version` against the launch environment and parses its
 // own release out of the output. It is a PRE-plan step — the launcher's
-// (follow-up F-L1) — never part of BuildPlan, which starts no process.
+// (follow-up F-L1) — never part of BuildPlan, which otherwise starts no
+// process. The one exception is the Muse interactive exec-plan sealer,
+// which probes the sealed binary at seal time to bind the release the
+// plan's own bytes attest; that probe is seal establishment, not request
+// filling, and it refuses rather than synthesizes on any probe failure.
 //
 // A system whose binary cannot attest its tool release does not implement
 // it. The pi plugins currently require the caller to establish the Pi release

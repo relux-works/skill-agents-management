@@ -25,9 +25,10 @@
 //     this plugin now carries `--reasoning-effort` in argv. Capabilities() and
 //     args.go each say why where they say it.
 //   - The interactive surface is Muse's no-subcommand TUI. The pinned 1.4.1
-//     help accepts `--model`, `--reasoning-effort`, `--workspace`, and
-//     `--yolo`; the binary, environment, and stdin contracts above remain the
-//     same. Interactive yolo is release-pinned; exec and its dry-run mirror
+//     and 1.4.2 helps accept `--model`, `--reasoning-effort`,
+//     `--workspace`, and `--yolo`; the binary, environment, and stdin
+//     contracts above remain the same. Interactive yolo is release-pinned;
+//     exec and its dry-run mirror
 //     remain the headless-child bypass posture and always carry `--yolo`, like
 //     Claude's `--dangerously-skip-permissions` and Codex's
 //     `--dangerously-bypass-approvals-and-sandbox` in
