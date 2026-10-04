@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.46 — 2026-10-04
+
+- Support muse-env-v1 for exactly Muse 1.4.1-R4503.1 and 1.4.2-R4684.1 exec:
+  apply the D4 process patch, inject every stdio MCP env block, and wrap settings
+  and managed-file hook commands in a sealed launch-private XDG config. Preserve
+  HOME, link auth only, and refuse unsupported tuples or uncovered config shapes.
+  Retain the documented R7b shell/tool-child gap. Add production-plan regressions,
+  refusal mappings, and named narrowing mutants.
+
+## Unreleased
+
 ## v0.5.45 — 2026-10-04
 
 - Declare preview Antigravity Argon ids `gemini-4-argon-high`,
@@ -28,8 +39,6 @@
 - Refuse local Codex rows whose declared vocabulary exceeds native catalog
   reasoning levels on both ID and snapshot paths, with consumer-shaped launch
   regressions and narrowing mutation evidence.
-
-## Unreleased
 
 ## v0.5.44 — 2026-10-04
 
