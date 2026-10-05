@@ -151,6 +151,21 @@ func commanderSettingsValue(args []string) (string, bool) {
 	return value, present
 }
 
+// effectiveSettingsSource selects the explicit --settings source the way
+// native does, for every consumer of that source (the tool policy below and
+// the session record): the pinned eager scanner and the Commander parse must
+// agree on the same effective value, or no single source is authoritative
+// and the answer is the typed ambiguity refusal. present is false when no
+// --settings occurs at all.
+func effectiveSettingsSource(args []string) (value string, present bool, err error) {
+	eagerVal, eagerOK := lastSettingsValue(eagerSettingsValues(args))
+	cmdVal, cmdOK := commanderSettingsValue(args)
+	if eagerOK != cmdOK || (eagerOK && eagerVal != cmdVal) {
+		return "", false, settingsPolicyRefusal(agentic.SettingsPolicyAmbiguous)
+	}
+	return eagerVal, eagerOK, nil
+}
+
 // checkSettingsPolicy refuses explicit re-enable attempts carried by the
 // effective --settings source before launch. The pinned native eager scanner
 // (NI, which never decomposes combined short switches) and the Commander
@@ -161,15 +176,15 @@ func commanderSettingsValue(args []string) (string, bool) {
 // else a file relative to the launch cwd. Implicit user/project/managed
 // configuration is outside this argv policy.
 func checkSettingsPolicy(req agentic.LaunchRequest) error {
-	eagerVal, eagerOK := lastSettingsValue(eagerSettingsValues(req.NativeArgs))
-	cmdVal, cmdOK := commanderSettingsValue(req.NativeArgs)
-	if eagerOK != cmdOK || (eagerOK && eagerVal != cmdVal) {
-		return settingsPolicyRefusal(agentic.SettingsPolicyAmbiguous)
-	}
-	if !eagerOK {
+	var source string
+	if value, present, err := effectiveSettingsSource(req.NativeArgs); err != nil {
+		return err
+	} else if !present {
 		return nil
+	} else {
+		source = value
 	}
-	rules, kind := settingsAllowRules(eagerVal, req.WorkDir)
+	rules, kind := settingsAllowRules(source, req.WorkDir)
 	if kind != "" {
 		return settingsPolicyRefusal(kind)
 	}
@@ -189,6 +204,22 @@ func checkSettingsPolicy(req agentic.LaunchRequest) error {
 // We validate the permission shape used by this policy without claiming to
 // implement the native schema of unrelated settings keys.
 func settingsAllowRules(value, workDir string) ([]string, agentic.SettingsPolicyFailureKind) {
+	settings, kind := readSettingsObject(value, workDir)
+	raw, present := settings["permissions"]
+	if kind != "" || !present {
+		// A failed read or decode returns its kind with a nil object, so
+		// the lookup above is on nil and the kind is what propagates; an
+		// absent permissions key is the empty, unfailed answer.
+		return nil, kind
+	}
+	return decodeAllowRules(raw)
+}
+
+// readSettingsObject reads the effective explicit settings source — inline
+// JSON or a file relative to the launch cwd — and decodes its top-level
+// object. A failed read and a failed decode are distinct kinds; neither
+// becomes absence.
+func readSettingsObject(value, workDir string) (map[string]json.RawMessage, agentic.SettingsPolicyFailureKind) {
 	var body []byte
 	trimmed := ecmaTrim(value)
 	if strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}") {
@@ -208,10 +239,12 @@ func settingsAllowRules(value, workDir string) ([]string, agentic.SettingsPolicy
 	if json.Unmarshal(body, &settings) != nil || settings == nil {
 		return nil, agentic.SettingsPolicyInvalid
 	}
-	raw, present := settings["permissions"]
-	if !present {
-		return nil, ""
-	}
+	return settings, ""
+}
+
+// decodeAllowRules decodes the permissions object a settings source carries.
+func decodeAllowRules(raw json.RawMessage) ([]string, agentic.SettingsPolicyFailureKind) {
+	var present bool
 	var permissions map[string]json.RawMessage
 	if json.Unmarshal(raw, &permissions) != nil || permissions == nil {
 		return nil, agentic.SettingsPolicyInvalid

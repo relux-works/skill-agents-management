@@ -702,6 +702,104 @@ frozen RUNTIME id `claude`; `parity_test.go` maps between them in one place.
   against the installed pinned functions. Both skip absent/drifted Claude or
   absent Node. Node executes the pinned functions directly; it starts no
   session and accesses no operator settings or credentials.
+- **Native session metadata rides the plan: `Plan.Session`.** The plugin
+  fills a typed `agentic.PlanSession{Name, RCEnabled, RCIndices}` while
+  `BuildPlan` builds the plan, through the optional `SessionPlanner`
+  capability, so the record travels inside the registry-built `Plan` and
+  there is no projector function, registry projector binding or
+  registration call to reach around. It is `nil` for a system with no native
+  session surface and present for every Claude plan, in every launch mode.
+  **Trust boundary: registry registration.** A registered plugin owns the
+  plans it builds; one that embeds `*claude.System` inherits its session
+  fill by Go embedding and fills sessions for its own plans — accepted
+  scope, not a bypass. What holds from outside the module: no exported or
+  package-reachable function derives a Session from argv the caller
+  supplies or for a plan the bound plugin did not build. The only input to
+  `FillPlanSession` is an `agentic.SessionFill`, which only the `agentic`
+  package can issue (no exported field, no constructor, readers only; the
+  zero value is refused as not issued); `BuildPlan` and `FinalizePlan` are its
+  only issuers. The derivation itself
+  (`deriveSession`) is unexported. The fill reads the argv with the same
+  pinned ownership parser every other gate uses — no second parser, no
+  plugin-id comparison: `Name` is the native session name when the argv
+  sets one (`--name`/`-n`, or an `--remote-control`/`--rc` value; nil
+  when none, `""` when explicitly empty), `RCEnabled` is the remote-control
+  intent, and `RCIndices` are the exact positions in this plan's `Argv` of
+  the RC-family tokens (`--remote-control`, `--rc`,
+  `--remote-control-session-name-prefix`) in argv order. Separated and `=`
+  forms record; an enabled RC with empty (but present) indices is the
+  settings origin — an explicit `--settings` source (inline JSON or a file
+  under the launch cwd) carrying `remoteControlAtStartup: true`, selected
+  exactly as the AskUserQuestion tool policy selects its source (agreeing
+  eager and Commander parses); a silent argv with no such source records
+  disabled with no indices, never disabled-with-indices. Repeated selector
+  classes, names that disagree across classes, a required selector dangling
+  without a value and a settings key that is not a boolean refuse typed
+  with `ErrSessionInvalid` at `BuildPlan`, and `BuildPlan` itself refuses an
+  incoherent plugin answer (nil, out-of-bounds, negative or repeated
+  indices; disabled with indices) as `ErrPluginContract`.
+  **The record rides the exec seal IN-PROCESS ONLY; across
+  `ExportSeal`/`ImportSeal` it is UNVERIFIED.** In-process, the base-process
+  snapshot (`FinalizePlan` refuses a base whose Session changed after
+  sealing) and the finalized verifier bind the whole record by value:
+  presence (a dropped record refuses, and so does a record attached to a plan
+  finalized with none), name, `RCEnabled` and `RCIndices`, collection
+  presence included — a nil `RCIndices` is not an empty one, so the
+  settings-origin shape cannot be flattened. Any change after sealing is
+  `ErrFinalizedProcessChanged`. A native tail
+  (`FinalizeOverlays.NativeTail`) extends the sealed argv, so `FinalizePlan`
+  derives the record again over the final argv through the plugin that
+  filled it; a tail that contradicts the record (a second `--name`) refuses
+  typed there. Across the wire nothing is bound, on purpose: the exported
+  guard payload contract 1.0.0 is frozen with the Claude exec guard unsealed
+  and carries no `Session`, and the settings-origin remote control depends on
+  inputs outside argv (the settings bytes, the verification working
+  directory) that no seal binds, so deriving the record again at import
+  would be a false guarantee. `ImportSeal` therefore derives nothing, binds
+  nothing and reads no settings; the plan an imported process rebuilds
+  (`ImportedProcess.Process`) carries a nil `Session`, whatever the process
+  given to `NewImportedProcess` carried; and a plan handed to an imported
+  verifier is verified on the process facts only — its `Session` is not an
+  input, so an admission says nothing about it. A consumer that needs a
+  Session across a process boundary carries it itself and treats it as
+  unverified. Stated bounds: an unfinalized base guard carries no argv, so
+  nothing binds its Session at all after it crosses; `RCEnabled` is what the
+  argv and the explicit settings source declare, not what the provider honors
+  under managed policy, and the `remoteControlAtStartup` key is read from the
+  explicit source only (implicit user, project and managed settings are
+  outside this grammar, as they are for the tool policy); the settings source
+  is read again after the tool policy read it, so a file rewritten between the
+  two reads of one `BuildPlan` is a residual; `Plan.Session` is an exported
+  field, so a fabricated `Plan` can carry any value — it has no
+  registry-built seal, and the in-process seal checks above refuse it.
+  `TestPlanSessionCoversNameAndRemoteControlForms`,
+  `TestPlanSessionSettingsOrigin`,
+  `TestPlanSessionRefusesDuplicatesConflictsAndDanglingSelectors` and
+  `TestPlanSessionExecModePlanCarriesTheDisabledRecord` drive every form
+  through `BuildPlan` and cross-check each index against the token it names
+  in the same plan's `Argv`; `TestBuildPlanAttachesTheSessionRecordThePluginFilled`,
+  `TestBuildPlanLeavesSessionNilWithoutASessionSurface` and
+  `TestBuildPlanRefusesIncoherentSessionRecords` pin the dispatch;
+  `TestExternalIsolatedRegistryYieldsPlanSession` proves
+  `NewRegistry` + `Register(claude.New())` + `BuildPlan` yields `Session`;
+  `TestPlanSessionRidesTheExecSeal` (both plan shapes; drop, change and
+  nil/empty swap, before and after finalization),
+  `TestFinalizedVerifierBindsAnAbsentSessionAndRefusesAPresentOne`,
+  `TestPlanSessionFollowsANativeTailThroughTheSeal`,
+  `TestImportedSealVerifiesNoSession`, `TestImportedSealReadsNoCurrentSettings`
+  and `TestImportedPlanNeverYieldsAVerifiedSession` pin the seal and the
+  unverified-across-import contract;
+  `TestNoExportedSessionDerivationFromCallerArgv` drives the exported surface
+  from the external package (behavior, reflection and a parsed census of
+  every module source), and `TestNoSessionProjectorSurfaceRemains` fails if
+  the retired projector surface returns. Thirty-nine narrowing members in
+  `tools/launchcontext-mutants` (`claude-plan-session-*`: index off-by-one,
+  settings origin dropped, Session left nil, the selector and settings
+  refusals, the dispatch and coherence gates, both in-process seal bindings
+  weakened one field at a time and for a dropped record, an imported verifier
+  that binds a Session, an imported plan that keeps one, empty collection
+  equated to nil, the native-tail re-derivation, a re-exported foreign-argv
+  helper, an unissued fill admitted, the fill gaining a writer) die by name.
 
 Run the policy gates with
 `go test ./pkg/agentic/... ./internal/refusalscan ./tools/launchcontext-mutants ./pkg/vendorplugin/... ./pkg/providerquota`.

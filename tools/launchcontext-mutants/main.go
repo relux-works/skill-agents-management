@@ -5153,7 +5153,7 @@ func narrowingMutants() []mutant {
 		}
 	}
 	base = append(base, sealMutants()...)
-	return append(append(append(append(append(base, gateMutants...), claudeToolPolicyMutants()...), museNetworkMutants()...), museSealMutants()...), codexTempDirMutants()...)
+	return append(append(append(append(append(append(base, gateMutants...), claudeToolPolicyMutants()...), museNetworkMutants()...), museSealMutants()...), codexTempDirMutants()...), claudePlanSessionMutants()...)
 }
 
 // sealMutants narrows the exec-guard seal import and finalization gates
@@ -5401,10 +5401,10 @@ func claudeToolPolicyMutants() []mutant {
 			"trimmed := ecmaTrim(value)", "trimmed := strings.TrimSpace(value)",
 			"TestAskUserQuestionSettingsECMAScriptRules/native/settings_inline_BOM_wrapped_refused", "^TestAskUserQuestionSettingsECMAScriptRules$/^native$/^settings_inline_BOM_wrapped_refused$", "want typed settings re-enable refusal", "restores Go TrimSpace for inline-JSON detection; BOM-wrapped inline settings read as a file path while plain inline JSON still parses"),
 		policy("eager-settings-dropped", "pkg/agentic/systems/claude/toolpolicy.go",
-			"eagerVal, eagerOK := lastSettingsValue(eagerSettingsValues(req.NativeArgs))", "eagerVal, eagerOK := \"\", false",
+			"eagerVal, eagerOK := lastSettingsValue(eagerSettingsValues(args))", "eagerVal, eagerOK := \"\", false",
 			"TestAskUserQuestionEagerSettingsAmbiguity/native/eager_only_separate_cn", "^TestAskUserQuestionEagerSettingsAmbiguity$/^native$/^eager_only_separate_cn$", "want typed settings ambiguity refusal", "drops the eager settings scan; combined-short eager sources never disagree while Commander-visible sources still refuse"),
 		policy("ambiguity-skipped", "pkg/agentic/systems/claude/toolpolicy.go",
-			"if eagerOK != cmdOK || (eagerOK && eagerVal != cmdVal) {\n\t\treturn settingsPolicyRefusal(agentic.SettingsPolicyAmbiguous)\n\t}", "if eagerOK != cmdOK || (eagerOK && eagerVal != cmdVal) {\n\t\tif eagerOK && !cmdOK {\n\t\t\treturn nil\n\t\t}\n\t\treturn settingsPolicyRefusal(agentic.SettingsPolicyAmbiguous)\n\t}",
+			"if eagerOK != cmdOK || (eagerOK && eagerVal != cmdVal) {\n\t\treturn \"\", false, settingsPolicyRefusal(agentic.SettingsPolicyAmbiguous)\n\t}", "if eagerOK != cmdOK || (eagerOK && eagerVal != cmdVal) {\n\t\tif eagerOK && !cmdOK {\n\t\t\treturn \"\", false, nil\n\t\t}\n\t\treturn \"\", false, settingsPolicyRefusal(agentic.SettingsPolicyAmbiguous)\n\t}",
 			"TestAskUserQuestionEagerSettingsAmbiguity/native/eager_only_separate_cn", "^TestAskUserQuestionEagerSettingsAmbiguity$/^native$/^eager_only_separate_cn$", "want typed settings ambiguity refusal", "admits eager-only parser disagreements; other disagreements still refuse ambiguous"),
 		policy("conditional-deny", "pkg/agentic/systems/claude/args.go",
 			"args = append(args, disallowedToolsDenial)\n\trest := append([]string(nil), req.NativeArgs...)", "hasCallerDenial := false\n\tfor _, token := range req.NativeArgs {\n\t\tif strings.Contains(token, deniedToolAskUserQuestion) {\n\t\t\thasCallerDenial = true\n\t\t}\n\t}\n\tif !hasCallerDenial {\n\t\targs = append(args, disallowedToolsDenial)\n\t}\n\trest := append([]string(nil), req.NativeArgs...)",

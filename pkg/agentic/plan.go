@@ -50,6 +50,17 @@ type Plan struct {
 
 	Provenance LaunchProvenance
 
+	// Session is the native session record the system plugin filled from its
+	// own argv grammar while BuildPlan built this plan: nil for a system with
+	// no native session surface, never a guess. RCIndices index Argv of this
+	// same plan. The record rides the exec seal — see session.go.
+	Session *PlanSession
+
+	// sessionPlanner is the plugin that filled Session, kept so FinalizePlan
+	// can re-derive the record when a native tail extends the argv. Only
+	// buildPlan sets it.
+	sessionPlanner SessionPlanner
+
 	curatorContextProvenance *CuratorContextProvenance
 
 	networkProvenance *binding.Record
@@ -574,6 +585,20 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		argv = args
 	}
 
+	// Session metadata is filled HERE, by the plugin that just built argv,
+	// before anything is sealed: the record travels inside the plan, so a
+	// consumer never holds a way to ask a grammar about a plan it did not
+	// build. A system with no SessionPlanner leaves Session nil.
+	var session *PlanSession
+	planner, _ := sys.(SessionPlanner)
+	if planner != nil {
+		if value, err := deriveSession(planner, id, argv, req.WorkDir, mode); err != nil {
+			return Plan{}, err
+		} else {
+			session = value
+		}
+	}
+
 	var env []string
 	if value, err := sys.ChildEnv(req.Env, req); err != nil {
 		return Plan{}, fmt.Errorf("agentic: %s could not build the child environment: %w", id, err)
@@ -668,6 +693,8 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		WorkDir:                  req.WorkDir,
 		Home:                     home,
 		ModelIdentity:            identity,
+		Session:                  session,
+		sessionPlanner:           planner,
 		curatorContextProvenance: contextProvenance,
 		networkProvenance:        networkProvenance,
 	}

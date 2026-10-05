@@ -188,7 +188,11 @@ func importedSealProcessBinding(seal Seal) (importedSealBinding, bool) {
 
 // Process returns the bound exact process: the importing system, the launch
 // mode, and the six bound facts. Every slice is freshly copied, so mutating
-// the result cannot move the binding.
+// the result cannot move the binding. The plan carries NO Session, whatever
+// the process given to NewImportedProcess carried: Session is verified
+// in-process only and is unverified across ExportSeal/ImportSeal (see
+// session.go), so an imported plan never holds a record a consumer could take
+// for verified.
 func (p ImportedProcess) Process() Plan {
 	return Plan{
 		System:  p.system,

@@ -134,6 +134,9 @@ func finalizeUnsealedPlan(base Plan, overlays FinalizeOverlays, bindings []Typed
 	final := base
 	final.Env = env
 	final.Argv = append(append([]string(nil), base.Argv...), overlays.NativeTail...)
+	if err := rederiveFinalSession(&final, overlays.NativeTail); err != nil {
+		return Plan{}, err
+	}
 	_ = selectors
 	final.execVerifier = finalizedUnsealedVerifier{bindings: bindFinalProcess(final, key)}
 	return final, nil
@@ -170,6 +173,9 @@ func finalizeSealedPlan(base Plan, artifacts ExecArtifactVerifier, exporter Exec
 	final := base
 	final.Env = env
 	final.Argv = append(append([]string(nil), base.Argv...), overlays.NativeTail...)
+	if err := rederiveFinalSession(&final, overlays.NativeTail); err != nil {
+		return Plan{}, err
+	}
 	data.Argv = append([]string(nil), final.Argv...)
 	_ = selectors
 	data = cloneSealedData(data)
@@ -191,6 +197,24 @@ func finalizeSealedPlan(base Plan, artifacts ExecArtifactVerifier, exporter Exec
 	}
 	final.execVerifier = finalizedSealedVerifier{sealed: data, bindings: b, artifacts: artifacts}
 	return final, nil
+}
+
+// rederiveFinalSession keeps Session describing the argv the finalized plan
+// carries. A native tail appends tokens after the base argv, and a tail token
+// can be a session selector, so the record is derived again over the final
+// argv through the plugin that filled it. Without a tail the final argv is
+// the base argv and the sealed base record stands. Any other system (no
+// planner) carries no record, and none is invented.
+func rederiveFinalSession(final *Plan, tail []string) error {
+	if final.sessionPlanner == nil || len(tail) == 0 {
+		return nil
+	}
+	if session, err := deriveSession(final.sessionPlanner, final.System, final.Argv, final.WorkDir, final.Mode); err != nil {
+		return err
+	} else {
+		final.Session = session
+	}
+	return nil
 }
 
 // applyFinalizeOverlays validates the fragment, prompt and native overlays
@@ -354,6 +378,14 @@ type finalizedBindings struct {
 	selectors map[string]string
 	envNames  []string
 	key       SealCommitmentKey
+	// session is the Session the plan was finalized with, bound in-process
+	// only: presence (nil versus present), name, RCEnabled and RCIndices with
+	// nil-versus-empty. sessionBound separates "finalized with no record"
+	// from a binding rebuilt from the frozen guard wire (ImportSeal), which
+	// carries no Session and never binds one: across a process boundary
+	// Session is UNVERIFIED, see session.go.
+	session      *PlanSession
+	sessionBound bool
 }
 
 func (b finalizedBindings) verify(plan Plan) error {
@@ -362,6 +394,9 @@ func (b finalizedBindings) verify(plan Plan) error {
 	}
 	if !slices.Equal(plan.Argv, b.argv) {
 		return fmt.Errorf("%w: argv differs (got %d elements, sealed %d)", ErrFinalizedProcessChanged, len(plan.Argv), len(b.argv))
+	}
+	if b.sessionBound && !sessionsEqual(plan.Session, b.session) {
+		return fmt.Errorf("%w: session record differs", ErrFinalizedProcessChanged)
 	}
 	names := environmentNames(plan.Env)
 	if !slices.Equal(names, b.envNames) {

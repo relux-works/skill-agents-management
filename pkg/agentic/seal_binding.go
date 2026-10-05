@@ -91,7 +91,7 @@ func environmentNames(env []string) []string {
 	return names
 }
 func bindFinalProcess(p Plan, key SealCommitmentKey) finalizedBindings {
-	b := finalizedBindings{binary: p.Binary, argv: slices.Clone(p.Argv), envNames: environmentNames(p.Env), selectors: make(map[string]string, len(p.Env)), key: key}
+	b := finalizedBindings{binary: p.Binary, argv: slices.Clone(p.Argv), envNames: environmentNames(p.Env), selectors: make(map[string]string, len(p.Env)), key: key, session: cloneSession(p.Session), sessionBound: true}
 	for i, entry := range p.Env {
 		name, value, _ := strings.Cut(entry, "=")
 		b.selectors[fmt.Sprint(i)] = literalCommitment(key, name, value)
@@ -151,17 +151,25 @@ func cloneSealedData(data SealedData) SealedData {
 // processSnapshot is captured by BuildPlan, before the caller can mutate any
 // exported plan slices. Artifact checks remain at exec; no disk content is
 // adopted or re-digested during finalization.
+//
+// Session is part of what the snapshot binds: the record is derived from the
+// argv, so a Session edited after sealing describes a launch the sealed argv
+// does not carry and refuses like any other changed field.
 type processSnapshot struct {
 	binary    string
 	argv, env []string
+	session   *PlanSession
 }
 
 func snapshotProcess(p Plan) *processSnapshot {
-	return &processSnapshot{p.Binary, slices.Clone(p.Argv), slices.Clone(p.Env)}
+	return &processSnapshot{p.Binary, slices.Clone(p.Argv), slices.Clone(p.Env), cloneSession(p.Session)}
 }
 func (s *processSnapshot) verify(p Plan) error {
 	if p.Binary != s.binary || !slices.Equal(p.Argv, s.argv) || !slices.Equal(p.Env, s.env) {
 		return fmt.Errorf("%w: base process changed before finalization", ErrFinalizedProcessChanged)
+	}
+	if !sessionsEqual(p.Session, s.session) {
+		return fmt.Errorf("%w: session record changed before finalization", ErrFinalizedProcessChanged)
 	}
 	return nil
 }

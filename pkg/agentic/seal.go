@@ -225,7 +225,10 @@ func (p Plan) ExportSeal() (Seal, error) {
 // truncated payload refuses as malformed, and sealed data whose integrity
 // digest mismatches refuses as tampered. An unsealed guard yields a verifier
 // only for a plugin that declares no sealer and opts into unsealed; sealed
-// data imports only through the named system's own importer.
+// data imports only through the named system's own importer. The verifier it
+// returns binds process facts only: Plan.Session is unverified across
+// ExportSeal/ImportSeal (the frozen guard wire carries none), so it is neither
+// derived nor checked here — see session.go.
 func ImportSeal(sys System, seal Seal, keys ...SealCommitmentKey) (ExecPlanVerifier, error) {
 	// Validate original caller bytes before dispatch or marshal. A repaired
 	// projection must never validate a different binding than we retain.
