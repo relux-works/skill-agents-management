@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.5.51 — 2026-10-05
+
+- Add the module-owned native launch-boundary adapter: `agentic.CheckLaunchBoundary`
+  repeats the launcher's pre-exec binary, codex MCP layer, and
+  prompt/system-prompt checks plus the MCP admission validators (the
+  launcher's fragment `mcp.path` check and the module's own inline
+  `--mcp-config` JSON grammar from `internal/mcpjson`, byte-identical at
+  `v0.5.37`, kept as an explicitly requested validator distinct from the
+  launcher's reachable boundary) with byte-identical refusal codes and
+  messages behind one exec-free API for a future consumer call. The daemon
+  and the launcher do not call this API yet; launcher migration to this API
+  follows in a separate leaf and is not wired yet.
+
+## Unreleased
+
 ## v0.5.50 — 2026-10-05
 
 - Added `agentic.NewImportedProcess` and `ImportedProcess.VerifyBeforeExec`: the
@@ -11,8 +26,6 @@
   binding mismatch read from the seal itself, and delegates to the imported
   verifier immediately before exec. Works for unsealed Claude and sealed
   Codex/Muse; `pkg/agentic` still owns no exec.
-
-## Unreleased
 
 ## v0.5.49 — 2026-10-04
 
