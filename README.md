@@ -424,6 +424,23 @@ JSON. `ImportSeal(system, seal)` rebuilds the verifier. Call
   collections export as `[]`/`{}` even when empty, never null, so an
   untouched empty environment round-trips; null for a required member still
   refuses.
+- `NewImportedProcess(system, seal, process)` imports the guard and binds the
+  exact final process — binary, ordered argv, full ordered env, cwd, home,
+  stdin — to the imported verifier. Construction first validates the
+  process shape: binary, cwd and home must be absolute, argv must exclude
+  argv[0], every env entry must be well-formed NAME=value with no NUL and no
+  duplicate names, and stdin must follow the null/empty/bytes
+  representation. It then refuses typed on a nil importer result, a process
+  naming another system, and a sealed or finalized binding whose binary or
+  argv differs from the given process; the binding is read from the seal
+  itself, never from an optional verifier capability, and an unsealed seal
+  binds no process facts. ImportSeal refusals (including the unsealed
+  marker for a plugin that declares a sealer) propagate unchanged.
+  `ImportedProcess.VerifyBeforeExec` refuses typed on any drift of the six
+  bound facts — env compares names, order and values exactly — then
+  delegates to the imported verifier for its own checks. Both entry points
+  deep-copy; the `Process()` projection never aliases the binding. Works
+  for unsealed Claude and sealed Codex/Muse.
 - Guard JSON cannot carry invalid UTF-8, so the producer refuses it typed
   before acceptance: `BuildPlan` for binary, argv and child env,
   `FinalizePlan` for base binary/argv and every overlay layer, `ExportSeal`
