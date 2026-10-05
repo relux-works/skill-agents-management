@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.50 — 2026-10-05
+
+- Added `agentic.NewImportedProcess` and `ImportedProcess.VerifyBeforeExec`: the
+  module-owned verifier plumbing that validates the exact final process shape
+  (absolute binary/cwd/home, argv excluding argv[0], well-formed NAME=value
+  env without NUL or duplicates, null/empty/bytes stdin), binds the process
+  (binary, ordered argv, full ordered env, cwd, home, stdin) to the verifier
+  `ImportSeal` returns, refuses typed on any drift or on a sealed/finalized
+  binding mismatch read from the seal itself, and delegates to the imported
+  verifier immediately before exec. Works for unsealed Claude and sealed
+  Codex/Muse; `pkg/agentic` still owns no exec.
+
+## Unreleased
+
 ## v0.5.49 — 2026-10-04
 
 - Seal every Muse interactive plan at `BuildPlan` time: the sealer binds
@@ -24,8 +38,6 @@
   `ElevateResumeIntent` now classifies under both verified releases, and a
   future arity contradiction fails loud at load instead of guessing. Bare
   `resume` stays refused as the picker form per contract r2 section 2.
-
-## Unreleased
 
 ## v0.5.48 — 2026-10-04
 
