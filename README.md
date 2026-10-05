@@ -456,6 +456,32 @@ authenticated socket**. Consumers own transport authorization, credential-free
 argv/path policy and hosted schema admission. Never persist raw guards,
 commitment keys or full secret-dependent digests.
 
+#### Native launch boundary: `agentic.CheckLaunchBoundary`
+
+`CheckLaunchBoundary(process, policy)` repeats checks immediately before a
+start: first the MCP admission validators in launcher order (the launcher's
+fragment `mcp.path` check plus the module's own inline `--mcp-config` JSON
+grammar, an explicitly requested validator transcribed from
+`internal/mcpjson/mcpjson.go:96-153`, byte-identical at `v0.5.37` and
+distinct from the launcher's native reachable boundary, which keeps
+`Composition` unset per `internal/plan/plan.go:74-77` at `fbcdbaf0`), then
+the launcher's SPEC section 4.6 boundary (provider binary identity, the
+codex MCP layer probe, and the prompt/system-prompt boundary), reporting
+the first failure. Boundary refusal codes and message bytes are identical
+to the launcher's (`exec_provider_missing`, `mcp_layer_missing`,
+`mcp_layer_unreadable`, `sysprompt_channel_unavailable`,
+`sysprompt_file_unreadable`); admission refusals carry the byte-identical
+sentence of their owner (the launcher's fragment sentence, the grammar's
+inline sentence); typed boundary errors unwrap to their filesystem cause.
+The adapter owns no exec and writes nothing; it reads only where the
+launcher reads (binary stats, the codex layer, the Pi prompt probes) and
+returns the resolved binary path plus the launcher warning lines. Full
+fragment-section and descriptor-metadata admission stays with the existing
+module validators, never in this adapter. This API is available for a
+future consumer call; launcher migration to it follows in a separate
+leaf and is not wired yet. The daemon and the launcher do not call this
+API yet.
+
 ### The codex plugin: `pkg/agentic/systems/codex`
 
 The Codex CLI, ported from `skill-project-management`'s spawn adapter and

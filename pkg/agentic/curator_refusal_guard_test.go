@@ -683,6 +683,45 @@ var curatorRefusalCoverageTable = []curatorRefusalCoverageRow{
 	{file: "imported_process.go", function: "ImportedProcess.VerifyBeforeExec", guard: "if plan.Home != p.home", returned: "return fmt.Errorf(\"%w: home differs\", ErrImportedProcessChanged)", occurrence: 0, testName: "TestImportedProcessRefusesDrift", entryPoint: "VerifyBeforeExec"},
 	{file: "imported_process.go", function: "ImportedProcess.VerifyBeforeExec", guard: "if plan.Stdin.Attached != p.stdin.Attached || !bytes.Equal(plan.Stdin.Bytes, p.stdin.Bytes)", returned: "return fmt.Errorf(\"%w: stdin differs\", ErrImportedProcessChanged)", occurrence: 0, testName: "TestImportedProcessRefusesDrift", entryPoint: "VerifyBeforeExec"},
 	{file: "imported_process.go", function: "ImportedProcess.VerifyBeforeExec", guard: "unconditional", returned: "return p.verifier.VerifyBeforeExec(plan)", occurrence: 0, testName: "TestImportedProcessDelegatesToSealedVerifier", entryPoint: "VerifyBeforeExec"},
+	{file: "launchboundary.go", function: "CheckLaunchBoundary", guard: "if err != nil", returned: "return LaunchBoundaryReport{}, err", occurrence: 0, testName: "TestLaunchBoundaryRefusesRelativeMCPConfigPath", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "CheckLaunchBoundary", guard: "if err != nil", returned: "return LaunchBoundaryReport{}, err", occurrence: 1, testName: "TestLaunchBoundaryRefusesTrailingInlineMCPContent", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "CheckLaunchBoundary", guard: "if err != nil", returned: "return LaunchBoundaryReport{}, err", occurrence: 2, testName: "TestLaunchBoundaryRefusesNonexecutableBinary", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "CheckLaunchBoundary", guard: "if err != nil", returned: "return LaunchBoundaryReport{}, err", occurrence: 3, testName: "TestLaunchBoundaryRefusesDirectoryMCPLayer", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "CheckLaunchBoundary", guard: "if err != nil", returned: "return LaunchBoundaryReport{}, err", occurrence: 4, testName: "TestLaunchBoundaryRefusesMissingSelectedPrompt", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPConfigPath", guard: "if environment != \"claude_code\" && environment != \"codex_cli\" && environment != \"opencode\"", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"fragment: /mcp: %s has no MCP channel\", environment)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPConfigPath", guard: "if n < 2 || n > 4096 || path[0] != '/' || strings.IndexByte(path, 0) >= 0", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"fragment: /mcp/path: %q is not an absolute path\", path)}", occurrence: 0, testName: "TestLaunchBoundaryRefusesRelativeMCPConfigPath", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPConfigPath", guard: "if seg == \"..\"", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"fragment: /mcp/path: %q contains a .. segment\", path)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if strings.TrimSpace(server.Name) == \"\"", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"%s composition carries an unnamed MCP server\", launchBoundaryMCPGrammar)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if duplicate", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"%s composition declares the MCP server %q twice\", launchBoundaryMCPGrammar, server.Name)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if len(prefix) == 0", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"%s MCP metadata has no config argument\", launchBoundaryMCPGrammar)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if len(prefix) != 2 || prefix[0] != launchBoundaryMCPConfigFlag", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"%s composition must be exactly one %s pair\", launchBoundaryMCPGrammar, launchBoundaryMCPConfigFlag)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if err != nil || document.MCPServers == nil || len(document.MCPServers) != len(servers)", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"invalid %s MCP config root\", launchBoundaryMCPGrammar)}", occurrence: 0, testName: "TestLaunchBoundaryRefusesTrailingInlineMCPContent", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if !exists", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"%s composition references unknown MCP server\", launchBoundaryMCPGrammar)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if err != nil || declared.Type != server.Transport", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"invalid %s MCP entry\", launchBoundaryMCPGrammar)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if strings.TrimSpace(declared.URL) == \"\" || declared.Command != \"\" || len(declared.Args) != 0", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"invalid %s HTTP MCP shape\", launchBoundaryMCPGrammar)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if len(declared.Headers) != 0", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"unexpected %s HTTP headers\", launchBoundaryMCPGrammar)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if len(declared.Headers) != 1 || declared.Headers[\"Authorization\"] != expected", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"invalid %s bearer environment reference\", launchBoundaryMCPGrammar)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary_admission.go", function: "checkLaunchBoundaryMCPInline", guard: "if strings.TrimSpace(declared.Command) == \"\" || declared.URL != \"\" || len(declared.Headers) != 0", returned: "return &LaunchBoundaryMCPAdmissionError{Message: fmt.Sprintf(\"invalid %s stdio MCP shape\", launchBoundaryMCPGrammar)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "launchBoundaryExecutable", guard: "if err != nil", returned: "return \"\", &LaunchBoundaryBinaryError{Binary: binary, Err: err}", occurrence: 0, testName: "TestLaunchBoundaryRefusesNonexecutableBinary", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "launchBoundaryExecutable", guard: "unconditional", returned: "return \"\", &LaunchBoundaryBinaryError{Binary: binary, Err: errors.New(\"executable file not found in $PATH\")}", occurrence: 0, testName: "TestLaunchBoundaryIgnoresLowercasePathEnv", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "checkLaunchBoundaryMCPLayer", guard: "if errors.Is(err, os.ErrNotExist)", returned: "return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerMissing, Path: path, Err: err}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "checkLaunchBoundaryMCPLayer", guard: "if err != nil", returned: "return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: err}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "checkLaunchBoundaryMCPLayer", guard: "if err != nil", returned: "return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: err}", occurrence: 1, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "checkLaunchBoundaryMCPLayer", guard: "if !info.Mode().IsRegular()", returned: "return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: errors.New(\"not a regular file\")}", occurrence: 0, testName: "TestLaunchBoundaryRefusesDirectoryMCPLayer", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "checkLaunchBoundaryMCPLayer", guard: "if err != nil", returned: "return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: err}", occurrence: 2, testName: "TestLaunchBoundaryMCPUnreadable", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "checkLaunchBoundaryMCPLayer", guard: "if err != nil", returned: "return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: err}", occurrence: 3, outOfContract: "TASK-261004-26qvc0 native launch-boundary AC: verbatim port of the launcher's post-open Fstat defense (composition probe.go:57-60); f.Stat on a just-opened descriptor cannot fail, so no launcher boundary case witnesses this site either. Inventoried and shape-checked; no behavioral coverage claimed."},
+	{file: "launchboundary.go", function: "checkLaunchBoundaryMCPLayer", guard: "if !info.Mode().IsRegular()", returned: "return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: errors.New(\"opened file is not regular\")}", occurrence: 0, outOfContract: "TASK-261004-26qvc0 native launch-boundary AC: verbatim port of the launcher's post-open regularity defense (composition probe.go:61-63); an open descriptor's type cannot change, so no launcher boundary case witnesses this site either. Inventoried and shape-checked; no behavioral coverage claimed."},
+	{file: "launchboundary.go", function: "selectLaunchBoundaryPrompt", guard: "unconditional", returned: "return launchBoundarySelection{}, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnavailable, Err: fmt.Errorf(\"no non-file system-prompt channel for %q\", intent)}", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "probeLaunchBoundaryPromptFiles", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestLaunchBoundaryPromptFileMatrix", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "readableLaunchBoundaryPromptFile", guard: "if err != nil", returned: "return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: err}", occurrence: 0, testName: "TestLaunchBoundaryRefusesMissingSelectedPrompt", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "readableLaunchBoundaryPromptFile", guard: "if err != nil", returned: "return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: err}", occurrence: 1, testName: "TestLaunchBoundaryPromptFileMatrix", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "readableLaunchBoundaryPromptFile", guard: "if !info.Mode().IsRegular()", returned: "return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: fmt.Errorf(\"not a regular file\")}", occurrence: 0, testName: "TestLaunchBoundaryPromptFileMatrix", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "readableLaunchBoundaryPromptFile", guard: "if err != nil", returned: "return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: err}", occurrence: 2, testName: "TestLaunchBoundaryPromptFileMatrix", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "readableLaunchBoundaryPromptFile", guard: "if err != nil", returned: "return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: err}", occurrence: 3, outOfContract: "TASK-261004-26qvc0 native launch-boundary AC: verbatim port of the launcher's post-open Fstat defense (systemprompt.go:130-133); f.Stat on a just-opened descriptor cannot fail, so no launcher boundary case witnesses this site either. Inventoried and shape-checked; no behavioral coverage claimed."},
+	{file: "launchboundary.go", function: "readableLaunchBoundaryPromptFile", guard: "if !info.Mode().IsRegular()", returned: "return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: fmt.Errorf(\"opened object is not a regular file\")}", occurrence: 0, outOfContract: "TASK-261004-26qvc0 native launch-boundary AC: verbatim port of the launcher's post-open regularity defense (systemprompt.go:134-136); an open descriptor's type cannot change, so no launcher boundary case witnesses this site either. Inventoried and shape-checked; no behavioral coverage claimed."},
+	{file: "launchboundary.go", function: "prepareLaunchBoundaryPrompt", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestLaunchBoundaryParityWithLauncher", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "prepareLaunchBoundaryPrompt", guard: "if err != nil", returned: "return nil, err", occurrence: 1, testName: "TestLaunchBoundaryRefusesMissingSelectedPrompt", entryPoint: "CheckLaunchBoundary"},
+	{file: "launchboundary.go", function: "prepareLaunchBoundaryPrompt", guard: "if err != nil", returned: "return nil, err", occurrence: 2, testName: "TestLaunchBoundaryPromptFileMatrix", entryPoint: "CheckLaunchBoundary"},
 }
 
 type curatorNarrowingMutationMember struct {
@@ -788,8 +827,50 @@ func TestCuratorPluginRefusalSitesHaveNamedBuildPlanCoverage(t *testing.T) {
 			namedBuildPlanSites++
 		}
 	}
-	t.Logf("hosted API refusal-site coverage: %d of %d sites have named public-entry tests", namedHostedSites, len(refusalscan.HostedResumeCoverage()))
-	t.Logf("refusal-site coverage: %d of %d sites have named BuildPlan tests; every sentinel and fixed-point helper is resolved by go/types object identity; scoped consumption and error-protocol methods are allowed; local forwarding, bare named-result forwarding, storage and non-regular files refuse", namedBuildPlanSites, len(sites))
+	resumeRows := hostedResumeCoverageRows()
+	resumeNamed := 0
+	for _, row := range resumeRows {
+		if row.testName != "" {
+			resumeNamed++
+		}
+	}
+	resumeTotal := len(refusalscan.HostedResumeCoverage())
+	launchTotal, launchNamed, launchBounds := 0, 0, 0
+	sealNamed, sealTotal := 0, 0
+	for _, row := range coverage {
+		if strings.HasPrefix(row.file, "launchboundary") {
+			launchTotal++
+			if row.testName != "" {
+				launchNamed++
+			}
+			if row.outOfContract != "" {
+				launchBounds++
+			}
+		}
+		if row.entryPoint == "ImportSeal" || row.entryPoint == "ExportSeal" {
+			sealTotal++
+			if row.testName != "" {
+				sealNamed++
+			}
+		}
+	}
+	// hostedTotal counts every named public-entry site plus the launch
+	// defensive bounds (which carry no entry point); sibling hosted families
+	// contribute through namedHostedSites without changing this formula.
+	hostedTotal := namedHostedSites + launchBounds
+	otherHostedNamed := namedHostedSites - resumeNamed - sealNamed - launchNamed
+	otherHostedTotal := hostedTotal - resumeTotal - sealTotal - launchTotal
+	totalNamed := namedBuildPlanSites + namedHostedSites
+	totalBounds := len(sites) - totalNamed
+	t.Logf("hosted-resume refusal-site coverage: %d of %d sites have named public-entry tests", resumeNamed, resumeTotal)
+	t.Logf("seal hosted refusal-site coverage: %d of %d sites have named public-entry tests", sealNamed, sealTotal)
+	t.Logf("launch-boundary refusal-site coverage: %d of %d sites have named public-entry tests (%d defensive bounds inventoried)", launchNamed, launchTotal, launchBounds)
+	if otherHostedNamed == 0 && otherHostedTotal == 0 {
+		t.Logf("hosted API refusal-site coverage: %d of %d sites have named public-entry tests (resume %d/%d, seal %d/%d, launch-boundary %d/%d)", namedHostedSites, hostedTotal, resumeNamed, resumeTotal, sealNamed, sealTotal, launchNamed, launchTotal)
+	} else {
+		t.Logf("hosted API refusal-site coverage: %d of %d sites have named public-entry tests (resume %d/%d, seal %d/%d, launch-boundary %d/%d, other hosted %d/%d)", namedHostedSites, hostedTotal, resumeNamed, resumeTotal, sealNamed, sealTotal, launchNamed, launchTotal, otherHostedNamed, otherHostedTotal)
+	}
+	t.Logf("refusal-site coverage: %d of %d sites have named tests (%d BuildPlan, %d hosted entry-point, %d out-of-contract bounds); every sentinel and fixed-point helper is resolved by go/types object identity; scoped consumption and error-protocol methods are allowed; local forwarding, bare named-result forwarding, storage and non-regular files refuse", totalNamed, len(sites), namedBuildPlanSites, namedHostedSites, totalBounds)
 
 	membersBySite := make(map[string]int)
 	memberNames := make(map[string]bool)
