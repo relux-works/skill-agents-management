@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.5.52 — 2026-10-05
+
+- `LaunchRequest.TempDir` carries a host-created per-launch temporary directory.
+  The Codex plugin maps it to `TMPDIR` in the child environment as the last
+  layer for that variable, and the Codex exec seal binds the selection: a
+  changed, removed or duplicated `TMPDIR` after sealing refuses typed.
+  Presence is explicit: nil keeps the environment byte for byte against the
+  pre-change baseline, while a present value must be a clean absolute path —
+  a relative, empty, blank or non-clean spelling refuses typed with
+  `ErrTempDirInvalid` at plan time, before any plugin surface runs: the
+  shape gate precedes Curator validation, descriptor validation and request
+  preparation in `BuildPlan`, and effort admission plus `Vendor.Spawn` in
+  `BuildLaunch`. The module creates no directory and
+  starts no process — the host creates the directory under its run dir and
+  removes it with the run. `SpawnRequest` carries the field through the
+  vendor layer unchanged, under the usual no-redirect fidelity check.
+
+## Unreleased
+
 ## v0.5.51 — 2026-10-05
 
 - Add the module-owned native launch-boundary adapter: `agentic.CheckLaunchBoundary`
@@ -12,8 +31,6 @@
   messages behind one exec-free API for a future consumer call. The daemon
   and the launcher do not call this API yet; launcher migration to this API
   follows in a separate leaf and is not wired yet.
-
-## Unreleased
 
 ## v0.5.50 — 2026-10-05
 
