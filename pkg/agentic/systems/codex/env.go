@@ -96,6 +96,21 @@ const (
 // family's.
 const ServiceTierEnv = "TASK_BOARD_CODEX_SERVICE_TIER"
 
+// TempDirEnv is the variable a codex child reads for its temporary-file
+// root. It is exported for the same reason as ServiceTierEnv: the mapping
+// from LaunchRequest.TempDir to this name is the contract, and a caller
+// that displays the resolved directory reads the same name.
+//
+// Like ServiceTierEnv it is NOT in internal/runtimeenv: the filter never
+// strips it, so an absent TempDir leaves whatever the parent carried
+// byte for byte. When TempDir is set, ChildEnv writes it as the LAST layer
+// for this variable — after the filter, the run context, the service tier,
+// the CODEX_HOME pin and the managed dedupe — so the mapped value cannot
+// be filtered back out or shadowed by an earlier layer. The network patch
+// cannot override it either: it joins OwnedEnv through ChildEnv(nil), and
+// a patch touching an owned key refuses typed instead of applying.
+const TempDirEnv = "TMPDIR"
+
 // runtimeEnvKeys is the fixed part of the blocked set, in the source's order.
 //
 // It is a package-level var holding a COPY of the shared list rather than an

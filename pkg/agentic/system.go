@@ -25,7 +25,9 @@ package agentic
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -696,6 +698,55 @@ type LaunchRequest struct {
 	// The zero value means unmanaged — no scope was selected — and leaves
 	// every existing plan byte-identical.
 	Network Network
+
+	// TempDir is the host-created per-launch temporary directory, carried to
+	// the child as TMPDIR by the systems that map it (Codex today).
+	//
+	// The host creates the directory under its own run dir and removes it
+	// with the run; the module never creates it, never checks it exists,
+	// and never executes anything under it. Codex maps it because codex-cli
+	// leaks .tmpXXXXXX directories under the inherited TMPDIR, and a
+	// per-launch directory the host removes is the fix that keeps the
+	// module exec-free.
+	//
+	// Presence is explicit: nil means absent — no system writes TMPDIR and
+	// the plan keeps the pre-change environment byte for byte — while a
+	// non-nil value MUST be a clean absolute path after trimming
+	// surrounding whitespace. A relative path, a blank or empty value, or
+	// a non-clean absolute spelling (a ".." traversal, a duplicate
+	// separator, a "." element, a trailing slash) refuses typed with
+	// ErrTempDirInvalid at plan time, before any plugin surface is
+	// dispatched. The trimmed value is what the child inherits. The module
+	// applies no other normalization — no cleaning, no symlink or
+	// existence check — so the sealed bytes are exactly the host's bytes.
+	TempDir *string
+}
+
+// ErrTempDirInvalid refuses a present per-launch temp dir that is not a
+// clean absolute path: a relative path, an empty or blank value, or a
+// non-clean absolute spelling. It fires in BuildPlan for every system,
+// before any plugin surface, in BuildLaunch before any vendor dispatch,
+// and in the Codex ChildEnv for direct plugin callers; all three gates
+// share ValidateTempDir, so the refusal is one rule, not three.
+var ErrTempDirInvalid = errors.New("agentic: per-launch temp dir is not a clean absolute path")
+
+// ValidateTempDir normalizes one per-launch temp dir for the child
+// environment: nil stays absent, and a present value MUST be a clean
+// absolute path after trimming. A present-but-empty value (like whitespace
+// only) refuses rather than collapsing onto absence, so a host that
+// formatted an empty path meets a typed refusal instead of a launch that
+// silently inherits the parent's TMPDIR. A non-clean absolute spelling
+// refuses rather than being cleaned, so the sealed bytes are exactly the
+// host's bytes and two spellings of one directory never seal as one.
+func ValidateTempDir(raw *string) (string, error) {
+	if raw == nil {
+		return "", nil
+	}
+	if trimmed := strings.TrimSpace(*raw); trimmed == "" || !filepath.IsAbs(trimmed) || filepath.Clean(trimmed) != trimmed {
+		return "", fmt.Errorf("%w: %q", ErrTempDirInvalid, *raw)
+	} else {
+		return trimmed, nil
+	}
 }
 
 // RunContext is the caller's identity for one tracked run, carried to the

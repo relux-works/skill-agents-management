@@ -144,6 +144,16 @@ type SpawnRequest struct {
 	// The zero value means unmanaged and leaves every existing plan
 	// byte-identical.
 	Network agentic.Network
+
+	// TempDir is the host-created per-launch temporary directory,
+	// forwarded unchanged into LaunchRequest. The vendor layer carries it
+	// without interpreting path policy and may not redirect it (fidelity);
+	// BuildLaunch validates the clean-absolute-path shape before any vendor
+	// dispatch, BuildPlan revalidates it before any plugin surface, and the
+	// Codex plugin maps it to TMPDIR. Nil means absent and leaves every
+	// existing plan byte-identical; a non-nil value that is not a clean
+	// absolute path refuses typed.
+	TempDir *string
 }
 
 // BuildLaunch resolves one launch through both layers.
@@ -166,6 +176,10 @@ type SpawnRequest struct {
 // configuration home) and may not REDIRECT it. Then agentic.BuildPlan, which
 // applies the Layer-1 contract checks: the effort transport, the launch mode,
 // the composition grammar, the goal/budget/tier support.
+//
+// The temp-dir shape gate runs alongside the network gate above, before
+// resolution: an invalid per-launch directory likewise never reaches a
+// vendor, a preparer, an observation or a preflight.
 //
 // What it does NOT do is ask whether the launch is allowed RIGHT NOW.
 // Availability, limit state and admission are a separate question with a
@@ -208,6 +222,7 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 	req.Context = cloneCuratorContext(req.Context)
 	req.ContextDescriptors = cloneContextDescriptors(req.ContextDescriptors)
 	req.Network = req.Network.Clone()
+	req.TempDir = cloneTempDir(req.TempDir)
 	// The network gate runs HERE, through the same shared function BuildPlan
 	// uses, before any vendor dispatch, preparation, observation or preflight
 	// (round-3 merged finding W1: preparation and preflight used to run
@@ -225,6 +240,26 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 		// so admission is undecidable. Fall through: the normal path below
 		// reports it exactly as it always has, and nothing plugin-side has
 		// run — the failed lookup touched declarations only.
+	}
+	// The per-launch temp dir is a pure shape gate, and it runs HERE,
+	// before resolution and every vendor-owned surface below it — effort
+	// admission, Vendor.Spawn, preparation, observation and preflight
+	// (round-3 finding tempdir-after-plugin-dispatch: BuildPlan used to be
+	// the only gate, so an invalid value reached Vendor.Spawn before the
+	// typed refusal). Shape validation needs no plugin state, so it runs
+	// before the first plugin invocation this layer performs; the only
+	// call that may precede it is the Capabilities declaration read the
+	// network gate above performs. Resolution keeps its position after the
+	// shape gates, so a refusal still names the missing plugin rather than
+	// a symptom, and the normalized value is what the vendor dispatch
+	// below receives. Nil stays absent and leaves every existing launch
+	// byte-identical.
+	if tempDir, err := agentic.ValidateTempDir(req.TempDir); err != nil {
+		return agentic.Plan{}, fmt.Errorf("vendorplugin: runtime %s carries an invalid per-launch temp dir: %w", req.Runtime, err)
+	} else if tempDir == "" {
+		req.TempDir = nil
+	} else {
+		req.TempDir = &tempDir
 	}
 	binding, err := resolveLaunchBinding(r, req.Runtime)
 	if err != nil {
@@ -278,6 +313,7 @@ func buildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agenti
 		vendorRequest.Context = cloneCuratorContext(req.Context)
 		vendorRequest.ContextDescriptors = cloneContextDescriptors(req.ContextDescriptors)
 		vendorRequest.Network = req.Network.Clone()
+		vendorRequest.TempDir = cloneTempDir(req.TempDir)
 		launch, err = binding.Vendor.Spawn(SpawnContext{
 			Runtime: runtime,
 			Model:   model,
@@ -572,6 +608,9 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 	if !reflect.DeepEqual(launch.Network, req.Network) {
 		return fmt.Errorf("%w: vendor %s changed the caller's network scope", ErrVendorContract, runtime.VendorID)
 	}
+	if !reflect.DeepEqual(launch.TempDir, req.TempDir) {
+		return fmt.Errorf("%w: vendor %s changed the caller's per-launch temp dir", ErrVendorContract, runtime.VendorID)
+	}
 	if req.LocalProvider != nil && launch.Home != req.Home {
 		return fmt.Errorf("%w: vendor %s redirected the caller's local provider to a different Codex home", ErrVendorContract, runtime.VendorID)
 	}
@@ -579,6 +618,19 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 }
 
 func cloneLocalProvider(value *agentic.LocalProviderBinding) *agentic.LocalProviderBinding {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+// cloneTempDir detaches one per-launch temp dir pointer, preserving the
+// nil-absent contract. The admission snapshot and the vendor's copy each
+// hold their own string, so a vendor that mutates the pointed-to value
+// cannot move the caller's selection and the fidelity check still sees
+// the redirect.
+func cloneTempDir(value *string) *string {
 	if value == nil {
 		return nil
 	}

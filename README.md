@@ -509,6 +509,28 @@ proven against all four codex launch-surface goldens through the real
 - **Effort transport is argv** — a `-c model_reasoning_effort="..."` override —
   and the vocabulary stays with the vendor layer. The service-tier override
   travels the same way.
+- **A per-launch temp dir rides `TMPDIR`.** `LaunchRequest.TempDir` carries a
+  host-created directory that `ChildEnv` writes to `TMPDIR` as the last env
+  layer for that variable — after the filter, the run context, the service
+  tier, the `CODEX_HOME` pin and the managed dedupe — replacing any inherited
+  value, so the child resolves exactly one entry. It joins `OwnedEnv`, so a
+  network patch touching it refuses typed instead of overriding the mapping.
+  The exec seal binds the selection: a changed, removed or duplicated `TMPDIR`
+  after sealing refuses typed, while a plan sealed with no `TMPDIR` entry
+  verifies exactly as before. Presence is explicit: nil keeps the environment
+  byte for byte against the pre-change baseline, while a present value must
+  be a clean absolute path — a relative, empty, blank or non-clean spelling
+  refuses typed with `ErrTempDirInvalid` at plan time, before any plugin
+  surface runs — ahead of Curator validation, descriptor validation and
+  request preparation in `BuildPlan`, and ahead of effort admission and
+  `Vendor.Spawn` in `BuildLaunch`, so no plugin error can mask the refusal.
+  The module creates no directory and starts no process: the
+  host creates the directory under its run dir and removes it with the run,
+  which is what clears the `.tmpXXXXXX` directories codex-cli leaks under
+  an inherited `TMPDIR`. Exported guards carry the selection as a keyed
+  commitment, never the literal path. Hosts using the two-layer entry set
+  `SpawnRequest.TempDir`, which the vendor layer forwards unchanged and may
+  not redirect (fidelity).
 - **Local model providers are opt-in per launch.** A non-nil
   `LaunchRequest.LocalProvider` selects a provider entry from the private
   Codex home; its ID uses the separate `local-` namespace, so Codex's built-in

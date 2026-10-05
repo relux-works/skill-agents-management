@@ -433,6 +433,7 @@ func TestNoStrippedKeyCollidesWithAnInjectedOne(t *testing.T) {
 		agentic.EnvDeliveryGoalID: true,
 		agentic.EnvContextID:      true,
 		ServiceTierEnv:            true,
+		TempDirEnv:                true,
 	}
 	for _, stripped := range runtimeEnvKeys {
 		if injected[stripped] {

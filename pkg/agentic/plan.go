@@ -442,6 +442,26 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		return Plan{}, fmt.Errorf("%w: %s carries %d native argument(s) in %s mode; only the interactive grammar forwards them",
 			ErrNativeArgsNotInteractive, id, len(req.NativeArgs), mode)
 	}
+	// The per-launch temp dir is a pure module-level shape gate: every
+	// system refuses a present value that is not a clean absolute path
+	// here, before the first plugin surface of any kind — the Curator
+	// validator, the descriptor validator and request preparation below
+	// (round-3 finding tempdir-after-plugin-dispatch: the gate used to sit
+	// after them, so an invalid value reached plugin dispatch and a plugin
+	// error masked the typed refusal). Shape validation needs no plugin
+	// state, so it runs before the first plugin invocation; the only call
+	// that precedes it is the Capabilities declaration read the network
+	// gate above may perform. The normalized value is what every surface
+	// below receives. Mapping it to TMPDIR is each system's own decision
+	// (Codex maps it; the rest ignore a valid value, which is the task's
+	// stated bound, not a silent drop of a parameter the launch needed).
+	if tempDir, err := ValidateTempDir(req.TempDir); err != nil {
+		return Plan{}, fmt.Errorf("agentic: %s carries an invalid per-launch temp dir: %w", id, err)
+	} else if tempDir == "" {
+		req.TempDir = nil
+	} else {
+		req.TempDir = &tempDir
+	}
 	var contextProvenance *CuratorContextProvenance
 	if req.Context != nil {
 		if err := ValidateCuratorContext(req.Context, req.Home); err != nil {

@@ -120,6 +120,7 @@ var localRefusalCoverageTable = []localRefusalCoverageRow{
 	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if !filepath.IsAbs(artifact.Path)", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestImportSealedDataRefusesMalformedArtifacts"},
 	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if !ok", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestImportSealedDataRefusesMalformedArtifacts"},
 	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestImportSealRefusesSwappedCatalog"},
+	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if !isSealCommitment(commitment)", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestCodexTempDirImportRefusesMalformedSelector/catalog-with-literal-selector"},
 }
 
 type localRefusalSite struct {

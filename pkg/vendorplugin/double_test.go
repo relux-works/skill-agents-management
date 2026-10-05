@@ -140,6 +140,7 @@ type narwhalVendor struct {
 	spawnLocalProvider *agentic.LocalProviderBinding
 	spawnHome          *string
 	spawnNetwork       *agentic.Network
+	spawnTempDir       *string
 }
 
 // narwhalAuthEnv is the vendor's legitimate ADDITION to a launch: the kind of
@@ -234,6 +235,7 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 		ServiceTier:   req.ServiceTier,
 		Composition:   req.Composition,
 		Network:       req.Network.Clone(),
+		TempDir:       cloneTempDir(req.TempDir),
 	}
 	if n.spawnSkipAuthEnv {
 		launch.Env = append([]string(nil), req.Env...)
@@ -279,6 +281,9 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 	}
 	if n.spawnNetwork != nil {
 		launch.Network = *n.spawnNetwork
+	}
+	if n.spawnTempDir != nil {
+		launch.TempDir = cloneTempDir(n.spawnTempDir)
 	}
 	return launch, nil
 }

@@ -2,6 +2,7 @@ package codex
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -69,22 +70,103 @@ func verifyLaunchCatalog(path, digest, providerID string) error {
 	return nil
 }
 
+// ErrCodexTempDirChanged refuses a plan whose TMPDIR selection no longer
+// matches the seal: a changed value, a removed entry, or a duplicated one.
+// Duplicates refuse even when every copy carries the sealed value, because
+// the child resolves them last-wins and a second entry is a second writer.
+// Absence and duplicates AT SEAL TIME bind nothing (they are not a
+// selection), so only a plan sealed with exactly one TMPDIR entry is
+// checked; every other plan verifies exactly as before.
+var ErrCodexTempDirChanged = errors.New("codex: sealed temp dir changed after planning")
+
 type catalogExecSeal struct {
 	path, digest, providerID string
 	binary                   string
 	argv                     []string
+	// tmpdir is the sealed TMPDIR selection, meaningful only when
+	// tmpdirBound. An imported seal holds a keyed commitment here instead
+	// of the value (tmpdirCommitted) and commits the presented value
+	// before comparing, so exported guards never carry the directory.
+	tmpdir          string
+	tmpdirBound     bool
+	tmpdirCommitted bool
+}
+
+// sealedTempDirSelection reads the plan's TMPDIR selection: the value when
+// the environment carries exactly one TMPDIR entry, unbound otherwise. Bare
+// entries without '=' carry no value and are ignored, the same reading the
+// launch layer applies everywhere else.
+func sealedTempDirSelection(env []string) (string, bool) {
+	var first string
+	var count int
+	for _, entry := range env {
+		name, value, ok := strings.Cut(entry, "=")
+		if !ok || name != TempDirEnv {
+			continue
+		}
+		if count == 0 {
+			first = value
+		}
+		count++
+	}
+	return first, count == 1
+}
+
+// verifySealedTempDir re-checks the sealed TMPDIR selection against the
+// presented environment. An unbound seal checks nothing: a plan sealed
+// without a selection verifies exactly as before.
+func verifySealedTempDir(seal *catalogExecSeal, env []string) error {
+	if !seal.tmpdirBound {
+		return nil
+	}
+	var first string
+	var count int
+	for _, entry := range env {
+		name, value, ok := strings.Cut(entry, "=")
+		if !ok || name != TempDirEnv {
+			continue
+		}
+		if count == 0 {
+			first = value
+		}
+		count++
+	}
+	if count != 1 {
+		return fmt.Errorf("%w: want exactly one TMPDIR entry, found %d", ErrCodexTempDirChanged, count)
+	}
+	presented := first
+	if seal.tmpdirCommitted {
+		presented = agentic.CommitSealLiteral(TempDirEnv, first)
+	}
+	if presented != seal.tmpdir {
+		return fmt.Errorf("%w: TMPDIR value differs from the sealed selection", ErrCodexTempDirChanged)
+	}
+	return nil
 }
 
 func (seal *catalogExecSeal) VerifyBeforeExec(plan agentic.Plan) error {
+	if seal.path == "" {
+		// A TempDir-only seal binds no catalog: the TMPDIR selection is
+		// the whole seal. Exact-process binding for such plans arrives
+		// through FinalizePlan's generic final-process commitments.
+		return verifySealedTempDir(seal, plan.Env)
+	}
 	if plan.Binary != seal.binary || !slices.Equal(plan.Argv, seal.argv) {
 		return localCatalogRefusal(agentic.LocalProviderConflicting, seal.path, seal.providerID)
+	}
+	if err := verifySealedTempDir(seal, plan.Env); err != nil {
+		return err
 	}
 	return verifyLaunchCatalog(seal.path, seal.digest, seal.providerID)
 }
 
-// SealExecPlan binds the binary, exact argv and catalog digest to the plan.
+// SealExecPlan binds the binary, exact argv and catalog digest to the plan,
+// plus the plan's TMPDIR selection when it carries exactly one TMPDIR
+// entry. A plan with neither a local catalog nor a TMPDIR selection seals
+// to nothing, exactly as before.
 // The consumer invokes Plan.VerifyBeforeExec immediately before its own Start.
 func (*System) SealExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error) {
+	tmpdir, tmpdirBound := sealedTempDirSelection(plan.Env)
 	launchCatalogs.Lock()
 	root := launchCatalogs.root
 	launchCatalogs.Unlock()
@@ -102,7 +184,10 @@ func (*System) SealExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error)
 			continue
 		}
 		digest := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(path), "catalog-"), ".json")
-		return &catalogExecSeal{path: path, digest: digest, binary: plan.Binary, argv: append([]string(nil), plan.Argv...)}, nil
+		return &catalogExecSeal{path: path, digest: digest, binary: plan.Binary, argv: append([]string(nil), plan.Argv...), tmpdir: tmpdir, tmpdirBound: tmpdirBound}, nil
 	}
-	return nil, nil
+	if !tmpdirBound {
+		return nil, nil
+	}
+	return &catalogExecSeal{binary: plan.Binary, argv: append([]string(nil), plan.Argv...), tmpdir: tmpdir, tmpdirBound: true}, nil
 }

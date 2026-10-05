@@ -93,5 +93,6 @@ func passthroughLaunchRequest(system agentic.SystemID, model Model, effort strin
 		ToolRelease:        req.ToolRelease,
 		NativeArgs:         append([]string(nil), req.NativeArgs...),
 		Network:            req.Network.Clone(),
+		TempDir:            req.TempDir,
 	}
 }

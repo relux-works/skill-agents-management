@@ -1,0 +1,482 @@
+[
+  {
+    "name": "plain/exec/unmanaged",
+    "parent": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "exec",
+    "managed": false,
+    "wantEnv": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority"
+    ]
+  },
+  {
+    "name": "plain/exec/managed",
+    "parent": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "exec",
+    "managed": true,
+    "wantEnv": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "HTTP_PROXY=http://127.0.0.1:18081",
+      "HTTPS_PROXY=http://127.0.0.1:18081",
+      "http_proxy=http://127.0.0.1:18081",
+      "https_proxy=http://127.0.0.1:18081",
+      "NO_PROXY=127.0.0.1,::1,localhost",
+      "no_proxy=127.0.0.1,::1,localhost"
+    ]
+  },
+  {
+    "name": "plain/dry-run/unmanaged",
+    "parent": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "dry-run",
+    "managed": false,
+    "wantEnv": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority"
+    ]
+  },
+  {
+    "name": "plain/dry-run/managed",
+    "parent": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "dry-run",
+    "managed": true,
+    "wantEnv": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "HTTP_PROXY=http://127.0.0.1:18081",
+      "HTTPS_PROXY=http://127.0.0.1:18081",
+      "http_proxy=http://127.0.0.1:18081",
+      "https_proxy=http://127.0.0.1:18081",
+      "NO_PROXY=127.0.0.1,::1,localhost",
+      "no_proxy=127.0.0.1,::1,localhost"
+    ]
+  },
+  {
+    "name": "plain/managed-session/unmanaged",
+    "parent": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "managed-session",
+    "managed": false,
+    "wantEnv": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority"
+    ]
+  },
+  {
+    "name": "plain/managed-session/managed",
+    "parent": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "managed-session",
+    "managed": true,
+    "wantEnv": [
+      "KEEP=yes",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "HTTP_PROXY=http://127.0.0.1:18081",
+      "HTTPS_PROXY=http://127.0.0.1:18081",
+      "http_proxy=http://127.0.0.1:18081",
+      "https_proxy=http://127.0.0.1:18081",
+      "NO_PROXY=127.0.0.1,::1,localhost",
+      "no_proxy=127.0.0.1,::1,localhost"
+    ]
+  },
+  {
+    "name": "inherited-tmpdir/exec/unmanaged",
+    "parent": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "exec",
+    "managed": false,
+    "wantEnv": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority"
+    ]
+  },
+  {
+    "name": "inherited-tmpdir/exec/managed",
+    "parent": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "exec",
+    "managed": true,
+    "wantEnv": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "HTTP_PROXY=http://127.0.0.1:18081",
+      "HTTPS_PROXY=http://127.0.0.1:18081",
+      "http_proxy=http://127.0.0.1:18081",
+      "https_proxy=http://127.0.0.1:18081",
+      "NO_PROXY=127.0.0.1,::1,localhost",
+      "no_proxy=127.0.0.1,::1,localhost"
+    ]
+  },
+  {
+    "name": "inherited-tmpdir/dry-run/unmanaged",
+    "parent": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "dry-run",
+    "managed": false,
+    "wantEnv": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority"
+    ]
+  },
+  {
+    "name": "inherited-tmpdir/dry-run/managed",
+    "parent": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "dry-run",
+    "managed": true,
+    "wantEnv": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "HTTP_PROXY=http://127.0.0.1:18081",
+      "HTTPS_PROXY=http://127.0.0.1:18081",
+      "http_proxy=http://127.0.0.1:18081",
+      "https_proxy=http://127.0.0.1:18081",
+      "NO_PROXY=127.0.0.1,::1,localhost",
+      "no_proxy=127.0.0.1,::1,localhost"
+    ]
+  },
+  {
+    "name": "inherited-tmpdir/managed-session/unmanaged",
+    "parent": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "managed-session",
+    "managed": false,
+    "wantEnv": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority"
+    ]
+  },
+  {
+    "name": "inherited-tmpdir/managed-session/managed",
+    "parent": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "managed-session",
+    "managed": true,
+    "wantEnv": [
+      "KEEP=yes",
+      "TMPDIR=/fixture/tmp",
+      "OTHER=no",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "HTTP_PROXY=http://127.0.0.1:18081",
+      "HTTPS_PROXY=http://127.0.0.1:18081",
+      "http_proxy=http://127.0.0.1:18081",
+      "https_proxy=http://127.0.0.1:18081",
+      "NO_PROXY=127.0.0.1,::1,localhost",
+      "no_proxy=127.0.0.1,::1,localhost"
+    ]
+  },
+  {
+    "name": "duplicates/exec/unmanaged",
+    "parent": [
+      "TMPDIR=/fixture/a",
+      "KEEP=yes",
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "exec",
+    "managed": false,
+    "wantEnv": [
+      "TMPDIR=/fixture/a",
+      "KEEP=yes",
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority"
+    ]
+  },
+  {
+    "name": "duplicates/exec/managed",
+    "parent": [
+      "TMPDIR=/fixture/a",
+      "KEEP=yes",
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "exec",
+    "managed": true,
+    "wantEnv": [
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "HTTP_PROXY=http://127.0.0.1:18081",
+      "HTTPS_PROXY=http://127.0.0.1:18081",
+      "http_proxy=http://127.0.0.1:18081",
+      "https_proxy=http://127.0.0.1:18081",
+      "NO_PROXY=127.0.0.1,::1,localhost",
+      "no_proxy=127.0.0.1,::1,localhost"
+    ]
+  },
+  {
+    "name": "duplicates/dry-run/unmanaged",
+    "parent": [
+      "TMPDIR=/fixture/a",
+      "KEEP=yes",
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "dry-run",
+    "managed": false,
+    "wantEnv": [
+      "TMPDIR=/fixture/a",
+      "KEEP=yes",
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority"
+    ]
+  },
+  {
+    "name": "duplicates/dry-run/managed",
+    "parent": [
+      "TMPDIR=/fixture/a",
+      "KEEP=yes",
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "dry-run",
+    "managed": true,
+    "wantEnv": [
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "HTTP_PROXY=http://127.0.0.1:18081",
+      "HTTPS_PROXY=http://127.0.0.1:18081",
+      "http_proxy=http://127.0.0.1:18081",
+      "https_proxy=http://127.0.0.1:18081",
+      "NO_PROXY=127.0.0.1,::1,localhost",
+      "no_proxy=127.0.0.1,::1,localhost"
+    ]
+  },
+  {
+    "name": "duplicates/managed-session/unmanaged",
+    "parent": [
+      "TMPDIR=/fixture/a",
+      "KEEP=yes",
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "managed-session",
+    "managed": false,
+    "wantEnv": [
+      "TMPDIR=/fixture/a",
+      "KEEP=yes",
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority"
+    ]
+  },
+  {
+    "name": "duplicates/managed-session/managed",
+    "parent": [
+      "TMPDIR=/fixture/a",
+      "KEEP=yes",
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e"
+    ],
+    "mode": "managed-session",
+    "managed": true,
+    "wantEnv": [
+      "TMPDIR=/fixture/b",
+      "KEEP=yes",
+      "PATH=\u003cBIN\u003e",
+      "HOME=\u003cHOME\u003e",
+      "TASK_BOARD_RUN_ID=RUN-parity-codex",
+      "TASK_BOARD_TASK_ID=TASK-parity-codex",
+      "TASK_BOARD_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_DIR=\u003cWORK\u003e/.task-board",
+      "TASK_BOARD_CODEX_SERVICE_TIER=priority",
+      "HTTP_PROXY=http://127.0.0.1:18081",
+      "HTTPS_PROXY=http://127.0.0.1:18081",
+      "http_proxy=http://127.0.0.1:18081",
+      "https_proxy=http://127.0.0.1:18081",
+      "NO_PROXY=127.0.0.1,::1,localhost",
+      "no_proxy=127.0.0.1,::1,localhost"
+    ]
+  }
+]

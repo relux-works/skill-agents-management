@@ -378,6 +378,7 @@ func (museStub) ValidateComposition(agentic.Composition) error { return nil }
 // budget, a dropped goal, a composition the caller never approved.
 func TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch(t *testing.T) {
 	tier := "batch"
+	tempDir := "/vendor-elsewhere/tmp"
 	effort := "shallow"
 	support := agentic.EffortSupportNone
 	baseRun := narwhalRequest().Run
@@ -406,6 +407,7 @@ func TestBuildLaunchRefusesAVendorThatRedirectsTheLaunch(t *testing.T) {
 		"the budget dropped":       func(v *narwhalVendor) { v.spawnDropBudget = true },
 		"a different service tier": func(v *narwhalVendor) { v.spawnTier = &tier },
 		"the composition dropped":  func(v *narwhalVendor) { v.spawnDropComposit = true },
+		"a different temp dir":     func(v *narwhalVendor) { v.spawnTempDir = &tempDir },
 	}
 	for name, redirect := range cases {
 		t.Run(name, func(t *testing.T) {

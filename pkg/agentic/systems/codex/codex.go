@@ -167,7 +167,21 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 // resolve config-selecting keys from this array, and duplicates reached the
 // child last-wins while the inventory read first (round-4 K1). Unmanaged
 // envs keep their bytes verbatim.
+//
+// Last, a present TempDir is written to TMPDIR over every earlier layer:
+// the inherited value, if any, is replaced rather than shadowed, so the
+// child resolves exactly one entry. An absent (nil) TempDir writes nothing
+// and the environment keeps the pre-change bytes. BuildPlan validates the
+// shape before dispatching; this second check protects direct plugin
+// callers with the same typed refusal.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
+	var tempDir string
+
+	if validated, err := agentic.ValidateTempDir(req.TempDir); err != nil {
+		return nil, fmt.Errorf("codex: invalid per-launch temp dir: %w", err)
+	} else {
+		tempDir = validated
+	}
 	env := childEnv(parent, req)
 	if req.LocalProvider != nil {
 		var home string
@@ -179,10 +193,13 @@ func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, e
 		}
 		env = agentic.SetEnvValue(env, "CODEX_HOME", home)
 	}
-	if req.Network.IsZero() {
-		return env, nil
+	if !req.Network.IsZero() {
+		env = dedupeManagedEnv(env)
 	}
-	return dedupeManagedEnv(env), nil
+	if tempDir != "" {
+		env = agentic.SetEnvValue(env, TempDirEnv, tempDir)
+	}
+	return env, nil
 }
 
 // Stdin is codex's prompt transport: the assignment prompt is streamed on
