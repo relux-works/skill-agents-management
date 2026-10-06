@@ -29,6 +29,18 @@
 
 ## Unreleased
 
+- Auxiliary timeouts refuse primary admission with `AuxTimeoutError`, carrying
+  the probe role and supporting `errors.As`, distinct from failed probes while
+  preserving `errors.Is(err, ErrAuxRefused)`.
+
+- Add module-owned Claude version and goal auxiliary projections, derived only
+  from an admitted primary plan, with fixed argv, private per-process seals,
+  typed hard timeouts and no-survivor policy. Typed results gate the primary
+  start; unknown roles, swapped binary content, timeout and incomplete cleanup
+  refuse. Execution and result decoding remain host responsibilities. Release
+  grammar is shared without importing process control, and auxiliary refusal
+  sites participate in the existing source-derived coverage census.
+
 ## v0.5.53 — 2026-10-06
 
 - `agentic.Plan` carries a typed `Session *PlanSession` — the native session

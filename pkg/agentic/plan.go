@@ -60,6 +60,7 @@ type Plan struct {
 	// can re-derive the record when a native tail extends the argv. Only
 	// buildPlan sets it.
 	sessionPlanner SessionPlanner
+	auxiliaryBasis *auxiliaryBasis
 
 	curatorContextProvenance *CuratorContextProvenance
 
@@ -697,6 +698,9 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		sessionPlanner:           planner,
 		curatorContextProvenance: contextProvenance,
 		networkProvenance:        networkProvenance,
+	}
+	if planner, ok := sys.(AuxiliaryPlanner); ok {
+		plan.auxiliaryBasis = &auxiliaryBasis{planner: planner, workDir: plan.WorkDir, home: plan.Home}
 	}
 	if sealer, ok := sys.(ExecPlanSealer); ok {
 		if verifier, err := sealer.SealExecPlan(plan); err != nil {

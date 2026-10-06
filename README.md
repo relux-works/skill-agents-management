@@ -2000,3 +2000,34 @@ sealed transport APIs are a separate contract.
 | Go hosted contract tests | selector, restart, schema, exec-free and refusal properties | `go test ./pkg/agentic -run 'TestResume\|TestClaudeRestart\|TestPinnedHosted\|TestAgenticProduction\|TestCuratorPluginRefusalSites' -count=1` | terminal output; `.temp/` task logs |
 | Hosted mutant harness | execute a named narrowing witness against public API tests | `go run ./tools/launchcontext-mutants --name second-insertion-admitted --table-out .temp/hosted-mutants/second-insertion.md` | `.temp/hosted-mutants/` and `.temp/launch-context-mutants/process-evidence/` |
 | Go validation | validate the Change Request candidate | `make vet`; `make test`; `make regress` | terminal output; `.temp/` task logs |
+
+### Hosted Claude auxiliary projections
+
+`agentic.BuildAuxiliaryPlans(primary)` builds the two module-owned Claude
+preflight processes from a registry-built, already-admitted primary plan.
+The closed roles are `ClaudeVersionProbe` (`--version`, 15 seconds) and
+`ClaudeGoalProbe` (`-p --output-format json /goal`, 60 seconds). Neither
+accepts caller argv, env, binary, cwd or home fields. Each detached `AuxPlan`
+carries its own private seal and typed `HardTimeout` / `RequireNoSurvivors`
+policy. Call `aux.VerifyBeforeExec()` at every auxiliary start site.
+
+The host executes, decodes results into `AuxResult`, and enforces timeout,
+process-group termination and reaping. `VerifyPrimaryAfterAux(primary, plans,
+results)` refuses missing, duplicate, failed, timed-out, unreaped or wrongly
+typed results and checks the original binary content again before the primary
+start. Version strings must be release triples; goal success is `GoalReady`.
+Results never modify primary argv or env. These are in-process host assertions,
+not authenticated wire evidence; a dishonest host, execution races after the
+last check, and proving OS process cleanup are outside the module's contract.
+Release validation shares the pure `internal/releasegrammar` package with the
+existing probe API, so the base planning package retains its exec-free import
+graph. Auxiliary refusals are pinned in the existing refusal-site census.
+The frozen hosted wire schemas remain unchanged. Hosts opt into both probes
+for Claude preflight; this library never executes them.
+
+Run targeted verification with `go test -mod=mod ./pkg/agentic -run
+'^(TestAux|TestClaudeAuxiliary)' -count=1 -v`; the same suite includes behavioral
+narrowing mutants through private predicate seams, without source replacement.
+Run `go vet -mod=mod ./pkg/agentic ./pkg/agentic/systems/claude` for the affected
+packages. Logs belong in task-scoped `.temp/` directories. The Change Request
+validation runs the repository's `make vet` and `make test` gates.
