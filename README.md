@@ -388,8 +388,9 @@ JSON. `ImportSeal(system, seal)` rebuilds the verifier. Call
 - `FinalizePlan(base, overlays, bindings)` first refuses a base binary or argv
   that cannot survive guard JSON, then checks the BuildPlan process snapshot,
   rejecting a prechanged binary, argv or env. It validates fragment env,
-  prompt env, native tail and typed bindings in that order. Binding kinds
-  remain unsupported. It binds the exact final binary, ordered argv and full
+  prompt env, native tail and typed bindings in that order. The only typed
+  binding is the managed-session reservation below; every other binding
+  refuses typed. It binds the exact final binary, ordered argv and full
   ordered environment, including entries outside the overlays. It preserves
   artifact digests without reading/resealing disk during finalization;
   artifact drift still refuses at verification/import. A Muse seal
@@ -800,6 +801,77 @@ frozen RUNTIME id `claude`; `parity_test.go` maps between them in one place.
   that binds a Session, an imported plan that keeps one, empty collection
   equated to nil, the native-tail re-derivation, a re-exported foreign-argv
   helper, an unissued fill admitted, the fill gaining a writer) die by name.
+
+### Typed session reservation (`FinalizePlan`)
+
+A hosted launcher starting a NEW managed session first has the session daemon
+reserve one; the daemon answers with a SES handle and the native session UUID.
+`FinalizePlan` carries those two server-supplied values into exactly two typed
+slots at module-fixed positions, and nothing else. The reserve endpoint, its
+authentication, single use and TTL belong to the daemon (tb-sessiond); the
+module never generates, stores or checks the issuance of a value.
+
+- **API.** `FinalizeOverlays.Reservation` is an opaque `*SessionReservation`
+  (`SessionID` = SES handle, `NativeID` = UUID, `Intent` = zero or
+  `ResumeNew`, with no `Identity`). The `bindings` argument carries the two slots, each a
+  `TypedBinding{Kind: BindingKindManagedSession, Name, Value}`: env
+  `ManagedSessionEnvSlot` (`TASK_BOARD_MANAGED_SESSION_ID`) with the SES handle
+  and argv `ManagedSessionArgvSlot` (`--session-id`) with the UUID. Without a
+  reservation every binding still refuses `ErrFinalizeBindingUnknown`.
+- **Fixed positions.** The argv slot is the first two tokens of the final argv,
+  before the sealed base argv and the native tail, so no `--` can turn it into
+  prompt text. The env slot is the last entry of the final environment, after
+  every fragment and prompt overlay. `Plan.Session` is derived again over the
+  shifted argv, so RC indices stay exact.
+- **Refusals.** Any other binding kind or slot name refuses
+  `ErrFinalizeBindingUnknown`, as does a reservation on a system with no
+  native session grammar (Codex, Muse). Refusing `ErrFinalizeReservationRefused`:
+  a slot set that is not exactly the two slots (a third slot, a repeat, a
+  missing slot), a SES handle or UUID with no valid shape (the same grammar as
+  `ValidateResumeIntent`), a slot value that differs from the reservation, an
+  `Intent` other than new or an identity-bearing new `Intent` (an empty `Kind`
+  normalizes to new and, like `ResumeNew`, must obey `ValidateResumeIntent`:
+  the native UUID travels only as the slot value), an env that already carries the slot name, and an
+  argv — sealed base or native tail — in which the plugin's own resume grammar
+  finds a resume, continue, `--session-id` or `--fork-session` selector (no
+  second parser: the plugin's `ElevateResumeIntent` decides).
+- **Verifier.** The finalized verifier binds both slots by themselves, before
+  the whole-process comparison, so a changed, moved or dropped slot is named
+  as a reservation slot (`ErrFinalizedProcessChanged`).
+- **Stated bounds.** The slot binding is in-process, like `Session`: a binding
+  rebuilt by `ImportSeal` from the frozen guard wire carries no reservation,
+  and across a process boundary the slots stay bound only through the full
+  argv and environment commitments. The module cannot know whether a value
+  was actually issued by the daemon; a well-formed value that agrees with
+  itself is admitted. The sealed finalize path accepts a reservation only for a
+  plugin with a native session grammar, and no sealed plugin has one today, so
+  its slot application is exercised through the shared helper by the unsealed
+  (Claude) path and refused by Codex (`TestFinalizeSealedPlanRefusesAReservation`).
+  Phase 1 is NEW launches only.
+- **Tests.** `TestFinalizeReservationBindsTheTwoSlotsAtFixedPositions` (happy
+  path and parity with the native finalization, exec and interactive),
+  `TestFinalizeReservationRefusesForgedSES`,
+  `TestFinalizeReservationRefusesForgedUUID`,
+  `TestFinalizeReservationRefusesAThirdTypedSlotAndAnyOtherBinding`,
+  `TestFinalizeReservationRefusesResumeIntent`,
+  `TestFinalizeReservationRefusesIdentityOnANewIntent`,
+  `TestFinalizeReservationRefusesSlotValueMismatch`,
+  `TestFinalizeReservationRefusesAProcessThatAlreadyCarriesTheEnvSlot`,
+  `TestFinalizeReservationRederivesSessionOverTheShiftedArgv` and
+  `TestFinalizeReservationVerifierBindsBothSlots`, each driving `BuildPlan`
+  then `FinalizePlan`. Twenty-three narrowing members in
+  `tools/launchcontext-mutants` (`managed-session-*`: argv or env slot
+  position not fixed, a third slot or an extra slot name admitted, a slot with
+  no reservation, forged SES or UUID admitted, a differing slot value admitted,
+  an intent, an identity on a new intent (explicit or empty Kind), a continue or
+  adoption selector admitted, a carried env slot
+  admitted, a grammar-less system admitted, the session not re-derived, each
+  verifier member exempting ONE synthetic fixture value or position of the argv
+  or env slot and keeping the check active for every other) die by name, the
+  verifier ones on the slot check's own `reservation ... slot` attribution
+  (the downstream whole-process binder still refuses those fixtures under another
+  message, which is the stated bound); run one with
+  `go run ./tools/launchcontext-mutants -name managed-session-third-slot-admitted`.
 
 Run the policy gates with
 `go test ./pkg/agentic/... ./internal/refusalscan ./tools/launchcontext-mutants ./pkg/vendorplugin/... ./pkg/providerquota`.

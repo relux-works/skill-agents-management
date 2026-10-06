@@ -30,8 +30,9 @@ var (
 	// name that is not an environment name, a NUL-carrying value, a name
 	// set twice in one overlay, or a native tail token carrying NUL.
 	ErrFinalizeOverlayMalformed = errors.New("agentic: finalize overlay entry is malformed")
-	// ErrFinalizeBindingUnknown refuses a typed binding: no binding kinds
-	// are admitted yet, so any binding is unknown.
+	// ErrFinalizeBindingUnknown refuses a typed binding that is not one of
+	// the two managed-session slots under a reservation: without a
+	// reservation no binding kind is admitted, so any binding is unknown.
 	ErrFinalizeBindingUnknown = errors.New("agentic: finalize binding kind is unknown")
 	// ErrFinalizedProcessChanged refuses a process that differs from the
 	// finalized one: another binary, other argv, or changed env-sensitive
@@ -50,11 +51,17 @@ type FinalizeOverlays struct {
 	PromptEnv []string
 	// NativeTail holds argv tokens appended after the sealed argv, in order.
 	NativeTail []string
+	// Reservation is the opaque server-supplied session reservation the
+	// typed managed-session bindings must agree with, see
+	// finalize_reservation.go. Nil means no reservation: every typed
+	// binding refuses as unknown.
+	Reservation *SessionReservation
 }
 
-// TypedBinding is a future typed launch binding. The kinds land later; until
-// they do, FinalizePlan refuses every binding as unknown rather than
-// carrying a value it cannot validate.
+// TypedBinding is a typed launch binding. The only kind admitted is
+// BindingKindManagedSession, in exactly the two slots of a reservation; any
+// other binding refuses typed rather than carrying a value the module cannot
+// validate.
 type TypedBinding struct {
 	Kind  string
 	Name  string
@@ -128,17 +135,22 @@ func finalizeUnsealedPlan(base Plan, overlays FinalizeOverlays, bindings []Typed
 	} else {
 		env, selectors = applied, appliedSelectors
 	}
-	if err := refuseFinalizeBindings(bindings); err != nil {
+	var slots *reservedSlots
+	if resolved, err := resolveFinalizeBindings(base, overlays, bindings, env); err != nil {
 		return Plan{}, err
+	} else {
+		slots = resolved
 	}
 	final := base
-	final.Env = env
-	final.Argv = append(append([]string(nil), base.Argv...), overlays.NativeTail...)
-	if err := rederiveFinalSession(&final, overlays.NativeTail); err != nil {
+	final.Env = slots.finalEnv(env)
+	final.Argv = slots.finalArgv(base.Argv, overlays.NativeTail)
+	if err := rederiveFinalSession(&final, slots != nil || len(overlays.NativeTail) > 0); err != nil {
 		return Plan{}, err
 	}
 	_ = selectors
-	final.execVerifier = finalizedUnsealedVerifier{bindings: bindFinalProcess(final, key)}
+	b := bindFinalProcess(final, key)
+	slots.bind(&b)
+	final.execVerifier = finalizedUnsealedVerifier{bindings: b}
 	return final, nil
 }
 
@@ -167,19 +179,23 @@ func finalizeSealedPlan(base Plan, artifacts ExecArtifactVerifier, exporter Exec
 	} else {
 		env, selectors = applied, appliedSelectors
 	}
-	if err := refuseFinalizeBindings(bindings); err != nil {
+	var slots *reservedSlots
+	if resolved, err := resolveFinalizeBindings(base, overlays, bindings, env); err != nil {
 		return Plan{}, err
+	} else {
+		slots = resolved
 	}
 	final := base
-	final.Env = env
-	final.Argv = append(append([]string(nil), base.Argv...), overlays.NativeTail...)
-	if err := rederiveFinalSession(&final, overlays.NativeTail); err != nil {
+	final.Env = slots.finalEnv(env)
+	final.Argv = slots.finalArgv(base.Argv, overlays.NativeTail)
+	if err := rederiveFinalSession(&final, slots != nil || len(overlays.NativeTail) > 0); err != nil {
 		return Plan{}, err
 	}
 	data.Argv = append([]string(nil), final.Argv...)
 	_ = selectors
 	data = cloneSealedData(data)
 	b := bindFinalProcess(final, key)
+	slots.bind(&b)
 	data.Binding = b.export()
 	// The finalized projection carries the plugin's own selectors beside
 	// the final-process commitments: the plugin importer needs its
@@ -202,11 +218,13 @@ func finalizeSealedPlan(base Plan, artifacts ExecArtifactVerifier, exporter Exec
 // rederiveFinalSession keeps Session describing the argv the finalized plan
 // carries. A native tail appends tokens after the base argv, and a tail token
 // can be a session selector, so the record is derived again over the final
-// argv through the plugin that filled it. Without a tail the final argv is
-// the base argv and the sealed base record stands. Any other system (no
+// argv through the plugin that filled it. A reservation prepends its argv
+// slot, which moves every position, so it re-derives the same way. Without a
+// tail or a reservation the final argv is the base argv and the sealed base
+// record stands. Any other system (no
 // planner) carries no record, and none is invented.
-func rederiveFinalSession(final *Plan, tail []string) error {
-	if final.sessionPlanner == nil || len(tail) == 0 {
+func rederiveFinalSession(final *Plan, extended bool) error {
+	if final.sessionPlanner == nil || !extended {
 		return nil
 	}
 	if session, err := deriveSession(final.sessionPlanner, final.System, final.Argv, final.WorkDir, final.Mode); err != nil {
@@ -386,9 +404,15 @@ type finalizedBindings struct {
 	// Session is UNVERIFIED, see session.go.
 	session      *PlanSession
 	sessionBound bool
+	// reservation binds the two managed-session slots by themselves, also
+	// in-process only; nil when the plan was finalized without one.
+	reservation *boundReservation
 }
 
 func (b finalizedBindings) verify(plan Plan) error {
+	if err := b.reservation.verify(plan, b.key); err != nil {
+		return err
+	}
 	if plan.Binary != b.binary {
 		return fmt.Errorf("%w: binary differs", ErrFinalizedProcessChanged)
 	}

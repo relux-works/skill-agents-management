@@ -306,6 +306,26 @@ func TestFinalizeSealedPlanRefusesBinding(t *testing.T) {
 	}
 }
 
+// TestFinalizeSealedPlanRefusesAReservation drives the sealed finalize path:
+// Codex has no native session grammar for the managed-session slots, so a
+// well-formed reservation with both slots still refuses typed.
+func TestFinalizeSealedPlanRefusesAReservation(t *testing.T) {
+	home, wd := t.TempDir(), t.TempDir()
+	writeProviderConfig(t, home, "local-story", "http://127.0.0.1:38171/v1", "responses", false)
+	plan, err := buildCodexPlan(t, catalogRequest(t, home, wd, "low"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const ses, uuid = "SES-7f3a91c2", "0b9f8c2e-4d1a-4e6b-9c3d-2a5f7e8d1b04"
+	_, err = agentic.FinalizePlan(plan, agentic.FinalizeOverlays{Reservation: &agentic.SessionReservation{SessionID: ses, NativeID: uuid}}, []agentic.TypedBinding{
+		{Kind: agentic.BindingKindManagedSession, Name: agentic.ManagedSessionEnvSlot, Value: ses},
+		{Kind: agentic.BindingKindManagedSession, Name: agentic.ManagedSessionArgvSlot, Value: uuid},
+	})
+	if !errors.Is(err, agentic.ErrFinalizeBindingUnknown) {
+		t.Fatalf("FinalizePlan err = %v, want ErrFinalizeBindingUnknown for a system with no native session grammar", err)
+	}
+}
+
 func TestFinalizedSealedPlanRefusesChangedArgv(t *testing.T) {
 	home, wd := t.TempDir(), t.TempDir()
 	writeProviderConfig(t, home, "local-story", "http://127.0.0.1:38171/v1", "responses", false)
