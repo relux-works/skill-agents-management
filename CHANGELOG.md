@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.5.54 — 2026-10-06
+
+- `FinalizePlan` accepts a typed managed-session reservation: exactly two
+  typed slots carrying server-supplied values at module-fixed positions, env
+  `TASK_BOARD_MANAGED_SESSION_ID` (the SES handle, last entry of the final
+  environment) and argv `--session-id` (the native UUID, first two tokens of
+  the final argv). The reservation is the opaque `FinalizeOverlays.Reservation`;
+  the module never generates a value. Any other binding, a third slot, a slot
+  value that differs from the reservation, a forged SES or UUID shape, a
+  resume or adoption intent or an identity-bearing new intent (the
+  reservation's `Intent` obeys `ValidateResumeIntent`, an empty `Kind` is
+  new, or a selector the
+  plugin's own resume grammar finds in the sealed base or native tail), an
+  env that already carries the slot, and a system with no native session
+  grammar refuse typed (`ErrFinalizeBindingUnknown`,
+  `ErrFinalizeReservationRefused`). The finalized verifier binds both slots
+  and names a changed one; `Plan.Session` is derived again over the shifted
+  argv. The slot binding is in-process only; Phase 1 is new launches only,
+  and the reserve endpoint stays the daemon's.
+
+- `internal/timezones` embeds its zone corpus as NUL-free base64 text
+  (`data/zoneinfo.zip.b64`) instead of the binary `data/zoneinfo.zip`, decoded
+  once into the identical bytes (sha256 pinned in a test). The loader stays a
+  pure bundled source: it never consults `ZONEINFO` or the system zone
+  database. A guard test fails if any file under `internal/timezones`
+  contains a NUL byte.
+
+## Unreleased
+
 ## v0.5.53 — 2026-10-06
 
 - `agentic.Plan` carries a typed `Session *PlanSession` — the native session
@@ -41,8 +70,6 @@
   bounds: an unfinalized base guard carries no argv, so nothing binds its Session
   across import; RC intent is what the argv and the explicit settings source
   declare, not what the provider honors under managed policy.
-
-## Unreleased
 
 ## v0.5.52 — 2026-10-05
 
