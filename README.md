@@ -1866,8 +1866,15 @@ concluding that a missing golden is permission.
 
 ## Tools
 
+Hosted CI in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs
+`make vet`, `make test`, and `make regress` on pull requests and pushes to
+`main`, on both `ubuntu-latest` and `macos-latest`. Go comes from `go.mod`;
+actions are pinned to full commit SHAs. The workflow uses read-only contents
+permission and cancels superseded runs. Results and logs are in GitHub Actions.
+
 | Tool | Purpose | Entry point | Artifacts |
 | --- | --- | --- | --- |
+| `actionlint` | validate GitHub Actions workflow syntax and expressions | `actionlint .github/workflows/ci.yml` | terminal output; task-scoped logs in `.temp/` |
 | `make` | build, test, vet, regress and install the CLI | `make build` / `test` / `vet` / `regress` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
 | Go toolchain | package tests and static analysis | `go test -mod=mod ./... -count=1` / `go vet -mod=mod ./...`; `make test` / `make vet` wrap the repository gates | terminal output and task-scoped logs in `.temp/` |
 | changelog release | validate landing fragments; aggregate them before the tagger commits and tags | `.scripts/changelog-release.sh --check`; `.scripts/changelog-release.sh [--allow-empty] <version> <YYYY-MM-DD>` | reads `changelog.d/`; release updates `CHANGELOG.md` and removes consumed fragments |
