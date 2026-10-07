@@ -1,0 +1,34 @@
+{
+  "argv": [
+    "--search",
+    "-a",
+    "never",
+    "exec",
+    "-m",
+    "Qwen3.8-27B-Q4_K_M",
+    "-c",
+    "model_provider=\"local-story\"",
+    "-c",
+    "model_providers.local-story.name=\"task local provider\"",
+    "-c",
+    "model_providers.local-story.base_url=\"http://127.0.0.1:38171/v1\"",
+    "-c",
+    "model_providers.local-story.wire_api=\"responses\"",
+    "-c",
+    "model_providers.local-story.requires_openai_auth=false",
+    "-c",
+    "model_catalog_json=\"\u003cCATALOG_DIR\u003e/catalog-47b874b72116a5e0e7ff1e1aeb64ba52a8362c570d0340ec282ff0348bf0c9e5.json\"",
+    "-c",
+    "model_reasoning_effort=\"low\"",
+    "--dangerously-bypass-approvals-and-sandbox",
+    "--skip-git-repo-check",
+    "-C",
+    "\u003cWORK_DIR\u003e",
+    "-"
+  ],
+  "env": [
+    "CODEX_HOME=\u003cCODEX_HOME\u003e",
+    "HOME=\u003cHOME\u003e",
+    "PATH=\u003cBIN_DIR\u003e"
+  ]
+}

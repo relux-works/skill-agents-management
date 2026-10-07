@@ -556,6 +556,18 @@ proven against all four codex launch-surface goldens through the real
   interactive launches retain typed `unsupported` refusals. Hosted launches
   retain their existing argv, environment and effort behavior.
 
+  `codex.RepresentedProviderKeys()` is the public source of truth for the exact
+  `[model_providers.<id>]` keys represented by the snapshot: `name`, `base_url`,
+  `wire_api`, and `requires_openai_auth`. The first two are retained values;
+  the latter two are validated constants (`"responses"` and `false`). The fifth
+  provider override, `model_provider`, is a top-level selector, outside this set.
+  Consumers requiring lossless transport must refuse unknown keys themselves
+  (for example, test membership with `slices.Contains`); this declaration leaves
+  existing plugin parsing and plans unchanged. Returned slices are detached.
+  Targeted validation: `go test ./pkg/agentic/systems/codex -count=1`.
+  The semantic drop-key mutant runs in `TestRepresentedProviderKeyDropMutantKilledByName`;
+  verbose logs can be saved under `.temp/<TASK-ID>/`.
+
   `ProviderSnapshot` retains validated catalog bytes and their digest. Plans
   materialize those bytes into a process-owned private temporary directory
   (`0700`) and a content-addressed catalog (`0400`), then pass that path with

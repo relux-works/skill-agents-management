@@ -1,0 +1,57 @@
+package codex
+import (
+ "encoding/json"
+ "os"
+ "path/filepath"
+ "slices"
+ "strings"
+ "testing"
+ "github.com/relux-works/skill-agents-management/pkg/agentic"
+)
+func TestCaptureAcceptedProviderV0556(t *testing.T) {
+ for _, mode := range []agentic.LaunchMode{agentic.LaunchModeExec, agentic.LaunchModeDryRun} {
+  home := t.TempDir()
+  writeProviderConfig(t, home, "local-story", "http://127.0.0.1:38171/v1", "responses", false)
+  req := providerRequest(t, home, t.TempDir(), "local-story")
+  snapshot := mustSnapshot(t, req)
+  var want []byte
+  for _, bound := range []agentic.LaunchRequest{req, withSnapshot(req, snapshot)} {
+   plan, err := buildCodexPlanForMode(t, bound, mode)
+   if err != nil { t.Fatal(err) }
+   got := acceptedProviderPlanBytes(t, req, plan)
+   if want != nil && string(want) != string(got) { t.Fatal("baseline ID/snapshot mismatch") }
+   want = got
+  }
+  dir := filepath.Join("testdata", "provider-plans-v0.5.56")
+  if err := os.MkdirAll(dir, 0755); err != nil { t.Fatal(err) }
+  if err := os.WriteFile(filepath.Join(dir, mode.String()+".json"), want, 0644); err != nil { t.Fatal(err) }
+ }
+}
+func acceptedProviderPlanBytes(t *testing.T, req agentic.LaunchRequest, plan agentic.Plan) []byte {
+	t.Helper()
+	binDir := codexPolicyEnvValue(req.Env, "PATH")
+	replacer := strings.NewReplacer(
+		req.Home, "<CODEX_HOME>",
+		req.WorkDir, "<WORK_DIR>",
+		binDir, "<BIN_DIR>",
+		filepath.Dir(req.Home), "<HOME>",
+		launchCatalogs.root, "<CATALOG_DIR>",
+	)
+	argv := append([]string(nil), plan.Argv...)
+	env := append([]string(nil), plan.Env...)
+	for i := range argv {
+		argv[i] = replacer.Replace(argv[i])
+	}
+	for i := range env {
+		env[i] = replacer.Replace(env[i])
+	}
+	slices.Sort(env)
+	data, err := json.MarshalIndent(struct {
+		Argv []string `json:"argv"`
+		Env  []string `json:"env"`
+	}{argv, env}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return append(data, '\n')
+}
