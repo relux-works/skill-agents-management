@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.57 — 2026-10-07
+
+- Export `codex.RepresentedProviderKeys()` as the single provider-snapshot key
+  contract; document consumer refusal of unknown keys without changing launch
+  plans, and pin the declaration to carried fields and emitted overrides.
+
+## Unreleased
+
 ## v0.5.56 — 2026-10-07
 
 - Add hosted CI on pull requests and pushes to main, running vet, tests and
@@ -8,8 +16,6 @@
 - Refuse Muse exec and dry-run plans without the headless bypass posture at
   plan time with a typed approval-would-block refusal; accepted headless and
   interactive plans retain their existing bytes.
-
-## Unreleased
 
 ## v0.5.55 — 2026-10-06
 
