@@ -56,12 +56,13 @@ import "strconv"
 // position: membership comes from the frozen snapshot
 // (pkg/vendorplugin/v2snapshot.go), and a capability rank stays evidence.
 //
-// FOUR ROWS ARE NOT PORTS: claude-opus-5-5 / `opus` and claude-sonnet-5-5 /
-// `sonnet` (declared the same way on 2026-09-28). claude-opus-5-5 and its `opus` spelling reached this
+// SIX ROWS ARE NOT PORTS: claude-opus-5-5 / `opus`, claude-sonnet-5-5 /
+// `sonnet` (declared the same way on 2026-09-28) and claude-haiku-5-5 /
+// `haiku` (2026-10-07). claude-opus-5-5 and its `opus` spelling reached this
 // repository before the board's registry, so they rest on the Claude Code CLI
 // probe (claudeCLIProbe) through declaredRank and quote no source PolicyRank;
-// pkg/vendorplugin/declaredhere_test.go names both. They tie each other at 45,
-// an alias and its identity, and tie no ported row.
+// pkg/vendorplugin/declaredhere_test.go names all six. Each pair ties itself
+// (45, 44 and 22), an alias and its identity, and ties no ported row.
 //
 // AUTHORED HERE, not ported: every Description. The source's rows carry a
 // short display string and no what-is-this-model-best-for field at all, while
@@ -170,6 +171,43 @@ func anthropicSonnet55Effort() EffortDeclaration {
 func anthropicSonnet55Rank(note string, evidence ...RankEvidence) CapabilityRank {
 	return anthropicDeclaredRankFrom(anthropicClaudeCLIProbeSonnet55, 44,
 		BughuntInterpolated("claude-opus-5-5", "claude-fable-5-1", "unmeasured; Anthropic's card places sonnet-5-5 level with opus-5-5 on agentic benchmarks, so it sits just under it and above fable-5-1's measured 43"),
+		note, evidence...)
+}
+
+// anthropicClaudeCLIProbeHaiku55 is the probe the claude-haiku-5-5 rows rest on.
+// Read on Claude Code 2.1.290 the day Anthropic released the model: `claude -p
+// --model claude-haiku-5-5` ran the turn (stderr carried the CLI's
+// `[claude-code:unrecognized_model]` notice, exit 0), modelUsage named
+// claude-haiku-5-5 and reported contextWindow 200000, the CLI's own assumption
+// and not the provider's 1M. `claude -p --model haiku` on the same binary ran
+// claude-haiku-4-5-20251001, so the CLI's floating `haiku` does NOT yet float
+// to 5.5; the `haiku` row below declares AliasOf either way, so argv carries
+// the full id whatever a later CLI floats to.
+const anthropicClaudeCLIProbeHaiku55 = "the Claude Code CLI's own model resolution, probed with `claude -p --model <id> --output-format json` (Claude Code 2.1.290, 2026-10-07)"
+
+// haiku55ContextWindow is the OPERATING window the owner imposed on
+// claude-haiku-5-5 (2026-10-07). The provider's native window is 1M tokens;
+// 100K is also the boundary of Anthropic's cheap pricing tier ($0.10/$0.50 per
+// MTok up to 100K prompt tokens, $0.50/$2.50 above). The claude-code plugin
+// reads this fact and exports CLAUDE_CODE_AUTO_COMPACT_WINDOW so the harness
+// compacts at it, rather than the number being a label nothing enforces.
+const haiku55ContextWindow = 100_000
+
+// haiku55Effort is the claude-haiku-5-5 effort axis, shared by the identity row
+// and its `haiku` alias. Anthropic publishes all five levels and recommends
+// `medium` as the default starting point for this model, unlike the sonnet and
+// opus rows, which recommend `high`.
+func anthropicHaiku55Effort() EffortDeclaration {
+	return anthropicEffortRequired("medium", []string{"low", "medium", "high", "xhigh", "max"})
+}
+
+// haiku55Rank is claude-haiku-5-5's rank, handed to both the identity and its
+// alias. Unmeasured on the leaderboard, so INTERPOLATED between two MEASURED
+// anchors: claude-opus-5 (27) above and claude-opus-4-8 (15) below. 22 sits
+// strictly inside and is unique among the anthropic scores (sonnet-5 holds 20).
+func anthropicHaiku55Rank(note string, evidence ...RankEvidence) CapabilityRank {
+	return anthropicDeclaredRankFrom(anthropicClaudeCLIProbeHaiku55, 22,
+		BughuntInterpolated("claude-opus-5", "claude-opus-4-8", "unmeasured; a current-generation fast tier placed above sonnet-5's interpolated 20 and below opus-5's measured 27, strictly inside the two measured anchors"),
 		note, evidence...)
 }
 
@@ -308,6 +346,38 @@ var anthropicModels = []Model{
 		Effort:      anthropicEffortRequired("high", []string{"low", "medium", "high", "xhigh", "max"}),
 		Recommended: true,
 		Systems:     []string{"claude-code", "pi-native"},
+	},
+	{
+		ID:          "claude-haiku-5-5",
+		Description: "Fast, cheap high-volume turns: classification, extraction, routing and simple sub-agent work, run inside a 100K-token operating window",
+		Rank:        anthropicHaiku55Rank("`claude -p --model claude-haiku-5-5` on Claude Code 2.1.290 ran one turn whose modelUsage names claude-haiku-5-5; the source registry contains NO row for it and this score is therefore not a ported one"),
+		Lifecycle:   LifecycleCurrent,
+		Effort:      anthropicHaiku55Effort(),
+		// Owner-imposed operating window, not the provider's native 1M; see
+		// haiku55ContextWindow. Enforced at launch by the claude-code plugin.
+		ContextWindowTokens: haiku55ContextWindow,
+		// NOT Recommended: claude-opus-5 keeps this vendor's display pick.
+		// NOT pi-native: the installed Pi catalog (0.84.2) carries no
+		// claude-haiku-5-5.
+		Systems: []string{"claude-code"},
+	},
+	{
+		// The floating short spelling of the current haiku head, declared with
+		// AliasOf so argv carries claude-haiku-5-5. The installed Claude Code
+		// CLI resolves its own `haiku` to claude-haiku-4-5-20251001 on 2.1.290,
+		// so relying on the CLI's alias would run the previous generation.
+		ID:          "haiku",
+		Description: "The short spelling of the current haiku head, for an invocation that names the model without its generation; it executes as claude-haiku-5-5",
+		Rank: anthropicHaiku55Rank("this row is a short spelling of claude-haiku-5-5 and carries that row's score; there is no second capability to score",
+			RankEvidence{
+				Source:      anthropicClaudeCLIProbeHaiku55,
+				Observation: "`claude -p --model haiku` on Claude Code 2.1.290 ran one turn whose modelUsage names claude-haiku-4-5-20251001, the PREVIOUS generation; this row declares AliasOf so argv carries claude-haiku-5-5 instead of the CLI's own floating alias",
+			}),
+		AliasOf:             "claude-haiku-5-5",
+		Lifecycle:           LifecycleCurrent,
+		Effort:              anthropicHaiku55Effort(),
+		ContextWindowTokens: haiku55ContextWindow,
+		Systems:             []string{"claude-code"},
 	},
 	{
 		ID:          "claude-sonnet-5",

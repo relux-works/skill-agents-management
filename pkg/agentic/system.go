@@ -341,6 +341,17 @@ type Model struct {
 	// where the rows are registered) and carries it here through Launchable.
 	// Empty means "no alias was stated", never "look one up".
 	AliasOf string
+
+	// ContextWindowTokens is the operating context window the vendor declared
+	// for this row, zero when it declared none. It is a LAUNCH-BEARING fact only
+	// for a harness that can enforce a window (claude-code exports it as
+	// CLAUDE_CODE_AUTO_COMPACT_WINDOW); every other plugin ignores it, and a
+	// zero leaves the child environment byte-identical to a launch that never
+	// carried the field. The vendor layer states it (vendorplugin.Model) and
+	// carries it here through Launchable; unlike AliasOf it survives BuildPlan's
+	// alias substitution, because the requested row's window is the one the
+	// operator admitted.
+	ContextWindowTokens int
 }
 
 // LaunchIdentity is the id a harness must be handed for this model: the alias

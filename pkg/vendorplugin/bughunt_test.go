@@ -540,13 +540,15 @@ func TestTheLineupOrderIsTheBenchOrder(t *testing.T) {
 	// The narrowing mutant: a measured row re-scored under a lower measured
 	// row keeps every bench claim intact and moves only the ORDER, which
 	// the gate above does not read (it reads each row alone) and this one
-	// must. claude-fable-5-1 (measured 43) is dropped to 20 and now lists
-	// below claude-opus-5 (measured 27).
+	// must. claude-fable-5-1 (measured 43) is dropped to 23 and now lists
+	// directly below claude-opus-5 (measured 27). 23, not lower: the haiku-5-5
+	// rows are interpolated at 22, and a score under that would seat an
+	// unmeasured row between the pair, which this check does not read.
 	t.Run("a measured row listed below a lower-counted one", func(t *testing.T) {
 		home := vendorplugin.CloneModels(scope["anthropic"])
 		for i := range home {
 			if home[i].ID == "claude-fable-5-1" {
-				home[i].Rank.Score = 20
+				home[i].Rank.Score = 23
 			}
 		}
 		requireReport(t, lineupOrderProblems("anthropic", home),

@@ -272,6 +272,47 @@ func TestBuildLaunchRefusesAVendorThatDropsADeclaredAlias(t *testing.T) {
 	}
 }
 
+// TestBuildLaunchRefusesAVendorThatRewritesTheDeclaredWindow is the same gate
+// for the operating context window. The claude-code plugin turns the window
+// into CLAUDE_CODE_AUTO_COMPACT_WINDOW, so a vendor that could change it on
+// the way out would widen or drop a cap the registry row declared and
+// admission already passed on.
+func TestBuildLaunchRefusesAVendorThatRewritesTheDeclaredWindow(t *testing.T) {
+	const declared = 100_000
+	for name, rewritten := range map[string]int{"dropped": 0, "widened": 1_000_000} {
+		t.Run(name, func(t *testing.T) {
+			vendor := newNarwhal()
+			vendor.models[0].ContextWindowTokens = declared
+			vendor.spawnWindow = &rewritten
+			registry := registerNarwhal(t, vendor)
+
+			_, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
+			if !errors.Is(err, ErrVendorContract) {
+				t.Fatalf("err = %v, want ErrVendorContract", err)
+			}
+			if !strings.Contains(err.Error(), "context window") {
+				t.Errorf("refusal %q does not name the context window", err)
+			}
+		})
+	}
+}
+
+// TestBuildLaunchAdmitsAVendorThatKeepsTheDeclaredWindow proves the gate above
+// is reachable: the same row, the window untouched, launches.
+func TestBuildLaunchAdmitsAVendorThatKeepsTheDeclaredWindow(t *testing.T) {
+	vendor := newNarwhal()
+	vendor.models[0].ContextWindowTokens = 100_000
+	registry := registerNarwhal(t, vendor)
+
+	plan, err := BuildLaunch(context.Background(), registry, narwhalRequest(), agentic.LaunchModeExec)
+	if err != nil {
+		t.Fatalf("BuildLaunch refused a vendor that kept the declared window: %v", err)
+	}
+	if plan.System == "" {
+		t.Fatal("the admitted launch produced an empty plan")
+	}
+}
+
 // TestTheAliasReachesArgvThroughAVendorPlugin proves the two layers are wired
 // to each other, not just each to itself: Model.Launchable must carry AliasOf
 // across the boundary or BuildPlan has nothing to substitute.

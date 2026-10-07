@@ -1029,8 +1029,8 @@ Plugin id `pi-native`; the frozen runtimes that bind it are `pi-anthropic`,
 - **Catalog-verified membership.** A vendor row names `pi-native` only when
   its id is in the installed Pi catalog's provider data (Pi 0.84.2). Today: 8
   anthropic, 9 openai and 7 google rows. `claude-fable-5-1`, `gpt-6-astra`,
-  `gpt-6-sol`, `gpt-6-luna`, `claude-opus-5-5`, `claude-sonnet-5-5` (and their
-  `astra`, `sol`, `luna`, `opus` and `sonnet` aliases), `gpt-5.2-codex`, `gpt-5.1-codex-max` and
+  `gpt-6-sol`, `gpt-6-luna`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` (and their
+  `astra`, `sol`, `luna`, `opus`, `sonnet` and `haiku` aliases), `gpt-5.2-codex`, `gpt-5.1-codex-max` and
   `gpt-5.1-codex-mini` are absent from that catalog and are refused with
   `ErrModelNotDrivenBySystem`. `TestPiNativeMembershipMatchesTheInstalledCatalog`
   re-reads the installed bytes when Pi is present.
@@ -1295,10 +1295,10 @@ run from meaning "the rule never matched anything".
 All 45 rows of the extraction source's model registry, carried across. 42 land
 in the four vendors; the three `muse` rows belong to no vendor, because the
 source records that runtime's broker as checked-and-never-established, and the
-port accounts for them explicitly rather than dropping them. Eight further rows —
-`gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `claude-opus-5-5` and
-`claude-sonnet-5-5`, each with its floating short alias `astra`, `sol`, `luna`,
-`opus` and `sonnet` — plus the agy Flash and Argon rows, are declared HERE and
+port accounts for them explicitly rather than dropping them. Twelve further rows —
+`gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `claude-opus-5-5`,
+`claude-sonnet-5-5` and `claude-haiku-5-5`, each with its floating short alias `astra`, `sol`, `luna`,
+`opus`, `sonnet` and `haiku` — plus the agy Flash and Argon rows, are declared HERE and
 not ported; see
 *Rows declared ahead of the board's registry* below.
 
@@ -1377,11 +1377,12 @@ A row NOT on that list is still refused by both pins exactly as before, and
 `TestAnUnnamedExtraRowIsStillRefusedByBothPins` is the mutant that proves the
 skip did not quietly widen to every leftover row.
 
-Eight entries today: four models, each under its full id and a floating short
+Ten entries today: five models, each under its full id and a floating short
 spelling. The astra pair is described below; `gpt-6-sol`/`sol` and
 `gpt-6-luna`/`luna` (codex-cli 0.155.1 catalog, 2026-09-22) and
 `claude-opus-5-5`/`opus` (Claude Code 2.1.280 probe, 2026-09-22) and
-`claude-sonnet-5-5`/`sonnet` (Claude Code 2.1.284 probe, 2026-09-28) follow the
+`claude-sonnet-5-5`/`sonnet` (Claude Code 2.1.284 probe, 2026-09-28) and
+`claude-haiku-5-5`/`haiku` (Claude Code 2.1.290 probe, 2026-10-07) follow the
 same shape — none is `Recommended`, none is pi-native, and each alias declares
 `AliasOf` its head. `pkg/vendorplugin/gpt6_opus55_alias_test.go` drives
 `BuildLaunch` for every one of them at each probed effort.
@@ -1410,9 +1411,9 @@ NOT contain rather than for what it does.
 ### Alias identity resolution
 
 A model row may declare `AliasOf`: the identity it is a short spelling of.
-Nine rows do today — `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
+Ten rows do today — `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
 `gpt-6-astra`, `sol` → `gpt-6.1-sol`, `luna` → `gpt-6-luna`, `opus` →
-`claude-opus-5-5`, `sonnet` → `claude-sonnet-5-5`, `gemini-flash` →
+`claude-opus-5-5`, `sonnet` → `claude-sonnet-5-5`, `haiku` → `claude-haiku-5-5`, `gemini-flash` →
 `gemini-3.8-flash-high`, `argon` → `gemini-4-argon-high` and
 `gemini-4-argon` → `gemini-4-argon-high` — and all exist for the same reason: the alias is a name
 operators, configuration and spawn ceilings use and the provider does not have.

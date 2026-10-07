@@ -623,8 +623,14 @@ type Model struct {
 	// recommendation they cannot run.
 	Recommended bool
 
-	// ContextWindowTokens is the provider's maximum context window. Zero means
-	// none was recorded; a negative is refused.
+	// ContextWindowTokens is the context window the row declares: the provider's
+	// maximum for most rows, an operator-imposed OPERATING window where one was
+	// chosen below it (claude-haiku-5-5 runs inside 100K of a native 1M). Zero
+	// means none was recorded; a negative is refused.
+	//
+	// It is also launch-bearing for a harness that can enforce a window:
+	// Launchable carries it to agentic.Model, and the claude-code plugin exports
+	// it as CLAUDE_CODE_AUTO_COMPACT_WINDOW. Every other harness ignores it.
 	ContextWindowTokens int
 
 	// CacheBudgetBytes is the configured model-cache capacity in bytes, or nil
@@ -916,12 +922,13 @@ func checkRecommendations(models []Model) error {
 	return nil
 }
 
-// Launchable projects the row onto the one vendor-shaped fact Layer 1 needs:
-// the selected model and whether it requires an effort. Everything else — the
+// Launchable projects the row onto the vendor-shaped facts Layer 1 needs:
+// the selected model, whether it requires an effort, the alias it stands for
+// and the operating context window a harness may enforce. Everything else — the
 // description, the rank, the vocabulary — stays here, which is what keeps the
 // two layers from re-declaring each other.
 func (m Model) Launchable() agentic.Model {
-	return agentic.Model{ID: string(m.ID), Effort: m.Effort.Support, AliasOf: string(m.AliasOf)}
+	return agentic.Model{ID: string(m.ID), Effort: m.Effort.Support, AliasOf: string(m.AliasOf), ContextWindowTokens: m.ContextWindowTokens}
 }
 
 // AvailabilityQuery is what a caller wants an availability verdict about.
