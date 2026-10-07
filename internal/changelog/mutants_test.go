@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -148,10 +149,22 @@ func TestChangelogNarrowingMutants(t *testing.T) {
 		// P1 flag branch: assume-unchanged (lowercase tags) admitted while
 		// skip-worktree still refuses. Killed by the flag-without-edit case
 		// where bytes match and only the flag gate can refuse.
-		{"hidden-flag-assume", "      [a-z]|S) die \"$path carries hidden index state", "      S) die \"$path carries hidden index state", "TestReleaseRefusesHiddenFragmentEdits/flag-without-edit-still-refuses", release},
+		{"hidden-flag-assume", "      [abcdefghijklmnopqrstuvwxyz]|S) die \"$path carries hidden index state", "      S) die \"$path carries hidden index state", "TestReleaseRefusesHiddenFragmentEdits/flag-without-edit-still-refuses", release},
+		{"hidden-flag-utf8-assume", "      [abcdefghijklmnopqrstuvwxyz]|S) die \"$path carries hidden index state", "      [abcdefgijklmnopqrstuvwxyz]|S) die \"$path carries hidden index state", "TestReleaseUTF8LocaleRefusesAssumeUnchanged/changelog.d/a.md", release},
+		{"hidden-flag-utf8-skip", "      [abcdefghijklmnopqrstuvwxyz]|S) die \"$path carries hidden index state", "      [abcdefghijklmnopqrstuvwxyz]) die \"$path carries hidden index state", "TestReleaseUTF8LocaleRefusesSkipWorktree/changelog.d/a.md", release},
 		// P2: both git-mode checks in --check are skipped for one fragment
 		// name, so its mode-120000 entry validates. Other names still refuse.
 		{"check-mode-one-name", "    if ! check_index_symlink \"$entry\" \"$ls_tmp\"; then\n      bad=1\n      continue\n    fi\n    if [ \"$HEAD_EXISTS\" = \"yes\" ]; then\n      if ! check_head_symlink \"$entry\" \"$tree_tmp\"; then\n        bad=1\n        continue\n      fi\n    fi", "    if [ \"$base\" != link.md ]; then\n      if ! check_index_symlink \"$entry\" \"$ls_tmp\"; then\n        bad=1\n        continue\n      fi\n      if [ \"$HEAD_EXISTS\" = \"yes\" ]; then\n        if ! check_head_symlink \"$entry\" \"$tree_tmp\"; then\n          bad=1\n          continue\n        fi\n      fi\n    fi", "TestCheckRefusesSymlinkModeUnderNoSymlinksConfig", check},
+	}
+	// Restoring the range narrows accepted tracked states under macOS bash
+	// 3.2 UTF-8 collation. The gate remains intact, and the C-locale release
+	// control still passes. Other platforms do not reproduce this collation.
+	if runtime.GOOS == "darwin" {
+		mutants = append(mutants, mutant{
+			"hidden-flag-locale-range", "      [abcdefghijklmnopqrstuvwxyz]|S) die \"$path carries hidden index state",
+			"      [a-z]|S) die \"$path carries hidden index state",
+			"TestReleaseUTF8LocaleAcceptsNormalTrackedFiles", release,
+		})
 	}
 	// Each failed-read widening admits exactly one git command's exit-128
 	// read, so its witness is the FIRST read_N subtest for that command

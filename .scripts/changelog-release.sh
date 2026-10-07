@@ -180,7 +180,7 @@ refuse_hidden_state() {
     IFS= read -r -d '' rec <"$flag_tmp" || [ -n "$rec" ]
     tag="${rec:0:1}"
     case "$tag" in
-      [a-z]|S) die "$path carries hidden index state ($tag: assume-unchanged/skip-worktree); clear the flag and commit before release" ;;
+      [abcdefghijklmnopqrstuvwxyz]|S) die "$path carries hidden index state ($tag: assume-unchanged/skip-worktree); clear the flag and commit before release" ;;
     esac
   fi
   git_read work_hash hash-object --no-filters -- "$path"
