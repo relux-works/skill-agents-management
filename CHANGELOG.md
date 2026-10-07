@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.56 — 2026-10-07
+
+- Add hosted CI on pull requests and pushes to main, running vet, tests and
+  regression tests on Linux and macOS with SHA-pinned actions and Go from go.mod.
+
+- Refuse Muse exec and dry-run plans without the headless bypass posture at
+  plan time with a typed approval-would-block refusal; accepted headless and
+  interactive plans retain their existing bytes.
+
+## Unreleased
+
 ## v0.5.55 — 2026-10-06
 
 - Auxiliary timeouts refuse primary admission with `AuxTimeoutError`, carrying
@@ -13,8 +24,6 @@
   refuse. Execution and result decoding remain host responsibilities. Release
   grammar is shared without importing process control, and auxiliary refusal
   sites participate in the existing source-derived coverage census.
-
-## Unreleased
 
 ## v0.5.54 — 2026-10-06
 
