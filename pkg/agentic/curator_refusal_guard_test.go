@@ -29,6 +29,8 @@ type curatorRefusalCoverageRow struct {
 // AST test below fails closed when a refusal site is added, removed, or moved
 // to a different guard without updating its BuildPlan test mapping.
 var curatorRefusalCoverageTable = []curatorRefusalCoverageRow{
+	// The Muse package owns the seam mutant for this BuildPlan refusal.
+	{file: "systems/muse/headless.go", function: "requireHeadlessBypass", guard: "unconditional", returned: "return ErrMuseHeadlessApproval", occurrence: 0, testName: "TestMuseHeadlessExecRefusesMissingBypass"},
 	{file: "auxiliary.go", function: "readAuxBinaryIdentity", guard: "if err != nil", returned: "return auxBinaryIdentity{}, err", occurrence: 0, testName: "TestClaudeAuxiliaryAdmissionRefusals", entryPoint: "BuildAuxiliaryPlans"},
 	{file: "auxiliary.go", function: "readAuxBinaryIdentity", guard: "if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0", returned: "return auxBinaryIdentity{}, ErrAuxRefused", occurrence: 0, outOfContract: "AC 3 exposes a late verifier rather than atomic OS execution: this second descriptor-mode check covers a resolve/open race; the deterministic missing/non-executable path fails in the preceding resolver. No OS-race witness is claimed."},
 	{file: "auxiliary.go", function: "BuildAuxiliaryPlans", guard: "if primary.auxiliaryBasis == nil || primary.baseProcess == nil", returned: "return nil, ErrAuxRefused", occurrence: 0, testName: "TestClaudeAuxiliaryFixedProjections", entryPoint: "BuildAuxiliaryPlans"},
@@ -80,7 +82,8 @@ var curatorRefusalCoverageTable = []curatorRefusalCoverageRow{
 	{file: "systems/muse/network.go", function: "networkConfig", guard: "if err != nil", returned: "return \"\", networkRefusal(\"cannot materialize private config\")", occurrence: 0, testName: "TestMuseNetworkRefusesUnknownConfigSibling"},
 	{file: "systems/muse/network.go", function: "networkRefusal", guard: "unconditional", returned: "return fmt.Errorf(\"muse-env-v1: %s: %w\", detail, agentic.ErrNetworkScopeUnsupported)", occurrence: 0, testName: "TestMuseNetworkRefusesUnknownShapes"},
 	{file: "systems/muse/network_launch.go", function: "System.SealExecPlan", guard: "if !ok", returned: "return nil, networkRefusal(\"private config not bound to plan\")", occurrence: 0, outOfContract: "AC 3 Bounds: BuildPlan invokes ChildEnv before sealing, always registering the private root. This defensive sealer API misuse clause is unreachable through an unchanged production BuildPlan."},
-	{file: "systems/muse/network_launch.go", function: "System.SealExecPlan", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestMuseNetworkSealRefusesTampering"},
+	{file: "systems/muse/network_launch.go", function: "System.SealExecPlan", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestMuseHeadlessExecRefusesMissingBypass"},
+	{file: "systems/muse/network_launch.go", function: "System.SealExecPlan", guard: "if err != nil", returned: "return nil, err", occurrence: 1, testName: "TestMuseNetworkSealRefusesTampering"},
 	{file: "systems/muse/network_launch.go", function: "System.SealExecPlan", guard: "if !managed", returned: "return sealInteractiveExecPlan(plan)", occurrence: 0, testName: "TestMuseInteractiveSealBindsBinaryArgvReleaseAndEnv"},
 	{file: "systems/muse/seal.go", function: "sealInteractiveExecPlan", guard: "if !filepath.IsAbs(plan.Binary)", returned: "return nil, fmt.Errorf(\"%w: sealed binary %q is not absolute\", ErrMuseSealMalformed, plan.Binary)", occurrence: 0, testName: "TestMuseSealRefusesRelativeBinary"},
 	{file: "systems/muse/seal.go", function: "sealInteractiveExecPlan", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestMuseInteractiveSealRefusesDuplicateSelectorsAtSeal"},

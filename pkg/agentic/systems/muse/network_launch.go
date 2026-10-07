@@ -132,6 +132,9 @@ type networkExecSeal struct {
 }
 
 func (*System) SealExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error) {
+	if err := requireHeadlessBypass(plan); err != nil {
+		return nil, err
+	}
 	if _, managed := plan.NetworkProvenanceSnapshot(); !managed {
 		return sealInteractiveExecPlan(plan)
 	}

@@ -232,6 +232,13 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
 
 #### Permission-mode: non-interactive form classification
 
+Muse's exec and dry-run plans must carry their generated `--yolo` bypass
+posture. `BuildPlan` checks the built argv at Muse's plan-sealing boundary and
+returns `muse.ErrMuseHeadlessApproval` ("approval would block a headless child")
+if the posture is missing. Interactive plans retain their existing policy.
+Run the focused checks with `env -u TASK_BOARD_DIR go test -mod=mod
+./pkg/agentic/systems/muse -run 'TestMuse(Headless|InteractiveBypassGate)' -count=1`.
+
 `agentic.Registry.ClassifyNonInteractiveArgs(system, toolRelease, suffix)` is
 the launcher's versioned headless-argument classifier. It returns
 `NativeArgsClassification{Form, Grammar}`; `IsNonInteractive` is false when
