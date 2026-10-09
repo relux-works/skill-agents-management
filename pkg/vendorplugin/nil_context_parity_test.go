@@ -139,11 +139,16 @@ func nilContextParityFixture(t *testing.T) nilContextFixture {
 		}
 	}
 	// Muse seals every interactive plan at BuildPlan time and refuses an
-	// unprobeable binary, so its fixture attests a module-verified build.
+	// unprobeable binary, so its fixture attests a well-formed build and
+	// declares the yolo bypass flag its interactive posture maps from.
 	// A version probe must never start a session or carry another argument.
 	museStub := "#!/bin/sh\n" +
 		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ]; then\n" +
 		"printf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\n" +
+		"exit 0\n" +
+		"fi\n" +
+		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--help' ]; then\n" +
+		"printf '%s\\n' 'Usage: muse [options] [prompt]\n\nOptions:\n  --model <id>       Model to use\n  --yolo             Skip approval prompts\n'\n" +
 		"exit 0\n" +
 		"fi\n" +
 		"exit 0\n"

@@ -106,9 +106,11 @@ func ParseBuildIdentity(versionOutput []byte) (BuildIdentity, error) {
 		return BuildIdentity{}, fmt.Errorf("%w: the answer %q is not `Muse Code <release> (<release>-R<revision>)`", ErrInvalidBuildIdentity, line)
 	}
 	build := strings.TrimSuffix(tail, ")")
-	identity, err := ParseBuildID(build)
-	if err != nil {
+	var identity BuildIdentity
+	if parsed, err := ParseBuildID(build); err != nil {
 		return BuildIdentity{}, fmt.Errorf("%w: the answer %q is not `Muse Code <release> (<release>-R<revision>)`", ErrInvalidBuildIdentity, line)
+	} else {
+		identity = parsed
 	}
 	if identity.Release != release {
 		return BuildIdentity{}, fmt.Errorf("%w: the answer %q names release %q for build %q", ErrInvalidBuildIdentity, line, release, build)
@@ -200,11 +202,9 @@ func splitBuildID(text string) (release, revision, subrevision string, hasSub bo
 	if !ok || before == "" || after == "" {
 		return "", "", "", false, fmt.Errorf("%w: %q is not `<release>-R<revision>`", ErrInvalidBuildIdentity, text)
 	}
-	releaseParts, err := splitReleaseTriple(before)
-	if err != nil {
+	if _, err := splitReleaseTriple(before); err != nil {
 		return "", "", "", false, fmt.Errorf("%w: %q is not `<release>-R<revision>`", ErrInvalidBuildIdentity, text)
 	}
-	_ = releaseParts
 	revision, subrevision, hasSub = strings.Cut(after, ".")
 	if revision == "" || !isASCIIDigits(revision) {
 		return "", "", "", false, fmt.Errorf("%w: %q is not `<release>-R<revision>`", ErrInvalidBuildIdentity, text)

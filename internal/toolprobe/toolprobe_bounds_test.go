@@ -144,6 +144,18 @@ func TestHelpOutputBounds(t *testing.T) {
 		_, err := HelpOutput(context.Background(), stub, []string{})
 		requireAttempt(t, err, agentic.ProbeStageHelp, false, true)
 	})
+	t.Run("empty", func(t *testing.T) {
+		t.Parallel()
+		stub := writeProbeStub(t, "exit 0\n")
+		_, err := HelpOutput(context.Background(), stub, []string{})
+		attempt := requireAttempt(t, err, agentic.ProbeStageHelp, false, false)
+		if !attempt.ExecAttempted || !attempt.ChildStarted {
+			t.Fatalf("empty attempt = %+v, want exec attempted and child started", attempt)
+		}
+		if !strings.Contains(attempt.Detail, "printed no output") {
+			t.Fatalf("empty detail = %q, want the no-output fact", attempt.Detail)
+		}
+	})
 	t.Run("hanging", func(t *testing.T) {
 		t.Parallel()
 		stub := writeProbeStub(t, "sleep 60\n")

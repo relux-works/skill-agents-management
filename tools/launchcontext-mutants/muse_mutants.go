@@ -17,6 +17,10 @@ package main
 // mutants — they reintroduce the retired list, so the admission tests
 // fail — because no weakening can prove a grant. M39 has no module
 // mutant: its named killer is host-side (PTY + CLI), not a PLAN test.
+// M62 is retired in L0r2: argv mapping probes nothing, so the evidence
+// probe cannot resolve apart from the planned binary — the probe/plan
+// split class is unconstructible. TestSealNeverExecsUnfrozenOnOverridePath
+// remains as the regression test without a mutant.
 func museSealMutants() []mutant {
 	member := func(name, file, before, after, test, pattern, failure, bound string) mutant {
 		return mutant{name: "muse-seal-" + name, file: "pkg/agentic/systems/muse/" + file, replacements: []replacement{{before: before, after: after}}, testPackage: "./pkg/agentic/systems/muse", testName: test, runPattern: pattern, failureText: failure, narrows: bound}
@@ -42,12 +46,13 @@ func museSealMutants() []mutant {
 	}
 	if digest != seal.digest && digest != "878df98063d8951e538cdf03ac1e5de0d4d600eb5ed50b5a33c8c5633ff62c41" {`, "TestMuseInteractiveSealRefusesBinarySwap", "^TestMuseInteractiveSealRefusesBinarySwap$/^bytes-swapped$", "swapped binary bytes admitted", "admits only the fixed witness digest; every other byte swap still refuses"),
 		member("release-mismatch-skipped", "seal.go", `if release != seal.release {`, `if release != seal.release && release != "1.4.2-R4684.1" {`, "TestMuseInteractiveSealRefusesReleaseMismatch", "^TestMuseInteractiveSealRefusesReleaseMismatch$/^to-1-4-2$", "same-bytes release swap admitted", "admits only a same-bytes swap to 1.4.2-R4684.1; 1.5.0 and every other release still refuse"),
-		member("pinned-name-requires-dot", "buildid.go", `return ParseBuildID(rest)`, `if !strings.Contains(rest, ".") {
-		return BuildIdentity{}, ErrInvalidBuildIdentity
-	}
-	return ParseBuildID(rest)`, "TestLauncherValidBuildWithoutTrailingRevisionEndToEnd", "^TestLauncherValidBuildWithoutTrailingRevisionEndToEnd$", "want the dotless build", "M10: requires a dot subrevision in pinned filenames only; bare builds and version answers still accept dotless revisions, and dotted filenames still parse"),
+		member("pinned-name-requires-dot", "buildid.go", `return ParseBuildID(rest)`, `_, tail, _ := strings.Cut(rest, "-R")
+		if !strings.Contains(tail, ".") {
+			return BuildIdentity{}, ErrInvalidBuildIdentity
+		}
+		return ParseBuildID(rest)`, "TestLauncherValidBuildWithoutTrailingRevisionEndToEnd", "^TestLauncherValidBuildWithoutTrailingRevisionEndToEnd$", "want the dotless build", "M10: requires a dot subrevision in the revision tail of pinned filenames only; bare builds and version answers still accept dotless revisions, and dotted filenames still parse"),
 		member("compare-major-minor-only", "buildid.go", `for i := 0; i < 3; i++ {`, `for i := 0; i < 2; i++ {`, "TestParseBuildIdentityGrammar", "^TestParseBuildIdentityGrammar$/^order$", "patch orders numerically", "M11: orders by major and minor only; patch differences fall through to revision and the ambiguity refusal"),
-		member("frozen-symlink-exempted", "frozen.go", `if info.Mode()&os.ModeSymlink != 0 {`, `if info.Mode()&os.ModeSymlink != 0 && info.Name() != "muse-bin-1.4.1-R4503.1" {`, "TestFrozenOverrideGatesPresentButInvalid", "^TestFrozenOverrideGatesPresentButInvalid$/^symlink$", "BuildPlan with symlink frozen tuple err", "M35: admits only the 1.4.1 witness symlink; every other symlink and every other tuple defect still refuses"),
+		{name: "muse-seal-frozen-symlink-exempted", file: "pkg/agentic/systems/muse/frozen.go", replacements: []replacement{{before: `if info.Mode()&os.ModeSymlink != 0 {`, after: `if info.Mode()&os.ModeSymlink != 0 && info.Name() != "muse-bin-1.4.2-R4684.1" {`}, {before: `if !info.Mode().IsRegular() {`, after: `if !info.Mode().IsRegular() && info.Name() != "muse-bin-1.4.2-R4684.1" {`}}, testPackage: "./pkg/agentic/systems/muse", testName: "TestFrozenOverrideGatesPresentButInvalid", runPattern: "^TestFrozenOverrideGatesPresentButInvalid$/^symlink$", failureText: "BuildPlan with symlink frozen tuple err", narrows: "M35: admits only the coherent 1.4.2 witness symlink, exempted at both the symlink and non-regular gates; every other symlink and every other tuple defect still refuses"},
 		member("frozen-relative-falls-back-to-path", "frozen.go", `if err := validateFrozenToolTuple(req.FrozenToolBinary, req.FrozenToolBuild, req.FrozenToolSHA256); err != nil {
 		return "", err`, `if err := validateFrozenToolTuple(req.FrozenToolBinary, req.FrozenToolBuild, req.FrozenToolSHA256); err != nil {
 		if !filepath.IsAbs(req.FrozenToolBinary) {
@@ -74,7 +79,15 @@ func museSealMutants() []mutant {
 		member("release-mismatch-1-5-0-exempted", "seal.go", `claimed != "" && claimed != probed.Release {`, `claimed != "" && claimed != probed.Release && claimed != "1.5.0" {`, "TestSealRefusesToolReleaseMismatch", "^TestSealRefusesToolReleaseMismatch$", `BuildPlan claiming "1.5.0" err`, "M44: admits only 1.5.0 caller-release mismatches; the 9.9.9 control still refuses in both postures"),
 		member("help-prose-declares-flag", "help.go", `if trimmed == flag {`, `if trimmed == flag || strings.Contains(trimmed, flag) {`, "TestYoloRequiresOptionDeclarationEvidence", "^TestYoloRequiresOptionDeclarationEvidence$/^prose-only$", "BuildPlan with prose-only help err", "M45: declares the flag on any prose mention, not only option lines; the documented-option grant still maps"),
 		member("keyed-import-skips-release-shape", "seal.go", `if _, err := ParseBuildID(release); err != nil {`, `if _, err := ParseBuildID(release); err != nil && !keyed {`, "TestSealedImportRefusesSelfMintedEvidence", "^TestSealedImportRefusesSelfMintedEvidence$/^malformed-keyed$", "keyed import of malformed release err", "M60: skips the release-shape check on keyed imports only; direct imports still refuse malformed releases and well-formed forgeries still fail verification"),
-		member("yolo-probe-resolves-path", "args.go", `if resolved, err := resolveMuseBinary(req); err != nil {`, `if resolved, err := resolveBinary(req.Env); err != nil {`, "TestSealNeverExecsUnfrozenOnOverridePath", "^TestSealNeverExecsUnfrozenOnOverridePath$", "agentic.BuildPlan(interactive)", "M62: resolves the yolo evidence probe through PATH despite a frozen tuple; the planned binary still selects the frozen copy"),
+		{name: "muse-seal-help-probed-before-version", file: "pkg/agentic/systems/muse/seal.go", replacements: []replacement{{before: `	var probed BuildIdentity
+	if identity, err := probeInteractiveSealBuild(probeCtx, plan.Binary, plan.Env); err != nil {`, after: `	var probed BuildIdentity
+	_, _ = probeMuseHelpEvidence(probeCtx, plan.Binary, plan.Env, "", "")
+	if identity, err := probeInteractiveSealBuild(probeCtx, plan.Binary, plan.Env); err != nil {`}}, testPackage: "./pkg/agentic/systems/muse", testName: "TestMuseSealEstablishmentProbesVersionBeforeHelp", runPattern: "^TestMuseSealEstablishmentProbesVersionBeforeHelp$", failureText: "establishment probe order =", narrows: "help-acquisition-order: probes help once before version attestation and discards the answer; mapping, binding and verification still use the ordered probes"},
+		{name: "muse-seal-establishment-help-drift-admitted", file: "pkg/agentic/systems/muse/seal.go", replacements: []replacement{{before: `	if err := seal.VerifyBeforeExec(plan); err != nil {
+		return nil, err
+	}`, after: `	if err := seal.VerifyBeforeExec(plan); err != nil && !errors.Is(err, ErrMuseSealHelpChanged) {
+		return nil, err
+	}`}}, testPackage: "./pkg/agentic/systems/muse", testName: "TestMuseSealEstablishmentRefusesRetainedDeclarationDrift", runPattern: "^TestMuseSealEstablishmentRefusesRetainedDeclarationDrift$", failureText: "admitted retained-declaration help drift", narrows: "help-acquisition-order: skips establishment-time help-drift refusals only; binary, release, env and argv immediate refusals and all pre-exec refusals still fire"},
 		member("short-release-bound", "seal.go", `func sealBuildIdentity(probed string) string { return probed }`, `func sealBuildIdentity(probed string) string { build, _, _ := strings.Cut(probed, "-R"); return build }`, "TestMuseInteractiveSealRefusesBuildRevisionDrift", "^TestMuseInteractiveSealRefusesBuildRevisionDrift$", "same-triple build drift admitted", "binds only the short triple; cross-triple drift still refuses"),
 		member("finalized-import-refused", "seal.go", `	release, ok := data.Selectors[sealedReleaseKey]
 	if !ok {`, `	release, ok := data.Selectors[sealedReleaseKey]

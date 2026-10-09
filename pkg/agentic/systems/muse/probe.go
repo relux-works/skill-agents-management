@@ -24,9 +24,11 @@ func (*System) ProbeToolRelease(ctx context.Context, env []string) (string, erro
 	if err != nil {
 		return "", errors.Join(agentic.ErrToolReleaseUndetected, fmt.Errorf("muse: probing the binary: %w", err))
 	}
-	release, err := parseToolRelease(out)
-	if err != nil {
+	var release string
+	if parsed, err := parseToolRelease(out); err != nil {
 		return "", errors.Join(agentic.ErrToolReleaseUndetected, fmt.Errorf("muse: parsing the answer: %w", err))
+	} else {
+		release = parsed
 	}
 	return release, nil
 }
@@ -48,15 +50,9 @@ func parseToolVersion(out []byte) (release, build string, err error) {
 // Permission capabilities are keyed by the release, not the build
 // revision; an unverified triple is detected here and refused by policy.go.
 func parseToolRelease(out []byte) (string, error) {
-	release, _, err := parseToolVersion(out)
-	return release, err
-}
-
-// parseToolBuild reads the full build identity (release plus revision,
-// such as 1.4.2-R4684.1) out of Muse's version answer. The interactive
-// exec-plan sealer binds this identity: same-triple revisions are
-// different builds, and the seal refuses revision drift.
-func parseToolBuild(out []byte) (string, error) {
-	_, build, err := parseToolVersion(out)
-	return build, err
+	if release, _, err := parseToolVersion(out); err != nil {
+		return "", err
+	} else {
+		return release, nil
+	}
 }

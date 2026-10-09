@@ -124,7 +124,7 @@ func TestUnlistedReleaseUsesSupportedGrammar(t *testing.T) {
 
 // TestUnlistedReleaseWithoutHelpEvidenceRefuses pins the evidence half of
 // unlisted admission: a novel build whose help declares no bypass flag
-// refuses yolo. The BuildPlan leg pins the outer argv gate; the direct
+// refuses yolo. The BuildPlan leg pins the establishment gate; the direct
 // seal legs pin the sealer's independent enforcement — creation refuses
 // a declaration-less novel build, and the known-build control still
 // refuses when the M41 mutant exempts the novel one.

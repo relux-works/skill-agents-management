@@ -58,9 +58,11 @@ func validateFrozenToolTuple(binary, build, sha string) error {
 	if info.Mode().Perm()&0o111 == 0 {
 		return fmt.Errorf("%w: binary %q is not executable", ErrMuseFrozenToolInvalid, binary)
 	}
-	identity, err := ParsePinnedBinaryName(filepath.Base(binary))
-	if err != nil {
+	var identity BuildIdentity
+	if parsed, err := ParsePinnedBinaryName(filepath.Base(binary)); err != nil {
 		return fmt.Errorf("%w: %w", ErrMuseFrozenToolInvalid, err)
+	} else {
+		identity = parsed
 	}
 	if identity.Build != build {
 		return fmt.Errorf("%w: filename build %q does not match tuple build %q", ErrMuseFrozenToolInvalid, identity.Build, build)

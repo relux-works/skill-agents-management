@@ -193,6 +193,21 @@ func runProbe(ctx context.Context, stage, binary string, env []string, probeArg 
 		// The deadline fired but the child had already exited cleanly:
 		// only a pipe holder remained, now reaped by the group kill.
 		// The captured bytes are the complete answer, not a timeout.
+		if stage == agentic.ProbeStageHelp && stdout.Len() == 0 {
+			// A help probe that prints nothing acquired no evidence:
+			// zero bytes cannot declare an option and cannot digest
+			// into one. This is an attempt failure, not a static
+			// "declares no flag" verdict — absence of help is not
+			// help without the flag.
+			return nil, &agentic.ProbeExecutionError{
+				Stage:         stage,
+				ExecAttempted: true,
+				ChildStarted:  true,
+				Detail:        fmt.Sprintf("%s %s printed no output", binary, probeArg),
+				Stdout:        stdout.Sample(),
+				Stderr:        stderr.Sample(),
+			}
+		}
 		return stdout.Bytes(), nil
 	}
 	if deadlineFired {

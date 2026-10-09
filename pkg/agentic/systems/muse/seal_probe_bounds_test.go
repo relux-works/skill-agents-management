@@ -143,7 +143,7 @@ func TestHelpProbeBounded(t *testing.T) {
 	const answer = "Muse Code 1.4.1 (1.4.1-R4503.1)"
 	t.Run("witness-over-cap", func(t *testing.T) {
 		t.Parallel()
-		env := writeMuseHelpShellStub(t, answer, "printf '%1048577s' ''")
+		env := writeMuseHelpShellStub(t, answer, "printf '%1048577s' ''\nexit 0")
 		_, err := tryBuildMusePlan(t, New(), agentic.LaunchRequest{
 			System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
 			ToolRelease: "1.4.1", PermissionMode: agentic.PermissionModeYolo,

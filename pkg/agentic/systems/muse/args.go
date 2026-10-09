@@ -1,11 +1,9 @@
 package muse
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
-	"github.com/relux-works/skill-agents-management/internal/toolprobe"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -137,10 +135,11 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 // assignment protocol: NativeArgs is the caller's verbatim optional prompt and
 // option suffix.
 //
-// Yolo resolves from bounded help evidence probed off the selected binary
-// — the frozen copy when the request carries the tuple, the PATH binary
-// otherwise — under the same curated child environment the launch will
-// run with. Native probes nothing and forwards verbatim.
+// Yolo emits the bypass flag from the posture alone and probes nothing:
+// the interactive sealer acquires the bounded help evidence from the
+// selected binary and refuses a yolo plan whose help does not declare
+// the flag, so the mapping the seal binds is verified against the same
+// evidence the seal carries. Native probes nothing and forwards verbatim.
 func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
 	var effective agentic.PermissionMode
 	if value, err := req.PermissionMode.Resolve(); err != nil {
@@ -161,26 +160,14 @@ func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
 		args = append(args, "--workspace", req.WorkDir)
 	}
 	if effective == agentic.PermissionModeYolo {
-		var binary string
-		if resolved, err := resolveMuseBinary(req); err != nil {
-			return nil, err
-		} else {
-			binary = resolved
-		}
-		out, err := toolprobe.HelpOutput(context.Background(), binary, childEnv(req.Env, req))
-		if err != nil {
-			return nil, fmt.Errorf("muse: probing yolo help evidence: %w", err)
-		}
-		var mapping agentic.PermissionMapping
-		if computed, err := permissionMappingWithEvidence(parseHelpDeclaration(out, museYoloFlag), effective); err != nil {
-			return nil, err
-		} else {
-			mapping = computed
-		}
 		if err := scanMuseNativePolicy(req.NativeArgs); err != nil {
 			return nil, fmt.Errorf("muse: %w", err)
 		}
-		args = append(args, mapping.Flag)
+		// Posture mapping only: the flag is emitted here, but the
+		// evidence gate runs at seal time (see sealInteractiveExecPlan).
+		// Argv probes nothing, so mapping and sealing cannot observe
+		// two different help answers.
+		args = append(args, museYoloFlag)
 	}
 	return append(args, append([]string(nil), req.NativeArgs...)...), nil
 }

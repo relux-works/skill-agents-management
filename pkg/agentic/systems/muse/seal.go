@@ -158,6 +158,13 @@ type interactiveExecSeal struct {
 // non-interactive plan has no seal basis here and keeps its existing
 // behavior: the network sealer owns managed plans before this line is
 // reached, and plain exec and dry-run plans stay unsealed.
+//
+// Establishment order is pin/hash -> version -> help -> mapping -> seal:
+// the updater pin and binary digest come first, then the version probe
+// attests the build, then the help probe acquires the yolo evidence the
+// internal permission mapper gates, and only then is the seal built and
+// immediately re-verified. Argv mapping probes nothing, so the sealed
+// evidence is the only help answer the plan ever observes.
 func sealInteractiveExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error) {
 	if plan.Mode != agentic.LaunchModeInteractive {
 		return nil, nil
@@ -174,9 +181,11 @@ func sealInteractiveExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error
 	if envValue(plan.Env, museNoAutoUpdateEnv) != "1" {
 		return nil, fmt.Errorf("%w: %s is not pinned to 1", ErrMuseSealEnvChanged, museNoAutoUpdateEnv)
 	}
-	mode, err := plan.PermissionMode.Resolve()
-	if err != nil {
+	var mode agentic.PermissionMode
+	if resolved, err := plan.PermissionMode.Resolve(); err != nil {
 		return nil, fmt.Errorf("%w: sealed permission mode: %w", ErrMuseSealMalformed, err)
+	} else {
+		mode = resolved
 	}
 	// A seal binds an attested well-formed build or nothing at all: an
 	// undetected build refuses typed here, at plan time. No interactive
@@ -690,9 +699,11 @@ func probeInteractiveSealBuild(ctx context.Context, binary string, env []string)
 	if err != nil {
 		return BuildIdentity{}, errors.Join(agentic.ErrToolReleaseUndetected, fmt.Errorf("muse: probing the sealed binary: %w", err))
 	}
-	identity, err := ParseBuildIdentity(out)
-	if err != nil {
+	var identity BuildIdentity
+	if parsed, err := ParseBuildIdentity(out); err != nil {
 		return BuildIdentity{}, errors.Join(agentic.ErrToolReleaseUndetected, fmt.Errorf("muse: parsing the sealed answer: %w", err))
+	} else {
+		identity = parsed
 	}
 	return identity, nil
 }

@@ -19,6 +19,6 @@
   1 MiB help), with process-group teardown, bounded drain past child exit
   and typed `ProbeExecutionError` attempt records for host routing.
 
-- Echo the attested `ToolRelease` and `PermissionMode` on `Plan`, and refuse
-  a caller-supplied release that disagrees with the attested release with
-  `ErrMuseToolReleaseMismatch`.
+- Echo the caller-supplied `ToolRelease` claim and `PermissionMode` verbatim on `Plan`, including zero values. The interactive seal binds the attested full build and resolved permission posture, and refuses a supplied release claim that disagrees with the attested release with `ErrMuseToolReleaseMismatch`.
+
+- Remove exported `ErrMuseSealReleaseUnverified` with the retired release table.

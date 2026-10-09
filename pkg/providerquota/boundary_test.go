@@ -38,6 +38,12 @@ var quotaExecExceptions = map[string]bool{
 	"pkg/localruntime/client.go": true,
 	// Existing offline tool preflight; plans never call Probe from quota entry points.
 	"internal/toolprobe/toolprobe.go": true,
+	// Same preflight's unix process-group arm: setProbeProcessGroup and
+	// killProbeChild take *exec.Cmd, as the excepted runner does.
+	"internal/toolprobe/toolprobe_unix.go": true,
+	// Same preflight's non-unix arm: direct-child teardown takes
+	// *exec.Cmd, as the excepted runner does.
+	"internal/toolprobe/toolprobe_other.go": true,
 	// Existing providerlimits start-time liveness, not quota store liveness.
 	"pkg/providerlimits/liveness_starttime_unix.go": true,
 }

@@ -79,7 +79,7 @@ func TestFrozenOverrideGatesPresentButInvalid(t *testing.T) {
 	dir := t.TempDir()
 	valid, validDigest := writeFrozenMuseFixture(t, dir, "1.4.2-R4684.1",
 		"Muse Code 1.4.2 (1.4.2-R4684.1)", museYoloHelpFixture)
-	symlink := filepath.Join(dir, "muse-bin-1.4.1-R4503.1")
+	symlink := filepath.Join(dir, "muse-bin-1.4.2-R4684.1")
 	if err := os.Symlink(valid, symlink); err != nil {
 		t.Fatalf("linking the symlink fixture: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestFrozenOverrideGatesPresentButInvalid(t *testing.T) {
 		sha    string
 	}{
 		{"missing-file", filepath.Join(dir, "muse-bin-9.9.9-R1.1"), "9.9.9-R1.1", strings.Repeat("0", 64)},
-		{"symlink", symlink, "1.4.1-R4503.1", validDigest},
+		{"symlink", symlink, "1.4.2-R4684.1", validDigest},
 		{"relative", "muse-bin-1.4.2-R4684.1", "1.4.2-R4684.1", validDigest},
 		{"unclean", dir + "/sub/../muse-bin-1.4.2-R4684.1", "1.4.2-R4684.1", validDigest},
 		{"directory", subdir, "1.4.3-R1.1", strings.Repeat("0", 64)},

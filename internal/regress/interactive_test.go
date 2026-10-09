@@ -93,10 +93,22 @@ type interactiveCase struct {
 	// stubVersion, when non-empty, is the --version answer the fixture
 	// binary prints. Muse seals every interactive plan at BuildPlan time
 	// and refuses an unprobeable binary, so its fixture attests a
-	// module-verified build; the asserted properties (markers, posture,
+	// well-formed build; the asserted properties (markers, posture,
 	// native-verbatim request release) do not depend on the answer.
 	stubVersion string
+	// stubHelp, when non-empty, is the --help answer the same fixture
+	// binary prints. Muse yolo maps from that evidence instead of a
+	// release table, so its fixture declares the bypass flag.
+	stubHelp string
 }
+
+// museYoloHelpText is the --help answer the muse fixture binary prints:
+// a bounded option list declaring the bypass flag as its own option.
+const museYoloHelpText = "Usage: muse [options] [prompt]\n\nOptions:\n  --model <id>       Model to use\n  --yolo             Skip approval prompts\n"
+
+// museNoYoloHelpText is the same list without any bypass declaration:
+// prose names the flag mid-line, but no option line declares it.
+const museNoYoloHelpText = "Usage: muse [options] [prompt]\n\nOptions:\n  --model <id>       Model to use\n\nThis build documents no bypass flag; newer releases describe --yolo here.\n"
 
 var interactiveCases = map[string]interactiveCase{
 	"claude-code": {
@@ -122,6 +134,7 @@ var interactiveCases = map[string]interactiveCase{
 		yoloFlag:    "--yolo",
 		toolRelease: "1.4.1",
 		stubVersion: "Muse Code 1.4.1 (1.4.1-R4503.1)",
+		stubHelp:    museYoloHelpText,
 		exec: func(t *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest {
 			req.PromptPath = paritycase.WritePromptFile(t, workDir, "body")
 			return req
@@ -135,10 +148,15 @@ var interactiveCases = map[string]interactiveCase{
 
 func interactiveRequest(t *testing.T, c interactiveCase, workDir, binDir string) agentic.LaunchRequest {
 	t.Helper()
-	if c.stubVersion == "" {
+	return interactiveRequestWithProbe(t, c, workDir, binDir, c.stubVersion, c.stubHelp)
+}
+
+func interactiveRequestWithProbe(t *testing.T, c interactiveCase, workDir, binDir, version, help string) agentic.LaunchRequest {
+	t.Helper()
+	if version == "" {
 		paritycase.WriteStubExecutable(t, binDir, c.stub)
 	} else {
-		writeVersionStubExecutable(t, binDir, c.stub, c.stubVersion)
+		writeVersionStubExecutable(t, binDir, c.stub, version, help)
 	}
 	req := agentic.LaunchRequest{
 		System:  c.system.ID(),
@@ -156,18 +174,25 @@ func interactiveRequest(t *testing.T, c interactiveCase, workDir, binDir string)
 }
 
 // writeVersionStubExecutable installs a fixture binary that answers
-// --version with the given line and otherwise drains stdin and exits 0,
-// like the shared parity stub. A version probe must never start a
-// session or carry another argument.
-func writeVersionStubExecutable(t *testing.T, dir, name, version string) string {
+// --version with the given line, --help with the given text when
+// non-empty, and otherwise drains stdin and exits 0, like the shared
+// parity stub. A version probe must never start a session or carry
+// another argument.
+func writeVersionStubExecutable(t *testing.T, dir, name, version, help string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
 	script := "#!/bin/sh\n" +
 		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ]; then\n" +
 		"printf '%s\\n' '" + version + "'\n" +
 		"exit 0\n" +
-		"fi\n" +
-		"cat >/dev/null\nexit 0\n"
+		"fi\n"
+	if help != "" {
+		script += "if [ \"$#\" -eq 1 ] && [ \"$1\" = '--help' ]; then\n" +
+			"printf '%s\\n' '" + help + "'\n" +
+			"exit 0\n" +
+			"fi\n"
+	}
+	script += "cat >/dev/null\nexit 0\n"
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the version stub %s: %v", name, err)
 	}
@@ -261,6 +286,43 @@ func TestAYoloPlanCarriesItsOneBypassFlagAndNoOtherMarker(t *testing.T) {
 // above); drift there refuses as unverified like everywhere else.
 func TestAYoloPlanRefusesDriftForEveryMappedSystem(t *testing.T) {
 	for name, c := range interactiveCases {
+		if name == "muse" {
+			// L0: muse maps yolo from bounded help evidence, not a
+			// release table, so release-number drift is not its
+			// refusal. Its drift cells pin the new contract: a
+			// release claim disagreeing with the attested release
+			// fails closed at the seal, yolo without help evidence
+			// fails closed as unsupported, and native at a release
+			// no table lists still builds.
+			t.Run(name+"/release-9.9.9", func(t *testing.T) {
+				workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
+				req := interactiveRequestWithProbe(t, c, workDir, binDir, c.stubVersion, c.stubHelp)
+				req.PermissionMode = agentic.PermissionModeYolo
+				req.ToolRelease = "9.9.9"
+				if _, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeInteractive); !errors.Is(err, muse.ErrMuseToolReleaseMismatch) {
+					t.Fatalf("%s: err = %v, want ErrMuseToolReleaseMismatch", name, err)
+				}
+			})
+			t.Run(name+"/release-unestablished", func(t *testing.T) {
+				workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
+				req := interactiveRequestWithProbe(t, c, workDir, binDir, c.stubVersion, museNoYoloHelpText)
+				req.PermissionMode = agentic.PermissionModeYolo
+				req.ToolRelease = ""
+				if _, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+					t.Fatalf("%s: err = %v, want ErrPermissionModeUnsupported", name, err)
+				}
+			})
+			t.Run(name+"/native-builds-unverified", func(t *testing.T) {
+				workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)
+				req := interactiveRequestWithProbe(t, c, workDir, binDir, "Muse Code 9.9.9 (9.9.9-R9999.1)", "")
+				req.PermissionMode = agentic.PermissionModeNative
+				req.ToolRelease = "9.9.9"
+				if _, err := paritycase.TryBuildPlan(c.system, req, agentic.LaunchModeInteractive); err != nil {
+					t.Fatalf("%s: native at an unverified release was refused: %v", name, err)
+				}
+			})
+			continue
+		}
 		for _, release := range []string{"9.9.9", ""} {
 			t.Run(name+"/release-"+driftName(release), func(t *testing.T) {
 				workDir, binDir := paritycase.TempSlot(t), paritycase.TempSlot(t)

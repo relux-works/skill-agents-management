@@ -347,10 +347,10 @@ func TestSealedImportStaleHelpDigestRefuses(t *testing.T) {
 }
 
 // TestSealNeverExecsUnfrozenOnOverridePath pins frozen-tuple enforcement
-// across every probe: with the tuple present, argv mapping and sealing
-// execute the frozen copy only. The PATH binary documents no bypass flag
-// and records any execution, so resolving PATH either refuses or leaves
-// the marker — both fail the test.
+// across every probe: with the tuple present, argv mapping probes nothing
+// and sealing executes the frozen copy only. The PATH binary documents no
+// bypass flag and records any execution, so resolving PATH either refuses
+// or leaves the marker — both fail the test.
 func TestSealNeverExecsUnfrozenOnOverridePath(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -455,10 +455,10 @@ func TestSealReprobeTimeoutSurfacesAttemptError(t *testing.T) {
 }
 
 // TestMuseSealEstablishmentRefusesHelpChangeMidSeal pins seal-time help
-// enforcement: argv maps against the first help answer, and a help text
-// that degrades before seal creation refuses — a lost declaration as
-// unsupported on that binary, a failing probe as attempt evidence. The
-// mapping-time pass never authorizes the seal.
+// enforcement: the seal binds the first help answer, and the
+// establishment re-verification refuses any degradation before the plan
+// exists — a lost declaration as a gone declaration, a failing probe as
+// attempt evidence. The bound answer never authorizes a changed one.
 func TestMuseSealEstablishmentRefusesHelpChangeMidSeal(t *testing.T) {
 	t.Parallel()
 	t.Run("declaration-lost", func(t *testing.T) {
@@ -470,8 +470,8 @@ func TestMuseSealEstablishmentRefusesHelpChangeMidSeal(t *testing.T) {
 			System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
 			ToolRelease: "1.4.1", PermissionMode: agentic.PermissionModeYolo,
 		}, agentic.LaunchModeInteractive)
-		if !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
-			t.Fatalf("mid-seal declaration loss err = %v, want ErrPermissionModeUnsupported", err)
+		if !errors.Is(err, ErrMuseSealHelpChanged) {
+			t.Fatalf("mid-seal declaration loss err = %v, want ErrMuseSealHelpChanged", err)
 		}
 	})
 	t.Run("probe-fails", func(t *testing.T) {
@@ -490,4 +490,80 @@ func TestMuseSealEstablishmentRefusesHelpChangeMidSeal(t *testing.T) {
 			t.Fatalf("mid-seal help failure stage = %q, want help", attempt.Stage)
 		}
 	})
+}
+
+// TestMuseSealEstablishmentRefusesRetainedDeclarationDrift pins the
+// establishment digest comparison: a help text that keeps its --yolo
+// declaration but changes bytes between binding and the establishment
+// re-verification refuses — the seal binds one answer, not a drifting
+// stream. Skipping the establishment re-verification for help drift is
+// what the drift mutant does.
+func TestMuseSealEstablishmentRefusesRetainedDeclarationDrift(t *testing.T) {
+	t.Parallel()
+	laterHelp := museYoloHelpFixture + "\n  --yolo-extra documented\n"
+	env := writeMuseHelpCounterStub(t, t.TempDir(),
+		"Muse Code 1.4.1 (1.4.1-R4503.1)", museYoloHelpFixture,
+		"printf '%s\\n' '"+laterHelp+"'")
+	_, err := tryBuildMusePlan(t, New(), agentic.LaunchRequest{
+		System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
+		ToolRelease: "1.4.1", PermissionMode: agentic.PermissionModeYolo,
+	}, agentic.LaunchModeInteractive)
+	if !errors.Is(err, ErrMuseSealHelpChanged) {
+		t.Fatalf("establishment admitted retained-declaration help drift: %v", err)
+	}
+}
+
+// writeMuseProbeOrderStub installs a binary answering --version with the
+// fixed answer and --help with the fixed text, appending "version" or
+// "help" to its order file on every probe, so establishment tests can
+// assert probe order. It returns the order file path and a PATH-only env.
+func writeMuseProbeOrderStub(t *testing.T, dir, answer, help string) (string, []string) {
+	t.Helper()
+	order := filepath.Join(dir, "probe-order")
+	binary := filepath.Join(dir, "muse")
+	script := "#!/bin/sh\n" +
+		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ]; then\n" +
+		"printf 'version\\n' >> '" + order + "'\n" +
+		"printf '%s\\n' '" + answer + "'\n" +
+		"exit 0\n" +
+		"fi\n" +
+		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--help' ]; then\n" +
+		"[ \"$MUSE_NO_AUTO_UPDATE\" = '1' ] || exit 13\n" +
+		"printf 'help\\n' >> '" + order + "'\n" +
+		"printf '%s\\n' '" + help + "'\n" +
+		"exit 0\n" +
+		"fi\n" +
+		"exit 8\n"
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatalf("writing the order stub: %v", err)
+	}
+	return order, []string{"PATH=" + dir + ":/bin:/usr/bin"}
+}
+
+// TestMuseSealEstablishmentProbesVersionBeforeHelp pins the establishment
+// probe order through the public entry: version attestation runs before
+// the help probe, and the immediate re-verification repeats the pair, so
+// a yolo plan observes exactly version, help, version, help. Probing
+// help before version attestation is what the ordering mutant does.
+func TestMuseSealEstablishmentProbesVersionBeforeHelp(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	order, env := writeMuseProbeOrderStub(t, dir,
+		"Muse Code 1.4.1 (1.4.1-R4503.1)", museYoloHelpFixture)
+	plan := buildMuseInteractivePlan(t, New(), agentic.LaunchRequest{
+		System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
+		ToolRelease: "1.4.1", PermissionMode: agentic.PermissionModeYolo,
+	})
+	if err := assertMuseYoloExactlyOnce(plan); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(order)
+	if err != nil {
+		t.Fatalf("reading the probe order: %v", err)
+	}
+	const want = "version\nhelp\nversion\nhelp"
+	if got := strings.TrimSpace(string(raw)); got != want {
+		t.Fatalf("establishment probe order = %q, want %q",
+			strings.Split(got, "\n"), strings.Split(want, "\n"))
+	}
 }

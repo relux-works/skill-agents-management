@@ -251,8 +251,11 @@ the launcher's versioned headless-argument classifier. It returns
 `NativeArgsClassification{Form, Grammar}`; `IsNonInteractive` is false when
 `Form` is empty. Every plugin except `muse` verifies the exact release with
 its own `ReleaseCapability` rows and returns the same permission-grammar
-version used by the native-policy scanner; `muse` classifies from the
-attested build and help evidence instead of a release table. Unknown systems
+version used by the native-policy scanner. `muse` implements no classifier,
+so this registry API returns `ErrNativeArgsClassifierUnsupported` for it;
+muse's evidence-based interactive permission mapping (yolo from the
+attested build's `--help` declaration) is a separate planning path, not a
+headless classification. Unknown systems
 return `ErrUnknownSystem`, an unsupported system classifier returns
 `ErrNativeArgsClassifierUnsupported`, and an absent or unverified release
 returns `ErrPermissionModeUnverifiedRelease`. If a plugin cannot establish

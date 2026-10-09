@@ -84,9 +84,10 @@ func probeMuseHelpEvidence(ctx context.Context, binary string, env []string, bui
 		return helpEvidence{}, fmt.Errorf("muse: probing help evidence: %w", err)
 	}
 	declaration := parseHelpDeclaration(out, museYoloFlag)
-	if !declaration.declared {
-		return helpEvidence{}, fmt.Errorf("muse: refusing yolo: %w: selected build %q help declares no %q option",
-			agentic.ErrPermissionModeUnsupported, build, museYoloFlag)
+	// The internal permission mapper gates the evidence: the argv already
+	// carries the mapped flag, so only its refusal is consumed here.
+	if _, err := permissionMappingWithEvidence(declaration, agentic.PermissionModeYolo); err != nil {
+		return helpEvidence{}, err
 	}
 	fullSum := sha256.Sum256(out)
 	linesSum := sha256.Sum256([]byte(declaration.lines))
