@@ -108,8 +108,11 @@ func TestMuseInteractiveSealBindsBinaryArgvReleaseAndEnv(t *testing.T) {
 			t.Fatalf("selector %q = %q, want a keyed commitment, never the literal value", entry, data.Selectors[entry])
 		}
 	}
-	if len(data.Selectors) != 6 {
-		t.Fatalf("selectors = %#v, want exactly the release, the key id and the four sealed env entries", data.Selectors)
+	if len(data.Selectors) != 7 {
+		t.Fatalf("selectors = %#v, want exactly the release, the mode, the key id and the four sealed env entries", data.Selectors)
+	}
+	if data.Selectors[sealedModeKey] != string(agentic.PermissionModeNative) {
+		t.Fatalf("mode selector = %q, want the sealed native posture", data.Selectors[sealedModeKey])
 	}
 	if seal.HostedAdmissible() {
 		t.Fatal("sealed Muse guard is hosted-admissible before closed sealed schemas land")
@@ -242,10 +245,12 @@ func TestMuseInteractiveSealRefusesReleaseMismatch(t *testing.T) {
 
 // TestMuseInteractiveSealRefusesUnverifiedRelease builds interactive
 // native plans — no yolo mapping involved — against binaries that attest
-// no verified build. Every one refuses typed at plan time: probe
-// failures are undetected, attested-but-unverified builds (including an
-// unpinned revision of a verified triple) are unverified. No interactive
-// plan ships unsealed.
+// no well-formed build. Every one refuses typed at plan time: probe
+// failures are undetected. No interactive plan ships unsealed.
+//
+// M-AG2 retired the verified-build list this name once pinned: novel
+// well-formed builds now seal (see TestSealBindsAttestedNewest), and only
+// undetected or malformed attestation refuses.
 func TestMuseInteractiveSealRefusesUnverifiedRelease(t *testing.T) {
 	refuseUnverified := func(t *testing.T, env []string, sentinel error, what string) {
 		t.Helper()
@@ -257,14 +262,6 @@ func TestMuseInteractiveSealRefusesUnverifiedRelease(t *testing.T) {
 			t.Fatalf("unverified %s admitted without a seal: %v", what, err)
 		}
 	}
-	t.Run("native-1-5-0", func(t *testing.T) {
-		_, env := writeMuseVersionStub(t, "printf '%s\\n' 'Muse Code 1.5.0 (1.5.0-R9999.1)'\n")
-		refuseUnverified(t, env, ErrMuseSealReleaseUnverified, "1.5.0-R9999.1")
-	})
-	t.Run("native-same-triple-unpinned", func(t *testing.T) {
-		_, env := writeMuseVersionStub(t, "printf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R9999.1)'\n")
-		refuseUnverified(t, env, ErrMuseSealReleaseUnverified, "1.4.1-R9999.1")
-	})
 	t.Run("native-silent", func(t *testing.T) {
 		dir := t.TempDir()
 		paritycase.WriteStubExecutable(t, dir, executableName)
@@ -568,8 +565,9 @@ func TestMuseInteractiveSealRoundTripsReleaseMismatch(t *testing.T) {
 // importer directly: any mutation of an exported payload invalidates the
 // envelope integrity digest first, so ImportSeal would name tampering
 // instead of the shape defect. The ImportSeal-to-plugin wiring is proven
-// separately by the round-trip tests above. Unverified builds, a foreign
-// commitment key and literal env values refuse here too.
+// separately by the round-trip tests above. Malformed releases, a missing
+// or unexpected mode selector, missing or unexpected help digests, a
+// foreign commitment key and literal env values refuse here too.
 func TestMuseImportSealedDataRefusesMalformedShapes(t *testing.T) {
 	plan := buildMuseSealedPlan(t, museSealedInteractiveRequest(t))
 	seal, err := plan.ExportSeal()
@@ -588,6 +586,12 @@ func TestMuseImportSealedDataRefusesMalformedShapes(t *testing.T) {
 		{name: "bad-digest", mutate: func(data *agentic.SealedData) { data.Artifacts[0].Digest = "sha256:zzz" }, sentinel: ErrMuseSealMalformed},
 		{name: "bare-digest", mutate: func(data *agentic.SealedData) { data.Artifacts[0].Digest = strings.Repeat("0", 64) }, sentinel: ErrMuseSealMalformed},
 		{name: "missing-release", mutate: func(data *agentic.SealedData) { delete(data.Selectors, sealedReleaseKey) }, sentinel: ErrMuseSealMalformed},
+		{name: "malformed-release-triple", mutate: func(data *agentic.SealedData) { data.Selectors[sealedReleaseKey] = "1.5.0" }, sentinel: ErrMuseSealMalformed},
+		{name: "malformed-release-garbage", mutate: func(data *agentic.SealedData) { data.Selectors[sealedReleaseKey] = "not-a-build" }, sentinel: ErrMuseSealMalformed},
+		{name: "missing-mode", mutate: func(data *agentic.SealedData) { delete(data.Selectors, sealedModeKey) }, sentinel: ErrMuseSealMalformed},
+		{name: "bad-mode", mutate: func(data *agentic.SealedData) { data.Selectors[sealedModeKey] = "turbo" }, sentinel: ErrMuseSealMalformed},
+		{name: "native-with-help-stdout", mutate: func(data *agentic.SealedData) { data.Selectors[sealedHelpStdoutKey] = strings.Repeat("0", 64) }, sentinel: ErrMuseSealMalformed},
+		{name: "native-with-help-lines", mutate: func(data *agentic.SealedData) { data.Selectors[sealedHelpLinesKey] = strings.Repeat("0", 64) }, sentinel: ErrMuseSealMalformed},
 		{name: "missing-key-id", mutate: func(data *agentic.SealedData) { delete(data.Selectors, sealedKeyIDKey) }, sentinel: ErrMuseSealMalformed},
 		{name: "foreign-selector", mutate: func(data *agentic.SealedData) { data.Selectors["PATH"] = "/elsewhere" }, sentinel: ErrMuseSealMalformed},
 		{name: "literal-env-value", mutate: func(data *agentic.SealedData) { data.Selectors["XDG_DATA_HOME"] = "/elsewhere" }, sentinel: ErrMuseSealMalformed},
@@ -606,26 +610,46 @@ func TestMuseImportSealedDataRefusesMalformedShapes(t *testing.T) {
 			}
 		})
 	}
-	t.Run("unverified-release", func(t *testing.T) {
-		data := *seal.Data.Sealed
-		data.Selectors = make(map[string]string, len(seal.Data.Sealed.Selectors))
-		for name, value := range seal.Data.Sealed.Selectors {
+	// M-AG2 retired the verified-build list: well-formed releases import
+	// (see TestSealBindsAttestedNewest), and only malformed ones refuse
+	// above. The yolo help selectors below are the seal's required
+	// evidence shape: dropping one is malformed, not native mode.
+	yoloReq := museInteractiveRequest(t)
+	yoloReq.PermissionMode = agentic.PermissionModeYolo
+	yoloReq.ToolRelease = verifiedMuseRelease
+	yoloPlan := buildMuseInteractivePlan(t, New(), yoloReq)
+	yoloSeal, err := yoloPlan.ExportSeal()
+	if err != nil {
+		t.Fatalf("ExportSeal yolo: %v", err)
+	}
+	cloneYolo := func(t *testing.T) agentic.SealedData {
+		t.Helper()
+		data := *yoloSeal.Data.Sealed
+		data.Selectors = make(map[string]string, len(yoloSeal.Data.Sealed.Selectors))
+		for name, value := range yoloSeal.Data.Sealed.Selectors {
 			data.Selectors[name] = value
 		}
-		data.Selectors[sealedReleaseKey] = "1.5.0-R9999.1"
-		if _, err := New().ImportSealedData(data); !errors.Is(err, ErrMuseSealReleaseUnverified) {
-			t.Fatalf("ImportSealedData unverified release err = %v, want ErrMuseSealReleaseUnverified", err)
+		return data
+	}
+	t.Run("yolo-missing-help-stdout", func(t *testing.T) {
+		data := cloneYolo(t)
+		delete(data.Selectors, sealedHelpStdoutKey)
+		if _, err := New().ImportSealedData(data); !errors.Is(err, ErrMuseSealMalformed) {
+			t.Fatalf("ImportSealedData yolo without help stdout digest err = %v, want ErrMuseSealMalformed", err)
 		}
 	})
-	t.Run("unverified-same-triple", func(t *testing.T) {
-		data := *seal.Data.Sealed
-		data.Selectors = make(map[string]string, len(seal.Data.Sealed.Selectors))
-		for name, value := range seal.Data.Sealed.Selectors {
-			data.Selectors[name] = value
+	t.Run("yolo-missing-help-lines", func(t *testing.T) {
+		data := cloneYolo(t)
+		delete(data.Selectors, sealedHelpLinesKey)
+		if _, err := New().ImportSealedData(data); !errors.Is(err, ErrMuseSealMalformed) {
+			t.Fatalf("ImportSealedData yolo without help lines digest err = %v, want ErrMuseSealMalformed", err)
 		}
-		data.Selectors[sealedReleaseKey] = "1.4.1-R9999.1"
-		if _, err := New().ImportSealedData(data); !errors.Is(err, ErrMuseSealReleaseUnverified) {
-			t.Fatalf("ImportSealedData same-triple release err = %v, want ErrMuseSealReleaseUnverified", err)
+	})
+	t.Run("yolo-bad-help-digest", func(t *testing.T) {
+		data := cloneYolo(t)
+		data.Selectors[sealedHelpStdoutKey] = "not-hex"
+		if _, err := New().ImportSealedData(data); !errors.Is(err, ErrMuseSealMalformed) {
+			t.Fatalf("ImportSealedData yolo with malformed help digest err = %v, want ErrMuseSealMalformed", err)
 		}
 	})
 	t.Run("foreign-key-id", func(t *testing.T) {

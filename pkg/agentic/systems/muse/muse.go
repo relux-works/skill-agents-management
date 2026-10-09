@@ -168,7 +168,7 @@ func (*System) ResolveBinary(req agentic.LaunchRequest) (string, error) {
 	if !req.Network.IsZero() && hasDuplicatePath(req.Env) {
 		return "", networkRefusal("duplicate PATH before binary resolution")
 	}
-	return resolveBinary(req.Env)
+	return resolveMuseBinary(req)
 }
 
 // Argv builds the argument vector for one launch mode, excluding the binary.

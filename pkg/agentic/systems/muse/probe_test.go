@@ -24,8 +24,36 @@ func writeMuseVersionStub(t *testing.T, body string) (string, []string) {
 	return binary, []string{"PATH=" + dir}
 }
 
+// writeMuseVersionHelpStub is the version stub plus a --help answer: the
+// version branch runs body, the help branch requires the curated updater
+// pin and prints help. Yolo plans map from help evidence, so a yolo
+// BuildPlan against a version-only stub refuses before it proves
+// anything about the release under test.
+func writeMuseVersionHelpStub(t *testing.T, versionBody, help string) (string, []string) {
+	t.Helper()
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "muse")
+	script := "#!/bin/sh\n" +
+		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--help' ]; then\n" +
+		"[ \"$MUSE_NO_AUTO_UPDATE\" = '1' ] || exit 13\n" +
+		"printf '%s\\n' '" + help + "'\n" +
+		"exit 0\n" +
+		"fi\n" +
+		"[ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ] || exit 8\n" + versionBody
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return binary, []string{"PATH=" + dir}
+}
+
 // Drive the entire host sequence through public entry points. The fake binary
 // prints the pinned version output; no real provider or session is executed.
+//
+// M-AG3 retired the release table: the two historical releases below are
+// fixture values, not admission rows. What this name still pins is the
+// probe-to-plan flow — a probed binary reaches the plan it was probed
+// for — with yolo mapping from help evidence and the no-evidence public
+// query reporting evidence-required for yolo.
 func TestMuseProbeVerifiedReleasesReachInteractivePlans(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -37,29 +65,21 @@ func TestMuseProbeVerifiedReleasesReachInteractivePlans(t *testing.T) {
 	} {
 		t.Run(tc.release, func(t *testing.T) {
 			t.Parallel()
-			binary, env := writeMuseVersionStub(t, "printf '%s\\n' '"+tc.output+"'\n")
+			binary, env := writeMuseVersionHelpStub(t, "printf '%s\\n' '"+tc.output+"'\n", museYoloHelpFixture)
 			system := New()
 			release, err := agentic.ProbeToolRelease(context.Background(), system, env)
 			if err != nil || release != tc.release {
 				t.Fatalf("ProbeToolRelease = (%q, %v), want (%q, nil)", release, err, tc.release)
 			}
-			row, err := agentic.LookupReleaseCapability(verifiedReleases, release)
-			if err != nil || row.Release != tc.release || row.Grammar != agentic.PermissionGrammarV1 || !row.YoloSupported {
-				t.Fatalf("LookupReleaseCapability = (%#v, %v), want the verified release row", row, err)
+			nativeMapping, err := system.PermissionMapping(release, agentic.PermissionModeNative)
+			if err != nil || nativeMapping.Grammar != agentic.PermissionGrammarV1 || nativeMapping.Flag != "" {
+				t.Fatalf("PermissionMapping native = (%#v, %v), want grammar v1 with no flag", nativeMapping, err)
+			}
+			if _, err := system.PermissionMapping(release, agentic.PermissionModeYolo); !errors.Is(err, ErrMuseHelpEvidenceRequired) {
+				t.Fatalf("PermissionMapping yolo err = %v, want ErrMuseHelpEvidenceRequired", err)
 			}
 			for _, mode := range []agentic.PermissionMode{agentic.PermissionModeNative, agentic.PermissionModeYolo} {
 				t.Run(string(mode), func(t *testing.T) {
-					mapping, err := system.PermissionMapping(release, mode)
-					if err != nil || mapping.Grammar != agentic.PermissionGrammarV1 {
-						t.Fatalf("PermissionMapping = (%#v, %v), want grammar v1", mapping, err)
-					}
-					wantFlag := ""
-					if mode == agentic.PermissionModeYolo {
-						wantFlag = museYoloFlag
-					}
-					if mapping.Flag != wantFlag {
-						t.Fatalf("permission flag = %q, want %q", mapping.Flag, wantFlag)
-					}
 					req := agentic.LaunchRequest{
 						System: system.ID(), Model: agentic.Model{ID: "echo"},
 						Env: env, ToolRelease: release, PermissionMode: mode,
@@ -83,13 +103,13 @@ func TestMuseProbeVerifiedReleasesReachInteractivePlans(t *testing.T) {
 
 func TestMuseProbeUsesLaunchChildEnvironment(t *testing.T) {
 	t.Parallel()
-	_, env := writeMuseVersionStub(t, `
+	_, env := writeMuseVersionHelpStub(t, `
 [ "$MUSE_NO_AUTO_UPDATE" = 1 ] || exit 9
 [ "$LANG" = C ] || exit 10
 [ -n "$HOME" ] || exit 11
 [ "${UNLISTED_VARIABLE+x}" != x ] || exit 12
 printf '%s\n' 'Muse Code 1.4.2 (1.4.2-R4684.1)'
-`)
+`, museYoloHelpFixture)
 	env = append(env, "MUSE_NO_AUTO_UPDATE=0", "MUSE_NO_AUTO_UPDATE=false", "LANG=C", "HOME="+t.TempDir(), "UNLISTED_VARIABLE=discard")
 	before := append([]string(nil), env...)
 	release, err := agentic.ProbeToolRelease(context.Background(), New(), env)
@@ -110,32 +130,38 @@ printf '%s\n' 'Muse Code 1.4.2 (1.4.2-R4684.1)'
 	}
 }
 
-// Detection is distinct from qualification: a well-formed unknown release can
-// be read, but cannot claim either permission mapping or a yolo launch plan.
+// Detection is distinct from qualification. M-AG3 retired the release
+// table, so "unknown" no longer refuses everywhere: native maps an
+// unknown release verbatim, and a yolo plan with help evidence maps it
+// too. What this name still pins is the refusal that survives without
+// evidence — the public no-evidence yolo query reports
+// evidence-required — plus the new grants beside it.
 func TestMuseProbeUnknownReleasesRefusePermissionMapping(t *testing.T) {
 	t.Parallel()
+	system := New()
 	for _, unknown := range []string{"1.4.0", "1.5.0"} {
 		t.Run(unknown, func(t *testing.T) {
 			t.Parallel()
-			_, env := writeMuseVersionStub(t, "printf '%s\\n' 'Muse Code "+unknown+" ("+unknown+"-R1.1)'\n")
-			release, err := agentic.ProbeToolRelease(context.Background(), New(), env)
+			_, env := writeMuseVersionHelpStub(t,
+				"printf '%s\\n' 'Muse Code "+unknown+" ("+unknown+"-R1.1)'\n",
+				museYoloHelpFixture)
+			release, err := agentic.ProbeToolRelease(context.Background(), system, env)
 			if err != nil || release != unknown {
 				t.Fatalf("ProbeToolRelease = (%q, %v), want (%q, nil)", release, err, unknown)
 			}
-			for _, mode := range []agentic.PermissionMode{agentic.PermissionModeNative, agentic.PermissionModeYolo} {
-				t.Run(string(mode), func(t *testing.T) {
-					mapping, err := New().PermissionMapping(release, mode)
-					if !errors.Is(err, agentic.ErrPermissionModeUnsupported) || !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
-						t.Fatalf("PermissionMapping = (%#v, %v), want unsupported and unverified", mapping, err)
-					}
-				})
+			if mapping, err := system.PermissionMapping(release, agentic.PermissionModeYolo); !errors.Is(err, ErrMuseHelpEvidenceRequired) {
+				t.Fatalf("PermissionMapping yolo = (%#v, %v), want ErrMuseHelpEvidenceRequired", mapping, err)
 			}
-			_, err = tryBuildMusePlan(t, New(), agentic.LaunchRequest{
+			mapping, err := system.PermissionMapping(release, agentic.PermissionModeNative)
+			if err != nil || mapping.Flag != "" || mapping.Grammar != agentic.PermissionGrammarV1 {
+				t.Fatalf("PermissionMapping native = (%#v, %v), want verbatim grammar v1 with no flag", mapping, err)
+			}
+			plan := buildMuseInteractivePlan(t, system, agentic.LaunchRequest{
 				System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
 				ToolRelease: release, PermissionMode: agentic.PermissionModeYolo,
-			}, agentic.LaunchModeInteractive)
-			if !errors.Is(err, agentic.ErrPermissionModeUnsupported) || !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
-				t.Fatalf("BuildPlan unknown release = %v, want unsupported and unverified", err)
+			})
+			if err := assertMuseYoloExactlyOnce(plan); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

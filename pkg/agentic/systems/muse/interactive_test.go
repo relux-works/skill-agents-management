@@ -86,16 +86,19 @@ func TestMuseInteractiveYoloEmitsOneFlagAndForwardsNativeArgs(t *testing.T) {
 }
 
 func TestMuseInteractiveYoloRefusesAnUnlistedRelease(t *testing.T) {
+	// M-AG3 retired the release table the yolo mapping consulted, so an
+	// unlisted release is no longer refused for being unlisted: with help
+	// evidence it maps (see TestUnlistedReleaseUsesSupportedGrammar). What
+	// this name still pins is the surviving refusal underneath it — a
+	// caller-supplied release that disagrees with what the sealed binary
+	// attests refuses at seal time, never trusted.
 	req := museInteractiveRequest(t)
 	req.PermissionMode = agentic.PermissionModeYolo
 	req.ToolRelease = "1.5.0"
 
 	_, err := tryBuildMusePlan(t, New(), req, agentic.LaunchModeInteractive)
-	if !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
-		t.Fatalf("BuildPlan with unlisted Muse release error = %v, want ErrPermissionModeUnsupported", err)
-	}
-	if !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
-		t.Fatalf("BuildPlan with unlisted Muse release error = %v, want the specific unverified-release classification too", err)
+	if !errors.Is(err, ErrMuseToolReleaseMismatch) {
+		t.Fatalf("BuildPlan with mismatched Muse release error = %v, want ErrMuseToolReleaseMismatch", err)
 	}
 }
 
@@ -217,29 +220,15 @@ func TestMuseInteractiveDuplicateYoloNarrowingMutantIsDetected(t *testing.T) {
 	}
 }
 
-func TestMuseInteractiveUnlistedReleaseWideningMutantIsDetected(t *testing.T) {
-	req := museInteractiveRequest(t)
-	req.PermissionMode = agentic.PermissionModeYolo
-	req.ToolRelease = "1.5.0"
-	if err := requireMuseUnlistedReleaseRefusal(New(), req); err != nil {
-		t.Fatalf("unmutated policy did not refuse the unlisted release: %v", err)
-	}
-	if err := requireMuseUnlistedReleaseRefusal(unlistedReleaseMutant{System: New()}, req); err == nil {
-		t.Fatal("narrowing mutant survived: BuildPlan admitted yolo after the unlisted release was mapped onto the verified row")
-	}
-}
-
-func TestMuseInteractivePolicyPinsOnlyTheVerifiedRelease(t *testing.T) {
-	if len(verifiedReleases) != 2 {
-		t.Fatalf("Muse permission policy has %d rows, want exactly the two pinned TUI releases", len(verifiedReleases))
-	}
-	for i, release := range []string{verifiedMuseRelease, "1.4.2"} {
-		row := verifiedReleases[i]
-		if row.Release != release || row.Grammar != agentic.PermissionGrammarV1 || !row.YoloSupported {
-			t.Fatalf("Muse permission policy row = %#v, want release %q with grammar v1 and yolo supported", row, release)
-		}
-	}
-}
+// NOTE (M-AG3): TestMuseInteractiveUnlistedReleaseWideningMutantIsDetected
+// and TestMuseInteractivePolicyPinsOnlyTheVerifiedRelease were retired with
+// the release table they pinned: yolo no longer consults release rows, so
+// "mapping an unlisted release onto the verified row" is not an attack and
+// there is no row count to hold. Their coverage is replaced by
+// TestUnlistedReleaseWithoutHelpEvidenceRefuses (M41: unlisted yolo without
+// evidence refuses), TestUnlistedReleaseUsesSupportedGrammar (M40: unlisted
+// yolo with evidence maps) and TestSealRefusesToolReleaseMismatch (M44: a
+// mismatched caller release refuses at the seal).
 
 func museInteractiveRequest(t *testing.T) agentic.LaunchRequest {
 	t.Helper()
@@ -300,21 +289,6 @@ func activeMuseFlagCount(args []string, flag string) int {
 	return count
 }
 
-func requireMuseUnlistedReleaseRefusal(system agentic.System, req agentic.LaunchRequest) error {
-	registry := agentic.NewRegistry()
-	if err := registry.Register(system); err != nil {
-		return fmt.Errorf("Register Muse system: %w", err)
-	}
-	_, err := agentic.BuildPlan(registry, req, agentic.LaunchModeInteractive)
-	if err == nil {
-		return errors.New("BuildPlan admitted yolo for an unlisted Muse release")
-	}
-	if !errors.Is(err, agentic.ErrPermissionModeUnsupported) || !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
-		return fmt.Errorf("BuildPlan refused the unlisted release with the wrong classification: %w", err)
-	}
-	return nil
-}
-
 type nativeYoloMutant struct{ agentic.System }
 
 func (m nativeYoloMutant) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
@@ -341,13 +315,4 @@ func (m duplicateYoloMutant) Argv(req agentic.LaunchRequest, mode agentic.Launch
 		return nil, err
 	}
 	return append(args, callerArgs...), nil
-}
-
-type unlistedReleaseMutant struct{ agentic.System }
-
-func (m unlistedReleaseMutant) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
-	if mode == agentic.LaunchModeInteractive && req.PermissionMode == agentic.PermissionModeYolo && req.ToolRelease == "1.5.0" {
-		req.ToolRelease = verifiedMuseRelease
-	}
-	return m.System.Argv(req, mode)
 }

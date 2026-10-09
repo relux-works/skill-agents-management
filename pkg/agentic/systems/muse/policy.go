@@ -1,30 +1,23 @@
 package muse
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/relux-works/skill-agents-management/internal/nativeargs"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
-// verifiedReleases is Muse's per-release permission table. The rows are
-// Muse Code 1.4.1 and 1.4.2, whose pinned TUI help documents --yolo. Later
-// releases must be verified before this table can map yolo for them.
-var verifiedReleases = []agentic.ReleaseCapability{
-	{Release: "1.4.1", Grammar: agentic.PermissionGrammarV1, YoloSupported: true},
-	{Release: "1.4.2", Grammar: agentic.PermissionGrammarV1, YoloSupported: true},
-}
+// ErrMuseHelpEvidenceRequired refuses a yolo mapping requested without
+// the bounded help evidence it resolves from. The public no-evidence
+// PermissionMapping query reports it for yolo; BuildPlan obtains the
+// evidence by probing the selected binary instead of refusing.
+var ErrMuseHelpEvidenceRequired = errors.New("muse: yolo mapping requires bounded help evidence")
 
-// verifiedBuilds is the closed list of module-verified Muse builds the
-// interactive exec-plan sealer binds: full build identities (release plus
-// revision), not the short triples the permission table keys. A binary
-// attesting any other build — including an unpinned revision of a
-// verified triple — seals nothing and refuses at plan time.
-var verifiedBuilds = []string{"1.4.1-R4503.1", "1.4.2-R4684.1"}
-
-// PermissionMapping exposes the release-pinned Muse posture mapping without
-// building a launch plan. Native contributes no flag; yolo maps to Muse's
-// documented bypass flag for a verified release.
+// PermissionMapping exposes the Muse posture mapping WITHOUT evidence:
+// native contributes no flag, and yolo reports evidence-required. It
+// answers what the posture means, not whether any binary supports it;
+// the evidence-backed mapping below is what plans drive.
 func (*System) PermissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
 	return permissionMapping(toolRelease, mode)
 }
@@ -36,22 +29,36 @@ func permissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic
 	} else {
 		effective = value
 	}
-	var capability agentic.ReleaseCapability
-	if value, err := agentic.LookupReleaseCapability(verifiedReleases, toolRelease); err != nil {
-		// Keep the specific release-drift classification used by the other
-		// harnesses while also classifying the absent mapping as unsupported.
-		return agentic.PermissionMapping{}, fmt.Errorf("muse: refusing yolo: %w: %w",
-			agentic.ErrPermissionModeUnsupported, err)
-	} else {
-		capability = value
+	// The release claim travels with the request for the sealer's
+	// attestation cross-check; the mapping itself no longer consults it.
+	if effective == agentic.PermissionModeNative {
+		return agentic.PermissionMapping{Grammar: agentic.PermissionGrammarV1}, nil
 	}
-	mapping := agentic.PermissionMapping{Grammar: capability.Grammar}
+	return agentic.PermissionMapping{}, fmt.Errorf("muse: refusing yolo: %w: probe the selected binary help for the %q declaration",
+		ErrMuseHelpEvidenceRequired, museYoloFlag)
+}
+
+// permissionMappingWithEvidence maps the interactive posture from parsed
+// help evidence: the internal mapper BuildPlan drives. Native forwards
+// with no evidence consulted; yolo requires the declared bypass flag.
+// No version table gates either posture: a novel well-formed build maps
+// exactly like a long-shipped one when its help declares the flag, and
+// a help text without the declaration refuses typed as unsupported on
+// that binary, never as a release-list miss.
+func permissionMappingWithEvidence(declaration helpDeclaration, mode agentic.PermissionMode) (agentic.PermissionMapping, error) {
+	var effective agentic.PermissionMode
+	if value, err := mode.Resolve(); err != nil {
+		return agentic.PermissionMapping{}, fmt.Errorf("muse: %w", err)
+	} else {
+		effective = value
+	}
+	mapping := agentic.PermissionMapping{Grammar: agentic.PermissionGrammarV1}
 	if effective == agentic.PermissionModeNative {
 		return mapping, nil
 	}
-	if !capability.YoloSupported {
-		return agentic.PermissionMapping{}, fmt.Errorf("muse: refusing yolo: %w: tool release %q documents no bypass flag",
-			agentic.ErrPermissionModeUnsupported, capability.Release)
+	if !declaration.declared {
+		return agentic.PermissionMapping{}, fmt.Errorf("muse: refusing yolo: %w: selected binary help declares no %q option",
+			agentic.ErrPermissionModeUnsupported, museYoloFlag)
 	}
 	mapping.Flag = museYoloFlag
 	return mapping, nil

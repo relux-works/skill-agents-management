@@ -159,7 +159,8 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   bypass flag the system maps for its pinned tool release (`claude-code` →
   `--dangerously-skip-permissions`, `codex` →
   `--dangerously-bypass-approvals-and-sandbox`, emitted exactly once after
-  model and effort; `muse` maps `--yolo` for releases 1.4.1 and 1.4.2; `pi` and
+  model and effort; `muse` maps `--yolo` for any well-formed build whose
+  `--help` declares it as its own option; `pi` and
   `pi-native` refuse yolo with
   `ErrPermissionModeUnsupported` because pi 0.84.2 documents no such flag).
   `BuildPlan` refuses an unknown value in any mode
@@ -188,7 +189,7 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   settings kind.
 - The versioned provider-capability table (curator-spec Decision 0018
   choices 3 and 6) keys (environment, tool release) to a permission-grammar
-  version. Each plugin holds its own environment's rows and
+  version. Each plugin except `muse` holds its own environment's rows and
   `LookupReleaseCapability` is the single reader; there is no central map
   keyed by system id (the single-source guard forbids a second binding
   table). Claude and Codex use `permission-grammar-v2`, which adds the known
@@ -199,19 +200,25 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   |---|---|---|---|
   | `claude-code` | 2.1.261 | `permission-grammar-v2` | `--dangerously-skip-permissions` |
   | `codex` | 0.153.2 | `permission-grammar-v2` | `--dangerously-bypass-approvals-and-sandbox` |
-  | `muse` | 1.4.1, 1.4.2 | `permission-grammar-v1` | `--yolo` |
+  | `muse` | attested build, any release | `permission-grammar-v1` | `--yolo` (help evidence) |
   | `pi` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
   | `pi-native` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
 
   The caller establishes the running release by probing the resolved binary
   (`ProbeToolRelease`: `<binary> --version` against the launch environment —
   fake binaries in tests, never a real provider) and passes it on
-  `LaunchRequest.ToolRelease`. Muse parses the release triple from
-  `Muse Code <release> (<release>-R<revision>)` and probes with its curated
-  child environment, including the forced `MUSE_NO_AUTO_UPDATE=1` pin. On drift —
-  an unpinned or newer release, or none established at all — yolo fails closed first with
-  `ErrPermissionModeUnverifiedRelease`, while native still forwards verbatim
-  with no claims. `pi` has no release probe of its own, so yolo there without
+  `LaunchRequest.ToolRelease`. Muse holds no release rows: it parses the full
+  build identity from `Muse Code <release> (<release>-R<revision>)` through
+  the one `buildid` grammar, probes with its curated child environment
+  including the forced `MUSE_NO_AUTO_UPDATE=1` pin, and admits any
+  well-formed build the binary attests — there is no verified-release list.
+  Yolo additionally requires the bounded `--help` evidence to declare the
+  flag as its own option, else it refuses with
+  `ErrPermissionModeUnsupported` on that binary; a caller-supplied release
+  that disagrees with the attested release refuses with
+  `ErrMuseToolReleaseMismatch`, and a probe failure stays
+  `ErrToolReleaseUndetected`. Native still forwards verbatim with no claims.
+  `pi` has no release probe of its own, so yolo there without
   an explicitly passed Pi release refuses as unverified. Under yolo, Claude
   and Codex scan the caller's `NativeArgs` against their release's closed
   conflict grammar: an unknown codex `-c` key or an unknown claude
@@ -242,13 +249,14 @@ Run the focused checks with `env -u TASK_BOARD_DIR go test -mod=mod
 `agentic.Registry.ClassifyNonInteractiveArgs(system, toolRelease, suffix)` is
 the launcher's versioned headless-argument classifier. It returns
 `NativeArgsClassification{Form, Grammar}`; `IsNonInteractive` is false when
-`Form` is empty. Every plugin verifies the exact release with its own
-`ReleaseCapability` rows and returns the same permission-grammar version used
-by the native-policy scanner. Unknown systems return `ErrUnknownSystem`, an
-unsupported system classifier returns `ErrNativeArgsClassifierUnsupported`,
-and an absent or unverified release returns
-`ErrPermissionModeUnverifiedRelease`. If a plugin cannot establish an option's
-arity under its pinned grammar, it returns
+`Form` is empty. Every plugin except `muse` verifies the exact release with
+its own `ReleaseCapability` rows and returns the same permission-grammar
+version used by the native-policy scanner; `muse` classifies from the
+attested build and help evidence instead of a release table. Unknown systems
+return `ErrUnknownSystem`, an unsupported system classifier returns
+`ErrNativeArgsClassifierUnsupported`, and an absent or unverified release
+returns `ErrPermissionModeUnverifiedRelease`. If a plugin cannot establish
+an option's arity under its pinned grammar, it returns
 `ErrNativeArgsClassificationIndeterminate`; callers must not treat that as an
 interactive result.
 

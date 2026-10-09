@@ -48,6 +48,17 @@ type Plan struct {
 	// from a read it cannot distinguish from a field nobody set.
 	ModelIdentity ModelIdentity
 
+	// ToolRelease echoes the request's claimed tool release verbatim. A
+	// sealing plugin cross-checks it against what the sealed binary
+	// attests; verifiers bind the attested value, never this echo.
+	ToolRelease string
+
+	// PermissionMode echoes the request's interactive permission posture
+	// verbatim, exactly as requested (zero included). A sealing plugin
+	// resolves it to decide which evidence the seal must bind; the sealed
+	// posture is what the seal holds, never a re-read of this echo.
+	PermissionMode PermissionMode
+
 	Provenance LaunchProvenance
 
 	// Session is the native session record the system plugin filled from its
@@ -694,6 +705,8 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		WorkDir:                  req.WorkDir,
 		Home:                     home,
 		ModelIdentity:            identity,
+		ToolRelease:              req.ToolRelease,
+		PermissionMode:           req.PermissionMode,
 		Session:                  session,
 		sessionPlanner:           planner,
 		curatorContextProvenance: contextProvenance,

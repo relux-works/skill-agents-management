@@ -9,6 +9,14 @@ package main
 // in place. The revision-2 mutants additionally pin the establishment,
 // build-identity, finalized-import, finalized-release and guard-hygiene
 // classes. The resume mutant drops the pinned 1.4.2 capture row.
+//
+// The L0 mutants (TASK-261009-1rltjq, design M10/M11/M35-M38/M40-M45/M60/M62)
+// pin the attested-build seal that replaced the verified-release list:
+// the one build-identity grammar, the frozen tuple, the bounded probes,
+// the help evidence and the strict import. M40 and M42 are regression
+// mutants — they reintroduce the retired list, so the admission tests
+// fail — because no weakening can prove a grant. M39 has no module
+// mutant: its named killer is host-side (PTY + CLI), not a PLAN test.
 func museSealMutants() []mutant {
 	member := func(name, file, before, after, test, pattern, failure, bound string) mutant {
 		return mutant{name: "muse-seal-" + name, file: "pkg/agentic/systems/muse/" + file, replacements: []replacement{{before: before, after: after}}, testPackage: "./pkg/agentic/systems/muse", testName: test, runPattern: pattern, failureText: failure, narrows: bound}
@@ -34,12 +42,39 @@ func museSealMutants() []mutant {
 	}
 	if digest != seal.digest && digest != "878df98063d8951e538cdf03ac1e5de0d4d600eb5ed50b5a33c8c5633ff62c41" {`, "TestMuseInteractiveSealRefusesBinarySwap", "^TestMuseInteractiveSealRefusesBinarySwap$/^bytes-swapped$", "swapped binary bytes admitted", "admits only the fixed witness digest; every other byte swap still refuses"),
 		member("release-mismatch-skipped", "seal.go", `if release != seal.release {`, `if release != seal.release && release != "1.4.2-R4684.1" {`, "TestMuseInteractiveSealRefusesReleaseMismatch", "^TestMuseInteractiveSealRefusesReleaseMismatch$/^to-1-4-2$", "same-bytes release swap admitted", "admits only a same-bytes swap to 1.4.2-R4684.1; 1.5.0 and every other release still refuse"),
-		member("unverified-plan-admitted-unsealed", "seal.go", `	if err := verifySealedBuild(probed); err != nil {
-		return nil, err`, `	if err := verifySealedBuild(probed); err != nil {
-		if probed == "1.5.0-R9999.1" {
-			return nil, nil
+		member("pinned-name-requires-dot", "buildid.go", `return ParseBuildID(rest)`, `if !strings.Contains(rest, ".") {
+		return BuildIdentity{}, ErrInvalidBuildIdentity
+	}
+	return ParseBuildID(rest)`, "TestLauncherValidBuildWithoutTrailingRevisionEndToEnd", "^TestLauncherValidBuildWithoutTrailingRevisionEndToEnd$", "want the dotless build", "M10: requires a dot subrevision in pinned filenames only; bare builds and version answers still accept dotless revisions, and dotted filenames still parse"),
+		member("compare-major-minor-only", "buildid.go", `for i := 0; i < 3; i++ {`, `for i := 0; i < 2; i++ {`, "TestParseBuildIdentityGrammar", "^TestParseBuildIdentityGrammar$/^order$", "patch orders numerically", "M11: orders by major and minor only; patch differences fall through to revision and the ambiguity refusal"),
+		member("frozen-symlink-exempted", "frozen.go", `if info.Mode()&os.ModeSymlink != 0 {`, `if info.Mode()&os.ModeSymlink != 0 && info.Name() != "muse-bin-1.4.1-R4503.1" {`, "TestFrozenOverrideGatesPresentButInvalid", "^TestFrozenOverrideGatesPresentButInvalid$/^symlink$", "BuildPlan with symlink frozen tuple err", "M35: admits only the 1.4.1 witness symlink; every other symlink and every other tuple defect still refuses"),
+		member("frozen-relative-falls-back-to-path", "frozen.go", `if err := validateFrozenToolTuple(req.FrozenToolBinary, req.FrozenToolBuild, req.FrozenToolSHA256); err != nil {
+		return "", err`, `if err := validateFrozenToolTuple(req.FrozenToolBinary, req.FrozenToolBuild, req.FrozenToolSHA256); err != nil {
+		if !filepath.IsAbs(req.FrozenToolBinary) {
+			return resolveBinary(req.Env)
 		}
-		return nil, err`, "TestMuseInteractiveSealRefusesUnverifiedRelease", "^TestMuseInteractiveSealRefusesUnverifiedRelease$/^native-1-5-0$", "admitted without a seal", "admits only 1.5.0-R9999.1 unsealed; every other unverified build still refuses"),
+		return "", err`, "TestFrozenOverrideGatesPresentButInvalid", "^TestFrozenOverrideGatesPresentButInvalid$/^relative$", "BuildPlan with relative frozen tuple err", "M35: falls back to PATH only for non-absolute tuple paths; unclean absolute paths, partial tuples and every other defect still refuse"),
+		{name: "muse-seal-version-drain-kill-skipped", file: "internal/toolprobe/toolprobe.go", replacements: []replacement{{before: `if !exited {
+		kill()`, after: `if !exited {
+		if stage != agentic.ProbeStageVersion {
+			kill()
+		}`}}, testPackage: "./pkg/agentic/systems/muse", testName: "TestSealVersionProbeBoundsPipeDrain", runPattern: "^TestSealVersionProbeBoundsPipeDrain$/^long-holder$", failureText: "agentic.BuildPlan(interactive)", narrows: "M36: skips the deadline group kill on version probes, so a holder past parent exit drains to teardown-incomplete instead of the complete answer; help probes still kill and drain, and brief holders still complete. The shared runner narrows initial and seal version probes together; only the seal leg is asserted"},
+		{name: "muse-seal-version-cap-buffers-first", file: "internal/toolprobe/toolprobe.go", replacements: []replacement{{before: `if len(p) > room {`, after: `if len(p) > room && b.limit != maxVersionBytes {`}}, testPackage: "./pkg/agentic/systems/muse", testName: "TestSealVersionProbeCapsDuringRead", runPattern: "^TestSealVersionProbeCapsDuringRead$/^over-cap-then-holds$", failureText: `want stage "version" timeout false limited true`, narrows: "M37: version stdout buffers past the cap without firing during the read, so a held pipe reports timeout instead of output-limited; help and stderr caps still fire during the read. The shared runner narrows initial and seal version probes together; only the seal leg is asserted"},
+		{name: "muse-seal-help-cap-off-by-one", file: "internal/toolprobe/toolprobe.go", replacements: []replacement{{before: `return runProbe(ctx, agentic.ProbeStageHelp, binary, env, helpArg, maxHelpBytes, helpTimeout)`, after: `return runProbe(ctx, agentic.ProbeStageHelp, binary, env, helpArg, maxHelpBytes+1, helpTimeout)`}}, testPackage: "./pkg/agentic/systems/muse", testName: "TestHelpProbeBounded", runPattern: "^TestHelpProbeBounded$/^witness-over-cap$", failureText: "want a *ProbeExecutionError", narrows: "M38: admits exactly the cap-plus-one help text, which then fails as unsupported instead of output-limited; the next byte up still refuses output-limited and version caps are unchanged"},
+		member("attested-novel-refused", "seal.go", `if claimed := strings.TrimSpace(plan.ToolRelease); claimed != "" && claimed != probed.Release {`, `if probed.Release != "1.4.1" && probed.Release != "1.4.2" {
+		return nil, ErrMuseSealReleaseChanged
+	}
+	if claimed := strings.TrimSpace(plan.ToolRelease); claimed != "" && claimed != probed.Release {`, "TestSealBindsAttestedNewest", "^TestSealBindsAttestedNewest$", "agentic.BuildPlan(interactive)", "M40: reintroduces the retired verified-release list at seal creation: only 1.4.1 and 1.4.2 attest; every novel well-formed build refuses"),
+		member("novel-yolo-without-evidence", "seal.go", `if evidence, err := probeMuseHelpEvidence(probeCtx, plan.Binary, plan.Env, probed.Build, digest); err != nil {`, `if evidence, err := probeMuseHelpEvidence(probeCtx, plan.Binary, plan.Env, probed.Build, digest); err != nil && probed.Release != "9.9.9" {`, "TestUnlistedReleaseWithoutHelpEvidenceRefuses", "^TestUnlistedReleaseWithoutHelpEvidenceRefuses$", "direct seal of declaration-less novel build err", "M41: exempts only the 9.9.9 novel build from seal-time help evidence; the known-build control still refuses unsupported and argv mapping still gates first"),
+		member("native-novel-refused", "args.go", `if effective == agentic.PermissionModeYolo {`, `if effective == agentic.PermissionModeNative && req.ToolRelease != "" && req.ToolRelease != "1.4.1" && req.ToolRelease != "1.4.2" {
+		return nil, agentic.ErrPermissionModeUnsupported
+	}
+	if effective == agentic.PermissionModeYolo {`, "TestNativeForwardsVerbatimOnUnlistedRelease", "^TestNativeForwardsVerbatimOnUnlistedRelease$", "agentic.BuildPlan(interactive)", "M42: restricts native forwarding to the retired listed releases; unlisted native plans refuse instead of forwarding verbatim"),
+		member("imported-help-drift-skipped", "seal.go", `} else if current.fullStdoutSHA256 != seal.helpFullDigest || current.matchedLinesSHA256 != seal.helpLinesDigest {`, `} else if (current.fullStdoutSHA256 != seal.helpFullDigest || current.matchedLinesSHA256 != seal.helpLinesDigest) && !seal.committed {`, "TestSealDriftRefusedOnEveryForm", "^TestSealDriftRefusedOnEveryForm$", "imported form err", "M43: skips the help digest comparison on imported verifiers only; direct and finalized forms still refuse drift and lost declarations still refuse everywhere"),
+		member("release-mismatch-1-5-0-exempted", "seal.go", `claimed != "" && claimed != probed.Release {`, `claimed != "" && claimed != probed.Release && claimed != "1.5.0" {`, "TestSealRefusesToolReleaseMismatch", "^TestSealRefusesToolReleaseMismatch$", `BuildPlan claiming "1.5.0" err`, "M44: admits only 1.5.0 caller-release mismatches; the 9.9.9 control still refuses in both postures"),
+		member("help-prose-declares-flag", "help.go", `if trimmed == flag {`, `if trimmed == flag || strings.Contains(trimmed, flag) {`, "TestYoloRequiresOptionDeclarationEvidence", "^TestYoloRequiresOptionDeclarationEvidence$/^prose-only$", "BuildPlan with prose-only help err", "M45: declares the flag on any prose mention, not only option lines; the documented-option grant still maps"),
+		member("keyed-import-skips-release-shape", "seal.go", `if _, err := ParseBuildID(release); err != nil {`, `if _, err := ParseBuildID(release); err != nil && !keyed {`, "TestSealedImportRefusesSelfMintedEvidence", "^TestSealedImportRefusesSelfMintedEvidence$/^malformed-keyed$", "keyed import of malformed release err", "M60: skips the release-shape check on keyed imports only; direct imports still refuse malformed releases and well-formed forgeries still fail verification"),
+		member("yolo-probe-resolves-path", "args.go", `if resolved, err := resolveMuseBinary(req); err != nil {`, `if resolved, err := resolveBinary(req.Env); err != nil {`, "TestSealNeverExecsUnfrozenOnOverridePath", "^TestSealNeverExecsUnfrozenOnOverridePath$", "agentic.BuildPlan(interactive)", "M62: resolves the yolo evidence probe through PATH despite a frozen tuple; the planned binary still selects the frozen copy"),
 		member("short-release-bound", "seal.go", `func sealBuildIdentity(probed string) string { return probed }`, `func sealBuildIdentity(probed string) string { build, _, _ := strings.Cut(probed, "-R"); return build }`, "TestMuseInteractiveSealRefusesBuildRevisionDrift", "^TestMuseInteractiveSealRefusesBuildRevisionDrift$", "same-triple build drift admitted", "binds only the short triple; cross-triple drift still refuses"),
 		member("finalized-import-refused", "seal.go", `	release, ok := data.Selectors[sealedReleaseKey]
 	if !ok {`, `	release, ok := data.Selectors[sealedReleaseKey]

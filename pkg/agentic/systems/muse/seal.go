@@ -2,14 +2,16 @@
 //
 // Every Muse LaunchModeInteractive plan carries this seal. It binds the
 // absolute binary path plus the SHA-256 of the probed binary, the exact
-// final argv, the probed full build identity (1.4.1-R4503.1 or
-// 1.4.2-R4684.1 from the module-verified list), and the XDG_* override
-// identity plus MUSE_NO_AUTO_UPDATE=1. VerifyBeforeExec refuses typed on
-// a binary swap, an argv change, a release mismatch, or a changed or
-// duplicated XDG_*/MUSE_NO_AUTO_UPDATE entry. A binary that attests no
-// verified build — another release, an unpinned revision of a verified
-// triple, silence, or a misattributed answer — refuses typed at plan
-// time: no interactive plan ships unsealed.
+// final argv, the actual attested full build identity (any well-formed
+// build the binary attests — there is no verified-build list), the
+// effective permission posture, and the XDG_* override identity plus
+// MUSE_NO_AUTO_UPDATE=1. Yolo seals additionally bind the help evidence
+// the mapping resolved from: the full help stdout digest and the matched
+// option-declaration digest. VerifyBeforeExec refuses typed on a binary
+// swap, an argv change, a release mismatch, a help-evidence drift, or a
+// changed or duplicated XDG_*/MUSE_NO_AUTO_UPDATE entry. A binary that
+// attests no well-formed build — silence or a misattributed answer —
+// refuses typed at plan time: no interactive plan ships unsealed.
 //
 // The seal is exportable through the R-SEAL API: ExportSeal carries the
 // bound process over the closed wire and ImportSeal rebuilds an equivalent
@@ -25,10 +27,11 @@
 // exec and dry-run plans carry no seal, exactly as before.
 //
 // Sealing probes the binary (`--version` through the same ToolReleaseProber
-// path probe.go owns, parsed for the full build identity) and hashes its
-// bytes. Verification re-probes and re-hashes: the release re-probe is
-// what catches a same-bytes dispatch shim resolving a different effective
-// release behind the sealed path, which the byte hash alone cannot see.
+// path probe.go owns, parsed for the full build identity, plus `--help`
+// for yolo plans) and hashes its bytes. Verification re-probes and
+// re-hashes: the release re-probe is what catches a same-bytes dispatch
+// shim resolving a different effective release behind the sealed path,
+// which the byte hash alone cannot see.
 package muse
 
 import (
@@ -43,6 +46,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/relux-works/skill-agents-management/internal/toolprobe"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
@@ -58,12 +62,16 @@ var (
 	// still resolve a different release behind a dispatch shim, which is
 	// why this check runs even when the byte hash matches.
 	ErrMuseSealReleaseChanged = errors.New("muse: sealed tool release changed after planning")
-	// ErrMuseSealReleaseUnverified refuses an interactive plan whose
-	// binary attests no module-verified build: another release, an
-	// unpinned revision of a verified triple, or any answer outside the
-	// closed verified-build list. Undetected answers (silence,
-	// misattribution, probe failure) refuse as undetected instead.
-	ErrMuseSealReleaseUnverified = errors.New("muse: sealed tool build is not module-verified")
+	// ErrMuseSealHelpChanged refuses a yolo plan whose binary help no
+	// longer matches the sealed help evidence: a changed help digest or
+	// a lost option declaration. Sealed evidence drift is an integrity
+	// refusal, never a mapping question.
+	ErrMuseSealHelpChanged = errors.New("muse: sealed help evidence changed after planning")
+	// ErrMuseToolReleaseMismatch refuses a plan whose caller-supplied
+	// tool release disagrees with what the sealed binary attests. The
+	// host's earlier probe is not permission to trust caller-supplied
+	// version text.
+	ErrMuseToolReleaseMismatch = errors.New("muse: caller tool release does not match the attested release")
 	// ErrMuseSealArgvChanged refuses a plan whose argv no longer equals
 	// the exact sealed argv.
 	ErrMuseSealArgvChanged = errors.New("muse: sealed argv changed after planning")
@@ -81,17 +89,30 @@ var (
 )
 
 // Seal artifact and selector labels. The artifact names the probed binary
-// file the verifier re-hashes; the release selector carries the verified
-// full build. "tool-release" and "commitment-key-id" cannot collide with
-// a sealed environment name: the seal only ever reads XDG_* names and the
-// updater pin.
+// file the verifier re-hashes; the release selector carries the attested
+// full build; the mode selector carries the sealed posture; the help
+// selectors carry the yolo help evidence digests. None of them can
+// collide with a sealed environment name: the seal only ever reads XDG_*
+// names and the updater pin, and none can collide with a finalized
+// binding key either: those are dense "0".."N" indices.
 const (
 	sealedMuseBinaryName   = "muse-binary"
 	sealedReleaseKey       = "tool-release"
+	sealedModeKey          = "permission-mode"
+	sealedHelpStdoutKey    = "help-stdout-sha256"
+	sealedHelpLinesKey     = "help-flags-sha256"
 	sealedKeyIDKey         = "commitment-key-id"
 	sealedDigestPrefix     = "sha256:"
 	sealedCommitmentPrefix = "hmac-sha256:"
 )
+
+// sealProbeAggregateTimeout is the aggregate wall deadline one sealer
+// call imposes on its own probes: seal creation, pre-exec verification
+// and finalized verification each run their version and help probes
+// under it. Every nested probe keeps its own execution bound inside the
+// aggregate; callers of a context-free verifier can incur at most this,
+// never an unbounded wait.
+const sealProbeAggregateTimeout = 30 * time.Second
 
 var (
 	_ agentic.ExecSealExporter             = (*interactiveExecSeal)(nil)
@@ -104,15 +125,19 @@ var (
 )
 
 // interactiveExecSeal is the bound interactive plan: the absolute binary
-// path, its byte digest, the exact argv, the verified full build, and the
+// path, its byte digest, the exact argv, the attested full build, the
+// sealed permission posture, the yolo help evidence digests, and the
 // single-entry XDG_*/MUSE_NO_AUTO_UPDATE identity — values in memory,
 // keyed commitments once imported.
 type interactiveExecSeal struct {
-	binary  string
-	digest  string
-	argv    []string
-	release string
-	env     map[string]string
+	binary          string
+	digest          string
+	argv            []string
+	release         string
+	mode            agentic.PermissionMode
+	helpFullDigest  string
+	helpLinesDigest string
+	env             map[string]string
 	// committed reports the imported form: env holds keyed commitments
 	// rather than sealed values.
 	committed bool
@@ -149,17 +174,23 @@ func sealInteractiveExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error
 	if envValue(plan.Env, museNoAutoUpdateEnv) != "1" {
 		return nil, fmt.Errorf("%w: %s is not pinned to 1", ErrMuseSealEnvChanged, museNoAutoUpdateEnv)
 	}
-	// A seal binds a verified attestation or nothing at all: an
-	// undetected or unverified build refuses typed here, at plan time.
-	// No interactive plan ships unsealed.
-	var probed string
-	if build, err := probeInteractiveSealBuild(plan.Binary, plan.Env); err != nil {
+	mode, err := plan.PermissionMode.Resolve()
+	if err != nil {
+		return nil, fmt.Errorf("%w: sealed permission mode: %w", ErrMuseSealMalformed, err)
+	}
+	// A seal binds an attested well-formed build or nothing at all: an
+	// undetected build refuses typed here, at plan time. No interactive
+	// plan ships unsealed, and no release list gates the admission.
+	probeCtx, cancel := context.WithTimeout(context.Background(), sealProbeAggregateTimeout)
+	defer cancel()
+	var probed BuildIdentity
+	if identity, err := probeInteractiveSealBuild(probeCtx, plan.Binary, plan.Env); err != nil {
 		return nil, err
 	} else {
-		probed = build
+		probed = identity
 	}
-	if err := verifySealedBuild(probed); err != nil {
-		return nil, err
+	if claimed := strings.TrimSpace(plan.ToolRelease); claimed != "" && claimed != probed.Release {
+		return nil, fmt.Errorf("%w: caller claims release %q, binary attests %q", ErrMuseToolReleaseMismatch, claimed, probed.Release)
 	}
 	var digest string
 	if hashed, err := hashInteractiveSealBinary(plan.Binary); err != nil {
@@ -171,8 +202,17 @@ func sealInteractiveExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error
 		binary:  plan.Binary,
 		digest:  digest,
 		argv:    append([]string(nil), plan.Argv...),
-		release: sealBuildIdentity(probed),
+		release: sealBuildIdentity(probed.Build),
+		mode:    mode,
 		env:     maps.Clone(identity),
+	}
+	if mode == agentic.PermissionModeYolo {
+		if evidence, err := probeMuseHelpEvidence(probeCtx, plan.Binary, plan.Env, probed.Build, digest); err != nil {
+			return nil, err
+		} else {
+			seal.helpFullDigest = evidence.fullStdoutSHA256
+			seal.helpLinesDigest = evidence.matchedLinesSHA256
+		}
 	}
 	if err := seal.VerifyBeforeExec(plan); err != nil {
 		return nil, err
@@ -200,7 +240,8 @@ func verifyMuseUpdaterPin(env []string) error {
 // executing anything. The byte hash precedes the release re-probe so a
 // deleted binary reads as a binary swap rather than a probe failure; the
 // release re-probe then guards the residual same-bytes class behind
-// dispatch shims.
+// dispatch shims. The help re-probe guards the sealed yolo evidence the
+// same way.
 func (seal *interactiveExecSeal) VerifyBeforeExec(plan agentic.Plan) error {
 	var identity map[string]string
 	if computed, err := interactiveSealEnvIdentity(plan.Env); err != nil {
@@ -223,20 +264,44 @@ func (seal *interactiveExecSeal) VerifyBeforeExec(plan agentic.Plan) error {
 	if digest != seal.digest {
 		return fmt.Errorf("%w: binary bytes no longer match the sealed digest", ErrMuseSealBinaryChanged)
 	}
+	probeCtx, cancel := context.WithTimeout(context.Background(), sealProbeAggregateTimeout)
+	defer cancel()
 	var release string
-	if probed, err := probeInteractiveSealBuild(plan.Binary, plan.Env); err != nil {
+	if probed, err := probeInteractiveSealBuild(probeCtx, plan.Binary, plan.Env); err != nil {
 		return err
 	} else {
-		release = sealBuildIdentity(probed)
+		release = sealBuildIdentity(probed.Build)
 	}
 	if release != seal.release {
 		return fmt.Errorf("%w: probed %q, sealed %q", ErrMuseSealReleaseChanged, release, seal.release)
+	}
+	if seal.mode == agentic.PermissionModeYolo {
+		if err := seal.verifyHelpEvidence(probeCtx, plan.Binary, plan.Env); err != nil {
+			return err
+		}
 	}
 	if !slices.Equal(plan.Argv, seal.argv) {
 		return fmt.Errorf("%w: argv has %d elements, sealed %d", ErrMuseSealArgvChanged, len(plan.Argv), len(seal.argv))
 	}
 	if !seal.envIdentityMatches(identity) {
 		return fmt.Errorf("%w: XDG_*/%s identity differs from the sealed identity", ErrMuseSealEnvChanged, museNoAutoUpdateEnv)
+	}
+	return nil
+}
+
+// verifyHelpEvidence re-probes the sealed yolo help evidence and refuses
+// typed on any drift: a changed help digest or a lost option
+// declaration. A probe failure is attempt evidence and propagates for
+// host routing; only the evidence comparison itself is an integrity
+// refusal.
+func (seal *interactiveExecSeal) verifyHelpEvidence(ctx context.Context, binary string, env []string) error {
+	if current, err := probeMuseHelpEvidence(ctx, binary, env, seal.release, seal.digest); err != nil {
+		if errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+			return fmt.Errorf("%w: sealed help declaration is gone from the binary help", ErrMuseSealHelpChanged)
+		}
+		return err
+	} else if current.fullStdoutSHA256 != seal.helpFullDigest || current.matchedLinesSHA256 != seal.helpLinesDigest {
+		return fmt.Errorf("%w: binary help no longer matches the sealed evidence", ErrMuseSealHelpChanged)
 	}
 	return nil
 }
@@ -280,8 +345,13 @@ func (seal *interactiveExecSeal) envIdentityMatches(identity map[string]string) 
 // does not hold. An imported seal re-exports its stored commitments and
 // stored key id verbatim, never re-committing under a different key.
 func (seal *interactiveExecSeal) ExportSealedData() agentic.SealedData {
-	selectors := make(map[string]string, len(seal.env)+2)
+	selectors := make(map[string]string, len(seal.env)+5)
 	selectors[sealedReleaseKey] = seal.release
+	selectors[sealedModeKey] = string(seal.mode)
+	if seal.mode == agentic.PermissionModeYolo {
+		selectors[sealedHelpStdoutKey] = seal.helpFullDigest
+		selectors[sealedHelpLinesKey] = seal.helpLinesDigest
+	}
 	if seal.committed {
 		selectors[sealedKeyIDKey] = seal.commitKeyID
 		for name, value := range seal.env {
@@ -315,8 +385,13 @@ func (seal *interactiveExecSeal) ExportSealedDataWithKey(key agentic.SealCommitm
 	if seal.committed {
 		return seal.ExportSealedData()
 	}
-	selectors := make(map[string]string, len(seal.env)+2)
+	selectors := make(map[string]string, len(seal.env)+5)
 	selectors[sealedReleaseKey] = seal.release
+	selectors[sealedModeKey] = string(seal.mode)
+	if seal.mode == agentic.PermissionModeYolo {
+		selectors[sealedHelpStdoutKey] = seal.helpFullDigest
+		selectors[sealedHelpLinesKey] = seal.helpLinesDigest
+	}
 	selectors[sealedKeyIDKey] = agentic.CommitmentKeyID(key)
 	for name, value := range seal.env {
 		selectors[name] = agentic.CommitSealLiteralWithKey(key, name, value)
@@ -358,8 +433,8 @@ func (seal *interactiveExecSeal) VerifySealedArtifacts() error {
 // same pre-probe invariants the base verifier enforces (duplicates, then
 // the updater pin from the single verifyMuseUpdaterPin list, then the
 // full sealed XDG/pin identity from the same envIdentityMatches list)
-// before the byte hash and the release re-probe. The probe never runs
-// unpinned or on a drifted process.
+// before the byte hash and the release and help re-probes. The probes
+// never run unpinned or on a drifted process.
 func (seal *interactiveExecSeal) VerifyFinalizedPlan(plan agentic.Plan) error {
 	var identity map[string]string
 	if computed, err := interactiveSealEnvIdentity(plan.Env); err != nil {
@@ -376,14 +451,21 @@ func (seal *interactiveExecSeal) VerifyFinalizedPlan(plan agentic.Plan) error {
 	if err := seal.VerifySealedArtifacts(); err != nil {
 		return err
 	}
+	probeCtx, cancel := context.WithTimeout(context.Background(), sealProbeAggregateTimeout)
+	defer cancel()
 	var current string
-	if probed, err := probeInteractiveSealBuild(plan.Binary, plan.Env); err != nil {
+	if probed, err := probeInteractiveSealBuild(probeCtx, plan.Binary, plan.Env); err != nil {
 		return err
 	} else {
-		current = sealBuildIdentity(probed)
+		current = sealBuildIdentity(probed.Build)
 	}
 	if current != seal.release {
 		return fmt.Errorf("%w: probed %q, sealed %q", ErrMuseSealReleaseChanged, current, seal.release)
+	}
+	if seal.mode == agentic.PermissionModeYolo {
+		if err := seal.verifyHelpEvidence(probeCtx, plan.Binary, plan.Env); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -416,10 +498,11 @@ func (seal *interactiveExecSeal) ValidateFinalizeOverlays(overlays agentic.Final
 // verifier the in-process sealer would have built: the same binary, the
 // same byte digest — verified against the file on disk right now, so an
 // already-swapped binary refuses at import — the same exact argv, the same
-// verified full build, and the same XDG_*/MUSE_NO_AUTO_UPDATE identity in
-// commitment form. The build string is required to be module-verified;
-// the envelope integrity digest already authenticates it against
-// post-export tampering, and no probe runs at import.
+// attested full build, the same sealed posture with its help evidence,
+// and the same XDG_*/MUSE_NO_AUTO_UPDATE identity in commitment form.
+// The build string must be well-formed and the yolo help selectors must
+// be present digests; the envelope integrity digest already authenticates
+// them against post-export tampering, and no probe runs at import.
 func (*System) ImportSealedData(data agentic.SealedData) (agentic.ExecPlanVerifier, error) {
 	return importMuseSealedData(data, agentic.LocalCommitmentKeyID(), agentic.SealCommitmentKey{}, false)
 }
@@ -451,8 +534,39 @@ func importMuseSealedData(data agentic.SealedData, expectedKeyID string, key age
 	if !ok {
 		return nil, fmt.Errorf("%w: sealed selectors carry no %q", ErrMuseSealMalformed, sealedReleaseKey)
 	}
-	if err := verifySealedBuild(release); err != nil {
-		return nil, fmt.Errorf("muse: refusing to import: %w", err)
+	if _, err := ParseBuildID(release); err != nil {
+		return nil, fmt.Errorf("%w: sealed release is not a well-formed build: %w", ErrMuseSealMalformed, err)
+	}
+	modeValue, ok := data.Selectors[sealedModeKey]
+	if !ok {
+		return nil, fmt.Errorf("%w: sealed selectors carry no %q", ErrMuseSealMalformed, sealedModeKey)
+	}
+	var mode agentic.PermissionMode
+	switch modeValue {
+	case string(agentic.PermissionModeNative):
+		mode = agentic.PermissionModeNative
+	case string(agentic.PermissionModeYolo):
+		mode = agentic.PermissionModeYolo
+	default:
+		return nil, fmt.Errorf("%w: sealed permission mode %q is neither native nor yolo", ErrMuseSealMalformed, modeValue)
+	}
+	var helpFullDigest, helpLinesDigest string
+	if mode == agentic.PermissionModeYolo {
+		helpFullDigest, ok = data.Selectors[sealedHelpStdoutKey]
+		if !ok || !isLowerHex64(helpFullDigest) {
+			return nil, fmt.Errorf("%w: sealed yolo selectors carry no %q digest", ErrMuseSealMalformed, sealedHelpStdoutKey)
+		}
+		helpLinesDigest, ok = data.Selectors[sealedHelpLinesKey]
+		if !ok || !isLowerHex64(helpLinesDigest) {
+			return nil, fmt.Errorf("%w: sealed yolo selectors carry no %q digest", ErrMuseSealMalformed, sealedHelpLinesKey)
+		}
+	} else {
+		if _, present := data.Selectors[sealedHelpStdoutKey]; present {
+			return nil, fmt.Errorf("%w: sealed native selectors carry unexpected %q", ErrMuseSealMalformed, sealedHelpStdoutKey)
+		}
+		if _, present := data.Selectors[sealedHelpLinesKey]; present {
+			return nil, fmt.Errorf("%w: sealed native selectors carry unexpected %q", ErrMuseSealMalformed, sealedHelpLinesKey)
+		}
 	}
 	keyID, ok := data.Selectors[sealedKeyIDKey]
 	if !ok {
@@ -463,7 +577,7 @@ func importMuseSealedData(data agentic.SealedData, expectedKeyID string, key age
 	}
 	env := make(map[string]string, len(data.Selectors))
 	for name, value := range data.Selectors {
-		if name == sealedReleaseKey || name == sealedKeyIDKey {
+		if name == sealedReleaseKey || name == sealedKeyIDKey || name == sealedModeKey || name == sealedHelpStdoutKey || name == sealedHelpLinesKey {
 			continue
 		}
 		if !isInteractiveSealSelector(name) {
@@ -475,32 +589,23 @@ func importMuseSealedData(data agentic.SealedData, expectedKeyID string, key age
 		env[name] = value
 	}
 	seal := &interactiveExecSeal{
-		binary:       data.Binary,
-		digest:       digest,
-		argv:         append([]string(nil), data.Argv...),
-		release:      release,
-		env:          env,
-		committed:    true,
-		commitKeyID:  keyID,
-		commitKey:    key,
-		hasCommitKey: keyed,
+		binary:          data.Binary,
+		digest:          digest,
+		argv:            append([]string(nil), data.Argv...),
+		release:         release,
+		mode:            mode,
+		helpFullDigest:  helpFullDigest,
+		helpLinesDigest: helpLinesDigest,
+		env:             env,
+		committed:       true,
+		commitKeyID:     keyID,
+		commitKey:       key,
+		hasCommitKey:    keyed,
 	}
 	if err := seal.VerifySealedArtifacts(); err != nil {
 		return nil, err
 	}
 	return seal, nil
-}
-
-// verifySealedBuild admits exactly the module-verified builds: the full
-// identities from policy.go, never a bare triple and never an unpinned
-// revision of a verified triple.
-func verifySealedBuild(build string) error {
-	for _, verified := range verifiedBuilds {
-		if build == verified {
-			return nil
-		}
-	}
-	return fmt.Errorf("%w: probed build %q is not module-verified (verified: %s)", ErrMuseSealReleaseUnverified, build, strings.Join(verifiedBuilds, ", "))
 }
 
 // sealBuildIdentity is the build identity the seal binds: the FULL
@@ -576,20 +681,20 @@ func interactiveSealEnvIdentity(env []string) (map[string]string, error) {
 
 // probeInteractiveSealBuild establishes the full build identity of the
 // sealed binary through the same version probe probe.go owns: exactly
-// `--version`, the shared bounded wait, and the pinned release grammar
-// parsed for the build. The seal API carries no context, so the probe
-// runs on a background context under toolprobe's own timeout. Every
-// failure is undetected, never a synthesized build.
-func probeInteractiveSealBuild(binary string, env []string) (string, error) {
-	out, err := toolprobe.VersionOutput(context.Background(), binary, env)
+// `--version`, the bounded runner, and the shared build-identity grammar
+// parsed for release and build. Every failure is undetected, never a
+// synthesized build; attempt failures keep their typed probe error for
+// host routing.
+func probeInteractiveSealBuild(ctx context.Context, binary string, env []string) (BuildIdentity, error) {
+	out, err := toolprobe.VersionOutput(ctx, binary, env)
 	if err != nil {
-		return "", errors.Join(agentic.ErrToolReleaseUndetected, fmt.Errorf("muse: probing the sealed binary: %v", err))
+		return BuildIdentity{}, errors.Join(agentic.ErrToolReleaseUndetected, fmt.Errorf("muse: probing the sealed binary: %w", err))
 	}
-	build, err := parseToolBuild(out)
+	identity, err := ParseBuildIdentity(out)
 	if err != nil {
-		return "", errors.Join(agentic.ErrToolReleaseUndetected, fmt.Errorf("muse: parsing the sealed answer: %v", err))
+		return BuildIdentity{}, errors.Join(agentic.ErrToolReleaseUndetected, fmt.Errorf("muse: parsing the sealed answer: %w", err))
 	}
-	return build, nil
+	return identity, nil
 }
 
 // hashInteractiveSealBinary streams the SHA-256 of the sealed binary file

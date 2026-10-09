@@ -663,7 +663,28 @@ type LaunchRequest struct {
 	// outside interactive launches it is ignored: it is an observation, not
 	// launch content, so ignoring it cannot misdirect a launch the way
 	// dropping a parameter would.
+	//
+	// Muse is the exception to the lookup half: its yolo mapping resolves
+	// from bounded help evidence the plugin probes itself, never from a
+	// release table, so an empty ToolRelease does not itself refuse a muse
+	// yolo plan. A supplied muse ToolRelease is still a claim, and the
+	// interactive sealer refuses it unless it equals the attested release.
 	ToolRelease string
+
+	// FrozenToolBinary, FrozenToolBuild and FrozenToolSHA256 are one tuple:
+	// the host-frozen tool copy this launch must run. Binary is the
+	// absolute canonical path of the frozen copy, Build its exact full
+	// build identity, SHA256 the lowercase hex SHA-256 of its bytes. All
+	// three empty retains direct-module PATH compatibility; any present
+	// requires all three, and the plugin validates the tuple — absolute
+	// non-symlink regular executable path, filename/build agreement,
+	// digest agreement — and refuses typed without falling back to PATH.
+	// A plugin that does not implement the frozen override ignores the
+	// tuple. Population is the host's job; no plugin discovers, copies or
+	// updates frozen copies.
+	FrozenToolBinary string
+	FrozenToolBuild  string
+	FrozenToolSHA256 string
 
 	// NativeArgs are the caller's own native arguments, forwarded VERBATIM
 	// into the interactive argv after everything the module spells (so the
@@ -896,6 +917,10 @@ type LaunchRequestPreparer interface {
 // A system whose binary cannot attest its tool release does not implement
 // it. The pi plugins currently require the caller to establish the Pi release
 // another way; yolo fails closed as unverified when no release is supplied.
+// Muse's interactive yolo argv is the second in-BuildPlan probe: it reads
+// bounded help evidence from the selected binary to map the bypass flag,
+// and refuses typed when the evidence is missing rather than consulting a
+// release table.
 type ToolReleaseProber interface {
 	ProbeToolRelease(ctx context.Context, env []string) (string, error)
 }
@@ -910,7 +935,9 @@ type ToolReleaseProber interface {
 // native forwards verbatim, so a detection failure is a refusal for the
 // posture that resolves policy and a pass for the one that claims
 // nothing. A probe error must never be answered by synthesizing the
-// release the table wants to see.
+// release the table wants to see. Muse resolves yolo from its own help
+// evidence instead of this answer, so an empty ToolRelease plans there;
+// a supplied one must still equal what the sealed binary attests.
 func ProbeToolRelease(ctx context.Context, sys System, env []string) (string, error) {
 	if sys == nil {
 		return "", fmt.Errorf("%w: no system to probe; pass ToolRelease \"\" and plan anyway", ErrToolReleaseUndetected)

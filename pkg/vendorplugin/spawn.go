@@ -127,6 +127,15 @@ type SpawnRequest struct {
 	// ToolRelease is the running harness release established by the caller.
 	// The agentic plugin uses it to select its verified permission grammar.
 	ToolRelease string
+	// FrozenToolBinary, FrozenToolBuild and FrozenToolSHA256 are one tuple:
+	// the host-frozen tool copy the launch must run, forwarded unchanged
+	// into LaunchRequest. The vendor layer carries it without interpreting
+	// it and may not redirect it (fidelity); the agentic plugin validates
+	// the tuple and refuses typed without falling back to PATH. All three
+	// empty retains PATH resolution.
+	FrozenToolBinary string
+	FrozenToolBuild  string
+	FrozenToolSHA256 string
 	// NativeArgs are caller-supplied harness arguments, forwarded unchanged to
 	// the agentic plugin for interactive planning.
 	NativeArgs []string
@@ -592,6 +601,9 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 	}
 	if launch.ToolRelease != req.ToolRelease {
 		return fmt.Errorf("%w: vendor %s changed the caller's verified tool release", ErrVendorContract, runtime.VendorID)
+	}
+	if launch.FrozenToolBinary != req.FrozenToolBinary || launch.FrozenToolBuild != req.FrozenToolBuild || launch.FrozenToolSHA256 != req.FrozenToolSHA256 {
+		return fmt.Errorf("%w: vendor %s changed the caller's frozen tool tuple", ErrVendorContract, runtime.VendorID)
 	}
 	if !reflect.DeepEqual(launch.NativeArgs, req.NativeArgs) {
 		return fmt.Errorf("%w: vendor %s changed the caller's native arguments", ErrVendorContract, runtime.VendorID)

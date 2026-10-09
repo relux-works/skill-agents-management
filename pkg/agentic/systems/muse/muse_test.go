@@ -512,16 +512,23 @@ func launchRequest(t *testing.T, body string) agentic.LaunchRequest {
 
 // writeMuseStubExecutable installs the fixture binary every muse launch
 // request resolves. Unlike the shared parity stub it answers --version
-// with the pinned release: interactive plans seal at BuildPlan time and
-// sealing probes, so a silent stub would refuse every interactive plan.
-// Any other invocation keeps the shared stub's drain-and-exit behavior,
-// which exec and dry-run plans never observe either way.
+// with the pinned release and --help with a help text declaring the
+// bypass flag: interactive plans seal at BuildPlan time and sealing
+// probes, so a silent stub would refuse every interactive plan, and yolo
+// plans map from help evidence, so a stub without the declaration would
+// refuse every yolo plan. Any other invocation keeps the shared stub's
+// drain-and-exit behavior, which exec and dry-run plans never observe
+// either way.
 func writeMuseStubExecutable(t *testing.T, dir string) string {
 	t.Helper()
 	path := filepath.Join(dir, executableName)
 	script := "#!/bin/sh\n" +
 		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ]; then\n" +
 		"printf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\n" +
+		"exit 0\n" +
+		"fi\n" +
+		"if [ \"$#\" -eq 1 ] && [ \"$1\" = '--help' ]; then\n" +
+		"printf '%s\\n' 'Usage: muse [options] [prompt]' '' 'Options:' '  --model <id>       Model to use' '  --yolo             Skip approval prompts'\n" +
 		"exit 0\n" +
 		"fi\n" +
 		"cat >/dev/null\nexit 0\n"
@@ -535,3 +542,13 @@ func withPrompt(req agentic.LaunchRequest, prompt []byte) agentic.LaunchRequest 
 	req.Prompt = prompt
 	return req
 }
+
+// museYoloHelpFixture is the help text help-capable stubs answer with: a
+// usage line, an options section and a standalone --yolo declaration
+// line. It is the same text the shared muse stub prints.
+const museYoloHelpFixture = "Usage: muse [options] [prompt]\n\nOptions:\n  --model <id>       Model to use\n  --yolo             Skip approval prompts"
+
+// museNoYoloHelpFixture is a help text without any bypass declaration:
+// prose names the flag mid-line, but no option line declares it, so only
+// a line-anchored matcher refuses it.
+const museNoYoloHelpFixture = "Usage: muse [options] [prompt]\n\nOptions:\n  --model <id>       Model to use\n\nThis build documents no bypass flag; newer releases describe --yolo here."
