@@ -265,7 +265,7 @@ made BEFORE the refusal: `codex debug models` publishes no `astra` slug, so a
 launch under that spelling would earn the same answer from OpenAI, and the row
 declares `AliasOf: gpt-6-astra` rather than waiting to find out. `sol` →
 `gpt-6.1-sol` (formerly `gpt-6-sol`), `luna` → `gpt-6-luna` and anthropic's `opus` → `claude-opus-5-5`
-and `sonnet` → `claude-sonnet-5-5` followed the same way. Google adds
+`sonnet` → `claude-sonnet-5-5` and `haiku` → `claude-haiku-5-5` followed the same way. Google adds
 `gemini-flash` → `gemini-3.8-flash-high`, `argon` → `gemini-4-argon-high` and
 `gemini-4-argon` → `gemini-4-argon-high`.
 

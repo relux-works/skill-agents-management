@@ -569,6 +569,10 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 		return fmt.Errorf("%w: vendor %s returned alias target %q for model %q, which declares %q; the identity a launch resolves to is the registry's, and a vendor that could set it could redirect an admitted launch onto any model at all",
 			ErrVendorContract, runtime.VendorID, launch.Model.AliasOf, model.ID, model.AliasOf)
 	}
+	if launch.Model.ContextWindowTokens != model.ContextWindowTokens {
+		return fmt.Errorf("%w: vendor %s returned a %d-token context window for model %q, which declares %d; the window is the registry's, and a vendor that could set it could widen or drop an enforced cap",
+			ErrVendorContract, runtime.VendorID, launch.Model.ContextWindowTokens, model.ID, model.ContextWindowTokens)
+	}
 	if launch.Model.Effort != model.Effort.Support {
 		return fmt.Errorf("%w: vendor %s returned effort support %s for model %q, which declares %s",
 			ErrVendorContract, runtime.VendorID, launch.Model.Effort, model.ID, model.Effort.Support)

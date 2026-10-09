@@ -55,6 +55,7 @@ var declaredHereRows = []vendorplugin.ModelID{
 	"gpt-6-luna", "luna",
 	"claude-opus-5-5", "opus",
 	"claude-sonnet-5-5", "sonnet",
+	"claude-haiku-5-5", "haiku",
 	"gemini-3.8-flash-high", "gemini-flash", "gemini-3.7-flash-high",
 }
 

@@ -126,7 +126,7 @@ became `.Score`; the total order is derived by `vendorplugin.Lineup`):
 | Question | Call |
 | --- | --- |
 | What exactly would this launch run? | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, ModelIdentity, …}` |
-| What did the caller ask for, and what ran? | `plan.ModelIdentity` → `{Requested, Launched}`; they differ when the row declared `AliasOf` (today: `muse-spark` → `muse-spark-1.3-contributor`, `astra` → `gpt-6-astra`, `sol` → `gpt-6.1-sol`, `luna` → `gpt-6-luna`, `opus` → `claude-opus-5-5`, `sonnet` → `claude-sonnet-5-5`, `gemini-flash` → `gemini-3.8-flash-high`, `argon` → `gemini-4-argon-high`, `gemini-4-argon` → `gemini-4-argon-high`) |
+| What did the caller ask for, and what ran? | `plan.ModelIdentity` → `{Requested, Launched}`; they differ when the row declared `AliasOf` (today: `muse-spark` → `muse-spark-1.3-contributor`, `astra` → `gpt-6-astra`, `sol` → `gpt-6.1-sol`, `luna` → `gpt-6-luna`, `opus` → `claude-opus-5-5`, `sonnet` → `claude-sonnet-5-5`, `haiku` → `claude-haiku-5-5`, `gemini-flash` → `gemini-3.8-flash-high`, `argon` → `gemini-4-argon-high`, `gemini-4-argon` → `gemini-4-argon-high`) |
 | Add engine/sidecar nodes | `agentic.BuildMultiNodePlan(primary, dependencies, nodes...)` |
 | The same, through a runtime and its vendor | `vendorplugin.BuildLaunch(registry, req, mode)` |
 | Publish and validate launch identity metadata | `plan.ConsumerProvenance()` → versioned `engine_binding` plus configured/resolved engine projection; after persistence call `registry.ValidateLaunchProvenance(record)` so registry declarations and graph resolution, not the record itself, supply authority; `none` is valid only for a system-only legacy shape |

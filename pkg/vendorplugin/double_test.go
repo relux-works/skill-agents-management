@@ -129,6 +129,7 @@ type narwhalVendor struct {
 	spawnModelID       string
 	spawnAliasOf       string
 	spawnDropAlias     bool
+	spawnWindow        *int
 	spawnEffortSupport *agentic.EffortSupport
 	spawnEffort        *string
 	spawnRun           *agentic.RunContext
@@ -251,6 +252,9 @@ func (n *narwhalVendor) Spawn(sc SpawnContext) (agentic.LaunchRequest, error) {
 	}
 	if n.spawnDropAlias {
 		launch.Model.AliasOf = ""
+	}
+	if n.spawnWindow != nil {
+		launch.Model.ContextWindowTokens = *n.spawnWindow
 	}
 	if n.spawnEffortSupport != nil {
 		launch.Model.Effort = *n.spawnEffortSupport

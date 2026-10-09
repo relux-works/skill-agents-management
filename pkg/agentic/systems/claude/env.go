@@ -1,6 +1,8 @@
 package claude
 
 import (
+	"strconv"
+
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -93,8 +95,20 @@ func filterRuntimeEnv(environ []string) []string {
 	return env
 }
 
+// autoCompactWindowEnv is the Claude Code variable that moves the point at
+// which a session compacts. It accepts a plain integer from 100000 to 1000000
+// (code.claude.com/docs/en/env-vars). It is how a vendor row's declared
+// operating window becomes something the harness enforces instead of a label.
+const autoCompactWindowEnv = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
+
 // childEnv strips what the harness must not inherit, writes the caller's run
 // context, and disables prompt suggestions for every launch mode.
+//
+// A row that declares an operating context window (req.Model.ContextWindowTokens,
+// after BuildPlan's alias substitution, which keeps the requested row's window)
+// also exports it as CLAUDE_CODE_AUTO_COMPACT_WINDOW. A row declaring none
+// (zero) leaves the variable exactly as the parent had it, so the environment of
+// every row that never carried a window is byte-identical to before.
 //
 // The order — filter, then inject — is the source's. No key in runtimeEnvKeys
 // is also a run-context key, so the two orders currently produce identical
@@ -109,5 +123,9 @@ func filterRuntimeEnv(environ []string) []string {
 // inherited entry, including true, rather than using a caller-selected default.
 func childEnv(parent []string, req agentic.LaunchRequest) []string {
 	env := agentic.WithRunContext(filterRuntimeEnv(parent), req)
-	return agentic.SetEnvValue(env, "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION", "false")
+	env = agentic.SetEnvValue(env, "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION", "false")
+	if req.Model.ContextWindowTokens > 0 {
+		env = agentic.SetEnvValue(env, autoCompactWindowEnv, strconv.Itoa(req.Model.ContextWindowTokens))
+	}
+	return env
 }

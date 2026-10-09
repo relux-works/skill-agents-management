@@ -78,10 +78,10 @@ that is the point of the release. What does NOT move is POLICY: which models a
 repository may spawn stays your configuration's decision.
 
 `Model.AliasOf` is an additive optional catalog fact: the model identity a row
-is a short spelling of, empty when the row is its own identity. Nine rows carry
+is a short spelling of, empty when the row is its own identity. Ten rows carry
 it today: `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
 `gpt-6-astra`, `sol` → `gpt-6.1-sol`, `luna` → `gpt-6-luna`, `opus` →
-`claude-opus-5-5`, `sonnet` → `claude-sonnet-5-5`, `gemini-flash` →
+`claude-opus-5-5`, `sonnet` → `claude-sonnet-5-5`, `haiku` → `claude-haiku-5-5`, `gemini-flash` →
 `gemini-3.8-flash-high`, `argon` → `gemini-4-argon-high` and
 `gemini-4-argon` → `gemini-4-argon-high`. A consumer does
 not act on it — `agentic.BuildPlan` substitutes it before argv, so a launch

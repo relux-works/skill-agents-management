@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -213,5 +214,154 @@ func TestTheSolHeadRecommendsMedium(t *testing.T) {
 	}
 	if seen != len(want) {
 		t.Fatalf("found %d of the %d sol rows", seen, len(want))
+	}
+}
+
+// haiku55Window is the operating window the owner imposed on claude-haiku-5-5,
+// written down here rather than read off the rows under test so a declaration
+// that drifts fails instead of moving the expectation with it.
+const haiku55Window = 100_000
+
+const claudeCompactWindowKey = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
+
+// TestTheHaikuSpellingLaunchesAsClaudeHaiku55AtEveryProbedEffort holds the
+// `haiku` alias to claude-haiku-5-5 through the same launch proof as `opus`.
+// Probed vocabulary: Anthropic's effort page lists low..max for haiku-5-5.
+func TestTheHaikuSpellingLaunchesAsClaudeHaiku55AtEveryProbedEffort(t *testing.T) {
+	registry := isolatedRegistry(t, nil)
+	for _, requested := range []vendorplugin.ModelID{"haiku", "claude-haiku-5-5"} {
+		t.Run(string(requested), func(t *testing.T) {
+			for _, problem := range opusLaunchProblems(t, registry, requested, "claude-haiku-5-5") {
+				t.Error(problem)
+			}
+		})
+	}
+	// The narrowing direction: the previous haiku keeps its own id, and the
+	// CLI's own floating `haiku` (still 4.5 on Claude Code 2.1.290) is not what
+	// argv carries.
+	for _, id := range []vendorplugin.ModelID{"claude-haiku-4-5", "claude-haiku-4-5-20251001"} {
+		// Both previous-generation rows declare no effort axis, so none is passed.
+		plan, err := vendorplugin.BuildLaunch(context.Background(), registry, opusRequest(t, id, ""), agentic.LaunchModeExec)
+		if err != nil {
+			t.Fatalf("BuildLaunch(claude, %s): %v", id, err)
+		}
+		if plan.ModelIdentity.IsAlias() || !argvHasElement(plan.Argv, string(id)) {
+			t.Errorf("%q launched as %q (argv %v); a pinned haiku row must not be rewritten", id, plan.ModelIdentity.Launched, plan.Argv)
+		}
+	}
+}
+
+// TestTheHaikuRowsDeclareTheOwnerCapAndTheProbedAxis pins the declaration the
+// launch proofs above and below stand on.
+func TestTheHaikuRowsDeclareTheOwnerCapAndTheProbedAxis(t *testing.T) {
+	plugin, ok := vendorplugin.Default.Lookup("anthropic")
+	if !ok {
+		t.Fatal("anthropic vendor is not registered")
+	}
+	rows := map[vendorplugin.ModelID]vendorplugin.Model{}
+	for _, model := range plugin.Models() {
+		rows[model.ID] = model
+	}
+	identity, alias := rows["claude-haiku-5-5"], rows["haiku"]
+	if identity.ID == "" || alias.ID == "" {
+		t.Fatalf("anthropic declares claude-haiku-5-5 = %v and haiku = %v; both rows are required", identity.ID != "", alias.ID != "")
+	}
+	for _, model := range []vendorplugin.Model{identity, alias} {
+		if model.Lifecycle != vendorplugin.LifecycleCurrent {
+			t.Errorf("%s lifecycle = %s, want current", model.ID, model.Lifecycle)
+		}
+		if model.SupersededBy != "" {
+			t.Errorf("%s names successor %q; the head has none", model.ID, model.SupersededBy)
+		}
+		if model.Recommended {
+			t.Errorf("%s is the vendor display pick; claude-opus-5 keeps it", model.ID)
+		}
+		if !slices.Equal(model.Systems, []agentic.SystemID{"claude-code"}) {
+			t.Errorf("%s systems = %v, want exactly [claude-code]", model.ID, model.Systems)
+		}
+		if model.Effort.Support != agentic.EffortSupportRequired || model.Effort.Recommended != "medium" ||
+			!slices.Equal(model.Effort.Vocabulary, []string{"low", "medium", "high", "xhigh", "max"}) {
+			t.Errorf("%s effort = %+v, want required low..max recommended medium", model.ID, model.Effort)
+		}
+		if model.ContextWindowTokens != haiku55Window {
+			t.Errorf("%s ContextWindowTokens = %d, want the owner cap %d", model.ID, model.ContextWindowTokens, haiku55Window)
+		}
+		if model.Rank.Score != 22 {
+			t.Errorf("%s rank = %d, want 22 (interpolated between claude-opus-5 and claude-opus-4-8)", model.ID, model.Rank.Score)
+		}
+	}
+	if identity.AliasOf != "" || alias.AliasOf != "claude-haiku-5-5" {
+		t.Errorf("AliasOf: claude-haiku-5-5 = %q, haiku = %q; want empty and claude-haiku-5-5", identity.AliasOf, alias.AliasOf)
+	}
+	// The tie is the alias and its identity and nothing else.
+	for id, model := range rows {
+		if id != "claude-haiku-5-5" && id != "haiku" && model.Rank.Score == 22 {
+			t.Errorf("%s also scores 22; the haiku pair must tie only itself", id)
+		}
+	}
+}
+
+// compactWindowOf returns the variable's entries in a plan's child environment.
+func compactWindowOf(env []string) []string {
+	var out []string
+	for _, entry := range env {
+		if key, _, _ := strings.Cut(entry, "="); key == claudeCompactWindowKey {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+// claudeRowEffort is an effort the row's own axis accepts.
+func claudeRowEffort(model vendorplugin.Model) string {
+	if model.Effort.Recommended != "" {
+		return model.Effort.Recommended
+	}
+	if len(model.Effort.Vocabulary) > 0 {
+		return model.Effort.Vocabulary[0]
+	}
+	return ""
+}
+
+// TestOnlyTheHaikuRowsCarryTheCompactWindowIntoTheClaudeChild drives the real
+// launch entry point, vendorplugin.BuildLaunch, for EVERY row the claude-code
+// harness drives. The two haiku spellings must hand the child
+// CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000 — the alias under its resolved
+// identity — and no other row may gain the variable, so a window typed onto the
+// wrong row, or an export that fired for every row, fails here by name.
+func TestOnlyTheHaikuRowsCarryTheCompactWindowIntoTheClaudeChild(t *testing.T) {
+	registry := isolatedRegistry(t, nil)
+	resolved, err := registry.ResolveRuntime("claude")
+	if err != nil {
+		t.Fatalf("resolving claude: %v", err)
+	}
+	rows := vendorplugin.RuntimeModels(resolved)
+	if len(rows) == 0 {
+		t.Fatal("the claude runtime drives no rows, so this sweep ranges over nothing")
+	}
+	windowed := map[vendorplugin.ModelID]bool{"claude-haiku-5-5": true, "haiku": true}
+	for id := range windowed {
+		if _, present := rows[id]; !present {
+			t.Fatalf("the claude runtime does not drive %q", id)
+		}
+	}
+	for id, model := range rows {
+		for _, mode := range []agentic.LaunchMode{agentic.LaunchModeDryRun, agentic.LaunchModeExec} {
+			plan, err := vendorplugin.BuildLaunch(context.Background(), registry, opusRequest(t, id, claudeRowEffort(model)), mode)
+			if err != nil {
+				t.Errorf("BuildLaunch(claude, %s, %s) refused the launch: %v", id, mode, err)
+				continue
+			}
+			got := compactWindowOf(plan.Env)
+			if windowed[id] {
+				if want := fmt.Sprintf("%s=%d", claudeCompactWindowKey, haiku55Window); len(got) != 1 || got[0] != want {
+					t.Errorf("%s/%s: child env carries %v, want exactly [%s]", id, mode, got, want)
+				}
+				continue
+			}
+			if len(got) != 0 {
+				t.Errorf("%s/%s: child env carries %v; only the haiku-5-5 rows declare a window, so no other row may gain the variable", id, mode, got)
+			}
+		}
 	}
 }
