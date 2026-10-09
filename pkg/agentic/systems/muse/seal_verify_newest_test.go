@@ -567,3 +567,21 @@ func TestMuseSealEstablishmentProbesVersionBeforeHelp(t *testing.T) {
 			strings.Split(got, "\n"), strings.Split(want, "\n"))
 	}
 }
+
+// TestMuseSealEstablishmentHashesBeforeVersion pins the establishment
+// acquisition order through the seal entry: the binary hash precedes the
+// version probe, so a binary that is both unhashable and unprobable
+// refuses as malformed (hash) rather than undetected (version). A missing
+// binary cannot survive BuildPlan resolution, so the witness drives
+// SealExecPlan directly over a valid plan with a missing binary, like the
+// relative-binary refusal. Letting a missing binary fall through to the
+// version probe is what the ordering mutant does.
+func TestMuseSealEstablishmentHashesBeforeVersion(t *testing.T) {
+	t.Parallel()
+	plan := buildMuseSealedPlan(t, museSealedInteractiveRequest(t))
+	plan.Binary = filepath.Join(t.TempDir(), "muse-bin-9.9.9-R1.1")
+	_, err := New().SealExecPlan(plan)
+	if !errors.Is(err, ErrMuseSealMalformed) {
+		t.Fatalf("establishment hashed before version err = %v, want ErrMuseSealMalformed", err)
+	}
+}

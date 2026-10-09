@@ -187,11 +187,22 @@ func sealInteractiveExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error
 	} else {
 		mode = resolved
 	}
+	// Establishment runs pin/hash -> version -> help -> mapping -> seal:
+	// the binary hash precedes the version probe, so an unhashable
+	// binary refuses as malformed before any probe runs, and the yolo
+	// mapping refusal precedes seal construction, so absent help
+	// evidence refuses as unsupported before any seal exists to verify.
+	probeCtx, cancel := context.WithTimeout(context.Background(), sealProbeAggregateTimeout)
+	defer cancel()
+	var digest string
+	if hashed, err := hashInteractiveSealBinary(plan.Binary); err != nil {
+		return nil, fmt.Errorf("%w: sealed binary cannot be read: %v", ErrMuseSealMalformed, err)
+	} else {
+		digest = hashed
+	}
 	// A seal binds an attested well-formed build or nothing at all: an
 	// undetected build refuses typed here, at plan time. No interactive
 	// plan ships unsealed, and no release list gates the admission.
-	probeCtx, cancel := context.WithTimeout(context.Background(), sealProbeAggregateTimeout)
-	defer cancel()
 	var probed BuildIdentity
 	if identity, err := probeInteractiveSealBuild(probeCtx, plan.Binary, plan.Env); err != nil {
 		return nil, err
@@ -201,27 +212,23 @@ func sealInteractiveExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error
 	if claimed := strings.TrimSpace(plan.ToolRelease); claimed != "" && claimed != probed.Release {
 		return nil, fmt.Errorf("%w: caller claims release %q, binary attests %q", ErrMuseToolReleaseMismatch, claimed, probed.Release)
 	}
-	var digest string
-	if hashed, err := hashInteractiveSealBinary(plan.Binary); err != nil {
-		return nil, fmt.Errorf("%w: sealed binary cannot be read: %v", ErrMuseSealMalformed, err)
-	} else {
-		digest = hashed
-	}
-	seal := &interactiveExecSeal{
-		binary:  plan.Binary,
-		digest:  digest,
-		argv:    append([]string(nil), plan.Argv...),
-		release: sealBuildIdentity(probed.Build),
-		mode:    mode,
-		env:     maps.Clone(identity),
-	}
+	var helpFullDigest, helpLinesDigest string
 	if mode == agentic.PermissionModeYolo {
 		if evidence, err := probeMuseHelpEvidence(probeCtx, plan.Binary, plan.Env, probed.Build, digest); err != nil {
 			return nil, err
 		} else {
-			seal.helpFullDigest = evidence.fullStdoutSHA256
-			seal.helpLinesDigest = evidence.matchedLinesSHA256
+			helpFullDigest, helpLinesDigest = evidence.fullStdoutSHA256, evidence.matchedLinesSHA256
 		}
+	}
+	seal := &interactiveExecSeal{
+		binary:          plan.Binary,
+		digest:          digest,
+		argv:            append([]string(nil), plan.Argv...),
+		release:         sealBuildIdentity(probed.Build),
+		mode:            mode,
+		helpFullDigest:  helpFullDigest,
+		helpLinesDigest: helpLinesDigest,
+		env:             maps.Clone(identity),
 	}
 	if err := seal.VerifyBeforeExec(plan); err != nil {
 		return nil, err

@@ -127,18 +127,12 @@ func TestUnlistedReleaseUsesSupportedGrammar(t *testing.T) {
 // refuses yolo. The BuildPlan leg pins the establishment gate; the direct
 // seal legs pin the sealer's independent enforcement — creation refuses
 // a declaration-less novel build, and the known-build control still
-// refuses when the M41 mutant exempts the novel one.
+// refuses when the M41 mutant exempts the novel one. The legs run as
+// subtests so every leg executes under the mutant: the establishment leg
+// fails on the admitted novel build while the known-build control still
+// passes.
 func TestUnlistedReleaseWithoutHelpEvidenceRefuses(t *testing.T) {
 	t.Parallel()
-	novelBinary, novelEnv := writeMuseVersionHelpStub(t,
-		"printf '%s\\n' 'Muse Code 9.9.9 (9.9.9-R1.1)'\n", museNoYoloHelpFixture)
-	_, err := tryBuildMusePlan(t, New(), agentic.LaunchRequest{
-		System: systemID, Model: agentic.Model{ID: "echo"}, Env: novelEnv,
-		ToolRelease: "9.9.9", PermissionMode: agentic.PermissionModeYolo,
-	}, agentic.LaunchModeInteractive)
-	if !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
-		t.Fatalf("BuildPlan yolo without help evidence err = %v, want ErrPermissionModeUnsupported", err)
-	}
 	directSeal := func(t *testing.T, binary string, env []string, release string) error {
 		t.Helper()
 		plan := agentic.Plan{
@@ -150,14 +144,34 @@ func TestUnlistedReleaseWithoutHelpEvidenceRefuses(t *testing.T) {
 		_, err := New().SealExecPlan(plan)
 		return err
 	}
-	if err := directSeal(t, novelBinary, novelEnv, "9.9.9"); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
-		t.Fatalf("direct seal of declaration-less novel build err = %v, want ErrPermissionModeUnsupported", err)
-	}
-	knownBinary, knownEnv := writeMuseVersionHelpStub(t,
-		"printf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\n", museNoYoloHelpFixture)
-	if err := directSeal(t, knownBinary, knownEnv, "1.4.1"); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
-		t.Fatalf("direct seal of declaration-less known build err = %v, want ErrPermissionModeUnsupported", err)
-	}
+	t.Run("establishment", func(t *testing.T) {
+		t.Parallel()
+		_, novelEnv := writeMuseVersionHelpStub(t,
+			"printf '%s\\n' 'Muse Code 9.9.9 (9.9.9-R1.1)'\n", museNoYoloHelpFixture)
+		_, err := tryBuildMusePlan(t, New(), agentic.LaunchRequest{
+			System: systemID, Model: agentic.Model{ID: "echo"}, Env: novelEnv,
+			ToolRelease: "9.9.9", PermissionMode: agentic.PermissionModeYolo,
+		}, agentic.LaunchModeInteractive)
+		if !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+			t.Fatalf("BuildPlan yolo without help evidence err = %v, want ErrPermissionModeUnsupported", err)
+		}
+	})
+	t.Run("direct-seal-novel", func(t *testing.T) {
+		t.Parallel()
+		novelBinary, novelEnv := writeMuseVersionHelpStub(t,
+			"printf '%s\\n' 'Muse Code 9.9.9 (9.9.9-R1.1)'\n", museNoYoloHelpFixture)
+		if err := directSeal(t, novelBinary, novelEnv, "9.9.9"); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+			t.Fatalf("direct seal of declaration-less novel build err = %v, want ErrPermissionModeUnsupported", err)
+		}
+	})
+	t.Run("direct-seal-known-control", func(t *testing.T) {
+		t.Parallel()
+		knownBinary, knownEnv := writeMuseVersionHelpStub(t,
+			"printf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\n", museNoYoloHelpFixture)
+		if err := directSeal(t, knownBinary, knownEnv, "1.4.1"); !errors.Is(err, agentic.ErrPermissionModeUnsupported) {
+			t.Fatalf("direct seal of declaration-less known build err = %v, want ErrPermissionModeUnsupported", err)
+		}
+	})
 }
 
 // TestNativeForwardsVerbatimOnUnlistedRelease pins native on an unlisted

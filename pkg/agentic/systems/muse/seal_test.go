@@ -883,9 +883,12 @@ func TestMuseSealExportCarriesNoEnvironmentValues(t *testing.T) {
 }
 
 // TestMuseSealEstablishmentRefusesUnreadableBinary stages a binary that
-// deletes itself while answering the seal-time version probe:
-// establishment reaches the seal-read refusal deterministically through
-// BuildPlan, with no concurrent mutation.
+// deletes itself while answering the seal-time version probe. Under the
+// approved pin/hash -> version order, establishment hashes the present
+// binary, the version probe deletes it while answering, and the
+// immediate re-verification refuses the mid-seal deletion as a binary
+// change — the seal bound a good digest, then the bytes went away —
+// deterministically through BuildPlan, with no concurrent mutation.
 func TestMuseSealEstablishmentRefusesUnreadableBinary(t *testing.T) {
 	_, env := writeMuseVersionStub(t, "/bin/rm -- \"$0\"\nprintf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\n")
 	req := museInteractiveRequest(t)
@@ -893,7 +896,7 @@ func TestMuseSealEstablishmentRefusesUnreadableBinary(t *testing.T) {
 	req.PermissionMode = agentic.PermissionModeNative
 	req.ToolRelease = ""
 	_, err := tryBuildMusePlan(t, New(), req, agentic.LaunchModeInteractive)
-	if !errors.Is(err, ErrMuseSealMalformed) {
+	if !errors.Is(err, ErrMuseSealBinaryChanged) {
 		t.Fatalf("self-deleting binary sealed: %v", err)
 	}
 }

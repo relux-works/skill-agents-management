@@ -77,7 +77,14 @@ func TestFrozenOverrideSelectsSuppliedCopy(t *testing.T) {
 func TestFrozenOverrideGatesPresentButInvalid(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	valid, validDigest := writeFrozenMuseFixture(t, dir, "1.4.2-R4684.1",
+	// The pinned target lives in its own directory: the symlink keeps
+	// the witness basename at the top level, so the link and its target
+	// never share a path.
+	targetDir := filepath.Join(dir, "target")
+	if err := os.Mkdir(targetDir, 0o755); err != nil {
+		t.Fatalf("making the frozen target directory: %v", err)
+	}
+	valid, validDigest := writeFrozenMuseFixture(t, targetDir, "1.4.2-R4684.1",
 		"Muse Code 1.4.2 (1.4.2-R4684.1)", museYoloHelpFixture)
 	symlink := filepath.Join(dir, "muse-bin-1.4.2-R4684.1")
 	if err := os.Symlink(valid, symlink); err != nil {
