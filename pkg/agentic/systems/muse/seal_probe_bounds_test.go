@@ -69,6 +69,10 @@ func requireProbeAttempt(t *testing.T, err error, stage string, timeout, limited
 // version re-probe: a descendant holding the stdout pipe past the parent
 // exit still completes — fast when the holder is brief, through the
 // deadline group kill when it is not — with the complete version bytes.
+// The short holder runs under the post-leader proof in
+// seal_pipe_lifetime_unix_test.go: it stays blocked on a test-owned FIFO
+// past the observed leader termination and is released explicitly, so a
+// pass proves the pipe outlived the leader rather than draining early.
 // Skipping the kill on version probes (the M36 mutant) turns the long
 // holder into teardown-incomplete instead of a result.
 func TestSealVersionProbeBoundsPipeDrain(t *testing.T) {
@@ -98,8 +102,15 @@ func TestSealVersionProbeBoundsPipeDrain(t *testing.T) {
 		t.Parallel()
 		// The brief holder drains through EOF, not through the
 		// execution deadline: past the version probe's 10s bound this
-		// is the long-holder path wearing a short holder's name.
-		if elapsed := sealWithHolder(t, shortPipeHolderVersionBody(t)); elapsed >= 10*time.Second {
+		// is the long-holder path wearing a short holder's name. The
+		// stop check fails the test even when a proof breakdown still
+		// drained, so it runs before the deadline assertion.
+		proof := newShortPipeHolderProof(t)
+		elapsed := sealWithHolder(t, proof.versionBody())
+		if err := proof.stop(); err != nil {
+			t.Fatalf("short holder proof: %v", err)
+		}
+		if elapsed >= 10*time.Second {
 			t.Fatalf("short holder drained in %v, want before the execution deadline", elapsed)
 		}
 	})
