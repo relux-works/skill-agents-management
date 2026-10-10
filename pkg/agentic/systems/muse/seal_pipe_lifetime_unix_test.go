@@ -92,9 +92,11 @@ func newShortPipeHolderProof(t *testing.T) *shortPipeHolderProof {
 	proof.hold = open(proof.holdPath)
 	proof.pid = open(proof.pidPath)
 	t.Cleanup(func() {
-		// Closing the held ends releases a still-blocked holder
-		// through EOF and ends the pump's PID read, so a failed test
-		// leaks neither a process nor a goroutine.
+		// Wake the pump explicitly (a blocked FIFO read is not
+		// interrupted by Close on Darwin), then close the held ends,
+		// which releases a still-blocked holder through EOF, so a
+		// failed test leaks neither a process nor a goroutine.
+		_, _ = proof.pid.WriteString(shortPipeProofStop + "\n")
 		_ = proof.hold.Close()
 		_ = proof.pid.Close()
 	})
@@ -121,6 +123,10 @@ func (p *shortPipeHolderProof) pump() {
 	reader := bufio.NewReader(p.pid)
 	for {
 		line, err := reader.ReadString('\n')
+		if err == nil && strings.TrimSpace(line) == shortPipeProofStop {
+			// stop or cleanup woke the read explicitly.
+			return
+		}
 		if err != nil {
 			// The held PID end closes only at stop or test cleanup,
 			// both past the probe run, so a read failure is the
@@ -164,14 +170,27 @@ func (p *shortPipeHolderProof) pump() {
 // error fails the test even when the probe drained: without this check a
 // proof breakdown that still drained through cleanup EOF would pass.
 func (p *shortPipeHolderProof) stop() error {
-	_ = p.hold.Close()
-	_ = p.pid.Close()
+	// The PID end is held O_RDWR, which Go's poller excludes on Darwin, so
+	// Close does not interrupt the pump's blocked read: wake it with an
+	// explicit stop line, join it, and only then close the held ends.
+	if _, err := p.pid.WriteString(shortPipeProofStop + "\n"); err != nil {
+		_ = p.hold.Close()
+		_ = p.pid.Close()
+		return fmt.Errorf("pipe proof: waking the release pump: %v", err)
+	}
 	watchdog := time.NewTimer(30 * time.Second)
 	defer watchdog.Stop()
+	var err error
 	select {
-	case err := <-p.done:
-		return err
+	case err = <-p.done:
 	case <-watchdog.C:
-		return fmt.Errorf("pipe proof: the release pump never exited")
+		err = fmt.Errorf("pipe proof: the release pump never exited")
 	}
+	_ = p.hold.Close()
+	_ = p.pid.Close()
+	return err
 }
+
+// shortPipeProofStop is the line stop and cleanup write to the PID FIFO to
+// end the pump's read; a leader never writes it (it writes its PID).
+const shortPipeProofStop = "stop"
