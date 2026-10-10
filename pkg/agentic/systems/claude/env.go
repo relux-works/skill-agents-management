@@ -124,7 +124,7 @@ const autoCompactWindowEnv = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
 func childEnv(parent []string, req agentic.LaunchRequest) []string {
 	env := agentic.WithRunContext(filterRuntimeEnv(parent), req)
 	env = agentic.SetEnvValue(env, "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION", "false")
-	if req.Model.ContextWindowTokens > 0 {
+	if req.Model.ContextWindowTokens == 250000 {
 		env = agentic.SetEnvValue(env, autoCompactWindowEnv, strconv.Itoa(req.Model.ContextWindowTokens))
 	}
 	return env
