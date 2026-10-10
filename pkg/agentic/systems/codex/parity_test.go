@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/parity"
 )
@@ -73,7 +74,7 @@ func tempSlot(t *testing.T) string {
 func writeStubExecutable(t *testing.T, dir, name string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte("#!/bin/sh\ncat >/dev/null\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte("#!/bin/sh\ncat >/dev/null\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("writing the stub %s: %v", name, err)
 	}
 	return path
@@ -115,7 +116,7 @@ func writeNativeShim(t *testing.T, binDir string) string {
 		t.Fatalf("creating the shim bin directory: %v", err)
 	}
 	shimPath := filepath.Join(shimBinDir, shimFileName)
-	if err := os.WriteFile(shimPath, []byte("#!/usr/bin/env node\n// npm shim placeholder\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(shimPath, []byte("#!/usr/bin/env node\n// npm shim placeholder\n"), 0o755); err != nil {
 		t.Fatalf("writing the shim: %v", err)
 	}
 	nativeDir := filepath.Join(packageRoot, "vendor", targetTriple, "bin")

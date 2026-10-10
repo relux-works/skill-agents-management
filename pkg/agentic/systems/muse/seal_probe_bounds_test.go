@@ -2,10 +2,10 @@ package muse
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -26,7 +26,7 @@ func writeMuseHelpShellStub(t *testing.T, answer, helpBody string) []string {
 		helpBody + "\n" +
 		"fi\n" +
 		"exit 8\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the help-shell stub: %v", err)
 	}
 	return []string{"PATH=" + dir + ":/bin:/usr/bin"}
@@ -43,7 +43,7 @@ func writeMuseVersionShellStub(t *testing.T, versionBody string) []string {
 		versionBody + "\n" +
 		"fi\n" +
 		"exit 8\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the version-shell stub: %v", err)
 	}
 	return []string{"PATH=" + dir + ":/bin:/usr/bin"}
@@ -72,10 +72,14 @@ func requireProbeAttempt(t *testing.T, err error, stage string, timeout, limited
 // holder into teardown-incomplete instead of a result.
 func TestSealVersionProbeBoundsPipeDrain(t *testing.T) {
 	t.Parallel()
-	sealWithHolder := func(t *testing.T, hold string) {
+	sealWithHolder := func(t *testing.T, release bool) {
 		t.Helper()
+		holder := ":" // A short holder closes its pipe on process exit.
+		if !release {
+			holder = execfixture.NewGate(t).Command()
+		}
 		env := writeMuseVersionShellStub(t,
-			"(sleep "+hold+" &)\nprintf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\nexit 0")
+			"("+holder+") &\nprintf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\nexit 0")
 		plan := buildMuseInteractivePlan(t, New(), agentic.LaunchRequest{
 			System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
 			PermissionMode: agentic.PermissionModeNative,
@@ -94,11 +98,11 @@ func TestSealVersionProbeBoundsPipeDrain(t *testing.T) {
 	}
 	t.Run("short-holder", func(t *testing.T) {
 		t.Parallel()
-		sealWithHolder(t, "2")
+		sealWithHolder(t, true)
 	})
 	t.Run("long-holder", func(t *testing.T) {
 		t.Parallel()
-		sealWithHolder(t, "30")
+		sealWithHolder(t, false)
 	})
 }
 
@@ -122,12 +126,16 @@ func TestSealVersionProbeCapsDuringRead(t *testing.T) {
 	})
 	t.Run("over-cap-then-holds", func(t *testing.T) {
 		t.Parallel()
-		env := writeMuseVersionShellStub(t, "printf '%70000s' ''\nsleep 60")
+		gate := execfixture.NewGate(t)
+		env := writeMuseVersionShellStub(t, "printf '%70000s' ''\n"+gate.Command())
 		_, err := tryBuildMusePlan(t, New(), agentic.LaunchRequest{
 			System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
 			PermissionMode: agentic.PermissionModeNative,
 		}, agentic.LaunchModeInteractive)
-		requireProbeAttempt(t, err, agentic.ProbeStageVersion, false, true)
+		attempt := requireProbeAttempt(t, err, agentic.ProbeStageVersion, false, true)
+		if attempt.TeardownIncomplete {
+			t.Fatal("output cap left a running child or held pipe")
+		}
 	})
 }
 
@@ -161,7 +169,8 @@ func TestHelpProbeBounded(t *testing.T) {
 	})
 	t.Run("hanging-help", func(t *testing.T) {
 		t.Parallel()
-		env := writeMuseHelpShellStub(t, answer, "sleep 60")
+		gate := execfixture.NewGate(t)
+		env := writeMuseHelpShellStub(t, answer, gate.Command())
 		_, err := tryBuildMusePlan(t, New(), agentic.LaunchRequest{
 			System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
 			ToolRelease: "1.4.1", PermissionMode: agentic.PermissionModeYolo,

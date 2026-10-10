@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 )
 
 // TestChangelogNarrowingMutants runs real behavioral tests in child test
@@ -205,7 +207,7 @@ func TestChangelogNarrowingMutants(t *testing.T) {
 				t.Fatalf("mutation anchor count %d, want 1", n)
 			}
 			script := filepath.Join(t.TempDir(), "changelog-release.sh")
-			if err := os.WriteFile(script, []byte(strings.Replace(original, m.from, m.to, 1)), 0o755); err != nil {
+			if err := execfixture.WriteFile(script, []byte(strings.Replace(original, m.from, m.to, 1)), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			if stdout, stderr, exit, err := runChangelogChild("", fixtureEnv(t), 0, "bash", "-n", script); err != nil || exit != 0 {

@@ -3,11 +3,10 @@ package muse
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/paritycase"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
@@ -18,7 +17,7 @@ func writeMuseVersionStub(t *testing.T, body string) (string, []string) {
 	binary := filepath.Join(dir, executableName)
 	// A version probe must never start a session or carry another argument.
 	script := "#!/bin/sh\n[ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ] || exit 8\n" + body
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return binary, []string{"PATH=" + dir}
@@ -40,7 +39,7 @@ func writeMuseVersionHelpStub(t *testing.T, versionBody, help string) (string, [
 		"exit 0\n" +
 		"fi\n" +
 		"[ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ] || exit 8\n" + versionBody
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return binary, []string{"PATH=" + dir}
@@ -202,11 +201,42 @@ func TestMuseProbeFailuresRemainUndetected(t *testing.T) {
 		requireMuseProbeUndetected(t, ctx, env)
 	})
 	t.Run("fired_deadline", func(t *testing.T) {
-		_, env := writeMuseVersionStub(t, "echo 'Muse Code 1.4.2 (1.4.2-R4684.1)'\nexec /bin/sleep 1\n")
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		gate := execfixture.NewGate(t)
+		_, env := writeMuseVersionStub(t, gate.Command()+"\n")
+		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		requireMuseProbeUndetected(t, ctx, env)
+		type result struct {
+			release string
+			err     error
+		}
+		resultCh := make(chan result, 1)
+		go func() {
+			release, err := agentic.ProbeToolRelease(signaledProbeDeadline{ctx}, New(), env)
+			resultCh <- result{release, err}
+		}()
+		gate.Wait(t)
+		cancel()
+		got := <-resultCh
+		var attempt *agentic.ProbeExecutionError
+		if got.release != "" || !errors.Is(got.err, agentic.ErrToolReleaseUndetected) || !errors.As(got.err, &attempt) || !attempt.Timeout || !attempt.ChildStarted {
+			t.Fatalf("ready child with fired deadline = (%q, %v), want started timeout and ErrToolReleaseUndetected", got.release, got.err)
+		}
 	})
+}
+
+// Fire the caller's deadline only after the fixture is observably running.
+// This implements Context's terminal Err contract without a scheduling race.
+type signaledProbeDeadline struct{ context.Context }
+
+// Keep cancellation propagation on this context's Err method, rather than
+// exposing the embedded cancel context through its private Value key.
+func (signaledProbeDeadline) Value(any) any { return nil }
+
+func (c signaledProbeDeadline) Err() error {
+	if c.Context.Err() != nil {
+		return context.DeadlineExceeded
+	}
+	return nil
 }
 
 func requireMuseProbeUndetected(t *testing.T, ctx context.Context, env []string) {

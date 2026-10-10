@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
 )
@@ -267,7 +267,7 @@ func TestFinalizePlanRefusesUnrepresentableStrings(t *testing.T) {
 func TestSealValidUnicodeRoundTrips(t *testing.T) {
 	binDir := t.TempDir()
 	binary := filepath.Join(binDir, "claude-héllo-世界-🎉")
-	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+	if err := execfixture.WriteFile(binary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatalf("write stub executable: %v", err)
 	}
 	sys := &sealRev5EnvSystem{System: claude.New(), binary: binary, env: []string{"PROP_BASE=héllo-世界-🎉"}}

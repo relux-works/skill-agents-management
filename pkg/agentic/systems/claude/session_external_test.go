@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/gosources"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
@@ -27,7 +28,7 @@ import (
 func externalSessionRequest(t *testing.T, native []string) agentic.LaunchRequest {
 	t.Helper()
 	binDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(binDir, "claude"), []byte("#!/bin/sh\ncat >/dev/null\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(filepath.Join(binDir, "claude"), []byte("#!/bin/sh\ncat >/dev/null\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("writing the stub claude: %v", err)
 	}
 	workDir := t.TempDir()

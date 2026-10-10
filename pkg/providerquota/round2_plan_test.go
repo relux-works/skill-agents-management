@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/quotatest"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
@@ -20,7 +21,7 @@ func TestRound2PlansRefuseProtectedSymlink(t *testing.T) {
 			allowed := t.TempDir()
 			target := t.TempDir()
 			// Inert fixture is prepared before target is designated a forbidden root.
-			if err := os.WriteFile(filepath.Join(target, name), []byte("fixture"), 0700); err != nil {
+			if err := execfixture.WriteFile(filepath.Join(target, name), []byte("fixture"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			binary := filepath.Join(allowed, name)
@@ -48,7 +49,7 @@ func TestRound2PlansRefuseProtectedSymlink(t *testing.T) {
 func TestRound2PlansRefuseProtectedEmptyPath(t *testing.T) {
 	c := quotatest.Context(t, "muse", false)
 	cwd := t.TempDir()
-	if err := os.WriteFile(filepath.Join(cwd, "muse"), []byte("fixture"), 0700); err != nil {
+	if err := execfixture.WriteFile(filepath.Join(cwd, "muse"), []byte("fixture"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(cwd)
@@ -70,7 +71,7 @@ func TestRound3RelativePathPlanSurvivesScratchCwd(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(checked), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(checked, []byte("inert fixture"), 0700); err != nil {
+	if err := execfixture.WriteFile(checked, []byte("inert fixture"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	plan, err := muse.New().QuotaPlan(providerquota.Request{Env: []string{"HOME=" + t.TempDir(), "PATH=bin"}})

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -111,7 +112,7 @@ func TestImportedProcessDelegatesToMuseVerifier(t *testing.T) {
 	}
 	// Same version answer, different bytes: the digest moves while the
 	// release stays, so only the delegate's hash re-read refuses.
-	if err := os.WriteFile(plan.Binary, []byte(museSealWitnessStub), 0o755); err != nil {
+	if err := execfixture.WriteFile(plan.Binary, []byte(museSealWitnessStub), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := imported.VerifyBeforeExec(witness); !errors.Is(err, ErrMuseSealBinaryChanged) {

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 )
 
 // Every claim in this file is one the plugins above it rest on and cannot
@@ -95,7 +97,7 @@ func TestACandidateMustBeExecutable(t *testing.T) {
 		t.Fatalf("writing the shadow: %v", err)
 	}
 	want := filepath.Join(installed, "prog")
-	if err := os.WriteFile(want, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(want, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("writing the program: %v", err)
 	}
 
@@ -113,7 +115,7 @@ func TestACandidateMustBeExecutable(t *testing.T) {
 // launcher would report a binary the child then fails to exec.
 func TestAnEmptyPathElementIsTheWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "prog"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(filepath.Join(dir, "prog"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("writing the program: %v", err)
 	}
 	t.Chdir(dir)
@@ -133,7 +135,7 @@ func TestANameWithASeparatorIsUsedAsGiven(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	program := filepath.Join(dir, "prog")
-	if err := os.WriteFile(program, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(program, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("writing the program: %v", err)
 	}
 

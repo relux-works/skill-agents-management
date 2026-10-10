@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -36,7 +37,7 @@ func TestParseToolReleaseReadsTheBareTriple(t *testing.T) {
 func writeScriptStub(t *testing.T, dir, name, body string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatalf("writing the stub %s: %v", name, err)
 	}
 	return path

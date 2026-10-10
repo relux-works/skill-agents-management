@@ -21,6 +21,7 @@ import (
 	// compiled in, and the refusal this file cares about (the broker was never
 	// established) would never be reached. Importing it makes the assertion
 	// about the vendor layer instead of about the test binary's import list.
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/muse"
 )
 
@@ -435,7 +436,7 @@ func mustModels(t *testing.T, r *vendorplugin.Registry, id vendorplugin.VendorID
 func writeStubBinary(t *testing.T, dir, name string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte("#!/bin/sh\ncat >/dev/null\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte("#!/bin/sh\ncat >/dev/null\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("writing the stub %s: %v", name, err)
 	}
 	return path

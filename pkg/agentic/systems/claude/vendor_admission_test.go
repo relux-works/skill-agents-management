@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
@@ -96,7 +97,7 @@ func newPermissionAdmissionFixture(t *testing.T, mutate func(*agentic.LaunchRequ
 		t.Fatal(err)
 	}
 	binary := filepath.Join(binDir, "claude")
-	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+	if err := execfixture.WriteFile(binary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	return registry, vendor, workDir

@@ -41,6 +41,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/parity"
 )
@@ -107,7 +108,7 @@ func TempSlot(t testing.TB) string {
 func WriteStubExecutable(t testing.TB, dir, name string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte("#!/bin/sh\ncat >/dev/null\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte("#!/bin/sh\ncat >/dev/null\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("writing the stub %s: %v", name, err)
 	}
 	return path

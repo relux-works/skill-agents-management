@@ -3,12 +3,12 @@ package toolprobe
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -17,7 +17,7 @@ func writeProbeStub(t *testing.T, body string) string {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "probe")
 	script := "#!/bin/sh\n" + body
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the probe stub: %v", err)
 	}
 	return path
@@ -57,15 +57,20 @@ func TestVersionOutputCapsDuringRead(t *testing.T) {
 	})
 	t.Run("over-cap-then-holds", func(t *testing.T) {
 		t.Parallel()
-		stub := writeProbeStub(t, "printf '%70000s' ''\nsleep 60\n")
+		gate := execfixture.NewGate(t)
+		stub := writeProbeStub(t, "printf '%70000s' ''\n"+gate.Command()+"\n")
 		_, err := VersionOutput(context.Background(), stub, []string{"PATH=/bin:/usr/bin"})
-		requireAttempt(t, err, agentic.ProbeStageVersion, false, true)
+		attempt := requireAttempt(t, err, agentic.ProbeStageVersion, false, true)
+		if attempt.TeardownIncomplete {
+			t.Fatal("output cap left a running child or held pipe")
+		}
 	})
 }
 
 func TestProbeStdoutDrainsPastChildExit(t *testing.T) {
 	t.Parallel()
-	stub := writeProbeStub(t, "(sleep 30 &)\nprintf '%s\\n' 'answer'\n")
+	gate := execfixture.NewGate(t)
+	stub := writeProbeStub(t, "("+gate.Command()+") &\nprintf '%s\\n' 'answer'\n")
 	out, err := VersionOutput(context.Background(), stub, []string{"PATH=/bin:/usr/bin"})
 	if err != nil || strings.TrimSpace(string(out)) != "answer" {
 		t.Fatalf("VersionOutput with held pipe = (%q, %v), want the complete answer", out, err)
@@ -85,7 +90,8 @@ func TestProbeTimeoutAndAttemptSurface(t *testing.T) {
 	t.Parallel()
 	t.Run("hanging", func(t *testing.T) {
 		t.Parallel()
-		stub := writeProbeStub(t, "sleep 60\n")
+		gate := execfixture.NewGate(t)
+		stub := writeProbeStub(t, gate.Command()+"\n")
 		_, err := VersionOutput(context.Background(), stub, []string{"PATH=/bin:/usr/bin"})
 		attempt := requireAttempt(t, err, agentic.ProbeStageVersion, true, false)
 		if !attempt.ExecAttempted || !attempt.ChildStarted {
@@ -130,6 +136,14 @@ func TestProbeTimeoutAndAttemptSurface(t *testing.T) {
 
 func TestHelpOutputBounds(t *testing.T) {
 	t.Parallel()
+	t.Run("exactly-at-cap", func(t *testing.T) {
+		t.Parallel()
+		stub := writeProbeStub(t, "printf '%1048576s' ''\n")
+		out, err := HelpOutput(context.Background(), stub, []string{})
+		if err != nil || len(out) != 1048576 {
+			t.Fatalf("HelpOutput at cap = (%d bytes, %v), want 1048576 bytes", len(out), err)
+		}
+	})
 	t.Run("small", func(t *testing.T) {
 		t.Parallel()
 		stub := writeProbeStub(t, "printf '%s\\n' 'help'\n")
@@ -158,7 +172,8 @@ func TestHelpOutputBounds(t *testing.T) {
 	})
 	t.Run("hanging", func(t *testing.T) {
 		t.Parallel()
-		stub := writeProbeStub(t, "sleep 60\n")
+		gate := execfixture.NewGate(t)
+		stub := writeProbeStub(t, gate.Command()+"\n")
 		start := time.Now()
 		_, err := HelpOutput(context.Background(), stub, []string{"PATH=/bin:/usr/bin"})
 		requireAttempt(t, err, agentic.ProbeStageHelp, true, false)

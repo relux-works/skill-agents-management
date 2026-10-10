@@ -3,11 +3,11 @@ package agentic_test
 import (
 	"encoding/json"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
@@ -28,7 +28,7 @@ func sealTestRegistry(t *testing.T) *agentic.Registry {
 func sealTestStubBin(t *testing.T, name string) string {
 	t.Helper()
 	binDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+	if err := execfixture.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatalf("write stub executable: %v", err)
 	}
 	return binDir

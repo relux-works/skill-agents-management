@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
@@ -134,7 +135,7 @@ func nilContextParityFixture(t *testing.T) nilContextFixture {
 	dir := t.TempDir()
 	// Executable fixtures cover binary resolution only; no agent is launched.
 	for _, name := range []string{"codex", "claude", "qwen", "gemini", "pi"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		if err := execfixture.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -152,7 +153,7 @@ func nilContextParityFixture(t *testing.T) nilContextFixture {
 		"exit 0\n" +
 		"fi\n" +
 		"exit 0\n"
-	if err := os.WriteFile(filepath.Join(dir, "muse"), []byte(museStub), 0700); err != nil {
+	if err := execfixture.WriteFile(filepath.Join(dir, "muse"), []byte(museStub), 0700); err != nil {
 		t.Fatal(err)
 	}
 	prompt := filepath.Join(dir, "assignment.md")

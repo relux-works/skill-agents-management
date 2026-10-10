@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -28,7 +29,7 @@ func writeFrozenMuseFixture(t *testing.T, dir, build, answer, help string) (stri
 		"exit 0\n" +
 		"fi\n" +
 		"cat >/dev/null\nexit 0\n"
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the frozen fixture: %v", err)
 	}
 	raw, err := os.ReadFile(path)
@@ -95,7 +96,7 @@ func TestFrozenOverrideGatesPresentButInvalid(t *testing.T) {
 		t.Fatalf("making the directory fixture: %v", err)
 	}
 	plain := filepath.Join(dir, "muse")
-	if err := os.WriteFile(plain, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(plain, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("writing the plain-name fixture: %v", err)
 	}
 	plainRaw, err := os.ReadFile(plain)
@@ -117,7 +118,7 @@ func TestFrozenOverrideGatesPresentButInvalid(t *testing.T) {
 	// runner, which reads it and refuses on the digest instead. Either
 	// way the tuple refuses typed without falling back to PATH.
 	unreadable := filepath.Join(dir, "muse-bin-1.4.5-R1.1")
-	if err := os.WriteFile(unreadable, []byte("#!/bin/sh\nexit 0\n"), 0o111); err != nil {
+	if err := execfixture.WriteFile(unreadable, []byte("#!/bin/sh\nexit 0\n"), 0o111); err != nil {
 		t.Fatalf("writing the unreadable fixture: %v", err)
 	}
 	upperDigest := strings.ToUpper(validDigest)

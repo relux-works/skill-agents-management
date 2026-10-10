@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/localruntime"
 )
@@ -62,7 +63,7 @@ func TestResolveBinaryIsNativePi(t *testing.T) {
 
 func writeExecutable(t *testing.T, path string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatalf("writing fake executable %s: %v", path, err)
 	}
 }

@@ -2,10 +2,10 @@ package muse
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/paritycase"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
@@ -532,7 +532,7 @@ func writeMuseStubExecutable(t *testing.T, dir string) string {
 		"exit 0\n" +
 		"fi\n" +
 		"cat >/dev/null\nexit 0\n"
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the muse stub: %v", err)
 	}
 	return path

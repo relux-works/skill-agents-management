@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 )
 
 // Run the behavioral tests after each weakening. Searched tokens remain in
@@ -148,7 +150,7 @@ func copyModule(t *testing.T, source, destination string) {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(filepath.Join(destination, relative), body, info.Mode().Perm())
+		return execfixture.WriteFile(filepath.Join(destination, relative), body, info.Mode().Perm())
 	})
 	if err != nil {
 		t.Fatal(fmt.Errorf("copy module: %w", err))

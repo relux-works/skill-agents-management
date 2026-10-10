@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 )
 
 type auxFixtureSystem struct{ *pangolinSystem }
@@ -28,7 +30,7 @@ func auxFixture(t *testing.T) (Plan, []AuxPlan, []AuxResult) {
 	t.Helper()
 	sys := auxFixtureSystem{newPangolin()}
 	sys.binary = filepath.Join(t.TempDir(), "provider")
-	if err := os.WriteFile(sys.binary, []byte("original"), 0700); err != nil {
+	if err := execfixture.WriteFile(sys.binary, []byte("original"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	registry := NewRegistry()
@@ -63,7 +65,7 @@ func TestAuxBinarySwappedBeforePrimaryRefuses(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(primary.Binary, []byte("changed"), 0700); err != nil {
+	if err := execfixture.WriteFile(primary.Binary, []byte("changed"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := VerifyPrimaryAfterAux(primary, plans, results); !errors.Is(err, ErrAuxRefused) {
@@ -73,7 +75,7 @@ func TestAuxBinarySwappedBeforePrimaryRefuses(t *testing.T) {
 func TestAuxBinaryReplacementWithIdenticalBytesRefuses(t *testing.T) {
 	primary, plans, results := auxFixture(t)
 	replacement := primary.Binary + ".replacement"
-	if err := os.WriteFile(replacement, []byte("original"), 0700); err != nil {
+	if err := execfixture.WriteFile(replacement, []byte("original"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Rename(replacement, primary.Binary); err != nil {

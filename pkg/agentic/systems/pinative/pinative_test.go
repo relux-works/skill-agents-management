@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pi"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pinative"
@@ -45,7 +46,7 @@ func markersOn(argv []string) []string {
 
 func writeExecutable(t *testing.T, path string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatalf("writing fake executable %s: %v", path, err)
 	}
 }

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
+
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 )
 
 func TestDarwinStartTimeIdentityBytesNarrowingMutantIsKilled(t *testing.T) {
@@ -49,7 +51,7 @@ func TestDarwinProcessStartTimeMissingPIDIsTypedAndDoesNotForkPS(t *testing.T) {
 	marker := filepath.Join(psDir, "ps-was-run")
 	psPath := filepath.Join(psDir, "ps")
 	script := []byte("#!/bin/sh\nprintf invoked > \"$PROCESS_START_TIME_PS_MARKER\"\nexit 91\n")
-	if err := os.WriteFile(psPath, script, 0o755); err != nil {
+	if err := execfixture.WriteFile(psPath, script, 0o755); err != nil {
 		t.Fatalf("write ps sentinel: %v", err)
 	}
 	t.Setenv("PATH", psDir)
@@ -82,7 +84,7 @@ func TestDarwinMissingPIDMappingDoesNotDependOnPIDParity(t *testing.T) {
 	marker := filepath.Join(psDir, "ps-was-run")
 	psPath := filepath.Join(psDir, "ps")
 	script := []byte("#!/bin/sh\nprintf invoked > \"$PROCESS_START_TIME_PS_MARKER\"\nexit 91\n")
-	if err := os.WriteFile(psPath, script, 0o755); err != nil {
+	if err := execfixture.WriteFile(psPath, script, 0o755); err != nil {
 		t.Fatalf("write ps sentinel: %v", err)
 	}
 	t.Setenv("PATH", psDir)

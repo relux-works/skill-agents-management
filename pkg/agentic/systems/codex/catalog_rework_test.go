@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -84,7 +85,7 @@ func TestIDPlanBindsBytesAndRefusesArtifactTamperBeforeExec(t *testing.T) {
 				t.Fatal(err)
 			}
 			marker := filepath.Join(wd, "started")
-			if err := os.WriteFile(plan.Binary, []byte("#!/bin/sh\n : > '"+marker+"'\n"), 0700); err != nil {
+			if err := execfixture.WriteFile(plan.Binary, []byte("#!/bin/sh\n : > '"+marker+"'\n"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			// A swap after ID validation cannot affect argv's launch-owned copy.

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
@@ -1679,7 +1680,7 @@ func curatorRequest(t *testing.T, plugin curatorPluginCase, context *agentic.Cur
 		name = "codex"
 	}
 	binaryPath := filepath.Join(binDir, name)
-	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+	if err := execfixture.WriteFile(binaryPath, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatalf("write stub executable: %v", err)
 	}
 	homeVariable := "CLAUDE_CONFIG_DIR"

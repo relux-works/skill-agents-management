@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
@@ -158,7 +159,7 @@ requires_openai_auth = false
 	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\n: > \"$0.started\"\n"), 0755); err != nil {
+	if err := execfixture.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\n: > \"$0.started\"\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	return vendorplugin.SpawnRequest{

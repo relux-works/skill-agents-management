@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/engineobservation"
 	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
@@ -92,7 +93,7 @@ func modelCheckTestPiPath(t *testing.T) string {
 	t.Helper()
 	directory := t.TempDir()
 	path := filepath.Join(directory, "pi")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write fake Pi executable: %v", err)
 	}
 	return directory
@@ -633,7 +634,7 @@ func TestReviewReproDeadlineWithDescendantHoldingStdout(t *testing.T) {
 // replace.
 func TestRunModelCheckProcessRealPiEcho(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "pi")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\necho expected-fragment-for-test\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(script, []byte("#!/bin/sh\necho expected-fragment-for-test\n"), 0o755); err != nil {
 		t.Fatalf("write fake Pi: %v", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

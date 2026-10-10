@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/providerlimits"
 	"github.com/relux-works/skill-agents-management/pkg/providerquota"
 )
@@ -39,7 +40,7 @@ func BinaryEnv(t *testing.T, name string) (string, []string) {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 99\n"), 0o700); err != nil {
+	if err := execfixture.WriteFile(path, []byte("#!/bin/sh\nexit 99\n"), 0o700); err != nil {
 		t.Fatalf("writing inert executable fixture: %v", err)
 	}
 	return path, []string{"PATH=" + dir, "HOME=" + t.TempDir()}

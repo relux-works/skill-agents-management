@@ -25,6 +25,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -134,10 +136,23 @@ func runProbe(ctx context.Context, stage, binary string, env []string, probeArg 
 	setProbeProcessGroup(cmd)
 	stdout := newCappedBuffer(stdoutCap)
 	stderr := newDiscardingBuffer(maxStderrBytes)
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	kill := sync.OnceFunc(func() { killProbeChild(cmd) })
-	stdout.onOver = kill
+	// Own the pipes: cmd.Wait must report process exit independently of a
+	// descendant holding an output descriptor. In particular, exceeding the
+	// cap must wake this supervisor without waiting for that descendant's EOF.
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		return nil, &agentic.ProbeExecutionError{Stage: stage, Detail: fmt.Sprintf("creating stdout pipe before exec: %v", err)}
+	}
+	defer outR.Close()
+	defer outW.Close()
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		return nil, &agentic.ProbeExecutionError{Stage: stage, Detail: fmt.Sprintf("creating stderr pipe before exec: %v", err)}
+	}
+	defer errR.Close()
+	defer errW.Close()
+	cmd.Stdout = outW
+	cmd.Stderr = errW
 	if err := cmd.Start(); err != nil {
 		return nil, &agentic.ProbeExecutionError{
 			Stage:         stage,
@@ -145,49 +160,91 @@ func runProbe(ctx context.Context, stage, binary string, env []string, probeArg 
 			Detail:        fmt.Sprintf("starting %s %s: %v", binary, probeArg, err),
 		}
 	}
+	_ = outW.Close()
+	_ = errW.Close()
+	kill := func() { killProbeChild(cmd) }
+	copyDone := make(chan error, 2)
+	go copyProbeOutput(outR, stdout, copyDone)
+	go copyProbeOutput(errR, stderr, copyDone)
 	waitDone := make(chan error, 1)
 	go func() { waitDone <- cmd.Wait() }()
 	var waitErr error
+	var copyErr error
+	copies := 0
 	exited := false
-	select {
-	case waitErr = <-waitDone:
-		exited = true
-	case <-bounded.Done():
-	}
 	deadlineFired := false
-	if !exited {
-		kill()
-		drain, drainCancel := context.WithTimeout(context.Background(), teardownTimeout)
-		defer drainCancel()
+observe:
+	for !exited || copies != 2 {
 		select {
 		case waitErr = <-waitDone:
 			exited = true
-		case <-drain.Done():
+			waitDone = nil
+		case err := <-copyDone:
+			copies++
+			if err != nil && copyErr == nil {
+				copyErr = err
+			}
+		case <-stdout.limited:
+			break observe
+		case <-bounded.Done():
+			deadlineFired = true
+			break observe
 		}
-		if !exited {
-			return nil, &agentic.ProbeExecutionError{
-				Stage:              stage,
-				ExecAttempted:      true,
-				ChildStarted:       true,
-				Timeout:            bounded.Err() == context.DeadlineExceeded,
-				TeardownIncomplete: true,
-				Detail:             probeDeadlineDetail(bounded, timeout, stdout.Len(), stderr.Len()),
-				Stdout:             stdout.Sample(),
-				Stderr:             stderr.Sample(),
+	}
+	if !exited || copies != 2 {
+		kill()
+		drain, drainCancel := context.WithTimeout(context.Background(), teardownTimeout)
+		defer drainCancel()
+	drainOutputs:
+		for !exited || copies != 2 {
+			select {
+			case waitErr = <-waitDone:
+				exited = true
+				waitDone = nil
+				// Reap the leader before the last group signal: a fork
+				// concurrent with the first signal may have inherited a
+				// pipe. A once-only kill cannot clean up that holder.
+				kill()
+			case err := <-copyDone:
+				copies++
+				if err != nil && copyErr == nil {
+					copyErr = err
+				}
+			case <-drain.Done():
+				break drainOutputs
 			}
 		}
-		deadlineFired = true
 	}
+	incomplete := !exited || copies != 2
+	// Overflow is a captured fact, independent of which ready select arm won.
+	// It remains output-limited even if the deadline also fired or teardown
+	// could not be confirmed; no truncated answer is ever returned as success.
 	if stdout.Over() {
 		return nil, &agentic.ProbeExecutionError{
-			Stage:         stage,
-			ExecAttempted: true,
-			ChildStarted:  true,
-			OutputLimited: true,
-			Detail:        fmt.Sprintf("%s %s answered past the %d byte cap (%d bytes captured)", binary, probeArg, stdoutCap, stdout.Len()),
-			Stdout:        stdout.Sample(),
-			Stderr:        stderr.Sample(),
+			Stage:              stage,
+			ExecAttempted:      true,
+			ChildStarted:       true,
+			OutputLimited:      true,
+			TeardownIncomplete: incomplete,
+			Detail:             fmt.Sprintf("%s %s answered past the %d byte cap (%d bytes captured)", binary, probeArg, stdoutCap, stdout.Len()),
+			Stdout:             stdout.Sample(),
+			Stderr:             stderr.Sample(),
 		}
+	}
+	if incomplete {
+		return nil, &agentic.ProbeExecutionError{
+			Stage:              stage,
+			ExecAttempted:      true,
+			ChildStarted:       true,
+			Timeout:            bounded.Err() == context.DeadlineExceeded,
+			TeardownIncomplete: true,
+			Detail:             probeDeadlineDetail(bounded, timeout, stdout.Len(), stderr.Len()),
+			Stdout:             stdout.Sample(),
+			Stderr:             stderr.Sample(),
+		}
+	}
+	if waitErr == nil {
+		waitErr = copyErr
 	}
 	if waitErr == nil {
 		// The deadline fired but the child had already exited cleanly:
@@ -234,6 +291,12 @@ func runProbe(ctx context.Context, stage, binary string, env []string, probeArg 
 	return stdout.Bytes(), nil
 }
 
+func copyProbeOutput(reader *os.File, writer io.Writer, done chan<- error) {
+	_, err := io.Copy(writer, reader)
+	_ = reader.Close()
+	done <- err
+}
+
 // probeDeadlineDetail renders the one-line deadline fact, distinguishing
 // a fired execution deadline from a caller cancellation: both end the
 // probe, but only the first is the probe's own bound firing.
@@ -245,10 +308,10 @@ func probeDeadlineDetail(bounded context.Context, timeout time.Duration, stdoutL
 }
 
 // cappedBuffer is the during-read capturing writer: bytes past the limit
-// fire onOver once and are refused, so a runaway answer can neither fill
+// close limited once and are refused, so a runaway answer can neither fill
 // memory nor pass as a truncated truth. A discarding buffer instead drops
 // past-limit bytes silently: stderr capture must not kill a probe for a
-// chatty diagnostic. It is safe for the exec copy goroutine and the
+// chatty diagnostic. It is safe for the output copy goroutine and the
 // waiting caller concurrently.
 type cappedBuffer struct {
 	mu      sync.Mutex
@@ -256,19 +319,21 @@ type cappedBuffer struct {
 	limit   int
 	discard bool
 	over    bool
-	onOver  func()
+	limited chan struct{}
 }
 
-func newCappedBuffer(limit int) *cappedBuffer { return &cappedBuffer{limit: limit} }
+func newCappedBuffer(limit int) *cappedBuffer {
+	return &cappedBuffer{limit: limit, limited: make(chan struct{})}
+}
 
 func newDiscardingBuffer(limit int) *cappedBuffer {
 	return &cappedBuffer{limit: limit, discard: true}
 }
 
-// Write appends up to the limit and fires onOver on the first byte past
+// Write appends up to the limit and closes limited on the first byte past
 // it. Past the limit a capturing buffer errors every further byte: the
-// exec copy stops, the child sees a broken pipe on its next write, and
-// the fired kill ends it. A discarding buffer reports past-limit bytes
+// output copy stops, the child sees a broken pipe on its next write, and
+// the supervisor kills its group. A discarding buffer reports past-limit bytes
 // written and keeps nothing.
 func (b *cappedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
@@ -286,8 +351,8 @@ func (b *cappedBuffer) Write(p []byte) (int, error) {
 	if len(p) > room {
 		b.buf.Write(p[:room])
 		b.over = true
-		if b.onOver != nil {
-			b.onOver()
+		if b.limited != nil {
+			close(b.limited)
 		}
 		if b.discard {
 			return len(p), nil

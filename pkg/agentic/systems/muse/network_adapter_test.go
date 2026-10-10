@@ -11,6 +11,7 @@ import (
 
 	"github.com/relux-works/curator-network-profiles/pkg/binding"
 	"github.com/relux-works/curator-network-profiles/pkg/envpatch"
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -563,7 +564,7 @@ func TestPanelDuplicatePathResolution(t *testing.T) {
 			req := museNetworkRequest(t, build)
 			first := envValue(req.Env, "PATH")
 			last := t.TempDir()
-			if err := os.WriteFile(filepath.Join(last, "muse"), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+			if err := execfixture.WriteFile(filepath.Join(last, "muse"), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			req.Env = append(req.Env, "PATH="+last)
@@ -628,7 +629,7 @@ func TestMuseResolveBinaryUsesEffectivePATH(t *testing.T) {
 	req := launchRequest(t, "effective PATH")
 	last := t.TempDir()
 	want := filepath.Join(last, "muse")
-	if err := os.WriteFile(want, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+	if err := execfixture.WriteFile(want, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	req.Env = append(req.Env, "PATH="+last)

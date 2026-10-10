@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pi"
 	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
@@ -116,7 +117,7 @@ func isolatedLocalQwenRegistryWithAdapters(t *testing.T, reader localruntime.Sta
 func fakePiOnPath(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "pi"), []byte("#!/bin/sh\n: > \"$0.started\"\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(filepath.Join(dir, "pi"), []byte("#!/bin/sh\n: > \"$0.started\"\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("writing fake pi: %v", err)
 	}
 	return dir

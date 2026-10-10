@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	_ "github.com/relux-works/skill-agents-management/pkg/agentic/systems/codex"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
@@ -23,7 +24,7 @@ func spawnTempDirPtr(value string) *string { return &value }
 func codexTempDirRequest(t *testing.T, tempDir *string) (vendorplugin.SpawnRequest, string) {
 	t.Helper()
 	workDir, binDir := t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	if err := execfixture.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write Codex stub: %v", err)
 	}
 	return vendorplugin.SpawnRequest{

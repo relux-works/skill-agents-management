@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -144,7 +145,7 @@ func prepareModelCheckDescendantFixture(t *testing.T, name, script string) model
 	t.Helper()
 	directory := t.TempDir()
 	scriptPath := filepath.Join(directory, name)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write proof script %s: %v", name, err)
 	}
 	readyDir := filepath.Join(directory, "ready")

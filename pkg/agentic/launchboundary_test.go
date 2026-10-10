@@ -11,6 +11,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/mcpjson"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
@@ -350,7 +351,7 @@ func lbHTTPNoTokenServer() agentic.CompositionServer {
 
 func writeLBFile(t *testing.T, path string, data []byte, mode os.FileMode) {
 	t.Helper()
-	if err := os.WriteFile(path, data, mode); err != nil {
+	if err := execfixture.WriteFile(path, data, mode); err != nil {
 		t.Fatal(err)
 	}
 }

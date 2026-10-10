@@ -20,6 +20,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 )
 
 func TestParseLinuxProcStatStartTicksUsesFieldAfterCommand(t *testing.T) {
@@ -269,7 +271,7 @@ func TestProcessStartTimeDoesNotExecutePSOnKernelSuccess(t *testing.T) {
 	marker := filepath.Join(dir, "ps-was-run")
 	psPath := filepath.Join(dir, "ps")
 	script := []byte("#!/bin/sh\nprintf invoked > \"$PROCESS_START_TIME_PS_MARKER\"\nexit 91\n")
-	if err := os.WriteFile(psPath, script, 0o755); err != nil {
+	if err := execfixture.WriteFile(psPath, script, 0o755); err != nil {
 		t.Fatalf("write ps sentinel: %v", err)
 	}
 	t.Setenv("PATH", dir)

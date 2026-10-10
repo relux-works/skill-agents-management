@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
@@ -29,7 +30,7 @@ var curatorVendorCases = []curatorVendorCase{
 func vendorCuratorRequest(t *testing.T, tc curatorVendorCase) vendorplugin.SpawnRequest {
 	t.Helper()
 	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, string(tc.runtime)), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+	if err := execfixture.WriteFile(filepath.Join(bin, string(tc.runtime)), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
@@ -377,7 +378,7 @@ func TestBuildLaunchWithEnvironmentNilContextPlanEquality(t *testing.T) {
 func testVendorNilContextPlanEquality(t *testing.T, build vendorContextBuilder) {
 	bin := t.TempDir()
 	for _, name := range []string{"codex", "claude", "qwen", "gemini", "muse", "pi"} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		if err := execfixture.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}

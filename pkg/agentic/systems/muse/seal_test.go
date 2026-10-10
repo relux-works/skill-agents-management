@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/paritycase"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
@@ -135,7 +136,7 @@ func TestMuseInteractiveSealRefusesBinarySwap(t *testing.T) {
 	})
 	t.Run("bytes-swapped", func(t *testing.T) {
 		plan := buildMuseSealedPlan(t, museSealedInteractiveRequest(t))
-		if err := os.WriteFile(plan.Binary, []byte(museSealWitnessStub), 0o755); err != nil {
+		if err := execfixture.WriteFile(plan.Binary, []byte(museSealWitnessStub), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		requireMuseSealRefusal(t, plan.VerifyBeforeExec(), ErrMuseSealBinaryChanged, "swapped binary bytes")
@@ -199,7 +200,7 @@ func writeMuseSidecarStub(t *testing.T, dir, answer string) (binary, sidecar str
 	}
 	binary = filepath.Join(dir, executableName)
 	script := "#!/bin/sh\n[ \"$#\" -eq 1 ] && [ \"$1\" = '--version' ] || exit 8\ncat \"" + sidecar + "\"\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return binary, sidecar
@@ -665,7 +666,7 @@ func TestMuseImportSealedDataRefusesMalformedShapes(t *testing.T) {
 	})
 	t.Run("swapped-bytes", func(t *testing.T) {
 		data := *seal.Data.Sealed
-		if err := os.WriteFile(plan.Binary, []byte(museSealWitnessStub), 0o755); err != nil {
+		if err := execfixture.WriteFile(plan.Binary, []byte(museSealWitnessStub), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := New().ImportSealedData(data); !errors.Is(err, ErrMuseSealBinaryChanged) {
@@ -720,7 +721,7 @@ func TestMuseSealSurvivesFinalizePlan(t *testing.T) {
 	requireMuseSealRefusal(t, changed.VerifyBeforeExec(), agentic.ErrFinalizedProcessChanged, "changed finalized argv")
 
 	swapped := plan
-	if err := os.WriteFile(swapped.Binary, []byte(museSealWitnessStub), 0o755); err != nil {
+	if err := execfixture.WriteFile(swapped.Binary, []byte(museSealWitnessStub), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	requireMuseSealRefusal(t, final.VerifyBeforeExec(), ErrMuseSealBinaryChanged, "swapped binary after finalization")

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/quotatest"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/agy"
@@ -65,7 +66,7 @@ func TestBuildPlanAllSystemsNeverCallsReader(t *testing.T) {
 	_, env := quotatest.BinaryEnv(t, "unused")
 	for _, name := range []string{"codex", "claude", "muse", "gemini", "qwen", "pi"} {
 		path := root + string(os.PathSeparator) + name
-		if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 99\n"), 0o700); err != nil {
+		if err := execfixture.WriteFile(path, []byte("#!/bin/sh\nexit 99\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}

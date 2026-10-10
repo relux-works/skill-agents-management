@@ -78,6 +78,15 @@ func TestMuseSealMutantCensus(t *testing.T) {
 // copy of the module and its named test must fail there with the mutant's
 // targeted assertion. A mutant whose inner test passes fails this census.
 func TestMuseSealMutantKillsExecute(t *testing.T) {
+	runNamedMutantKills(t, museSealMutants())
+}
+
+func TestProbeLifetimeMutantKillsExecute(t *testing.T) {
+	runNamedMutantKills(t, toolprobeMutants())
+}
+
+func runNamedMutantKills(t *testing.T, candidates []mutant) {
+	t.Helper()
 	workingDirectory, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("get test package directory: %v", err)
@@ -91,7 +100,7 @@ func TestMuseSealMutantKillsExecute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("locate worktree git index: %v", err)
 	}
-	for _, candidate := range museSealMutants() {
+	for _, candidate := range candidates {
 		t.Run(candidate.name, func(t *testing.T) {
 			isolated := t.TempDir()
 			if err := copyTree(moduleRoot, isolated); err != nil {

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 )
 
 // rootAddFixture reproduces both panels' root-history case: name order is
@@ -197,7 +199,7 @@ func gitReadShim(t *testing.T, failAt int, failCommand string) ([]string, string
 		" hash-object) printf '0000000000000000000000000000000000000000\\n';;\n" +
 		" cat-file) printf '%s\\n' \"- Plausible blob.\";;\n log) printf 'COMMIT partial\\nchangelog.d/zzz.md\\nCOMMIT partial2\\nchangelog.d/aaa.md\\n';;\n esac\n echo \"injected git $command read failure\" >&2\n exit 128\nfi\nexec " + shellQuote(git) + " \"$@\"\n"
 	path := filepath.Join(bin, "git")
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, trace
@@ -292,7 +294,7 @@ func TestReleaseRefusesUnknownAddHistory(t *testing.T) {
 	body := readFile(t, shim)
 	body = strings.Replace(body, "printf 'COMMIT partial\\nchangelog.d/zzz.md\\nCOMMIT partial2\\nchangelog.d/aaa.md\\n';;", ":;;", 1)
 	body = strings.Replace(body, "exit 128", "exit 0", 1)
-	if err := os.WriteFile(shim, []byte(body), 0o755); err != nil {
+	if err := execfixture.WriteFile(shim, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	_, stderr, exit := runScriptEnv(t, dir, env, "v1.0.0", "2026-10-02")

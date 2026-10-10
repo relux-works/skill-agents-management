@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/quotatest"
 	"github.com/relux-works/skill-agents-management/pkg/providerquota"
 )
@@ -278,7 +279,7 @@ func TestRound3RelativeManagedPlanSurvivesScratchCwd(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(checked), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(checked, []byte("inert fixture"), 0700); err != nil {
+	if err := execfixture.WriteFile(checked, []byte("inert fixture"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	plan, err := New().QuotaPlan(providerquota.Request{Env: []string{"HOME=" + t.TempDir(), "PATH=bin", managedPackageRootEnv + "=package"}})

@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 )
 
 type replacement struct {
@@ -486,7 +488,7 @@ func copyTree(source, destination string) error {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(filepath.Join(destination, relative), body, info.Mode().Perm())
+		return execfixture.WriteFile(filepath.Join(destination, relative), body, info.Mode().Perm())
 	})
 }
 

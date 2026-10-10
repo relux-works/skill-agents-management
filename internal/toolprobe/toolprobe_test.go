@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 )
 
 // The release-triple grammar, pinned both ways: exact triples admit,
@@ -29,7 +31,7 @@ func TestIsReleaseTripleAdmitsExactTriplesOnly(t *testing.T) {
 func writeStub(t *testing.T, dir, name, body string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatalf("writing the stub %s: %v", name, err)
 	}
 	return path
@@ -109,18 +111,23 @@ func TestVersionOutputRefusesWhatItCannotUse(t *testing.T) {
 	})
 	t.Run("an answer past the byte cap", func(t *testing.T) {
 		t.Parallel()
-		bin := writeStub(t, dir, "chatty", "#!/bin/sh\nhead -c 100000 /dev/zero | tr '\\0' '7'\n")
+		bin := writeStub(t, dir, "chatty", "#!/bin/sh\nprintf '%100000s' ''\n")
 		if _, err := VersionOutput(context.Background(), bin, []string{"PATH=" + dir}); err == nil {
 			t.Error("a 100KB answer was admitted")
 		}
 	})
 	t.Run("a fired context", func(t *testing.T) {
 		t.Parallel()
-		bin := writeStub(t, dir, "sleeper", "#!/bin/sh\nsleep 30\n")
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		gate := execfixture.NewGate(t)
+		bin := writeStub(t, dir, "sleeper", "#!/bin/sh\n"+gate.Command()+"\n")
+		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		start := time.Now()
-		if _, err := VersionOutput(ctx, bin, []string{"PATH=" + dir}); err == nil {
+		result := make(chan error, 1)
+		go func() { _, err := VersionOutput(ctx, bin, []string{"PATH=" + dir}); result <- err }()
+		gate.Wait(t)
+		cancel()
+		if err := <-result; err == nil {
 			t.Error("a hung subprocess was admitted")
 		}
 		if elapsed := time.Since(start); elapsed > 20*time.Second {

@@ -2,11 +2,11 @@ package regress
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/paritycase"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/claude"
@@ -193,7 +193,7 @@ func writeVersionStubExecutable(t *testing.T, dir, name, version, help string) s
 			"fi\n"
 	}
 	script += "cat >/dev/null\nexit 0\n"
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the version stub %s: %v", name, err)
 	}
 	return path

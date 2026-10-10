@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -31,7 +32,7 @@ func writeMuseMutableHelpStub(t *testing.T, dir, answer, help string) (string, s
 		"exit 0\n" +
 		"fi\n" +
 		"exit 8\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the mutable stub: %v", err)
 	}
 	// The stub needs cat; the seal under test binds XDG_*/pin only, so
@@ -66,7 +67,7 @@ func writeMuseHelpCounterStub(t *testing.T, dir, answer, firstHelp, laterBody st
 		"exit 0\n" +
 		"fi\n" +
 		"exit 8\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the counter stub: %v", err)
 	}
 	// The stub needs cat; the seal under test binds XDG_*/pin only, so
@@ -370,7 +371,7 @@ func TestSealNeverExecsUnfrozenOnOverridePath(t *testing.T) {
 		"exit 0\n" +
 		"fi\n" +
 		"exit 8\n"
-	if err := os.WriteFile(pathStub, []byte(pathScript), 0o755); err != nil {
+	if err := execfixture.WriteFile(pathStub, []byte(pathScript), 0o755); err != nil {
 		t.Fatalf("writing the PATH stub: %v", err)
 	}
 	req := launchRequest(t, "")
@@ -414,7 +415,8 @@ func TestSealReprobeTimeoutSurfacesAttemptError(t *testing.T) {
 	t.Parallel()
 	t.Run("timeout", func(t *testing.T) {
 		t.Parallel()
-		_, env := writeMuseVersionStub(t, "sleep 60\n")
+		gate := execfixture.NewGate(t)
+		_, env := writeMuseVersionStub(t, gate.Command()+"\n")
 		env[0] += ":/bin:/usr/bin"
 		_, err := tryBuildMusePlan(t, New(), agentic.LaunchRequest{
 			System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
@@ -534,7 +536,7 @@ func writeMuseProbeOrderStub(t *testing.T, dir, answer, help string) (string, []
 		"exit 0\n" +
 		"fi\n" +
 		"exit 8\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+	if err := execfixture.WriteFile(binary, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing the order stub: %v", err)
 	}
 	return order, []string{"PATH=" + dir + ":/bin:/usr/bin"}

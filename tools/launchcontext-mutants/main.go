@@ -22,6 +22,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/internal/refusalscan"
 )
 
@@ -651,7 +652,7 @@ func copyTree(source, destination string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return err
 		}
-		return os.WriteFile(target, body, info.Mode().Perm())
+		return execfixture.WriteFile(target, body, info.Mode().Perm())
 	})
 }
 
@@ -5153,6 +5154,7 @@ func narrowingMutants() []mutant {
 		}
 	}
 	base = append(base, sealMutants()...)
+	base = append(base, toolprobeMutants()...)
 	return append(append(append(append(append(append(append(base, gateMutants...), claudeToolPolicyMutants()...), museNetworkMutants()...), museSealMutants()...), codexTempDirMutants()...), claudePlanSessionMutants()...), managedSessionMutants()...)
 }
 
