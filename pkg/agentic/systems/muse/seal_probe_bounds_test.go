@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
@@ -72,14 +73,10 @@ func requireProbeAttempt(t *testing.T, err error, stage string, timeout, limited
 // holder into teardown-incomplete instead of a result.
 func TestSealVersionProbeBoundsPipeDrain(t *testing.T) {
 	t.Parallel()
-	sealWithHolder := func(t *testing.T, release bool) {
+	sealWithHolder := func(t *testing.T, versionBody string) time.Duration {
 		t.Helper()
-		holder := ":" // A short holder closes its pipe on process exit.
-		if !release {
-			holder = execfixture.NewGate(t).Command()
-		}
-		env := writeMuseVersionShellStub(t,
-			"("+holder+") &\nprintf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\nexit 0")
+		env := writeMuseVersionShellStub(t, versionBody)
+		start := time.Now()
 		plan := buildMuseInteractivePlan(t, New(), agentic.LaunchRequest{
 			System: systemID, Model: agentic.Model{ID: "echo"}, Env: env,
 			PermissionMode: agentic.PermissionModeNative,
@@ -95,14 +92,21 @@ func TestSealVersionProbeBoundsPipeDrain(t *testing.T) {
 		if err := plan.VerifyBeforeExec(); err != nil {
 			t.Fatalf("VerifyBeforeExec after drained probe: %v", err)
 		}
+		return time.Since(start)
 	}
 	t.Run("short-holder", func(t *testing.T) {
 		t.Parallel()
-		sealWithHolder(t, true)
+		// The brief holder drains through EOF, not through the
+		// execution deadline: past the version probe's 10s bound this
+		// is the long-holder path wearing a short holder's name.
+		if elapsed := sealWithHolder(t, shortPipeHolderVersionBody(t)); elapsed >= 10*time.Second {
+			t.Fatalf("short holder drained in %v, want before the execution deadline", elapsed)
+		}
 	})
 	t.Run("long-holder", func(t *testing.T) {
 		t.Parallel()
-		sealWithHolder(t, false)
+		sealWithHolder(t,
+			"("+execfixture.NewGate(t).Command()+") &\nprintf '%s\\n' 'Muse Code 1.4.1 (1.4.1-R4503.1)'\nexit 0")
 	})
 }
 

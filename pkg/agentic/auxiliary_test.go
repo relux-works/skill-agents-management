@@ -65,7 +65,19 @@ func TestAuxBinarySwappedBeforePrimaryRefuses(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := execfixture.WriteFile(primary.Binary, []byte("changed"), 0700); err != nil {
+	// Rewrite the primary IN PLACE (same inode, new bytes): this test owns the
+	// same-file swap, and TestAuxBinaryReplacementWithIdenticalBytesRefuses owns
+	// the replacement by rename. The binary is not executed after the rewrite, so
+	// the in-place write cannot race an exec.
+	swapped, err := os.OpenFile(primary.Binary, os.O_WRONLY|os.O_TRUNC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := swapped.Write([]byte("changed")); err != nil {
+		swapped.Close()
+		t.Fatal(err)
+	}
+	if err := swapped.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if err := VerifyPrimaryAfterAux(primary, plans, results); !errors.Is(err, ErrAuxRefused) {

@@ -191,7 +191,15 @@ observe:
 			break observe
 		}
 	}
-	if !exited || copies != 2 {
+	// A captured overflow always terminates the probe group, even when the
+	// leader's exit and both pipe completions won the select race against
+	// the cap signal: the closed limited channel is only a wakeup, and the
+	// loop above may have consumed every completion event first. Without
+	// this a same-group descendant holding neither output pipe would
+	// survive while the probe reports output-limited with teardown
+	// confirmed. The bounded drain below still confirms the teardown;
+	// when nothing is pending it holds vacuously.
+	if !exited || copies != 2 || stdout.Over() {
 		kill()
 		drain, drainCancel := context.WithTimeout(context.Background(), teardownTimeout)
 		defer drainCancel()
@@ -219,6 +227,8 @@ observe:
 	// Overflow is a captured fact, independent of which ready select arm won.
 	// It remains output-limited even if the deadline also fired or teardown
 	// could not be confirmed; no truncated answer is ever returned as success.
+	// The group termination above ran for this overflow on every path, so a
+	// confirmed teardown here means the group was signalled, not skipped.
 	if stdout.Over() {
 		return nil, &agentic.ProbeExecutionError{
 			Stage:              stage,

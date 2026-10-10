@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/relux-works/skill-agents-management/internal/execfixture"
@@ -202,7 +203,8 @@ func TestMuseProbeFailuresRemainUndetected(t *testing.T) {
 	})
 	t.Run("fired_deadline", func(t *testing.T) {
 		gate := execfixture.NewGate(t)
-		_, env := writeMuseVersionStub(t, gate.Command()+"\n")
+		_, env := writeMuseVersionStub(t,
+			"printf '%s\\n' 'Muse Code 1.4.2 (1.4.2-R4684.1)'\n"+gate.Command()+"\n")
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		type result struct {
@@ -220,6 +222,9 @@ func TestMuseProbeFailuresRemainUndetected(t *testing.T) {
 		var attempt *agentic.ProbeExecutionError
 		if got.release != "" || !errors.Is(got.err, agentic.ErrToolReleaseUndetected) || !errors.As(got.err, &attempt) || !attempt.Timeout || !attempt.ChildStarted {
 			t.Fatalf("ready child with fired deadline = (%q, %v), want started timeout and ErrToolReleaseUndetected", got.release, got.err)
+		}
+		if !strings.Contains(string(attempt.Stdout), "Muse Code 1.4.2 (1.4.2-R4684.1)") {
+			t.Fatalf("deadline attempt sample = %q, want the valid answer the child printed before blocking", attempt.Stdout)
 		}
 	})
 }
