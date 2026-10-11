@@ -116,51 +116,41 @@ type CuratorPermissions struct {
 // boundary: exactly the members mode, locked and source, each present with
 // its required JSON type. Presence and type cannot be recovered after a
 // plain struct decode collapses an absent locked to false and drops unknown
-// members, so this method runs before the typed projection. The value
-// vocabularies and the lock-consistency relation stay with
-// ValidateCuratorContext, which owns the typed layer.
+// members, so this method decodes through a member map first. It refuses
+// non-object wire, unknown members, absent members, explicit nulls and
+// mistyped members with the malformed typed refusal, returned directly at
+// each site; the value vocabularies and the lock-consistency relation stay
+// with ValidateCuratorContext, which owns the typed layer.
 func (p *CuratorPermissions) UnmarshalJSON(wire []byte) error {
-	decoded, err := decodeCuratorPermissions(wire)
-	if err == nil {
-		*p = decoded
-	}
-	return err
-}
-
-// decodeCuratorPermissions is the plain-function decode core behind
-// CuratorPermissions.UnmarshalJSON. It refuses non-object wire, unknown
-// members, absent members, explicit nulls and mistyped members with the
-// malformed typed refusal; every admitted value still passes through
-// ValidateCuratorContext for vocabulary and consistency checks.
-func decodeCuratorPermissions(wire []byte) (CuratorPermissions, error) {
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(wire, &members); err != nil {
-		return CuratorPermissions{}, fmt.Errorf("%w: permissions must be a JSON object", ErrCuratorContextMalformed)
+		return fmt.Errorf("%w: permissions must be a JSON object", ErrCuratorContextMalformed)
 	}
 	for name := range members {
 		if name != "mode" && name != "locked" && name != "source" {
-			return CuratorPermissions{}, fmt.Errorf("%w: permissions carries an unknown member %q", ErrCuratorContextMalformed, name)
+			return fmt.Errorf("%w: permissions carries an unknown member %q", ErrCuratorContextMalformed, name)
 		}
 	}
 	modeRaw, modePresent := members["mode"]
 	var mode CuratorPermissionMode
 	modeTypeErr := json.Unmarshal(modeRaw, &mode)
 	if !modePresent || string(modeRaw) == "null" || modeTypeErr != nil {
-		return CuratorPermissions{}, fmt.Errorf("%w: permissions mode is required and must be a string", ErrCuratorContextMalformed)
+		return fmt.Errorf("%w: permissions mode is required and must be a string", ErrCuratorContextMalformed)
 	}
 	lockedRaw, lockedPresent := members["locked"]
 	var locked bool
 	lockedTypeErr := json.Unmarshal(lockedRaw, &locked)
 	if !lockedPresent || string(lockedRaw) == "null" || lockedTypeErr != nil {
-		return CuratorPermissions{}, fmt.Errorf("%w: permissions locked is required and must be a boolean", ErrCuratorContextMalformed)
+		return fmt.Errorf("%w: permissions locked is required and must be a boolean", ErrCuratorContextMalformed)
 	}
 	sourceRaw, sourcePresent := members["source"]
 	var source CuratorPermissionSource
 	sourceTypeErr := json.Unmarshal(sourceRaw, &source)
 	if !sourcePresent || string(sourceRaw) == "null" || sourceTypeErr != nil {
-		return CuratorPermissions{}, fmt.Errorf("%w: permissions source is required and must be a string", ErrCuratorContextMalformed)
+		return fmt.Errorf("%w: permissions source is required and must be a string", ErrCuratorContextMalformed)
 	}
-	return CuratorPermissions{Mode: mode, Locked: locked, Source: source}, nil
+	*p = CuratorPermissions{Mode: mode, Locked: locked, Source: source}
+	return nil
 }
 
 // CuratorContext is the typed projection of launch-env-fragment-v1 and

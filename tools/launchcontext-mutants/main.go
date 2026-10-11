@@ -1608,11 +1608,37 @@ func curatorSiteTarget(fset *token.FileSet, file *ast.File, site refusalscan.Sit
 
 func findFunctionAndBody(file *ast.File, name string) *ast.FuncDecl {
 	for _, declaration := range file.Decls {
-		if function, ok := declaration.(*ast.FuncDecl); ok && function.Name.Name == name {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		if function.Name.Name == name {
+			return function
+		}
+		if function.Recv != nil && methodQualifiedName(function) == name {
 			return function
 		}
 	}
 	return nil
+}
+
+// methodQualifiedName mirrors refusalscan's declaredFunctionName: the receiver
+// type name plus the method name, so validator derivation resolves method
+// refusal sites (e.g. CuratorPermissions.UnmarshalJSON). Pointer receivers
+// dereference; a non-identifier receiver never matches a qualified query.
+func methodQualifiedName(function *ast.FuncDecl) string {
+	if function.Recv == nil || len(function.Recv.List) == 0 {
+		return function.Name.Name
+	}
+	receiver := function.Recv.List[0].Type
+	if pointer, ok := receiver.(*ast.StarExpr); ok {
+		receiver = pointer.X
+	}
+	identifier, ok := receiver.(*ast.Ident)
+	if !ok {
+		return function.Name.Name
+	}
+	return identifier.Name + "." + function.Name.Name
 }
 
 type conditionMember struct {
@@ -4578,14 +4604,7 @@ func applyASTNarrowingAtSite(path, functionName, guard string, line int, returne
 	if err != nil {
 		return err
 	}
-	var function *ast.FuncDecl
-	for _, declaration := range parsed.Decls {
-		candidate, ok := declaration.(*ast.FuncDecl)
-		if ok && candidate.Name.Name == functionName {
-			function = candidate
-			break
-		}
-	}
+	function := findFunctionAndBody(parsed, functionName)
 	if function == nil || function.Body == nil {
 		return fmt.Errorf("function %s not found", functionName)
 	}

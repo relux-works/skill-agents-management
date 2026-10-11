@@ -859,10 +859,10 @@ func TestBuildPlanCuratorContextRefusesInvalidV2PermissionsWire(t *testing.T) {
 		{name: "null-source", wire: `{"mode":"native","locked":false,"source":null}`, wantMessage: sourceMessage},
 		{name: "source-wrong-type", wire: `{"mode":"native","locked":false,"source":42}`, wantMessage: sourceMessage},
 	}
-	// syntaxCases never reach decodeCuratorPermissions: encoding/json rejects
-	// the malformed syntax before invoking CuratorPermissions.UnmarshalJSON,
-	// so these assert *json.SyntaxError (and explicitly not the typed
-	// refusal), not ErrCuratorContextMalformed.
+	// syntaxCases never reach the permissions shape checks: encoding/json
+	// rejects the malformed syntax before invoking
+	// CuratorPermissions.UnmarshalJSON, so these assert *json.SyntaxError
+	// (and explicitly not the typed refusal), not ErrCuratorContextMalformed.
 	syntaxCases := []struct {
 		name string
 		wire string
