@@ -11,6 +11,7 @@ func cloneCuratorContext(source *agentic.CuratorContext) *agentic.CuratorContext
 	out := *source
 	out.Env = cloneContextMap(source.Env)
 	out.MCP = cloneCuratorMCP(source.MCP)
+	out.Permissions = cloneCuratorPermissions(source.Permissions)
 	if source.SystemPrompt != nil {
 		prompt := *source.SystemPrompt
 		prompt.Channels = cloneCuratorChannels(prompt.Channels)
@@ -20,6 +21,7 @@ func cloneCuratorContext(source *agentic.CuratorContext) *agentic.CuratorContext
 		provenance := *source.ExpectedProvenance
 		provenance.Fragment.Env = cloneContextMap(provenance.Fragment.Env)
 		provenance.Fragment.MCP = cloneCuratorMCP(provenance.Fragment.MCP)
+		provenance.Fragment.Permissions = cloneCuratorPermissions(provenance.Fragment.Permissions)
 		if provenance.Fragment.SystemPrompt != nil {
 			prompt := *provenance.Fragment.SystemPrompt
 			prompt.Channels = cloneCuratorChannels(prompt.Channels)
@@ -27,6 +29,14 @@ func cloneCuratorContext(source *agentic.CuratorContext) *agentic.CuratorContext
 		}
 		out.ExpectedProvenance = &provenance
 	}
+	return &out
+}
+
+func cloneCuratorPermissions(source *agentic.CuratorPermissions) *agentic.CuratorPermissions {
+	if source == nil {
+		return nil
+	}
+	out := *source
 	return &out
 }
 

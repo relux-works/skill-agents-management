@@ -643,7 +643,7 @@ func TestBuildPlanCuratorContextRefusesMissingProfile(t *testing.T) {
 func TestBuildPlanCuratorContextRefusesUnknownFragmentRevision(t *testing.T) {
 	for _, plugin := range curatorPlugins {
 		t.Run(plugin.name, func(t *testing.T) {
-			for _, revision := range []string{"launch-env-fragment-v9", agentic.CuratorLaunchFragmentV2, "CuratorLaunchFragmentV1__unmapped__"} {
+			for _, revision := range []string{"launch-env-fragment-v9", agentic.CuratorLaunchFragmentV3, "CuratorLaunchFragmentV1__unmapped__", "CuratorLaunchFragmentV2__unmapped__"} {
 				t.Run(strings.ReplaceAll(revision, "/", "_"), func(t *testing.T) {
 					context := validCuratorContext(plugin)
 					context.Revision = revision
@@ -657,18 +657,296 @@ func TestBuildPlanCuratorContextRefusesUnknownFragmentRevision(t *testing.T) {
 	}
 }
 
-func TestBuildPlanCuratorContextRefusesPermissionFragmentV2(t *testing.T) {
+func TestBuildPlanCuratorContextRefusesPermissionFragmentV3(t *testing.T) {
 	for _, plugin := range curatorPlugins {
 		t.Run(plugin.name, func(t *testing.T) {
 			context := validCuratorContext(plugin)
-			context.Revision = agentic.CuratorLaunchFragmentV2
+			context.Revision = agentic.CuratorLaunchFragmentV3
+			context.Permissions = validAcceptanceCuratorPermissions()
 			_, err := buildCuratorPlan(t, plugin, context)
 			if !errors.Is(err, agentic.ErrCuratorFragmentRevisionUnsupported) {
-				t.Fatalf("BuildPlan err = %v, want v2 refusal until a typed permission mapping exists", err)
+				t.Fatalf("BuildPlan err = %v, want ErrCuratorFragmentRevisionUnsupported for v3", err)
 			}
 		})
 	}
 }
+
+func TestBuildPlanCuratorContextAcceptsFragmentV1(t *testing.T) {
+	for _, plugin := range curatorPlugins {
+		t.Run(plugin.name, func(t *testing.T) {
+			context := validCuratorContext(plugin)
+			plan, err := buildCuratorPlan(t, plugin, context)
+			if err != nil {
+				t.Fatalf("BuildPlan: %v", err)
+			}
+			provenance, ok := plan.CuratorContextProvenanceSnapshot()
+			if !ok {
+				t.Fatal("plan has no Curator provenance")
+			}
+			if provenance.Fragment.Revision != agentic.CuratorLaunchFragmentV1 || provenance.Fragment.Permissions != nil {
+				t.Fatalf("v1 provenance carries unexpected permissions: %#v", provenance.Fragment)
+			}
+			encoded, err := json.Marshal(provenance.Fragment)
+			if err != nil {
+				t.Fatalf("marshal v1 fragment identity: %v", err)
+			}
+			if strings.Contains(string(encoded), "permissions") {
+				t.Fatalf("v1 fragment identity JSON carries a permissions member: %s", encoded)
+			}
+		})
+	}
+}
+
+func TestBuildPlanCuratorContextAcceptsFragmentV2(t *testing.T) {
+	triples := []struct {
+		name        string
+		conformance string
+		permissions agentic.CuratorPermissions
+	}{
+		{name: "native-profile", conformance: "valid.json", permissions: agentic.CuratorPermissions{Mode: agentic.CuratorPermissionNative, Locked: false, Source: agentic.CuratorPermissionSourceProfile}},
+		{name: "native-locked", conformance: "valid-permissions-native-locked.json", permissions: agentic.CuratorPermissions{Mode: agentic.CuratorPermissionNative, Locked: true, Source: agentic.CuratorPermissionSourceGlobal}},
+		{name: "native-silent", conformance: "valid-permissions-native-silent.json", permissions: agentic.CuratorPermissions{Mode: agentic.CuratorPermissionNative, Locked: false, Source: agentic.CuratorPermissionSourceDefault}},
+		{name: "yolo-unlocked", conformance: "valid-permissions-yolo-unlocked.json", permissions: agentic.CuratorPermissions{Mode: agentic.CuratorPermissionYolo, Locked: false, Source: agentic.CuratorPermissionSourceProfile}},
+	}
+	for _, plugin := range curatorPlugins {
+		t.Run(plugin.name, func(t *testing.T) {
+			for _, triple := range triples {
+				triple := triple
+				t.Run(triple.name, func(t *testing.T) {
+					context := validCuratorContext(plugin)
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					permissions := triple.permissions
+					context.Permissions = &permissions
+					if triple.name == "native-profile" {
+						intent := agentic.CuratorSystemPromptAppend
+						if plugin.system == "codex" {
+							intent = agentic.CuratorSystemPromptReplace
+						}
+						context.MCP = validAcceptanceCuratorMCP(plugin)
+						context.SystemPrompt = validAcceptanceCuratorSystemPrompt(plugin, intent)
+					}
+					plan, err := buildCuratorPlan(t, plugin, context)
+					if err != nil {
+						t.Fatalf("BuildPlan: %v", err)
+					}
+					first, ok := plan.CuratorContextProvenanceSnapshot()
+					if !ok {
+						t.Fatal("plan has no Curator provenance")
+					}
+					if first.Fragment.Revision != agentic.CuratorLaunchFragmentV2 {
+						t.Fatalf("v2 provenance revision = %q, want v2", first.Fragment.Revision)
+					}
+					if first.Fragment.Permissions == nil || !reflect.DeepEqual(*first.Fragment.Permissions, triple.permissions) {
+						t.Fatalf("v2 provenance does not carry the validated permissions: %#v", first.Fragment.Permissions)
+					}
+					context.Permissions.Locked = !context.Permissions.Locked
+					first.Fragment.Permissions.Mode = agentic.CuratorPermissionMode("mutated")
+					second, ok := plan.CuratorContextProvenanceSnapshot()
+					if !ok || second.Fragment.Permissions == nil || !reflect.DeepEqual(*second.Fragment.Permissions, triple.permissions) {
+						t.Fatalf("v2 provenance changed after request or returned-copy mutation: %#v", second.Fragment.Permissions)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestBuildPlanCuratorContextRefusesInvalidV2Permissions(t *testing.T) {
+	native := agentic.CuratorPermissionNative
+	yolo := agentic.CuratorPermissionYolo
+	profile := agentic.CuratorPermissionSourceProfile
+	global := agentic.CuratorPermissionSourceGlobal
+	deflt := agentic.CuratorPermissionSourceDefault
+	permissions := func(mode agentic.CuratorPermissionMode, locked bool, source agentic.CuratorPermissionSource) *agentic.CuratorPermissions {
+		return &agentic.CuratorPermissions{Mode: mode, Locked: locked, Source: source}
+	}
+	cases := []struct {
+		name        string
+		conformance string
+		v1          bool
+		permissions *agentic.CuratorPermissions
+		wantMessage string
+	}{
+		{name: "absent", conformance: "invalid-permissions-absent.json", wantMessage: "agentic: malformed typed Curator context: v2 fragments require the permissions member"},
+		{name: "missing-mode", conformance: "invalid-permissions-missing-mode.json", permissions: permissions("", false, profile), wantMessage: "agentic: malformed typed Curator context: permissions mode must be native or yolo"},
+		{name: "unknown-mode", conformance: "invalid-permissions-unknown-mode.json", permissions: permissions("auto", false, profile), wantMessage: "agentic: malformed typed Curator context: permissions mode must be native or yolo"},
+		{name: "unknown-source", conformance: "invalid-permissions-unknown-source.json", permissions: permissions(native, false, "flag"), wantMessage: "agentic: malformed typed Curator context: permissions source must be profile, global, or default"},
+		{name: "global-unlocked", conformance: "invalid-permissions-global-unlocked.json", permissions: permissions(native, false, global), wantMessage: "agentic: malformed typed Curator context: permissions locked must be true exactly for the global source"},
+		{name: "locked-profile-source", conformance: "invalid-permissions-locked-profile-source.json", permissions: permissions(native, true, profile), wantMessage: "agentic: malformed typed Curator context: permissions locked must be true exactly for the global source"},
+		{name: "yolo-locked", conformance: "invalid-permissions-yolo-locked.json", permissions: permissions(yolo, true, global), wantMessage: "agentic: malformed typed Curator context: permissions yolo requires an unlocked profile source"},
+		{name: "yolo-silent", conformance: "invalid-permissions-yolo-silent.json", permissions: permissions(yolo, false, deflt), wantMessage: "agentic: malformed typed Curator context: permissions yolo requires an unlocked profile source"},
+		{name: "v1-carries-permissions", v1: true, permissions: permissions(native, false, profile), wantMessage: "agentic: malformed typed Curator context: v1 fragments cannot carry the v2 permissions member"},
+		{name: "mode-enum-CuratorPermissionNative__unmapped__", permissions: permissions("CuratorPermissionNative__unmapped__", false, profile), wantMessage: "agentic: malformed typed Curator context: permissions mode must be native or yolo"},
+		{name: "mode-enum-CuratorPermissionYolo__unmapped__", permissions: permissions("CuratorPermissionYolo__unmapped__", false, profile), wantMessage: "agentic: malformed typed Curator context: permissions mode must be native or yolo"},
+		{name: "source-enum-CuratorPermissionSourceProfile__unmapped__", permissions: permissions(native, false, "CuratorPermissionSourceProfile__unmapped__"), wantMessage: "agentic: malformed typed Curator context: permissions source must be profile, global, or default"},
+		{name: "source-enum-CuratorPermissionSourceGlobal__unmapped__", permissions: permissions(native, false, "CuratorPermissionSourceGlobal__unmapped__"), wantMessage: "agentic: malformed typed Curator context: permissions source must be profile, global, or default"},
+		{name: "source-enum-CuratorPermissionSourceDefault__unmapped__", permissions: permissions(native, false, "CuratorPermissionSourceDefault__unmapped__"), wantMessage: "agentic: malformed typed Curator context: permissions source must be profile, global, or default"},
+		{name: "locked-default", permissions: permissions(native, true, deflt), wantMessage: "agentic: malformed typed Curator context: permissions locked must be true exactly for the global source"},
+		{name: "yolo-locked-profile", permissions: permissions(yolo, true, profile), wantMessage: "agentic: malformed typed Curator context: permissions locked must be true exactly for the global source"},
+	}
+	for _, plugin := range curatorPlugins {
+		t.Run(plugin.name, func(t *testing.T) {
+			for _, tc := range cases {
+				tc := tc
+				t.Run(tc.name, func(t *testing.T) {
+					context := validCuratorContext(plugin)
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					if tc.v1 {
+						context.Revision = agentic.CuratorLaunchFragmentV1
+					}
+					context.Permissions = tc.permissions
+					_, err := buildCuratorPlan(t, plugin, context)
+					if !errors.Is(err, agentic.ErrCuratorContextMalformed) {
+						t.Fatalf("BuildPlan err = %v, want %v", err, agentic.ErrCuratorContextMalformed)
+					}
+					if !strings.HasSuffix(err.Error(), tc.wantMessage) {
+						t.Fatalf("BuildPlan err = %q, want refusal diagnostic suffix %q", err, tc.wantMessage)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestCuratorV2PermissionsProjectionIsClosed(t *testing.T) {
+	permissions := agentic.CuratorPermissions{Mode: agentic.CuratorPermissionNative, Locked: false, Source: agentic.CuratorPermissionSourceProfile}
+	encoded, err := json.Marshal(permissions)
+	if err != nil {
+		t.Fatalf("marshal permissions: %v", err)
+	}
+	var members map[string]any
+	if err := json.Unmarshal(encoded, &members); err != nil {
+		t.Fatalf("unmarshal permissions: %v", err)
+	}
+	if len(members) != 3 || members["mode"] != "native" || members["locked"] != false || members["source"] != "profile" {
+		t.Fatalf("permissions projection carries unexpected members: %s", encoded)
+	}
+	decoder := json.NewDecoder(strings.NewReader(`{"mode":"native","locked":false,"source":"profile","level":"profile"}`))
+	decoder.DisallowUnknownFields()
+	var decoded agentic.CuratorPermissions
+	if err := decoder.Decode(&decoded); err == nil {
+		t.Fatal("strict decode accepted the unknown level member from invalid-permissions-unknown-field.json")
+	}
+}
+
+func TestBuildPlanCuratorContextRefusesInvalidV2PermissionsWire(t *testing.T) {
+	shapeMessage := "agentic: malformed typed Curator context: permissions must be a JSON object"
+	unknownMessage := func(member string) string {
+		return "agentic: malformed typed Curator context: permissions carries an unknown member \"" + member + "\""
+	}
+	modeMessage := "agentic: malformed typed Curator context: permissions mode is required and must be a string"
+	lockedMessage := "agentic: malformed typed Curator context: permissions locked is required and must be a boolean"
+	sourceMessage := "agentic: malformed typed Curator context: permissions source is required and must be a string"
+	cases := []struct {
+		name        string
+		conformance string
+		wire        string
+		wantMessage string
+	}{
+		{name: "not-an-object", wire: `42`, wantMessage: shapeMessage},
+		{name: "null-object", wire: `null`, wantMessage: modeMessage},
+		{name: "unknown-field", conformance: "invalid-permissions-unknown-field.json", wire: `{"level":"profile","locked":false,"mode":"native","source":"profile"}`, wantMessage: unknownMessage("level")},
+		{name: "unknown-member-mode-witness", wire: `{"mode":"native","locked":false,"source":"profile","mode__unmapped__":1}`, wantMessage: unknownMessage("mode__unmapped__")},
+		{name: "unknown-member-locked-witness", wire: `{"mode":"native","locked":false,"source":"profile","locked__unmapped__":1}`, wantMessage: unknownMessage("locked__unmapped__")},
+		{name: "unknown-member-source-witness", wire: `{"mode":"native","locked":false,"source":"profile","source__unmapped__":1}`, wantMessage: unknownMessage("source__unmapped__")},
+		{name: "missing-mode", conformance: "invalid-permissions-missing-mode.json", wire: `{"locked":false,"source":"profile"}`, wantMessage: modeMessage},
+		{name: "null-mode", wire: `{"mode":null,"locked":false,"source":"profile"}`, wantMessage: modeMessage},
+		{name: "mode-wrong-type", wire: `{"mode":42,"locked":false,"source":"profile"}`, wantMessage: modeMessage},
+		{name: "missing-locked", wire: `{"mode":"yolo","source":"profile"}`, wantMessage: lockedMessage},
+		{name: "null-locked", wire: `{"mode":"native","locked":null,"source":"profile"}`, wantMessage: lockedMessage},
+		{name: "locked-wrong-type", wire: `{"mode":"native","locked":"false","source":"profile"}`, wantMessage: lockedMessage},
+		{name: "missing-source", wire: `{"mode":"native","locked":false}`, wantMessage: sourceMessage},
+		{name: "null-source", wire: `{"mode":"native","locked":false,"source":null}`, wantMessage: sourceMessage},
+		{name: "source-wrong-type", wire: `{"mode":"native","locked":false,"source":42}`, wantMessage: sourceMessage},
+	}
+	// syntaxCases never reach decodeCuratorPermissions: encoding/json rejects
+	// the malformed syntax before invoking CuratorPermissions.UnmarshalJSON,
+	// so these assert *json.SyntaxError (and explicitly not the typed
+	// refusal), not ErrCuratorContextMalformed.
+	syntaxCases := []struct {
+		name string
+		wire string
+	}{
+		{name: "truncated", wire: `{"mode":"native",`},
+		{name: "trailing-garbage", wire: `{"mode":"native","locked":false,"source":"profile"} {}`},
+	}
+	valid := []struct {
+		name string
+		wire string
+	}{
+		{name: "native-profile", wire: `{"mode":"native","locked":false,"source":"profile"}`},
+		{name: "native-locked", wire: `{"mode":"native","locked":true,"source":"global"}`},
+		{name: "native-silent", wire: `{"mode":"native","locked":false,"source":"default"}`},
+		{name: "yolo-unlocked", wire: `{"mode":"yolo","locked":false,"source":"profile"}`},
+	}
+	for _, plugin := range curatorPlugins {
+		t.Run(plugin.name, func(t *testing.T) {
+			for _, tc := range cases {
+				tc := tc
+				t.Run(tc.name, func(t *testing.T) {
+					var decoded agentic.CuratorPermissions
+					err := json.Unmarshal([]byte(tc.wire), &decoded)
+					if !errors.Is(err, agentic.ErrCuratorContextMalformed) {
+						t.Fatalf("Unmarshal err = %v, want %v", err, agentic.ErrCuratorContextMalformed)
+					}
+					if !strings.HasSuffix(err.Error(), tc.wantMessage) {
+						t.Fatalf("Unmarshal err = %q, want refusal diagnostic suffix %q", err, tc.wantMessage)
+					}
+				})
+			}
+			for _, tc := range syntaxCases {
+				tc := tc
+				t.Run(tc.name, func(t *testing.T) {
+					var decoded agentic.CuratorPermissions
+					err := json.Unmarshal([]byte(tc.wire), &decoded)
+					if err == nil {
+						t.Fatalf("Unmarshal %q succeeded, want a JSON syntax error", tc.wire)
+					}
+					if errors.Is(err, agentic.ErrCuratorContextMalformed) {
+						t.Fatalf("Unmarshal err = %v, want a syntax error, not the typed refusal", err)
+					}
+					var syntaxErr *json.SyntaxError
+					if !errors.As(err, &syntaxErr) {
+						t.Fatalf("Unmarshal err = %T(%v), want *json.SyntaxError", err, err)
+					}
+				})
+			}
+			for _, triple := range valid {
+				triple := triple
+				t.Run("accept-"+triple.name, func(t *testing.T) {
+					var decoded agentic.CuratorPermissions
+					if err := json.Unmarshal([]byte(triple.wire), &decoded); err != nil {
+						t.Fatalf("Unmarshal valid permissions wire: %v", err)
+					}
+					context := validCuratorContext(plugin)
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					context.Permissions = &decoded
+					if _, err := buildCuratorPlan(t, plugin, context); err != nil {
+						t.Fatalf("BuildPlan: %v", err)
+					}
+				})
+			}
+			t.Run("full-fragment-unknown-field", func(t *testing.T) {
+				var fragment agentic.CuratorContext
+				err := json.Unmarshal([]byte(fullFragmentUnknownFieldWire), &fragment)
+				if err == nil {
+					t.Fatal("fragment decode admitted the unknown level member from invalid-permissions-unknown-field.json")
+				}
+				if !errors.Is(err, agentic.ErrCuratorContextMalformed) {
+					t.Fatalf("fragment decode err = %v, want %v", err, agentic.ErrCuratorContextMalformed)
+				}
+				if !strings.HasSuffix(err.Error(), unknownMessage("level")) {
+					t.Fatalf("fragment decode err = %q, want refusal diagnostic suffix %q", err, unknownMessage("level"))
+				}
+			})
+		})
+	}
+}
+
+// fullFragmentUnknownFieldWire is the invalid-permissions-unknown-field.json
+// shape reduced to the members that reach the permissions decoder: the
+// permissions object carries the exact member set of the conformance file.
+const fullFragmentUnknownFieldWire = `{"fragment":"launch-env-fragment-v2","environment":"claude_code","profile":{"name":"companyA","lock_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"precedence":{"winner":"higher-weight","placement":"winner-last"},"env":{"CLAUDE_CONFIG_DIR":"/manager/environments/companyA/claude_code"},"permissions":{"level":"profile","locked":false,"mode":"native","source":"profile"}}`
 
 func TestBuildPlanCuratorContextRefusesMalformedFragment(t *testing.T) {
 	for _, plugin := range curatorPlugins {
@@ -1269,6 +1547,49 @@ func TestBuildPlanCuratorContextRefusesMalformedFragment(t *testing.T) {
 					context.SystemPrompt.Intent = agentic.CuratorSystemPromptIntent(intent)
 				}})
 			}
+			for _, permissions := range []struct {
+				name        string
+				wantMessage string
+				mutate      func(*agentic.CuratorContext)
+			}{
+				{name: "permissions-on-v1", wantMessage: "agentic: malformed typed Curator context: v1 fragments cannot carry the v2 permissions member", mutate: func(context *agentic.CuratorContext) {
+					context.Permissions = validAcceptanceCuratorPermissions()
+				}},
+				{name: "permissions-v2-absent", wantMessage: "agentic: malformed typed Curator context: v2 fragments require the permissions member", mutate: func(context *agentic.CuratorContext) {
+					context.Revision = agentic.CuratorLaunchFragmentV2
+				}},
+				{name: "permissions-v2-missing-env", wantMessage: "agentic: malformed typed Curator context: exactly one managed-home environment entry is required", mutate: func(context *agentic.CuratorContext) {
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					context.Permissions = validAcceptanceCuratorPermissions()
+					context.Env = map[string]string{}
+				}},
+				{name: "permissions-mode-unknown", wantMessage: "agentic: malformed typed Curator context: permissions mode must be native or yolo", mutate: func(context *agentic.CuratorContext) {
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					context.Permissions = validAcceptanceCuratorPermissions()
+					context.Permissions.Mode = "auto"
+				}},
+				{name: "permissions-source-unknown", wantMessage: "agentic: malformed typed Curator context: permissions source must be profile, global, or default", mutate: func(context *agentic.CuratorContext) {
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					context.Permissions = validAcceptanceCuratorPermissions()
+					context.Permissions.Source = "flag"
+				}},
+				{name: "permissions-locked-mismatch", wantMessage: "agentic: malformed typed Curator context: permissions locked must be true exactly for the global source", mutate: func(context *agentic.CuratorContext) {
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					context.Permissions = validAcceptanceCuratorPermissions()
+					context.Permissions.Source = agentic.CuratorPermissionSourceGlobal
+				}},
+				{name: "permissions-yolo-inconsistent", wantMessage: "agentic: malformed typed Curator context: permissions yolo requires an unlocked profile source", mutate: func(context *agentic.CuratorContext) {
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					context.Permissions = validAcceptanceCuratorPermissions()
+					context.Permissions.Mode = agentic.CuratorPermissionYolo
+					context.Permissions.Source = agentic.CuratorPermissionSourceDefault
+				}},
+			} {
+				permissions := permissions
+				cases = append(cases, malformedCase{name: permissions.name, wantMessage: permissions.wantMessage, mutate: func(context *agentic.CuratorContext, _ *agentic.LaunchRequest) {
+					permissions.mutate(context)
+				}})
+			}
 			for _, unselected := range []agentic.CuratorSystemPromptIntent{
 				agentic.CuratorSystemPromptAppend,
 				agentic.CuratorSystemPromptReplace,
@@ -1411,6 +1732,12 @@ func TestBuildPlanCuratorContextRefusesStaleIdentity(t *testing.T) {
 						Channels: []agentic.CuratorChannelDescriptor{validMCPDescriptor(plugin, agentic.CuratorDescriptorFlag)},
 					}
 				}, mutate: func(context *agentic.CuratorContext) { context.MCP.Path = "/managed/home/changed-mcp.json" }},
+				{name: "permissions", setup: func(context *agentic.CuratorContext) {
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					context.Permissions = validAcceptanceCuratorPermissions()
+				}, mutate: func(context *agentic.CuratorContext) {
+					context.Permissions = &agentic.CuratorPermissions{Mode: agentic.CuratorPermissionNative, Locked: true, Source: agentic.CuratorPermissionSourceGlobal}
+				}},
 			}
 			for _, member := range members {
 				t.Run(member.name, func(t *testing.T) {
@@ -1719,6 +2046,10 @@ func cloneAcceptanceContext(source agentic.CuratorContext) agentic.CuratorContex
 		mcp.Channels = append([]agentic.CuratorChannelDescriptor(nil), source.MCP.Channels...)
 		copy.MCP = &mcp
 	}
+	if source.Permissions != nil {
+		permissions := *source.Permissions
+		copy.Permissions = &permissions
+	}
 	if source.ExpectedProvenance != nil {
 		provenance := *source.ExpectedProvenance
 		copy.ExpectedProvenance = &provenance
@@ -1734,6 +2065,10 @@ func validCuratorContext(plugin curatorPluginCase) agentic.CuratorContext {
 		Precedence:  agentic.CuratorPrecedence{Winner: "higher-weight", Placement: "winner-last"},
 		Env:         map[string]string{plugin.homeVariable: "/managed/home"},
 	}
+}
+
+func validAcceptanceCuratorPermissions() *agentic.CuratorPermissions {
+	return &agentic.CuratorPermissions{Mode: agentic.CuratorPermissionNative, Locked: false, Source: agentic.CuratorPermissionSourceProfile}
 }
 
 func validAcceptanceCuratorMCP(plugin curatorPluginCase) *agentic.CuratorMCPContext {

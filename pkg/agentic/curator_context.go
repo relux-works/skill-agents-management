@@ -1,6 +1,7 @@
 package agentic
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -12,6 +13,9 @@ import (
 const (
 	CuratorLaunchFragmentV1 = "launch-env-fragment-v1"
 	CuratorLaunchFragmentV2 = "launch-env-fragment-v2"
+	// CuratorLaunchFragmentV3 names the refused revision token: this module
+	// is a v1/v2 reader and rejects v3 without falling back.
+	CuratorLaunchFragmentV3 = "launch-env-fragment-v3"
 
 	CuratorDescriptorFlag      CuratorDescriptorKind = "flag"
 	CuratorDescriptorConfigKey CuratorDescriptorKind = "config-key"
@@ -24,6 +28,13 @@ const (
 
 	CuratorSystemPromptAppend  CuratorSystemPromptIntent = "append"
 	CuratorSystemPromptReplace CuratorSystemPromptIntent = "replace"
+
+	CuratorPermissionNative CuratorPermissionMode = "native"
+	CuratorPermissionYolo   CuratorPermissionMode = "yolo"
+
+	CuratorPermissionSourceProfile CuratorPermissionSource = "profile"
+	CuratorPermissionSourceGlobal  CuratorPermissionSource = "global"
+	CuratorPermissionSourceDefault CuratorPermissionSource = "default"
 )
 
 // CuratorDescriptorKind is the closed descriptor arm set emitted by the
@@ -36,6 +47,14 @@ type CuratorFlagArgument string
 // CuratorSystemPromptIntent is the caller-owned choice of prompt behavior.
 // The selected plugin resolves exactly one descriptor with matching semantics.
 type CuratorSystemPromptIntent string
+
+// CuratorPermissionMode is the resolved v2 profile permission level: the
+// permissions.<profile> knob value when the knob names one, native otherwise.
+type CuratorPermissionMode string
+
+// CuratorPermissionSource names which Curator-side input fixed the v2
+// permission mode: the machine knob, the fleet-global lock, or knob absence.
+type CuratorPermissionSource string
 
 // CuratorProfilePin is the profile identity bound into a v1 fragment.
 type CuratorProfilePin struct {
@@ -83,10 +102,72 @@ type CuratorSystemPromptContext struct {
 	Intent   CuratorSystemPromptIntent  `json:"-"`
 }
 
-// CuratorContext is the typed projection of launch-env-fragment-v1 plus the
-// explicit request intent and optional prior plan provenance used for reuse.
-// The profile and environment values are validated here; the module never
-// resolves a profile or reads raw fragment JSON.
+// CuratorPermissions is the typed v2 permissions member: the resolved profile
+// level and the lock engagement for the resolved profile. The launcher needs
+// mode and source together: source default is silence (fall through to the
+// launcher-global default), never an explicit native naming.
+type CuratorPermissions struct {
+	Mode   CuratorPermissionMode   `json:"mode"`
+	Locked bool                    `json:"locked"`
+	Source CuratorPermissionSource `json:"source"`
+}
+
+// UnmarshalJSON enforces the §10.2 closed permissions object at the wire
+// boundary: exactly the members mode, locked and source, each present with
+// its required JSON type. Presence and type cannot be recovered after a
+// plain struct decode collapses an absent locked to false and drops unknown
+// members, so this method runs before the typed projection. The value
+// vocabularies and the lock-consistency relation stay with
+// ValidateCuratorContext, which owns the typed layer.
+func (p *CuratorPermissions) UnmarshalJSON(wire []byte) error {
+	decoded, err := decodeCuratorPermissions(wire)
+	if err == nil {
+		*p = decoded
+	}
+	return err
+}
+
+// decodeCuratorPermissions is the plain-function decode core behind
+// CuratorPermissions.UnmarshalJSON. It refuses non-object wire, unknown
+// members, absent members, explicit nulls and mistyped members with the
+// malformed typed refusal; every admitted value still passes through
+// ValidateCuratorContext for vocabulary and consistency checks.
+func decodeCuratorPermissions(wire []byte) (CuratorPermissions, error) {
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(wire, &members); err != nil {
+		return CuratorPermissions{}, fmt.Errorf("%w: permissions must be a JSON object", ErrCuratorContextMalformed)
+	}
+	for name := range members {
+		if name != "mode" && name != "locked" && name != "source" {
+			return CuratorPermissions{}, fmt.Errorf("%w: permissions carries an unknown member %q", ErrCuratorContextMalformed, name)
+		}
+	}
+	modeRaw, modePresent := members["mode"]
+	var mode CuratorPermissionMode
+	modeTypeErr := json.Unmarshal(modeRaw, &mode)
+	if !modePresent || string(modeRaw) == "null" || modeTypeErr != nil {
+		return CuratorPermissions{}, fmt.Errorf("%w: permissions mode is required and must be a string", ErrCuratorContextMalformed)
+	}
+	lockedRaw, lockedPresent := members["locked"]
+	var locked bool
+	lockedTypeErr := json.Unmarshal(lockedRaw, &locked)
+	if !lockedPresent || string(lockedRaw) == "null" || lockedTypeErr != nil {
+		return CuratorPermissions{}, fmt.Errorf("%w: permissions locked is required and must be a boolean", ErrCuratorContextMalformed)
+	}
+	sourceRaw, sourcePresent := members["source"]
+	var source CuratorPermissionSource
+	sourceTypeErr := json.Unmarshal(sourceRaw, &source)
+	if !sourcePresent || string(sourceRaw) == "null" || sourceTypeErr != nil {
+		return CuratorPermissions{}, fmt.Errorf("%w: permissions source is required and must be a string", ErrCuratorContextMalformed)
+	}
+	return CuratorPermissions{Mode: mode, Locked: locked, Source: source}, nil
+}
+
+// CuratorContext is the typed projection of launch-env-fragment-v1 and
+// launch-env-fragment-v2 plus the explicit request intent and optional prior
+// plan provenance used for reuse. The profile and environment values are
+// validated here; the module never resolves a profile or reads raw fragment
+// JSON. Permissions is required on v2 and refused on v1.
 type CuratorContext struct {
 	Revision           string                      `json:"fragment"`
 	Environment        string                      `json:"environment"`
@@ -96,12 +177,14 @@ type CuratorContext struct {
 	SystemPrompt       *CuratorSystemPromptContext `json:"system_prompt,omitempty"`
 	MCP                *CuratorMCPContext          `json:"mcp,omitempty"`
 	PathPrepend        string                      `json:"path_prepend,omitempty"`
+	Permissions        *CuratorPermissions         `json:"permissions,omitempty"`
 	ExpectedProvenance *CuratorContextProvenance   `json:"-"`
 }
 
 // CuratorFragmentIdentity is the complete typed fragment value that affects
 // launch identity. SystemPrompt.Intent is deliberately excluded because it is
-// supplied by the launch caller, not emitted by Curator.
+// supplied by the launch caller, not emitted by Curator. Permissions rides the
+// identity so a changed profile level or lock engagement is stale identity.
 type CuratorFragmentIdentity struct {
 	Revision     string                       `json:"fragment"`
 	Environment  string                       `json:"environment"`
@@ -111,6 +194,7 @@ type CuratorFragmentIdentity struct {
 	SystemPrompt *CuratorSystemPromptFragment `json:"system_prompt,omitempty"`
 	MCP          *CuratorMCPContext           `json:"mcp,omitempty"`
 	PathPrepend  string                       `json:"path_prepend,omitempty"`
+	Permissions  *CuratorPermissions          `json:"permissions,omitempty"`
 }
 
 // CuratorSystemPromptFragment is the fragment-owned portion of the prompt
@@ -175,8 +259,30 @@ func ValidateCuratorContext(context *CuratorContext, requestHome string) error {
 	if !validCuratorIdentifier(context.Profile.Name) || !validCuratorLockHash(context.Profile.LockSHA256) {
 		return curatorMalformed("profile pin is invalid")
 	}
-	if context.Revision != CuratorLaunchFragmentV1 {
+	if context.Revision != CuratorLaunchFragmentV1 && context.Revision != CuratorLaunchFragmentV2 {
 		return fmt.Errorf("%w: %q", ErrCuratorFragmentRevisionUnsupported, context.Revision)
+	}
+	if context.Revision == CuratorLaunchFragmentV1 && context.Permissions != nil {
+		return curatorMalformed("v1 fragments cannot carry the v2 permissions member")
+	}
+	if context.Revision == CuratorLaunchFragmentV2 && context.Permissions == nil {
+		return curatorMalformed("v2 fragments require the permissions member")
+	}
+	if context.Permissions != nil {
+		if context.Permissions.Mode != CuratorPermissionNative && context.Permissions.Mode != CuratorPermissionYolo {
+			return curatorMalformed("permissions mode must be native or yolo")
+		}
+		if context.Permissions.Source != CuratorPermissionSourceProfile && context.Permissions.Source != CuratorPermissionSourceGlobal &&
+			context.Permissions.Source != CuratorPermissionSourceDefault {
+			return curatorMalformed("permissions source must be profile, global, or default")
+		}
+		if context.Permissions.Locked != (context.Permissions.Source == CuratorPermissionSourceGlobal) {
+			return curatorMalformed("permissions locked must be true exactly for the global source")
+		}
+		if context.Permissions.Mode == CuratorPermissionYolo && (context.Permissions.Locked ||
+			context.Permissions.Source == CuratorPermissionSourceGlobal || context.Permissions.Source == CuratorPermissionSourceDefault) {
+			return curatorMalformed("permissions yolo requires an unlocked profile source")
+		}
 	}
 	switch context.Environment {
 	case "claude_code", "codex_cli", "opencode", "pi":
@@ -442,6 +548,7 @@ func curatorContextProvenance(context *CuratorContext) CuratorContextProvenance 
 		Profile: context.Profile, Precedence: context.Precedence,
 		Env: cloneStringMap(context.Env), MCP: cloneCuratorMCP(context.MCP),
 		PathPrepend: context.PathPrepend,
+		Permissions: cloneCuratorPermissions(context.Permissions),
 	}
 	if context.SystemPrompt != nil {
 		fragment.SystemPrompt = &CuratorSystemPromptFragment{
@@ -464,6 +571,7 @@ func cloneCuratorProvenance(source CuratorContextProvenance) CuratorContextProve
 	copy := source
 	copy.Fragment.Env = cloneStringMap(source.Fragment.Env)
 	copy.Fragment.MCP = cloneCuratorMCP(source.Fragment.MCP)
+	copy.Fragment.Permissions = cloneCuratorPermissions(source.Fragment.Permissions)
 	if source.Fragment.SystemPrompt != nil {
 		copy.Fragment.SystemPrompt = &CuratorSystemPromptFragment{
 			Path:     source.Fragment.SystemPrompt.Path,
@@ -480,6 +588,7 @@ func cloneCuratorContext(source *CuratorContext) *CuratorContext {
 	copy := *source
 	copy.Env = cloneStringMap(source.Env)
 	copy.MCP = cloneCuratorMCP(source.MCP)
+	copy.Permissions = cloneCuratorPermissions(source.Permissions)
 	if source.SystemPrompt != nil {
 		copy.SystemPrompt = &CuratorSystemPromptContext{
 			Path:     source.SystemPrompt.Path,
@@ -491,6 +600,14 @@ func cloneCuratorContext(source *CuratorContext) *CuratorContext {
 		provenance := cloneCuratorProvenance(*source.ExpectedProvenance)
 		copy.ExpectedProvenance = &provenance
 	}
+	return &copy
+}
+
+func cloneCuratorPermissions(source *CuratorPermissions) *CuratorPermissions {
+	if source == nil {
+		return nil
+	}
+	copy := *source
 	return &copy
 }
 

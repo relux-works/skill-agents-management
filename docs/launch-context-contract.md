@@ -66,7 +66,7 @@ A Curator-backed launch fails before process creation or session hosting in each
 
 A caller may bypass Curator only through an explicit `source=none` choice. In that case no fragment is expected and no Curator provenance is claimed. An absent setting, a missing executable, a failed read, invalid JSON, or unsupported capability is not equivalent to `source=none`.
 
-The public Curator protocol also defines `launch-env-fragment-v2`, which adds a required permissions member. This module accepts only v1 and refuses v2 until a typed permission mapping exists. It must not parse v2 as v1 or discard the permissions member. The same rule applies to later fragment revisions and fields such as the reserved path transform until their capability is explicitly supported.
+The public Curator protocol also defines `launch-env-fragment-v2`, which adds a required permissions member. This module accepts v1 and v2: on v2 the permissions member is required, and production JSON decoding refuses a non-object value, any member outside `mode`/`locked`/`source`, an absent member, an explicit null, or a mistyped member, while the typed validator enforces the closed mode/source vocabularies and the lock-engagement consistency rules; the validated value rides the typed projection and the fragment identity. It must not parse v2 as v1 or discard the permissions member. Later fragment revisions refuse without fallback, and the same rule applies to fields such as the reserved path transform until their capability is explicitly supported.
 
 ## 5. Compatibility and scope
 

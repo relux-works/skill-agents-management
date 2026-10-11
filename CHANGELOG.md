@@ -8,6 +8,20 @@
 
 ## Unreleased
 
+- Accept `launch-env-fragment-v2` alongside v1. The v2 `permissions`
+  member is required: production JSON decoding refuses a non-object
+  value, any member outside `mode`/`locked`/`source`, an absent
+  member, an explicit null, or a mistyped member, and the typed
+  validator enforces the §10.2 value contract (closed native/yolo
+  mode and profile/global/default source vocabularies; the lock is
+  engaged exactly for the global source; yolo requires an unlocked
+  profile source). The validated value is exposed typed on
+  `CuratorContext` and carried in the fragment identity and
+  provenance snapshot so a changed profile level or lock engagement
+  is stale identity. A v1 fragment carrying the member is malformed;
+  v3 and unknown revisions refuse with the existing typed revision
+  refusal. v1 plans keep their existing bytes.
+
 ## v0.5.56 — 2026-10-07
 
 - Add hosted CI on pull requests and pushes to main, running vet, tests and
