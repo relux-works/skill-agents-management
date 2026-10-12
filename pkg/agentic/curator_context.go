@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"reflect"
 	"strings"
 	"unicode"
@@ -13,8 +14,10 @@ import (
 const (
 	CuratorLaunchFragmentV1 = "launch-env-fragment-v1"
 	CuratorLaunchFragmentV2 = "launch-env-fragment-v2"
-	// CuratorLaunchFragmentV3 names the refused revision token: this module
-	// is a v1/v2 reader and rejects v3 without falling back.
+	// CuratorLaunchFragmentV3 names the v3 revision token. Revision v3
+	// retains the v2 permissions contract and adds the muse environment
+	// with exactly the four section 7.1 XDG variables; every other
+	// environment keeps its single home variable and v2 channel rules.
 	CuratorLaunchFragmentV3 = "launch-env-fragment-v3"
 
 	CuratorDescriptorFlag      CuratorDescriptorKind = "flag"
@@ -153,11 +156,14 @@ func (p *CuratorPermissions) UnmarshalJSON(wire []byte) error {
 	return nil
 }
 
-// CuratorContext is the typed projection of launch-env-fragment-v1 and
-// launch-env-fragment-v2 plus the explicit request intent and optional prior
-// plan provenance used for reuse. The profile and environment values are
-// validated here; the module never resolves a profile or reads raw fragment
-// JSON. Permissions is required on v2 and refused on v1.
+// CuratorContext is the typed projection of launch-env-fragment-v1,
+// launch-env-fragment-v2 and launch-env-fragment-v3 plus the explicit
+// request intent and optional prior plan provenance used for reuse. The
+// profile and environment values are validated here; the module never
+// resolves a profile or reads raw fragment JSON. Permissions is required on
+// v2 and v3 and refused on v1. Env carries exactly one managed-home entry,
+// except muse on v3 which carries exactly the four XDG variables; see
+// CuratorMuseHomes.
 type CuratorContext struct {
 	Revision           string                      `json:"fragment"`
 	Environment        string                      `json:"environment"`
@@ -196,13 +202,88 @@ type CuratorSystemPromptFragment struct {
 
 // CuratorContextProvenance is an immutable-by-copy snapshot exposed by Plan.
 // Call CuratorContextProvenanceSnapshot to receive a detached deep copy.
+//
+// For muse, no single variable names the managed home: ManagedHomeVariable
+// is empty, ManagedHome is the shared <home> parent (equal to the validated
+// LaunchRequest.Home), and MuseHomes carries the four verified XDG values.
 type CuratorContextProvenance struct {
 	ProfileName         string                    `json:"profile_name"`
 	LockSHA256          string                    `json:"lock_sha256"`
 	ManagedHomeVariable string                    `json:"managed_home_variable"`
 	ManagedHome         string                    `json:"managed_home"`
+	MuseHomes           *CuratorMuseHomes         `json:"muse_homes,omitempty"`
 	SystemPromptIntent  CuratorSystemPromptIntent `json:"system_prompt_intent,omitempty"`
 	Fragment            CuratorFragmentIdentity   `json:"fragment"`
+}
+
+// CuratorMuseHomes is the validated muse XDG home set: the four section 7.1
+// variables under one absolute <home> parent, ending in /config, /data,
+// /state and /cache respectively. It is the typed extension that carries the
+// muse fragment env; the single-variable ManagedHomeVariable/ManagedHome
+// pair cannot name four values, so muse provenance carries this set instead
+// and ManagedHome holds the parent. XDG names are spelled in full so no
+// second vocabulary can drift from the fragment member names.
+type CuratorMuseHomes struct {
+	Parent        string `json:"parent"`
+	XDGConfigHome string `json:"xdg_config_home"`
+	XDGDataHome   string `json:"xdg_data_home"`
+	XDGStateHome  string `json:"xdg_state_home"`
+	XDGCacheHome  string `json:"xdg_cache_home"`
+}
+
+// CuratorMuseHomesFromEnv validates a muse fragment env and returns the
+// typed home set. It is the single implementation of the v3 muse env shape:
+// exactly the four XDG variables, no HOME, every value absolute, and every
+// value exactly path.Join(parent, leaf) under one absolute non-root parent.
+// Both ValidateCuratorContext and CuratorContext.MuseHomes call it, so the
+// shape has one source rather than two spellings that could drift apart.
+func CuratorMuseHomesFromEnv(env map[string]string) (CuratorMuseHomes, error) {
+	if env["HOME"] != "" {
+		return CuratorMuseHomes{}, curatorMalformed("muse fragments must not carry HOME")
+	}
+	if len(env) != 4 {
+		return CuratorMuseHomes{}, curatorMalformed("muse fragments require exactly the four XDG variables")
+	}
+	config := env["XDG_CONFIG_HOME"]
+	data := env["XDG_DATA_HOME"]
+	state := env["XDG_STATE_HOME"]
+	cache := env["XDG_CACHE_HOME"]
+	if !validCuratorAbsolutePath(config) || !validCuratorAbsolutePath(data) || !validCuratorAbsolutePath(state) || !validCuratorAbsolutePath(cache) {
+		return CuratorMuseHomes{}, curatorMalformed("muse XDG values must be absolute paths")
+	}
+	parent := path.Dir(config)
+	// path.Dir returns a Clean result and config above proved absolute, so
+	// the parent is absolute and clean by construction; the only degenerate
+	// parent the exact comparison below would otherwise accept is root.
+	if parent == "/" {
+		return CuratorMuseHomes{}, curatorMalformed("muse XDG home parent must not be the filesystem root")
+	}
+	// Exact canonical comparison, mirroring the rc.4 emitter's CheckBoundary
+	// (Join(parent, leaf) per HomeVariables entry): Base strips trailing
+	// slashes while Dir cleans, so a Base/Dir spelling admits sets like
+	// XDG_CONFIG_HOME=/a/config/ with the rest under /a/config. Every value
+	// must equal Join(parent, leaf) byte for byte, which additionally
+	// refuses trailing slashes, dot segments and double slashes.
+	if config != path.Join(parent, "config") || data != path.Join(parent, "data") || state != path.Join(parent, "state") || cache != path.Join(parent, "cache") {
+		return CuratorMuseHomes{}, curatorMalformed("muse XDG values must equal <home>/config, <home>/data, <home>/state and <home>/cache")
+	}
+	return CuratorMuseHomes{Parent: parent, XDGConfigHome: config, XDGDataHome: data, XDGStateHome: state, XDGCacheHome: cache}, nil
+}
+
+// MuseHomes returns the typed muse XDG home set for a v3 muse fragment. It
+// fails closed on a nil receiver, a non-muse environment, a pre-v3 revision
+// and any env that CuratorMuseHomesFromEnv refuses, so a caller holding only
+// the fragment derives the launch homes through the same shape the validator
+// enforces.
+func (c *CuratorContext) MuseHomes() (CuratorMuseHomes, error) {
+	if c == nil || c.Environment != "muse" || c.Revision != CuratorLaunchFragmentV3 {
+		return CuratorMuseHomes{}, curatorMalformed("muse home set requires a v3 muse fragment")
+	}
+	homes, err := CuratorMuseHomesFromEnv(c.Env)
+	if err != nil {
+		return CuratorMuseHomes{}, err
+	}
+	return homes, nil
 }
 
 var (
@@ -249,7 +330,7 @@ func ValidateCuratorContext(context *CuratorContext, requestHome string) error {
 	if !validCuratorIdentifier(context.Profile.Name) || !validCuratorLockHash(context.Profile.LockSHA256) {
 		return curatorMalformed("profile pin is invalid")
 	}
-	if context.Revision != CuratorLaunchFragmentV1 && context.Revision != CuratorLaunchFragmentV2 {
+	if context.Revision != CuratorLaunchFragmentV1 && context.Revision != CuratorLaunchFragmentV2 && context.Revision != CuratorLaunchFragmentV3 {
 		return fmt.Errorf("%w: %q", ErrCuratorFragmentRevisionUnsupported, context.Revision)
 	}
 	if context.Revision == CuratorLaunchFragmentV1 && context.Permissions != nil {
@@ -257,6 +338,9 @@ func ValidateCuratorContext(context *CuratorContext, requestHome string) error {
 	}
 	if context.Revision == CuratorLaunchFragmentV2 && context.Permissions == nil {
 		return curatorMalformed("v2 fragments require the permissions member")
+	}
+	if context.Revision == CuratorLaunchFragmentV3 && context.Permissions == nil {
+		return curatorMalformed("v3 fragments require the permissions member")
 	}
 	if context.Permissions != nil {
 		if context.Permissions.Mode != CuratorPermissionNative && context.Permissions.Mode != CuratorPermissionYolo {
@@ -275,7 +359,7 @@ func ValidateCuratorContext(context *CuratorContext, requestHome string) error {
 		}
 	}
 	switch context.Environment {
-	case "claude_code", "codex_cli", "opencode", "pi":
+	case "claude_code", "codex_cli", "opencode", "pi", "muse":
 	default:
 		return curatorMalformed("environment is not a supported typed fragment value")
 	}
@@ -283,32 +367,62 @@ func ValidateCuratorContext(context *CuratorContext, requestHome string) error {
 		(context.Precedence.Placement != "winner-last" && context.Precedence.Placement != "winner-first") {
 		return curatorMalformed("precedence is invalid")
 	}
-	if len(context.Env) != 1 {
-		return curatorMalformed("exactly one managed-home environment entry is required")
+	if context.Environment != "muse" {
+		if len(context.Env) != 1 {
+			return curatorMalformed("exactly one managed-home environment entry is required")
+		}
+		var homeVariable, home string
+		for key, value := range context.Env {
+			homeVariable, home = key, value
+		}
+		wantHomeVariable := ""
+		switch context.Environment {
+		case "claude_code":
+			wantHomeVariable = "CLAUDE_CONFIG_DIR"
+		case "codex_cli":
+			wantHomeVariable = "CODEX_HOME"
+		case "opencode":
+			wantHomeVariable = "XDG_CONFIG_HOME"
+		case "pi":
+			wantHomeVariable = "PI_CODING_AGENT_DIR"
+		}
+		if homeVariable != wantHomeVariable || !validCuratorAbsolutePath(home) || requestHome != home {
+			return curatorMalformed("managed-home entry must match LaunchRequest.Home and its environment")
+		}
 	}
-	var homeVariable, home string
-	for key, value := range context.Env {
-		homeVariable, home = key, value
-	}
-	wantHomeVariable := ""
-	switch context.Environment {
-	case "claude_code":
-		wantHomeVariable = "CLAUDE_CONFIG_DIR"
-	case "codex_cli":
-		wantHomeVariable = "CODEX_HOME"
-	case "opencode":
-		wantHomeVariable = "XDG_CONFIG_HOME"
-	case "pi":
-		wantHomeVariable = "PI_CODING_AGENT_DIR"
-	}
-	if homeVariable != wantHomeVariable || !validCuratorAbsolutePath(home) || requestHome != home {
-		return curatorMalformed("managed-home entry must match LaunchRequest.Home and its environment")
-	}
+	// The path_prepend guard is common to every environment, muse included:
+	// it stays ahead of the muse early return so a muse fragment carrying
+	// the member is validated exactly like any other adapter instead of
+	// being silently accepted. No adapter registers a root-bound launch
+	// mapping, so an absolute value is refused as unsupported here.
 	if context.PathPrepend != "" {
 		if !validCuratorAbsolutePath(context.PathPrepend) {
 			return curatorMalformed("path_prepend must be an absolute path")
 		}
 		return fmt.Errorf("%w: path_prepend has no registered root-bound launch mapping", ErrCuratorContextUnsupported)
+	}
+	if context.Environment == "muse" {
+		// Positive match on the pre-v3 revisions rather than a != v3: the
+		// revision gate above already refused every unknown token, so
+		// reaching this line means v1, v2 or v3, and each named member
+		// keeps its own narrowing mutant killable.
+		if context.Revision == CuratorLaunchFragmentV1 || context.Revision == CuratorLaunchFragmentV2 {
+			return curatorMalformed("muse fragments require launch-env-fragment-v3")
+		}
+		homes, err := CuratorMuseHomesFromEnv(context.Env)
+		if err != nil {
+			return err
+		}
+		if requestHome != homes.Parent {
+			return curatorMalformed("muse home parent must match LaunchRequest.Home")
+		}
+		if context.MCP != nil {
+			return curatorMalformed("muse fragments cannot carry MCP context")
+		}
+		if context.SystemPrompt != nil {
+			return curatorMalformed("muse fragments cannot carry system-prompt context")
+		}
+		return nil
 	}
 	if context.MCP != nil {
 		if context.Environment == "pi" {
@@ -530,8 +644,15 @@ func curatorReservedMCPEnv(name string) bool {
 
 func curatorContextProvenance(context *CuratorContext) CuratorContextProvenance {
 	var homeVariable, home string
-	for key, value := range context.Env {
-		homeVariable, home = key, value
+	if context.Environment == "muse" {
+		// A pure projection of validated input, never a second validation:
+		// ValidateCuratorContext proved the four-variable shape, so the
+		// parent below is the same one the validator bound to the request.
+		home = path.Dir(context.Env["XDG_CONFIG_HOME"])
+	} else {
+		for key, value := range context.Env {
+			homeVariable, home = key, value
+		}
 	}
 	fragment := CuratorFragmentIdentity{
 		Revision: context.Revision, Environment: context.Environment,
@@ -551,6 +672,15 @@ func curatorContextProvenance(context *CuratorContext) CuratorContextProvenance 
 		ManagedHomeVariable: homeVariable, ManagedHome: home,
 		Fragment: fragment,
 	}
+	if context.Environment == "muse" {
+		provenance.MuseHomes = &CuratorMuseHomes{
+			Parent:        home,
+			XDGConfigHome: context.Env["XDG_CONFIG_HOME"],
+			XDGDataHome:   context.Env["XDG_DATA_HOME"],
+			XDGStateHome:  context.Env["XDG_STATE_HOME"],
+			XDGCacheHome:  context.Env["XDG_CACHE_HOME"],
+		}
+	}
 	if context.SystemPrompt != nil {
 		provenance.SystemPromptIntent = context.SystemPrompt.Intent
 	}
@@ -559,6 +689,10 @@ func curatorContextProvenance(context *CuratorContext) CuratorContextProvenance 
 
 func cloneCuratorProvenance(source CuratorContextProvenance) CuratorContextProvenance {
 	copy := source
+	if source.MuseHomes != nil {
+		homes := *source.MuseHomes
+		copy.MuseHomes = &homes
+	}
 	copy.Fragment.Env = cloneStringMap(source.Fragment.Env)
 	copy.Fragment.MCP = cloneCuratorMCP(source.Fragment.MCP)
 	copy.Fragment.Permissions = cloneCuratorPermissions(source.Fragment.Permissions)
@@ -643,6 +777,7 @@ func ValidateCuratorContextIdentity(expected CuratorContextProvenance, current C
 	if expected.ProfileName != current.ProfileName || expected.LockSHA256 != current.LockSHA256 ||
 		expected.ManagedHomeVariable != current.ManagedHomeVariable || expected.ManagedHome != current.ManagedHome ||
 		expected.SystemPromptIntent != current.SystemPromptIntent ||
+		!reflect.DeepEqual(expected.MuseHomes, current.MuseHomes) ||
 		!sameCuratorFragmentIdentity(expected.Fragment, current.Fragment) {
 		return ErrCuratorContextStale
 	}

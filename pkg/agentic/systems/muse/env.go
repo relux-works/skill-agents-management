@@ -117,8 +117,20 @@ func isCredentialShapedParentEnvName(name string) bool {
 }
 
 // childEnv filters the parent first, overlays the caller's tracked run
-// context, then pins auto-update off as the final write.
+// context and any Curator-managed XDG homes, then pins auto-update off as
+// the final write.
+//
+// A Curator-managed launch replaces the inherited XDG homes with the
+// fragment's four verified values in section 7.1 declared order; HOME passes
+// through untouched. ChildEnv validates the fragment before this overlay
+// runs, so these are blind copies of already-validated values, never a
+// second validation.
 func childEnv(parent []string, req agentic.LaunchRequest) []string {
 	env := agentic.WithRunContext(filterMuseParentEnv(parent), req)
+	if req.Context != nil {
+		for _, variable := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"} {
+			env = agentic.SetEnvValue(env, variable, req.Context.Env[variable])
+		}
+	}
 	return agentic.SetEnvValue(env, museNoAutoUpdateEnv, "1")
 }

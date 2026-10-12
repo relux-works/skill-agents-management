@@ -803,20 +803,21 @@ func generatedCuratorConflictMutants(root string) ([]mutant, error) {
 }
 
 type curatorValidatorClassMember struct {
-	identity         string
-	siteKey          string
-	testName         string
-	subtestPattern   string
-	targetFile       string
-	targetFunction   string
-	targetGuard      string
-	targetLine       int
-	targetReturn     string
-	mutationKind     string
-	exemption        string
-	member           string
-	narrows          string
-	downstreamProofs []downstreamGuardProof
+	identity                           string
+	siteKey                            string
+	ownerIsSystemPromptDescriptorCheck bool
+	testName                           string
+	subtestPattern                     string
+	targetFile                         string
+	targetFunction                     string
+	targetGuard                        string
+	targetLine                         int
+	targetReturn                       string
+	mutationKind                       string
+	exemption                          string
+	member                             string
+	narrows                            string
+	downstreamProofs                   []downstreamGuardProof
 }
 
 type parsedSource struct {
@@ -1030,6 +1031,7 @@ func deriveCuratorValidatorClassMembers(root string, sites []refusalscan.Site, c
 	seen := make(map[string]bool)
 	appendMember := func(site refusalscan.Site, testName string, member curatorValidatorClassMember) {
 		member.siteKey = site.Key()
+		member.ownerIsSystemPromptDescriptorCheck = curatorOwnerValidatesSystemPromptDescriptors(parsedFiles, site)
 		member.testName = testName
 		member.downstreamProofs = append(deriveBooleanHelperDownstreamProofs(member, parsedFiles), deriveSameFunctionScalarDownstreamProofs(member, parsedFiles)...)
 		member.identity = validatorSourceMemberIdentity(member)
@@ -1108,8 +1110,7 @@ func deriveCuratorValidatorClassMembers(root string, sites []refusalscan.Site, c
 				appendMember(owner, testName, helperMember)
 			}
 		}
-		if owner.File == "curator_context.go" && owner.Function == "ValidateCuratorContext" &&
-			owner.Guard == "if err != nil" && owner.Occurrence == 1 {
+		if curatorOwnerValidatesSystemPromptDescriptors(parsedFiles, owner) {
 			channelMembers, err := curatorUnselectedPromptChannelMembers(root, owner, testName)
 			if err != nil {
 				return nil, err
@@ -1128,11 +1129,86 @@ type curatorPromptIntentConstant struct {
 	value string
 }
 
+// curatorOwnerValidatesSystemPromptDescriptors reports whether a refusal site
+// is the system-prompt descriptor validation inside ValidateCuratorContext.
+// Selection is by the validated call and its enclosing construct, never by
+// occurrence index: inserting another `if err != nil { return err }`
+// propagation renumbers every later occurrence (the v3 muse FromEnv check
+// moved this site from occurrence 1 to 2), while the call shape is stable.
+func curatorOwnerValidatesSystemPromptDescriptors(parsedFiles map[string]*parsedSource, site refusalscan.Site) bool {
+	if site.File != "curator_context.go" || site.Function != "ValidateCuratorContext" || site.Guard != "if err != nil" {
+		return false
+	}
+	source := parsedFiles[filepath.Join("pkg", "agentic", filepath.FromSlash(site.File))]
+	return source != nil && curatorSiteIsSystemPromptDescriptorCheck(source.fset, source.file, site)
+}
+
+// curatorSiteIsSystemPromptDescriptorCheck resolves a site to its branch and
+// requires the system-prompt descriptor validation shape: an
+// `if err := validateCuratorDescriptor(descriptor, true); err != nil`
+// propagation enclosed in the `range context.SystemPrompt.Channels` loop that
+// binds `descriptor`. The MCP propagation fails the call shape (an indexed
+// element, systemPrompt false) and the muse FromEnv propagation has no init
+// statement at all, so neither can host the unselected-channel exemptions,
+// which reference the loop variable.
+func curatorSiteIsSystemPromptDescriptorCheck(fset *token.FileSet, file *ast.File, site refusalscan.Site) bool {
+	branch, _ := curatorSiteBranches(fset, file, site)
+	if branch == nil || !curatorBranchValidatesSystemPromptDescriptor(branch) {
+		return false
+	}
+	return curatorBranchInsideSystemPromptChannelLoop(fset, file, site.Function, branch)
+}
+
+func curatorBranchValidatesSystemPromptDescriptor(branch *ast.IfStmt) bool {
+	assignment, ok := branch.Init.(*ast.AssignStmt)
+	if !ok || assignment.Tok != token.DEFINE || len(assignment.Lhs) != 1 || len(assignment.Rhs) != 1 {
+		return false
+	}
+	call, ok := assignment.Rhs[0].(*ast.CallExpr)
+	if !ok || callName(call) != "validateCuratorDescriptor" || len(call.Args) != 2 {
+		return false
+	}
+	first, ok := call.Args[0].(*ast.Ident)
+	if !ok || first.Name != "descriptor" {
+		return false
+	}
+	second, ok := call.Args[1].(*ast.Ident)
+	return ok && second.Name == "true"
+}
+
+func curatorBranchInsideSystemPromptChannelLoop(fset *token.FileSet, file *ast.File, function string, branch *ast.IfStmt) bool {
+	declaration := findFunctionAndBody(file, function)
+	if declaration == nil || declaration.Body == nil {
+		return false
+	}
+	found := false
+	ast.Inspect(declaration.Body, func(node ast.Node) bool {
+		if found {
+			return false
+		}
+		loop, ok := node.(*ast.RangeStmt)
+		if !ok || !nodeContains(loop, branch) || normalizedNode(fset, loop.X) != "context.SystemPrompt.Channels" {
+			return true
+		}
+		for _, target := range []ast.Expr{loop.Key, loop.Value} {
+			if identifier, ok := target.(*ast.Ident); ok && identifier.Name == "descriptor" {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
+
 func curatorUnselectedPromptChannelMembers(root string, site refusalscan.Site, testName string) ([]curatorValidatorClassMember, error) {
 	validatorPath := filepath.Join("pkg", "agentic", "curator_context.go")
 	validator, err := parseSource(root, validatorPath)
 	if err != nil {
 		return nil, err
+	}
+	if !curatorSiteIsSystemPromptDescriptorCheck(validator.fset, validator.file, site) {
+		return nil, fmt.Errorf("cannot derive unselected system-prompt channels: site %s is not the system-prompt descriptor validation (want `if err := validateCuratorDescriptor(descriptor, true); err != nil` inside `range context.SystemPrompt.Channels`)", site.Key())
 	}
 	intents, err := curatorPromptIntentConstants(validator.file)
 	if err != nil {
@@ -1336,7 +1412,7 @@ func curatorValidatorRunPattern(member curatorValidatorClassMember) string {
 			if member.exemption == "len(runes) == 0" && strings.Contains(member.siteKey, "context.Profile.Name") {
 				casePattern = "empty-profile-name-preempted"
 			} else {
-				casePattern = curatorIdentifierCasePattern(member.siteKey)
+				casePattern = curatorIdentifierCasePattern(member.siteKey, member.ownerIsSystemPromptDescriptorCheck)
 			}
 		case "validCuratorLockHash":
 			casePattern = "(profile pin invalid|lockhash-.*)"
@@ -1344,12 +1420,12 @@ func curatorValidatorRunPattern(member curatorValidatorClassMember) string {
 			casePattern = curatorAbsolutePathCasePattern(member.siteKey)
 		case "validCuratorPortablePath":
 			if member.exemption == "utf8.RuneCountInString(value) == 0" {
-				if strings.Contains(member.siteKey, "ValidateCuratorContext :: if err != nil") && strings.Contains(member.siteKey, "occurrence 1") {
+				if member.ownerIsSystemPromptDescriptorCheck {
 					casePattern = "system-prompt-descriptor-file-empty"
 				} else {
 					casePattern = "file descriptor empty filename"
 				}
-			} else if strings.Contains(member.siteKey, "ValidateCuratorContext :: if err != nil") && strings.Contains(member.siteKey, "occurrence 1") {
+			} else if member.ownerIsSystemPromptDescriptorCheck {
 				casePattern = "system-prompt-descriptor-file-.*"
 			} else {
 				casePattern = "(file-fragment-.*|file-reserved-name-.*|file descriptor (malformed|empty filename|absolute path)|portable-path-.*)"
@@ -1357,7 +1433,7 @@ func curatorValidatorRunPattern(member curatorValidatorClassMember) string {
 		case "validCuratorFlag":
 			casePattern = "(flag-content-.*|flag-boundary-.*|flag (invalid|empty|length-one|argument kind (invalid|empty))|with-.*companion.*|with-repeats.*)"
 		case "curatorAlphaNumeric", "curatorIdentifierTail":
-			casePattern = curatorIdentifierCasePattern(member.siteKey)
+			casePattern = curatorIdentifierCasePattern(member.siteKey, member.ownerIsSystemPromptDescriptorCheck)
 		case "curatorMalformed":
 			casePattern = malformedReasonCasePattern(member.member)
 		default:
@@ -1442,10 +1518,10 @@ func curatorAbsolutePathCasePattern(siteKey string) string {
 	}
 }
 
-func curatorIdentifierCasePattern(siteKey string) string {
+func curatorIdentifierCasePattern(siteKey string, ownerIsSystemPromptDescriptorCheck bool) string {
 	switch {
 	case strings.Contains(siteKey, "ValidateCuratorContext :: if err != nil"):
-		if strings.Contains(siteKey, "occurrence 1") {
+		if ownerIsSystemPromptDescriptorCheck {
 			return "(profile-identifier-.*|system-prompt-descriptor-identifier-.*)"
 		}
 		return "(profile-identifier-.*|config-key-identifier-.*|config-key key empty)"

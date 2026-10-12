@@ -188,7 +188,16 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 //
 // A managed scope materializes a private XDG config and deduplicates the env.
 // BuildPlan applies the generic patch afterwards, including OwnedEnv.
+//
+// A Curator-managed launch validates through the same pure builder the
+// BuildPlan gate uses, so direct plugin callers receive identical refusals;
+// the overlay itself is applied by childEnv after parent filtering.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
+	if req.Context != nil {
+		if err := validateMuseCuratorContext(req); err != nil {
+			return nil, err
+		}
+	}
 	if !req.Network.IsZero() {
 		return networkChildEnv(parent, req)
 	}

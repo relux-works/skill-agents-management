@@ -19,8 +19,29 @@
   `CuratorContext` and carried in the fragment identity and
   provenance snapshot so a changed profile level or lock engagement
   is stale identity. A v1 fragment carrying the member is malformed;
-  v3 and unknown revisions refuse with the existing typed revision
-  refusal. v1 plans keep their existing bytes.
+  unknown revisions refuse with the existing typed revision refusal.
+  v1 plans keep their existing bytes.
+
+- Accept `launch-env-fragment-v3` alongside v1 and v2. claude_code,
+  codex_cli, opencode and pi keep their exact v2 rules under v3 (one
+  home variable, required permissions, unchanged channels); the new
+  muse environment carries exactly the four §7.1 XDG variables under
+  one absolute `<home>` parent with no HOME, system_prompt or mcp.
+  v1 and v2 behaviour is unchanged, and a v1 or v2 fragment for muse
+  is refused. The muse system plugin implements
+  `CuratorContextValidator`; its launch env carries exactly the four
+  curator XDG values with HOME untouched. `CuratorContextProvenance`
+  gains the typed `MuseHomes` set covered by
+  `ValidateCuratorContextIdentity`, so any XDG drift is refused on
+  resume. New `CuratorContext.MuseHomes` and
+  `CuratorMuseHomesFromEnv` are the single typed XDG shape behind the
+  validator; typed refusals cover an unknown revision, an unsupported
+  environment and every invalid v3 conformance case. Each muse XDG value
+  must equal `Join(<home>, leaf)` byte for byte under a non-root parent
+  (trailing slashes, dot segments, double slashes and relative values
+  refused), and a muse fragment carrying `path_prepend` is validated
+  exactly like the other adapters — malformed unless absolute, otherwise
+  refused as an unregistered mapping — never silently ignored.
 
 ## v0.5.56 — 2026-10-07
 

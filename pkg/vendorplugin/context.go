@@ -19,6 +19,10 @@ func cloneCuratorContext(source *agentic.CuratorContext) *agentic.CuratorContext
 	}
 	if source.ExpectedProvenance != nil {
 		provenance := *source.ExpectedProvenance
+		if provenance.MuseHomes != nil {
+			homes := *provenance.MuseHomes
+			provenance.MuseHomes = &homes
+		}
 		provenance.Fragment.Env = cloneContextMap(provenance.Fragment.Env)
 		provenance.Fragment.MCP = cloneCuratorMCP(provenance.Fragment.MCP)
 		provenance.Fragment.Permissions = cloneCuratorPermissions(provenance.Fragment.Permissions)

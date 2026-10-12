@@ -643,7 +643,7 @@ func TestBuildPlanCuratorContextRefusesMissingProfile(t *testing.T) {
 func TestBuildPlanCuratorContextRefusesUnknownFragmentRevision(t *testing.T) {
 	for _, plugin := range curatorPlugins {
 		t.Run(plugin.name, func(t *testing.T) {
-			for _, revision := range []string{"launch-env-fragment-v9", agentic.CuratorLaunchFragmentV3, "CuratorLaunchFragmentV1__unmapped__", "CuratorLaunchFragmentV2__unmapped__"} {
+			for _, revision := range []string{"launch-env-fragment-v9", "CuratorLaunchFragmentV1__unmapped__", "CuratorLaunchFragmentV2__unmapped__", "CuratorLaunchFragmentV3__unmapped__"} {
 				t.Run(strings.ReplaceAll(revision, "/", "_"), func(t *testing.T) {
 					context := validCuratorContext(plugin)
 					context.Revision = revision
@@ -657,15 +657,35 @@ func TestBuildPlanCuratorContextRefusesUnknownFragmentRevision(t *testing.T) {
 	}
 }
 
-func TestBuildPlanCuratorContextRefusesPermissionFragmentV3(t *testing.T) {
+func TestBuildPlanCuratorContextAcceptsFragmentV3(t *testing.T) {
+	conformance := map[string]string{"claude": "valid-claude_code.json", "codex": "valid-codex_cli.json"}
 	for _, plugin := range curatorPlugins {
 		t.Run(plugin.name, func(t *testing.T) {
+			intent := agentic.CuratorSystemPromptAppend
+			if plugin.system == "codex" {
+				intent = agentic.CuratorSystemPromptReplace
+			}
 			context := validCuratorContext(plugin)
 			context.Revision = agentic.CuratorLaunchFragmentV3
 			context.Permissions = validAcceptanceCuratorPermissions()
-			_, err := buildCuratorPlan(t, plugin, context)
-			if !errors.Is(err, agentic.ErrCuratorFragmentRevisionUnsupported) {
-				t.Fatalf("BuildPlan err = %v, want ErrCuratorFragmentRevisionUnsupported for v3", err)
+			context.MCP = validAcceptanceCuratorMCP(plugin)
+			context.SystemPrompt = validAcceptanceCuratorSystemPrompt(plugin, intent)
+			plan, err := buildCuratorPlan(t, plugin, context)
+			if err != nil {
+				t.Fatalf("BuildPlan for %s: %v", conformance[plugin.name], err)
+			}
+			provenance, ok := plan.CuratorContextProvenanceSnapshot()
+			if !ok {
+				t.Fatal("v3 plan has no Curator provenance")
+			}
+			if provenance.Fragment.Revision != agentic.CuratorLaunchFragmentV3 {
+				t.Fatalf("v3 provenance revision = %q, want v3", provenance.Fragment.Revision)
+			}
+			if provenance.Fragment.Permissions == nil || !reflect.DeepEqual(*provenance.Fragment.Permissions, *context.Permissions) {
+				t.Fatalf("v3 provenance does not carry the validated permissions: %#v", provenance.Fragment.Permissions)
+			}
+			if provenance.MuseHomes != nil {
+				t.Fatalf("non-muse v3 provenance carries muse homes: %#v", provenance.MuseHomes)
 			}
 		})
 	}
@@ -1761,6 +1781,60 @@ func TestBuildPlanCuratorContextRefusesStaleIdentity(t *testing.T) {
 					}
 				})
 			}
+			// The muse members run under each plugin label so the identity
+			// mutants are killed for every required plugin. Only the stored
+			// homes differ here; the fragment still validates, so a stale
+			// refusal proves the identity comparison covers the new field.
+			for _, member := range []struct {
+				name   string
+				mutate func(*agentic.CuratorContextProvenance)
+			}{
+				{name: "muse homes value", mutate: func(provenance *agentic.CuratorContextProvenance) {
+					provenance.MuseHomes.XDGDataHome = "/managed/other-home/data"
+				}},
+				{name: "muse homes absent", mutate: func(provenance *agentic.CuratorContextProvenance) { provenance.MuseHomes = nil }},
+			} {
+				t.Run(member.name, func(t *testing.T) {
+					context := validMuseCuratorContext()
+					plan, err := buildMuseCuratorPlan(t, context, museV3HomeParent)
+					if err != nil {
+						t.Fatalf("initial BuildPlan: %v", err)
+					}
+					stored, ok := plan.CuratorContextProvenanceSnapshot()
+					if !ok || stored.MuseHomes == nil {
+						t.Fatal("initial plan has no muse homes provenance")
+					}
+					member.mutate(&stored)
+					context.ExpectedProvenance = &stored
+					_, err = buildMuseCuratorPlan(t, context, museV3HomeParent)
+					if !errors.Is(err, agentic.ErrCuratorContextStale) {
+						t.Fatalf("BuildPlan err = %v, want ErrCuratorContextStale", err)
+					}
+				})
+			}
+			t.Run("muse whole set move", func(t *testing.T) {
+				context := validMuseCuratorContext()
+				plan, err := buildMuseCuratorPlan(t, context, museV3HomeParent)
+				if err != nil {
+					t.Fatalf("initial BuildPlan: %v", err)
+				}
+				stored, ok := plan.CuratorContextProvenanceSnapshot()
+				if !ok {
+					t.Fatal("initial plan has no Curator provenance")
+				}
+				moved := "/managed/muse-home-2"
+				context.Env = map[string]string{
+					"XDG_CONFIG_HOME": moved + "/config",
+					"XDG_DATA_HOME":   moved + "/data",
+					"XDG_STATE_HOME":  moved + "/state",
+					"XDG_CACHE_HOME":  moved + "/cache",
+				}
+				context.ExpectedProvenance = &stored
+				_, err = buildMuseCuratorPlan(t, context, moved)
+				if !errors.Is(err, agentic.ErrCuratorContextStale) {
+					t.Fatalf("BuildPlan err = %v, want ErrCuratorContextStale", err)
+				}
+			})
 		})
 	}
 }

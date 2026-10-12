@@ -473,6 +473,157 @@ func TestCuratorValidatorRunPatternUsesBothPluginsAndChannelWitnesses(t *testing
 	}
 }
 
+func TestUnselectedPromptChannelMembersTargetTheSystemPromptDescriptorSite(t *testing.T) {
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Clean(filepath.Join(workingDirectory, "..", ".."))
+
+	// Independent expectation, walked here rather than through the generator
+	// predicate: the `validateCuratorDescriptor(descriptor, true)`
+	// propagation inside the `range context.SystemPrompt.Channels` loop that
+	// binds `descriptor`. A fixed-occurrence selector lands on the MCP
+	// propagation instead once another `if err != nil` guard sorts first.
+	validatorPath := filepath.Join(root, "pkg", "agentic", "curator_context.go")
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, validatorPath, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	function := findFunctionAndBody(file, "ValidateCuratorContext")
+	if function == nil || function.Body == nil {
+		t.Fatal("ValidateCuratorContext is missing from the validator tree")
+	}
+	contextBound := false
+	for _, field := range function.Type.Params.List {
+		for _, name := range field.Names {
+			contextBound = contextBound || name.Name == "context"
+		}
+	}
+	if !contextBound {
+		t.Fatal("ValidateCuratorContext has no context parameter for the channel exemptions to reference")
+	}
+	wantLine := 0
+	descriptorBound := false
+	ast.Inspect(function.Body, func(node ast.Node) bool {
+		loop, ok := node.(*ast.RangeStmt)
+		if !ok {
+			return true
+		}
+		channels, ok := loop.X.(*ast.SelectorExpr)
+		if !ok || channels.Sel.Name != "Channels" {
+			return true
+		}
+		prompt, ok := channels.X.(*ast.SelectorExpr)
+		if !ok || prompt.Sel.Name != "SystemPrompt" {
+			return true
+		}
+		receiver, ok := prompt.X.(*ast.Ident)
+		if !ok || receiver.Name != "context" {
+			return true
+		}
+		for _, target := range []ast.Expr{loop.Key, loop.Value} {
+			if identifier, ok := target.(*ast.Ident); ok && identifier.Name == "descriptor" {
+				descriptorBound = true
+			}
+		}
+		ast.Inspect(loop.Body, func(child ast.Node) bool {
+			branch, ok := child.(*ast.IfStmt)
+			if !ok {
+				return true
+			}
+			assignment, ok := branch.Init.(*ast.AssignStmt)
+			if !ok || assignment.Tok != token.DEFINE || len(assignment.Rhs) != 1 {
+				return true
+			}
+			call, ok := assignment.Rhs[0].(*ast.CallExpr)
+			if !ok || len(call.Args) != 2 {
+				return true
+			}
+			callee, ok := call.Fun.(*ast.Ident)
+			if !ok || callee.Name != "validateCuratorDescriptor" {
+				return true
+			}
+			first, firstOK := call.Args[0].(*ast.Ident)
+			second, secondOK := call.Args[1].(*ast.Ident)
+			if !firstOK || !secondOK || first.Name != "descriptor" || second.Name != "true" {
+				return true
+			}
+			ast.Inspect(branch.Body, func(result ast.Node) bool {
+				if statement, ok := result.(*ast.ReturnStmt); ok {
+					wantLine = fset.Position(statement.Pos()).Line
+					return false
+				}
+				return true
+			})
+			return true
+		})
+		return true
+	})
+	if wantLine == 0 {
+		t.Fatal("system-prompt descriptor propagation was not found in ValidateCuratorContext")
+	}
+	if !descriptorBound {
+		t.Fatal("no range over context.SystemPrompt.Channels binds descriptor")
+	}
+
+	sources, err := curatorValidatorPackageSources(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sites, err := refusalscan.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var validatorSites []refusalscan.Site
+	for _, site := range sites {
+		if site.File == "curator_context.go" {
+			validatorSites = append(validatorSites, site)
+		}
+	}
+	catalogPath := filepath.Join(root, "pkg", "agentic", "curator_refusal_guard_test.go")
+	catalog, err := parser.ParseFile(token.NewFileSet(), catalogPath, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := parseCatalogSlice(catalog, "curatorRefusalCoverageTable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	coverage := make(map[string]string)
+	for _, row := range rows {
+		if row["file"] != "curator_context.go" {
+			continue
+		}
+		occurrence, err := strconv.Atoi(row["occurrence"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		coverage[catalogSiteKey(row["file"], row["function"], row["guard"], row["returned"], occurrence)] = row["testName"]
+	}
+	members, err := deriveCuratorValidatorClassMembers(root, validatorSites, coverage, curatorValidatorFunctions(sources), sources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channelMembers := 0
+	for _, member := range members {
+		if !strings.HasPrefix(member.member, "unselected system-prompt channel ") {
+			continue
+		}
+		channelMembers++
+		if member.targetGuard != "if err != nil" || member.targetLine != wantLine {
+			t.Errorf("unselected channel member %q targets %s:%d, want the system-prompt descriptor propagation return at line %d", member.member, member.targetGuard, member.targetLine, wantLine)
+		}
+		if !member.ownerIsSystemPromptDescriptorCheck {
+			t.Errorf("unselected channel member %q is not flagged as system-prompt owned", member.member)
+		}
+	}
+	if channelMembers == 0 {
+		t.Fatal("derivation produced no unselected system-prompt channel members")
+	}
+}
+
 func TestEveryGeneratedCuratorValidatorRunPatternSelectsBothPlugins(t *testing.T) {
 	// Best-effort matrix check only: t.Skip and aliased plugin conditions are
 	// known blind spots tracked by TASK-260930-3txv44. This test does not claim
