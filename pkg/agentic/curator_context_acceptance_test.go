@@ -1783,8 +1783,9 @@ func TestBuildPlanCuratorContextRefusesStaleIdentity(t *testing.T) {
 			}
 			// The muse members run under each plugin label so the identity
 			// mutants are killed for every required plugin. Only the stored
-			// homes differ here; the fragment still validates, so a stale
-			// refusal proves the identity comparison covers the new field.
+			// provenance differs here; the current fragment still validates,
+			// so a stale refusal proves the identity comparison covers the
+			// stored field.
 			for _, member := range []struct {
 				name   string
 				mutate func(*agentic.CuratorContextProvenance)
@@ -1793,6 +1794,9 @@ func TestBuildPlanCuratorContextRefusesStaleIdentity(t *testing.T) {
 					provenance.MuseHomes.XDGDataHome = "/managed/other-home/data"
 				}},
 				{name: "muse homes absent", mutate: func(provenance *agentic.CuratorContextProvenance) { provenance.MuseHomes = nil }},
+				{name: "muse stored revision pre-v3", mutate: func(provenance *agentic.CuratorContextProvenance) {
+					provenance.Fragment.Revision = agentic.CuratorLaunchFragmentV2
+				}},
 			} {
 				t.Run(member.name, func(t *testing.T) {
 					context := validMuseCuratorContext()
@@ -1807,6 +1811,40 @@ func TestBuildPlanCuratorContextRefusesStaleIdentity(t *testing.T) {
 					member.mutate(&stored)
 					context.ExpectedProvenance = &stored
 					_, err = buildMuseCuratorPlan(t, context, museV3HomeParent)
+					if !errors.Is(err, agentic.ErrCuratorContextStale) {
+						t.Fatalf("BuildPlan err = %v, want ErrCuratorContextStale", err)
+					}
+				})
+			}
+			// The stored-revision members run under each plugin label so the
+			// identity mutants are killed for every required plugin. The
+			// validator owns the current side — an unknown current revision
+			// never reaches identity — so these tamper the stored provenance
+			// only. The unlisted witness is the generator-derived narrowing
+			// member for the stored v3 comparison; the unknown-revision
+			// validator test carries the same witness string.
+			for _, member := range []struct {
+				name     string
+				revision string
+			}{
+				{name: "stored revision unaccepted", revision: "launch-env-fragment-v9"},
+				{name: "stored revision unlisted witness", revision: "CuratorLaunchFragmentV3__unmapped__"},
+			} {
+				t.Run(member.name, func(t *testing.T) {
+					context := validCuratorContext(plugin)
+					context.Revision = agentic.CuratorLaunchFragmentV2
+					context.Permissions = validAcceptanceCuratorPermissions()
+					plan, err := buildCuratorPlan(t, plugin, context)
+					if err != nil {
+						t.Fatalf("initial BuildPlan: %v", err)
+					}
+					stored, ok := plan.CuratorContextProvenanceSnapshot()
+					if !ok {
+						t.Fatal("initial plan has no Curator provenance")
+					}
+					stored.Fragment.Revision = member.revision
+					context.ExpectedProvenance = &stored
+					_, err = buildCuratorPlan(t, plugin, context)
 					if !errors.Is(err, agentic.ErrCuratorContextStale) {
 						t.Fatalf("BuildPlan err = %v, want ErrCuratorContextStale", err)
 					}

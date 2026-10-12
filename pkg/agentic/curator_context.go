@@ -181,6 +181,9 @@ type CuratorContext struct {
 // launch identity. SystemPrompt.Intent is deliberately excluded because it is
 // supplied by the launch caller, not emitted by Curator. Permissions rides the
 // identity so a changed profile level or lock engagement is stale identity.
+// Revision rides the identity only as a stored-side acceptance gate: see
+// sameCuratorFragmentIdentity, which tolerates a Revision-only drift between
+// accepted revisions and compares every other field exactly.
 type CuratorFragmentIdentity struct {
 	Revision     string                       `json:"fragment"`
 	Environment  string                       `json:"environment"`
@@ -772,7 +775,29 @@ func cloneStringMap(source map[string]string) map[string]string {
 	return copy
 }
 
+// acceptedCuratorFragmentRevision reports whether a fragment revision token
+// is one the validator admits.
+func acceptedCuratorFragmentRevision(revision string) bool {
+	return revision == CuratorLaunchFragmentV1 || revision == CuratorLaunchFragmentV2 || revision == CuratorLaunchFragmentV3
+}
+
+// sameCuratorFragmentIdentity reports whether two fragment identities name
+// the same launch identity. Left is the stored (expected) fragment, right
+// the current one. A Revision-only difference is the SAME identity, but only
+// when every other field is byte-equal: the return below is today's DeepEqual
+// over all fields except Revision. The gate covers the STORED side only: the
+// stored provenance is data, not a validated request, so an unaccepted
+// stored revision reads as stale, and a stored XDG-homes (muse) fragment
+// must be v3 — never pre-v3, not even v2-to-v2. The current side needs no
+// gate here because buildPlan validates the current context before identity
+// ever runs: ValidateCuratorContext refuses unknown revisions and pre-v3
+// muse fragments first, so right is already validator-admitted.
 func sameCuratorFragmentIdentity(left, right CuratorFragmentIdentity) bool {
+	if !acceptedCuratorFragmentRevision(left.Revision) || (CuratorFragmentUsesXDGHomes(left.Environment) && left.Revision != CuratorLaunchFragmentV3) {
+		return false
+	}
+	left.Revision = ""
+	right.Revision = ""
 	return reflect.DeepEqual(left, right)
 }
 

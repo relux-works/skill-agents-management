@@ -43,6 +43,18 @@
   exactly like the other adapters — malformed unless absolute, otherwise
   refused as an unregistered mapping — never silently ignored.
 
+- Compare Curator fragment identity across revisions: a Revision-only
+  difference between accepted revisions (v1/v2/v3) is the same identity
+  when every other field is byte-equal, so a session recorded under v2
+  resumes on an otherwise identical v3 fragment instead of refusing
+  with stale identity. The stored revision must be accepted (anything
+  else is stale); the current side is validator-admitted before identity
+  runs, so identity gates the stored side only. A muse fragment stays
+  v3-only in identity as in validation — a stored pre-v3 muse fragment
+  never resumes. A v1 session still cannot resume on v2: v2 carries the
+  permissions member the v1 identity holds as absent, which is a
+  substantive delta.
+
 ## v0.5.56 — 2026-10-07
 
 - Add hosted CI on pull requests and pushes to main, running vet, tests and
