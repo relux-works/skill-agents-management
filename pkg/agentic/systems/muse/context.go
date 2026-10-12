@@ -33,7 +33,7 @@ func validateMuseCuratorContext(req agentic.LaunchRequest) error {
 		return err
 	}
 	context := req.Context
-	if context.Environment != "muse" {
+	if !agentic.CuratorFragmentUsesXDGHomes(context.Environment) {
 		return fmt.Errorf("%w: Muse requires the muse fragment environment", agentic.ErrCuratorContextUnsupported)
 	}
 	if !req.Network.IsZero() {

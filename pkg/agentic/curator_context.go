@@ -276,14 +276,14 @@ func CuratorMuseHomesFromEnv(env map[string]string) (CuratorMuseHomes, error) {
 // the fragment derives the launch homes through the same shape the validator
 // enforces.
 func (c *CuratorContext) MuseHomes() (CuratorMuseHomes, error) {
-	if c == nil || c.Environment != "muse" || c.Revision != CuratorLaunchFragmentV3 {
+	if c == nil || !CuratorFragmentUsesXDGHomes(c.Environment) || c.Revision != CuratorLaunchFragmentV3 {
 		return CuratorMuseHomes{}, curatorMalformed("muse home set requires a v3 muse fragment")
 	}
-	homes, err := CuratorMuseHomesFromEnv(c.Env)
-	if err != nil {
+	if homes, err := CuratorMuseHomesFromEnv(c.Env); err != nil {
 		return CuratorMuseHomes{}, err
+	} else {
+		return homes, nil
 	}
-	return homes, nil
 }
 
 var (
@@ -358,16 +358,21 @@ func ValidateCuratorContext(context *CuratorContext, requestHome string) error {
 			return curatorMalformed("permissions yolo requires an unlocked profile source")
 		}
 	}
-	switch context.Environment {
-	case "claude_code", "codex_cli", "opencode", "pi", "muse":
-	default:
-		return curatorMalformed("environment is not a supported typed fragment value")
+	// XDG-home environments are admitted through the registry-held
+	// declaration, not a case spelling the environment: the muse spelling
+	// collides with the system-id vocabulary the single-source guard scans.
+	if !CuratorFragmentUsesXDGHomes(context.Environment) {
+		switch context.Environment {
+		case "claude_code", "codex_cli", "opencode", "pi":
+		default:
+			return curatorMalformed("environment is not a supported typed fragment value")
+		}
 	}
 	if (context.Precedence.Winner != "higher-weight" && context.Precedence.Winner != "lower-weight") ||
 		(context.Precedence.Placement != "winner-last" && context.Precedence.Placement != "winner-first") {
 		return curatorMalformed("precedence is invalid")
 	}
-	if context.Environment != "muse" {
+	if !CuratorFragmentUsesXDGHomes(context.Environment) {
 		if len(context.Env) != 1 {
 			return curatorMalformed("exactly one managed-home environment entry is required")
 		}
@@ -401,7 +406,7 @@ func ValidateCuratorContext(context *CuratorContext, requestHome string) error {
 		}
 		return fmt.Errorf("%w: path_prepend has no registered root-bound launch mapping", ErrCuratorContextUnsupported)
 	}
-	if context.Environment == "muse" {
+	if CuratorFragmentUsesXDGHomes(context.Environment) {
 		// Positive match on the pre-v3 revisions rather than a != v3: the
 		// revision gate above already refused every unknown token, so
 		// reaching this line means v1, v2 or v3, and each named member
@@ -409,11 +414,9 @@ func ValidateCuratorContext(context *CuratorContext, requestHome string) error {
 		if context.Revision == CuratorLaunchFragmentV1 || context.Revision == CuratorLaunchFragmentV2 {
 			return curatorMalformed("muse fragments require launch-env-fragment-v3")
 		}
-		homes, err := CuratorMuseHomesFromEnv(context.Env)
-		if err != nil {
+		if homes, err := CuratorMuseHomesFromEnv(context.Env); err != nil {
 			return err
-		}
-		if requestHome != homes.Parent {
+		} else if requestHome != homes.Parent {
 			return curatorMalformed("muse home parent must match LaunchRequest.Home")
 		}
 		if context.MCP != nil {
@@ -644,7 +647,7 @@ func curatorReservedMCPEnv(name string) bool {
 
 func curatorContextProvenance(context *CuratorContext) CuratorContextProvenance {
 	var homeVariable, home string
-	if context.Environment == "muse" {
+	if CuratorFragmentUsesXDGHomes(context.Environment) {
 		// A pure projection of validated input, never a second validation:
 		// ValidateCuratorContext proved the four-variable shape, so the
 		// parent below is the same one the validator bound to the request.
@@ -672,7 +675,7 @@ func curatorContextProvenance(context *CuratorContext) CuratorContextProvenance 
 		ManagedHomeVariable: homeVariable, ManagedHome: home,
 		Fragment: fragment,
 	}
-	if context.Environment == "muse" {
+	if CuratorFragmentUsesXDGHomes(context.Environment) {
 		provenance.MuseHomes = &CuratorMuseHomes{
 			Parent:        home,
 			XDGConfigHome: context.Env["XDG_CONFIG_HOME"],

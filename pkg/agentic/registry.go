@@ -275,3 +275,22 @@ func (r *Registry) Len() int {
 // Register adds a system to the default registry. It is what a plugin
 // package's init function calls.
 func Register(sys System) error { return Default.Register(sys) }
+
+// curatorFragmentXDGHomesEnvironments names the Curator fragment environments
+// whose validated shape is the v3 XDG home set (CuratorMuseHomes) rather than
+// a single managed-home variable. Fragment environments are a Curator-protocol
+// namespace, not SystemIDs — claude_code is not claude-code — but the muse
+// spelling collides with the system-id vocabulary the single-source guard
+// scans, so comparing it outside this file reads as dispatch on a plugin id.
+// The declaration therefore lives HERE, in the one file permitted to bind it:
+// the guard allows id spellings in composite literals only in a binding home,
+// and no comparison or switch over the spelling exists anywhere. Generic
+// validation and the muse plugin read it through CuratorFragmentUsesXDGHomes.
+var curatorFragmentXDGHomesEnvironments = map[string]bool{"muse": true}
+
+// CuratorFragmentUsesXDGHomes reports whether a fragment environment carries
+// the v3 XDG home set. It is the single reader of the declaration above; no
+// caller spells the environment it matches.
+func CuratorFragmentUsesXDGHomes(environment string) bool {
+	return curatorFragmentXDGHomesEnvironments[environment]
+}

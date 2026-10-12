@@ -1148,9 +1148,9 @@ func curatorOwnerValidatesSystemPromptDescriptors(parsedFiles map[string]*parsed
 // `if err := validateCuratorDescriptor(descriptor, true); err != nil`
 // propagation enclosed in the `range context.SystemPrompt.Channels` loop that
 // binds `descriptor`. The MCP propagation fails the call shape (an indexed
-// element, systemPrompt false) and the muse FromEnv propagation has no init
-// statement at all, so neither can host the unselected-channel exemptions,
-// which reference the loop variable.
+// element, systemPrompt false) and the muse FromEnv propagation binds two
+// names from a different call outside any channel loop, so neither can host
+// the unselected-channel exemptions, which reference the loop variable.
 func curatorSiteIsSystemPromptDescriptorCheck(fset *token.FileSet, file *ast.File, site refusalscan.Site) bool {
 	branch, _ := curatorSiteBranches(fset, file, site)
 	if branch == nil || !curatorBranchValidatesSystemPromptDescriptor(branch) {
