@@ -56,6 +56,7 @@ var declaredHereRows = []vendorplugin.ModelID{
 	"claude-opus-5-5", "opus",
 	"claude-sonnet-5-5", "sonnet",
 	"claude-haiku-5-5", "haiku",
+	"muse-wonder-1.0-contributor", "muse-wonder", "muse-wonder-full-1.0-contributor",
 	"gemini-3.8-flash-high", "gemini-flash", "gemini-3.7-flash-high",
 }
 
@@ -151,6 +152,7 @@ func TestTheSourceTiesAreStillVisibleInTheCarriedRows(t *testing.T) {
 	for _, tie := range [][2]vendorplugin.ModelID{
 		{"claude-haiku-4-5", "claude-haiku-4-5-20251001"},
 		{"muse-spark-1.3-contributor", "muse-spark"},
+		{"muse-wonder-1.0-contributor", "muse-wonder"},
 	} {
 		left, known := scoreOf(tie[0])
 		if !known {

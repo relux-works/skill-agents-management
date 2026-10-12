@@ -109,6 +109,20 @@ var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
 	"gemini-3.7-flash-high": "google",
 }
 
+// declaredHereUnresolvedRows are the rows this module declares ahead of the
+// board's registry for a runtime whose vendor was never established, so they
+// have no vendor to key declaredHereRows by and sit in the runtime's own list
+// (benchdata.MuseModels). Three today, released 2026-10-12 and read off the
+// Muse Code 1.4.6 provider catalog: the contributor harness ids of Muse Wonder
+// 1.0 and Wonder Full 1.0, and `muse-wonder`, the short alias of the first
+// (the full variant has none). The board's table never carried them, so they
+// are accounted for here by name and the frozen board capture is untouched.
+var declaredHereUnresolvedRows = []vendorplugin.ModelID{
+	"muse-wonder-1.0-contributor",
+	"muse-wonder",
+	"muse-wonder-full-1.0-contributor",
+}
+
 // retiredHereRows maps a row the board's registry DOES carry, and this module
 // deliberately no longer declares, to the vendor that dropped it. It is the
 // mirror of declaredHereRows: both full-set pins would otherwise report the

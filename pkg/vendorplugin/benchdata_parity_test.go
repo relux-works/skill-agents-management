@@ -174,6 +174,17 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 		})
 		fixture.Models = append(fixture.Models, benchdata.RegistryFact{ModelID: id, Efforts: []string{"high", "low", "max", "medium", "xhigh"}})
 	}
+	// And the three muse-wonder declarations (two contributor rows and the `muse-wonder` alias), interpolated at 34
+	// between claude-fable-5-1 (43) and muse-spark-1.3-contributor (33). Their
+	// axis is minimal..max, lexicographically sorted as facts publish it.
+	for _, id := range []string{"muse-wonder-1.0-contributor", "muse-wonder", "muse-wonder-full-1.0-contributor"} {
+		historical = append(historical, benchdata.BugHuntRow{
+			Key: id + ":0", ModelID: id, Kind: "interpolated", Value: 34,
+			Denominator: &denominator, OriginRef: "bug-hunt:" + id,
+			SourceVersion: "bug-hunt-bench@2026-09-13",
+		})
+		fixture.Models = append(fixture.Models, benchdata.RegistryFact{ModelID: id, Efforts: []string{"high", "low", "max", "medium", "minimal", "xhigh"}})
+	}
 	sort.Slice(fixture.Models, func(i, j int) bool { return fixture.Models[i].ModelID < fixture.Models[j].ModelID })
 	if err := compareBenchRows(rows, historical); err != nil {
 		t.Fatalf("historical export parity: %v", err)
@@ -187,10 +198,10 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 		counts[row.Kind]++
 		keys[row.Key] = true
 	}
-	if len(rows) != 65 || len(keys) != 65 || counts["measured"] != 12 || counts["interpolated"] != 52 || counts["cost"] != 1 {
+	if len(rows) != 68 || len(keys) != 68 || counts["measured"] != 12 || counts["interpolated"] != 55 || counts["cost"] != 1 {
 		t.Fatalf("claim counts: %d rows, %d keys, %v", len(rows), len(keys), counts)
 	}
-	if len(facts) != 64 {
+	if len(facts) != 67 {
 		t.Fatalf("registry count: %d", len(facts))
 	}
 	// Measured aliases retain shared source origins and remain separate keys.
@@ -201,7 +212,7 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 	if origins["astra:0"] != origins["gpt-6-astra:0"] || origins["muse-spark:0"] != origins["muse-spark-1.3-contributor:0"] {
 		t.Fatal("alias source origin drift")
 	}
-	t.Logf("parity: %d distinct keys; %d measured / %d interpolated / %d cost; %d registry facts; adapters and historical fixture plus exactly five Argon and two haiku-5-5 rows agree", len(keys), counts["measured"], counts["interpolated"], counts["cost"], len(facts))
+	t.Logf("parity: %d distinct keys; %d measured / %d interpolated / %d cost; %d registry facts; adapters and historical fixture plus exactly five Argon, two haiku-5-5 and three muse-wonder rows agree", len(keys), counts["measured"], counts["interpolated"], counts["cost"], len(facts))
 }
 
 func TestBenchdataParityRejectsDropDuplicateAndFieldDrift(t *testing.T) {

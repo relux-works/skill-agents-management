@@ -326,6 +326,19 @@ func compareBoardFacts(fixture boardFacts, rows map[vendorplugin.ModelID]vendorp
 		delete(remaining, id)
 	}
 
+	// The vendor-unresolved counterpart of the loop above: rows the runtime's
+	// own list declares before the board does. Named, and checked both ways.
+	for _, id := range declaredHereUnresolvedRows {
+		switch {
+		case boardIDs[id]:
+			report("the board table now holds %q, which this port records as declared here for a vendor-unresolved runtime; the row is a ported one and its facts belong in the fixture comparison rather than on that list", id)
+		case !remaining[id]:
+			report("this port records %q as a vendor-unresolved row declared here, and this module declares no such model", id)
+		default:
+			delete(remaining, id)
+		}
+	}
+
 	leftover := make([]string, 0, len(remaining))
 	for id := range remaining {
 		leftover = append(leftover, string(id))

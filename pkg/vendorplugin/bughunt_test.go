@@ -270,9 +270,9 @@ func TestEveryScoreInScopeIsABenchClaim(t *testing.T) {
 		}
 	}
 	// The count is stated independently so the gate cannot pass on a scope
-	// that quietly lost a home: 45 source rows plus the two declared-here
-	// openai rows.
-	if want := sourceModelCount + len(declaredHereRows) - len(retiredHereRows); rows != want {
+	// that quietly lost a home: 45 source rows plus the declared-here rows of
+	// the vendors and of the vendor-unresolved muse runtime.
+	if want := sourceModelCount + len(declaredHereRows) + len(declaredHereUnresolvedRows) - len(retiredHereRows); rows != want {
 		t.Errorf("the gate walked %d rows and the module declares %d in scope", rows, want)
 	}
 }

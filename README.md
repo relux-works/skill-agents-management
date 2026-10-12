@@ -1347,6 +1347,9 @@ not ported; see
   `AliasOf: muse-spark-1.3-contributor`, so it is admitted and audited under its
   own spelling and EXECUTES under the contributor id — see *Alias identity
   resolution* below.
+  Two further muse rows, `muse-wonder-1.0-contributor` and
+  `muse-wonder-full-1.0-contributor`, are declared HERE rather than ported (see
+  the next section), so the runtime carries six rows in all (with the `muse-wonder` alias).
 - `alibaba` is the architecture's own argument: five rows under the `qwen-code`
   harness and one under `codex`. A cross-runtime pair is one vendor declaring
   one more system, and a test builds a real launch through it.
@@ -1398,6 +1401,25 @@ same shape — none is `Recommended`, none is pi-native, and each alias declares
 `AliasOf` its head. `pkg/vendorplugin/gpt6_opus55_alias_test.go` drives
 `BuildLaunch` for every one of them at each probed effort.
 
+Three more entries belong to the vendor-unresolved `muse` runtime and sit on a
+separate list (`declaredHereUnresolvedRows`, because there is no vendor to key
+them by): `muse-wonder-1.0-contributor`, its short alias `muse-wonder`
+(`AliasOf` the standard row, in the shape of `muse-spark`; the full variant has
+no alias) and `muse-wonder-full-1.0-contributor`
+(released 2026-10-12; the full variant is the larger Wonder 1.0 model). Like
+`muse-spark-1.3` they are registered under their contributor harness ids only,
+and the board capture is untouched. Both are muse-only, `current`, not
+`Recommended`, `EffortRequired` over `minimal`/`low`/`medium`/`high`/`xhigh`/`max`
+recommending `xhigh`, with a 1,007,997-token window read from the Muse Code
+1.4.6 provider catalog (`~/.local/share/muse/model-catalog/6d657461__p746268.json`,
+read 2026-10-12). `max` is admitted for them, as for
+`muse-spark-1.3-contributor`, and a word outside the axis is refused by vendor
+admission. The axis follows the provider catalog as refreshed 2026-10-12 17:29Z
+(its first read listed no `max`). Their score is an interpolated 34, not a measurement: the leaderboard
+has no Wonder run, so it sits strictly between the measured
+`muse-spark-1.3` (33) and `claude-fable-5-1` (43), and the two rows tie because
+no source separates them. The existing spark and 1.2 rows are unchanged.
+
 `gpt-6-astra` is OpenAI's most capable Codex row: current,
 `low`/`medium`/`high`/`xhigh`/`max` (the catalog's `ultra` is retired module-wide), scored 130 above `gpt-5.6-sol`'s
 120, with a 272000-token context window. It is deliberately NOT `Recommended`:
@@ -1422,7 +1444,8 @@ NOT contain rather than for what it does.
 ### Alias identity resolution
 
 A model row may declare `AliasOf`: the identity it is a short spelling of.
-Ten rows do today — `muse-spark` → `muse-spark-1.3-contributor`, `astra` →
+Eleven rows do today — `muse-spark` → `muse-spark-1.3-contributor`, `muse-wonder` →
+`muse-wonder-1.0-contributor`, `astra` →
 `gpt-6-astra`, `sol` → `gpt-6.1-sol`, `luna` → `gpt-6-luna`, `opus` →
 `claude-opus-5-5`, `sonnet` → `claude-sonnet-5-5`, `haiku` → `claude-haiku-5-5`, `gemini-flash` →
 `gemini-3.8-flash-high`, `argon` → `gemini-4-argon-high` and
