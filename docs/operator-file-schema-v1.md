@@ -122,6 +122,104 @@ engine = "mlx"
 # Remaining entry body is defined and validated by curator-engines.
 ```
 
+## Exact local weights (additive; schema stays 1)
+
+**Status:** documented contract only. The readers, validation and certified
+launch gate land with the switch of the launch path to the `~/.curator`
+catalog, the engine side with `curator-engines`.
+Nothing in this section is enforced by the current readers.
+
+A local model is identified by the exact bytes of its weights file, not by its
+name. Two leaf fields carry that identity. They are additive: the operator
+schema stays `1`, `models.toml` is unchanged, and no v1→v2 conversion exists.
+
+**Scope of this version: single-file GGUF only.** The certified path covers
+exactly one accepted, unsplit, self-contained GGUF file. Split GGUF, MLX and
+adapter weights have no weights identity in this version. Consequently the MLX
+runtime in the `runtimes.toml` example above (`runtimes.local-qwen`, engine
+plugin `mlx`, model `qwen-3.8-27b-mlx-8bit`) stays legacy and unpinned and is
+never certified; the model router, which applies a quality score only on an
+exact weights match, will not select it automatically. An MLX identity (for
+example SHA-256 over a canonical manifest of the model directory's files) is a
+future additive version. Certifying a local model now requires a GGUF row added
+by the operator and the engine owner.
+
+| Placement / field | TOML type and presence | Definition |
+| --- | --- | --- |
+| `engines.<name>.weights` in `engines.toml` | Optional table | Engine-owned record. In this version its only member is `id`. |
+| `engines.<name>.weights.id` | String, required when `weights` is present | Declaration written by `curator-engines` when it imports or converts the weights: the digest of the complete bytes of the GGUF file. |
+| `runtimes.<runtime>.models."<model>".expected_weights_id` in `runtimes.toml` | Optional string structurally; required for certified local launch | Deployment pin owned by the operator. It is never refreshed automatically from the engine value. |
+
+The examples below are illustrative: no registry row carries a GGUF model or a
+weights identity yet, and the digest is synthetic. Engine attributes other than
+`engine` and `weights` (here `mode`) are engine-owned and pending confirmation
+by the engine owner.
+
+```toml
+# engines.toml (illustrative; engine-owned body)
+[engines.local-qwen-gguf]
+engine = "llama-cpp"
+mode = "local"        # engine-owned attribute, pending engine-owner confirmation
+
+[engines.local-qwen-gguf.weights]
+id = "gguf-sha256:1111111111111111111111111111111111111111111111111111111111111111"
+```
+
+```toml
+# runtimes.toml (illustrative; additive model metadata, schema_version stays 1)
+schema_version = 1
+
+[runtimes.local-qwen-gguf]
+system = "pi"
+engine = { plugin = "llama-cpp", name = "local-qwen-gguf" }
+
+[runtimes.local-qwen-gguf.models."qwen-3.8-27b-gguf-q4-k-m"]
+effort_support = "none"
+expected_weights_id = "gguf-sha256:1111111111111111111111111111111111111111111111111111111111111111"
+```
+
+**Grammar.** Both strings match exactly `^gguf-sha256:[0-9a-f]{64}$`. Matching
+is case-sensitive: the hex digits are lowercase only. The reader never trims,
+case-folds or normalizes; any whitespace inside the string value (leading,
+trailing or internal) makes the value `malformed`. A non-string, empty or
+otherwise malformed value is `malformed`; another prefix is `unsupported`. The
+digest is SHA-256 over the complete file bytes only: no filename, size,
+manifest or identity-version field.
+
+**Unknown members.** An unknown member of the `weights` table refuses certified
+execution. This is intended and fail-closed: until readers are updated, an
+unrecognized member never passes the certified gate. Any future member arrives
+together with a reader update in the same release. The table has no version
+key.
+
+**Certified local launch.** An engine entry carrying a valid `weights.id` is
+the certified-local candidate. An engine entry without `weights` is legacy and
+unpinned; it stays readable but cannot authorize certified execution. A
+certified launch requires the pin, the engine declaration and the engine's
+fresh observation of the loaded file to be equal; any disagreement refuses.
+When both the runtime and the model carry an engine reference, their `plugin`
+and `name` must agree; the gate resolves one effective reference and never
+falls back from an invalid explicit one. Neither a runtime-name prefix nor the
+`pi` system establishes locality. Whether the engine also declares an explicit
+locality attribute such as `mode` is for the engine owner to confirm; this
+schema does not require it.
+
+**Old and new readers.** Current readers preserve `expected_weights_id` as
+model metadata without validating or enforcing it, and the engine-catalog
+projection ignores the `weights` table. New readers validate a present field,
+report absence as discoverable and unpinned, and refuse certified local
+execution when the pin is absent. An entirely old stack can ignore the pin;
+that is a compatibility limit outside certified operation, not a fail-closed
+guarantee. The engine owner confirms its own file version and parser support
+for the `weights` table before activation.
+
+**Writes, import and re-pin.** Each owner writes its own file: an engine import
+updates only its entry; an explicit re-pin updates only one runtime-model pin,
+after fresh engine verification. There is no cross-file transaction. Import
+merges pins like other values: a valid source fills absence, an equal value is
+a no-op, a disagreement is a typed `conflicting` refusal, and an absent source
+preserves the destination. A pin is never synthesized from the engine value.
+
 ## `~/.curator/models.toml`
 
 `models.toml` may contain other operator-owned policy tables. The binding
