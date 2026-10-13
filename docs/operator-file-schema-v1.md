@@ -263,6 +263,17 @@ condition:
 Diagnostics name the refusal kind and the relevant role/runtime/engine IDs;
 they never embed TOML values, credentials, or absolute home paths.
 
+## Launch-path consumer
+
+The local-models vendor resolves `runtimes.toml` plus `engines.toml` as its
+source of local runtime/model rows and engine pointers, with the legacy
+`~/.agents/.configs/local-models.toml` as an explicit fallback carrying a
+typed deprecation warning that names `runtimecatalog.ImportAt`. The production
+entry point is `localmodels.LoadAt` (`Peek` memoizes it); see the "Local
+runtime configuration sources" section in the repository README for file
+locations and ownership. Refusals follow the kind table above; a read failure
+never falls back to the legacy source.
+
 ## Import and provenance
 
 Import accepts `local-models.toml` and an explicit legacy operator TOML input;

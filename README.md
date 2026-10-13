@@ -1762,13 +1762,48 @@ form carries the broker provenance — which source was checked, and that nothin
 established a vendor — because "unresolved" is only honest when the search
 behind it is visible.
 
+### Local runtime configuration sources
+
+Local runtime and model rows come from the machine-local Curator catalog, with
+the legacy file as an explicit fallback. The row shape below is shared by both
+sources. File locations and ownership:
+
+- `~/.curator/runtimes.toml` — the runtime catalog: runtime IDs, agentic
+  systems, model rows, effort axes, engine references, and
+  `pointer.curator_engines_project` / `pointer.curator_engines_profile` /
+  `pointer.pi_model_identity`. Operator-populated; the schema is owned by this
+  module, see `docs/operator-file-schema-v1.md`.
+- `~/.curator/engines.toml` — the engine catalog: one `[engines.<name>]`
+  entry per engine with its `engine` kind and optional `weights.id`. Owned by
+  `curator-engines`; this module only looks entries up to validate references
+  and never writes the file.
+- `~/.agents/.configs/local-models.toml` — the legacy source, operator-owned
+  and deprecated. Import it once with `runtimecatalog.ImportAt`, then remove
+  it. While present alone it still resolves, with a typed deprecation warning
+  naming the importer; while present alongside a disagreeing catalog the same
+  runtime ID refuses typed `conflicting` instead of last-writer-wins.
+
+`localmodels.LoadAt` is the production resolution entry point (`Peek`
+memoizes it per home paths). Every failure is a typed, sanitized
+`*localmodels.Refusal`: `absent`, `malformed`, `read_failed`, `conflicting`,
+`unbound`, or `unsupported`. A read failure never falls back to the legacy
+source. `runtimes.toml` is strict: unknown fields refuse as `malformed`
+(credential-shaped ones as `unsupported`). Engine-owned `engines.toml`
+attributes beyond `engine` and `weights` are tolerated, never interpreted or
+carried, but every nested table and array is still walked for
+credential-shaped keys, which refuse as `unsupported` before any value is
+stored; an unknown `weights` member refuses `unsupported` per the schema. Only
+the exact `credential` reference table is admitted. Refusal subjects carry
+identifier-shaped names only; anything else is omitted.
+
 ### Local-model effort configuration
 
-The machine-local `~/.agents/.configs/local-models.toml` declares each row's
-reasoning axis through `effort_support`, `effort_vocabulary`, and
-`recommended_effort`. The public `localmodels.ModelEntry` fields are
-`EffortSupport`, `EffortVocabulary`, and `RecommendedEffort`; `Models()`
-projects them into `vendorplugin.EffortDeclaration`.
+The machine-local local-models configuration (Curator catalog or legacy file)
+declares each row's reasoning axis through `effort_support`,
+`effort_vocabulary`, and `recommended_effort`. The public
+`localmodels.ModelEntry` fields are `EffortSupport`, `EffortVocabulary`, and
+`RecommendedEffort`; `Models()` projects them into
+`vendorplugin.EffortDeclaration`.
 
 ```toml
 [runtimes.local-codex]
@@ -1813,10 +1848,10 @@ validated provider and catalog metadata. Plan construction starts no process;
 call `plan.VerifyBeforeExec()` immediately before starting an exec plan.
 
 `local-runtime status` reads `localmodels.Peek()`'s memoized-forever result —
-the SAME loader a launch's conditional registration decision reads — and
-reports whether `~/.agents/.configs/local-models.toml` was found and parsed,
-distinctly for absence versus a malformed file
-(`{"registered": false, "reason": "absent"}` vs
+the SAME loader a launch's conditional registration decision reads, resolving
+the Curator catalog with the legacy fallback — and reports whether local
+configuration was found and parsed, distinctly for absence versus a malformed
+file (`{"registered": false, "reason": "absent"}` vs
 `{"registered": false, "reason": "malformed", "error": "<msg>"}`), and when
 valid, each declared `(runtime, model)` pair's live broker status via
 `pkg/localruntime`'s `StatusReader`. It never registers, declares, or launches

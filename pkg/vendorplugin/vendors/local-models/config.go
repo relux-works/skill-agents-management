@@ -65,6 +65,11 @@ type ModelEntry struct {
 	RecommendedEffort   string
 	Pointer             Pointer
 	Engine              plugin.Ref
+	// ExpectedWeightsID is the operator's exact-weights pin
+	// (gguf-sha256:<64 lowercase hex>) from the Curator catalog. Empty
+	// means unpinned: readable, but never certified. Legacy
+	// local-models.toml has no pin and always leaves this empty.
+	ExpectedWeightsID string
 }
 
 // RuntimeEntry is one declared runtime: its id, which agentic system drives
@@ -84,11 +89,25 @@ type RuntimeEntry struct {
 	Models map[vendorplugin.ModelID]ModelEntry
 }
 
-// Config is the fully parsed, fully validated content of one
-// local-models.toml.
+// Config is the fully parsed, fully validated content of one local-models
+// source: the Curator catalog (runtimes.toml plus engines.toml) or the legacy
+// local-models.toml fallback.
 type Config struct {
 	InferenceEngines []plugin.ID
 	Runtimes         []RuntimeEntry
+	// Source names the basename the rows were resolved from: "runtimes.toml"
+	// for the Curator catalog, "local-models.toml" for the legacy fallback.
+	// Empty means a manually constructed config and reads as the legacy
+	// source for provenance.
+	Source string
+}
+
+// SourceName reports the effective source basename for provenance.
+func (c Config) SourceName() string {
+	if c.Source == "" {
+		return legacyFileName
+	}
+	return c.Source
 }
 
 // EnginePlugins materializes configured inference-engine identities without
@@ -101,36 +120,54 @@ func (c Config) EnginePlugins() []plugin.Plugin {
 	return out
 }
 
-// ConfigResult is loadConfig's three-way answer: the machine genuinely has
-// no local-models.toml (Absent), the file was found but could not be
-// honestly read (Err, wrapping ErrConfigMalformed), or a valid Config.
+// ConfigResult is the loader's answer: the machine genuinely has no local
+// configuration at all (Absent), the files were found but could not be
+// honestly read (Err, a typed *Refusal), or a valid Config.
 //
 // Absent and Err are mutually exclusive and both distinct from a valid,
 // zero-model Config — a file that PARSES but declares no models under a
 // runtime is a real configuration error the vendor registry itself refuses
 // (Registry.Register's unconditional ErrNoModels), not something this type
 // collapses into either of the other two.
+//
+// Warning carries the typed legacy deprecation when the legacy file is
+// present and resolution succeeded: either the legacy fallback (Curator
+// catalog absent) or the equal-content case (both present and agreeing, the
+// Curator rows win and the legacy file is ignored).
 type ConfigResult struct {
-	Config Config
-	Absent bool
-	Err    error
+	Config  Config
+	Absent  bool
+	Err     error
+	Warning *DeprecationWarning
 }
 
-// localModelsFilePath is the one path this package ever reads: global only,
-// no project-local tier, because what it stores is a MACHINE fact (which
-// local server, if any, is available on this workstation), not a
-// per-calling-Story one.
+// localModelsFilePath is the legacy path this package reads as an explicit
+// fallback: global only, no project-local tier, because what it stores is a
+// MACHINE fact (which local server, if any, is available on this
+// workstation), not a per-calling-Story one.
 func localModelsFilePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("localmodels: resolving the home directory: %w", err)
 	}
-	return filepath.Join(home, ".agents", ".configs", "local-models.toml"), nil
+	return filepath.Join(home, ".agents", ".configs", legacyFileName), nil
 }
 
-// readHomeConfigFile is the production file reader: os.ReadFile against the
-// resolved home path, reporting absence via os.IsNotExist rather than
-// conflating it with every other read failure.
+// curatorDirPath is the Curator catalog directory: global only, for the same
+// machine-fact reason as the legacy path.
+func curatorDirPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("localmodels: resolving the home directory: %w", err)
+	}
+	return filepath.Join(home, ".curator"), nil
+}
+
+// readHomeConfigFile is the legacy single-file reader preserved for the
+// isolated configLoader unit tests: os.ReadFile against the resolved home
+// path, reporting absence via os.IsNotExist rather than conflating it with
+// every other read failure. Production resolution reads through LoadAt,
+// not through this function.
 func readHomeConfigFile() ([]byte, bool, error) {
 	path, err := localModelsFilePath()
 	if err != nil {
@@ -185,17 +222,84 @@ func (l *configLoader) load() ConfigResult {
 	return l.result
 }
 
-// homeLoader is the one process-wide, memoized-forever singleton every
-// production caller shares. Peek and every Vendor constructed from a real
-// machine read through it.
-var homeLoader = newConfigLoader(readHomeConfigFile)
+// homeCache is the one process-wide, memoized-forever-per-home singleton
+// every production caller shares. Peek and every Vendor constructed from a
+// real machine read through it. The legacy homeLoader shape survives only as
+// the isolated newConfigLoader unit-test fixture; production resolution reads
+// the Curator catalog with the legacy fallback through LoadAt.
+//
+// The memo keys on the resolved home paths (curator directory plus legacy
+// file path), so the same home resolves once however many callers ask, while
+// a different home never reuses another home's cached absence or rows.
+type homeCache struct {
+	mu      sync.Mutex
+	results map[string]ConfigResult
+}
 
-// Peek exposes the memoized-forever load result to a caller that must decide
-// whether to register this vendor at all, WITHOUT constructing a Vendor
-// value first. It calls the SAME loader production's Vendor values are
-// eventually built from — the memoization guarantees this costs one file
-// read total, however many callers ask.
-func Peek() ConfigResult { return homeLoader.load() }
+// homeResolver is the process-wide homeCache. Tests needing isolation
+// construct their own homeCache via newHomeCache instead of touching this.
+var homeResolver = newHomeCache()
+
+func newHomeCache() *homeCache {
+	return &homeCache{results: map[string]ConfigResult{}}
+}
+
+// homeCacheKey joins the two resolved paths with a NUL separator. Both
+// halves matter: the same curator directory with a different legacy file is
+// a different source set, not a cache hit.
+func homeCacheKey(curatorDir, legacyPath string) string {
+	return curatorDir + "\x00" + legacyPath
+}
+
+// get returns the memoized result for one resolved path pair, resolving once
+// on first use. Concurrent callers for the same key single-flight on the
+// mutex; different keys resolve independently.
+func (c *homeCache) get(curatorDir, legacyPath string) ConfigResult {
+	key := homeCacheKey(curatorDir, legacyPath)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if result, ok := c.results[key]; ok {
+		return result
+	}
+	result := resolveWithPaths(curatorDir, legacyPath)
+	c.results[key] = result
+	return result
+}
+
+// Peek exposes the memoized-forever-per-home load result to a caller that
+// must decide whether to register this vendor at all, WITHOUT constructing a
+// Vendor value first. It calls the SAME loader production's Vendor values are
+// eventually built from — the memoization guarantees this costs one
+// resolution per home, however many callers ask.
+//
+// A machine with neither the Curator catalog nor the legacy file reports
+// Absent (not an error), preserving the conditional-registration contract.
+// Every other failure is a typed *Refusal.
+func Peek() ConfigResult {
+	curatorDir, err := curatorDirPath()
+	if err != nil {
+		return ConfigResult{Err: refuse(RefusalReadFailed, runtimesFileName, "")}
+	}
+	legacyPath, err := localModelsFilePath()
+	if err != nil {
+		return ConfigResult{Err: refuse(RefusalReadFailed, runtimesFileName, "")}
+	}
+	return homeResolver.get(curatorDir, legacyPath)
+}
+
+// resolveWithPaths is Peek's testable core: LoadAt over explicit paths with
+// the absent refusal mapped to ConfigResult.Absent, preserving the
+// conditional-registration contract.
+func resolveWithPaths(curatorDir, legacyPath string) ConfigResult {
+	cfg, warning, err := LoadAt(curatorDir, legacyPath)
+	if err != nil {
+		if errors.Is(err, ErrAbsent) {
+			return ConfigResult{Absent: true}
+		}
+		return ConfigResult{Err: err}
+	}
+	return ConfigResult{Config: cfg, Warning: warning}
+}
 
 // ParseConfig exposes the same validated legacy local-models.toml parser to
 // the operator runtime-catalog importer. It does not read machine files or
@@ -288,6 +392,7 @@ func parseConfig(data []byte) (Config, error) {
 		}
 		cfg.Runtimes = append(cfg.Runtimes, entry)
 	}
+	cfg.Source = legacyFileName
 	return cfg, nil
 }
 

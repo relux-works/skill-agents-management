@@ -19,7 +19,7 @@ func buildModels(cfg Config) []vendorplugin.Model {
 			model := vendorplugin.Model{
 				ID:                  modelID,
 				Description:         vendorplugin.UsageDescription(entry.Description),
-				Rank:                localCapabilityRank(),
+				Rank:                localCapabilityRank(cfg.SourceName()),
 				Lifecycle:           entry.Lifecycle,
 				Effort:              vendorplugin.EffortDeclaration{Support: entry.EffortSupport, Vocabulary: append([]string(nil), entry.EffortVocabulary...), Recommended: entry.RecommendedEffort},
 				ContextWindowTokens: entry.ContextWindowTokens,
@@ -50,12 +50,15 @@ func buildModels(cfg Config) []vendorplugin.Model {
 // lowest legal one, which states a tie and nothing else — it is not a bench
 // point and its evidence does not cite the bench, so bughunt_test.go leaves
 // this vendor outside its scope by name.
-func localCapabilityRank() vendorplugin.CapabilityRank {
+func localCapabilityRank(source string) vendorplugin.CapabilityRank {
+	if source == "" {
+		source = legacyFileName
+	}
 	return vendorplugin.CapabilityRank{
 		Score: 1,
 		Basis: []vendorplugin.RankEvidence{{
-			Source:      "local-models.toml",
-			Observation: "the row exists in the operator's own local-models.toml; no comparative benchmark is available for locally-configured models",
+			Source:      source,
+			Observation: "the row exists in the operator's own " + source + "; no comparative benchmark is available for locally-configured models",
 		}},
 	}
 }
