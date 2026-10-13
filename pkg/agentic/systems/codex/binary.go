@@ -7,6 +7,7 @@ import (
 
 	"github.com/relux-works/skill-agents-management/internal/launchenv"
 	"github.com/relux-works/skill-agents-management/internal/runtimeenv"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 // Codex has THREE binary-resolution paths and they are tried in this order:
@@ -191,7 +192,7 @@ func nativeBinaryFromShim(shimPath string) string {
 	if shimPath == "" {
 		return ""
 	}
-	resolved, err := filepath.EvalSymlinks(shimPath)
+	resolved, err := planningio.Default.EvalSymlinks(shimPath)
 	if err != nil {
 		resolved = shimPath
 	}
@@ -215,7 +216,7 @@ func nativeBinaryFromShim(shimPath string) string {
 // different errors, so a caller that curated an environment without PATH is not
 // told its codex install is missing.
 func lookPath(env []string, name string) (string, error) {
-	return launchenv.LookPath(env, name)
+	return planningio.Default.LookPath(env, name)
 }
 
 // isRegularFile reports whether path names an existing file rather than a
@@ -223,7 +224,7 @@ func lookPath(env []string, name string) (string, error) {
 // source's `if _, err := os.Stat(...); err == nil` verbatim; the caller's next
 // move — try the following resolution path — is the same for a missing file
 // and an unreadable one.
-func isRegularFile(path string) bool { return launchenv.IsRegularFile(path) }
+func isRegularFile(path string) bool { return planningio.Default.IsRegularFile(path) }
 
 // lookupEnv returns the value of key in a KEY=VALUE environment and whether it
 // was present at all.

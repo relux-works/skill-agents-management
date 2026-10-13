@@ -11,6 +11,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 // ProviderSnapshot is a validated local-provider value object: the resolved
@@ -149,7 +150,7 @@ func ReadProviderSnapshot(req agentic.LaunchRequest) (*ProviderSnapshot, error) 
 		root = rootValue
 	}
 	configPath := filepath.Join(root, "config.toml")
-	data, err := os.ReadFile(configPath)
+	data, err := planningio.Default.ReadFile(configPath)
 	if err != nil {
 		kind := agentic.LocalProviderReadFailed
 		if errors.Is(err, os.ErrNotExist) {

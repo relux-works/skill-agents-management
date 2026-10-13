@@ -12,6 +12,7 @@ import (
 	"github.com/relux-works/curator-network-profiles/pkg/envpatch"
 	"github.com/relux-works/curator-network-profiles/pkg/refusal"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 // This file is the codex-env-v1 network adapter: the generic environment
@@ -671,7 +672,7 @@ func layerConfigMCPEntries(base, layered map[string]configMCPEntry) map[string]c
 // partial inventory is headroom for an unlisted server. Profile is the
 // selected profile's name for diagnostics, empty for the base config.
 func readCodexMCPServersFile(path, subject, profile string) (map[string]configMCPEntry, error) {
-	data, err := os.ReadFile(path)
+	data, err := planningio.Default.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return map[string]configMCPEntry{}, nil

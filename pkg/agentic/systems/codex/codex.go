@@ -34,11 +34,11 @@ package codex
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/relux-works/curator-network-profiles/pkg/binding"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 // systemID is this plugin's identity. It is one of the frozen runtime ids —
@@ -143,6 +143,19 @@ func (*System) ResolveBinary(req agentic.LaunchRequest) (string, error) {
 	return resolveBinary(req.Env)
 }
 
+// ValidateLocalProviderSettings is the pre-planning boundary for
+// request-carried local-provider settings: BuildPlan dispatches it before
+// binary resolution and every other filesystem-dependent step, so a refused
+// setting refuses typed before the first read. It is pure — the request's
+// settings against this plugin's own closed policy, no filesystem access —
+// and Argv re-validates as defence in depth for direct plugin callers.
+func (*System) ValidateLocalProviderSettings(req agentic.LaunchRequest, _ agentic.LaunchMode) error {
+	if req.LocalProvider == nil || len(req.LocalProvider.Settings) == 0 {
+		return nil
+	}
+	return validateCarriedLocalSettingsPrePlan(req.LocalProvider.Settings, req.LocalProvider.ID)
+}
+
 // Argv builds the argument vector for one launch mode, excluding the binary.
 //
 // The mode is checked against the declaration before Args is called, so a mode
@@ -218,7 +231,7 @@ func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, e
 // because no prompt file exists yet would be a dry run performing work.
 func (*System) Stdin(req agentic.LaunchRequest) (agentic.StdinPayload, error) {
 	if path := strings.TrimSpace(req.PromptPath); path != "" {
-		data, err := os.ReadFile(path)
+		data, err := planningio.Default.ReadFile(path)
 		if err != nil {
 			return agentic.StdinPayload{}, fmt.Errorf("codex: reading the assignment prompt: %w", err)
 		}

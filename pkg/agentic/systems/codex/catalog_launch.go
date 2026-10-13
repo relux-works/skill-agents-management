@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 // Each process owns a private temp directory. Content-addressed files are
@@ -35,7 +36,7 @@ func materializeCatalog(data []byte, providerID string) (string, error) {
 	}
 	digest := fmt.Sprintf("%x", sha256.Sum256(data))
 	path := filepath.Join(launchCatalogs.root, "catalog-"+digest+".json")
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
+	file, err := planningio.Default.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
 	if err == nil {
 		_, writeErr := file.Write(data)
 		closeErr := file.Close()
@@ -52,11 +53,11 @@ func materializeCatalog(data []byte, providerID string) (string, error) {
 }
 
 func verifyLaunchCatalog(path, digest, providerID string) error {
-	info, err := os.Lstat(path)
+	info, err := planningio.Default.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o400 {
 		return localCatalogRefusal(agentic.LocalProviderReadFailed, path, providerID)
 	}
-	dir, err := os.Lstat(filepath.Dir(path))
+	dir, err := planningio.Default.Lstat(filepath.Dir(path))
 	if err != nil || !dir.IsDir() || dir.Mode().Perm() != 0o700 {
 		return localCatalogRefusal(agentic.LocalProviderReadFailed, path, providerID)
 	}

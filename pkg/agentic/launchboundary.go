@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 // Native launch-boundary adapter.
@@ -237,11 +239,11 @@ func resolveLaunchBoundaryExecutablePath(path, workdir string) (string, error) {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(workdir, path)
 	}
-	abs, err := filepath.Abs(path)
+	abs, err := planningio.Default.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	info, err := os.Stat(abs)
+	info, err := planningio.Default.Stat(abs)
 	if err != nil {
 		return "", err
 	}
@@ -264,20 +266,20 @@ func checkLaunchBoundaryMCPLayer(environment, layer string) error {
 		return nil
 	}
 	path := layer
-	if _, err := os.Lstat(path); err != nil {
+	if _, err := planningio.Default.Lstat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerMissing, Path: path, Err: err}
 		}
 		return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: err}
 	}
-	info, err := os.Stat(path)
+	info, err := planningio.Default.Stat(path)
 	if err != nil {
 		return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: err}
 	}
 	if !info.Mode().IsRegular() {
 		return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: errors.New("not a regular file")}
 	}
-	f, err := os.Open(path)
+	f, err := planningio.Default.Open(path)
 	if err != nil {
 		return &LaunchBoundaryMCPError{Code: LaunchBoundaryCodeMCPLayerUnreadable, Path: path, Err: err}
 	}
@@ -381,13 +383,13 @@ func probeLaunchBoundaryPromptFiles(environment, home string) ([]launchBoundaryO
 // (internal/systemprompt/systemprompt.go:108-138). The launcher's fail
 // closure (systemprompt.go:109) is inlined at each return.
 func readableLaunchBoundaryPromptFile(path string, allowAbsent bool) (bool, error) {
-	if _, err := os.Lstat(path); err != nil {
+	if _, err := planningio.Default.Lstat(path); err != nil {
 		if allowAbsent && errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
 		return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: err}
 	}
-	info, err := os.Stat(path)
+	info, err := planningio.Default.Stat(path)
 	if err != nil {
 		return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: err}
 	}
@@ -395,7 +397,7 @@ func readableLaunchBoundaryPromptFile(path string, allowAbsent bool) (bool, erro
 		return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: fmt.Errorf("not a regular file")}
 	}
 	// Open only after the regular-file check, so stable FIFOs cannot block.
-	file, err := os.Open(path)
+	file, err := planningio.Default.Open(path)
 	if err != nil {
 		return false, &LaunchBoundaryPromptError{Code: LaunchBoundaryCodeSyspromptUnreadable, Path: path, Err: err}
 	}

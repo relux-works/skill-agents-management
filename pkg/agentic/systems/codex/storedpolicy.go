@@ -10,6 +10,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 const codexManagedPolicySource = "system or cloud-managed configuration and requirements"
@@ -162,7 +163,7 @@ var (
 )
 
 func readCodexConfig(path string) (map[string]any, error) {
-	data, err := os.ReadFile(path)
+	data, err := planningio.Default.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}

@@ -237,6 +237,11 @@ func localCatalogRefusal(kind agentic.LocalProviderRefusalKind, catalogPath, sub
 
 const maxCatalogBytes = 4 << 20
 
+// readCatalogFile is the Codex-owned bounded-reader seam. Its native reader
+// uses platform-specific nonblocking opens; keep that dependency in this plugin,
+// not the core's import graph. Production never replaces this function.
+var readCatalogFile = catalogfile.ReadRegular
+
 func readRegularCatalog(path string) ([]byte, error) {
-	return catalogfile.ReadRegular(path, maxCatalogBytes)
+	return readCatalogFile(path, maxCatalogBytes)
 }

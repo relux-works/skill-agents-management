@@ -1,8 +1,9 @@
 package agentic
 
 import (
-	"path/filepath"
 	"strings"
+
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 // This file is the port of the extraction source's withSpawnEnv and
@@ -112,7 +113,7 @@ func AbsoluteBoardDir(boardDir string) string {
 	if trimmed == "" {
 		return ""
 	}
-	abs, err := filepath.Abs(trimmed)
+	abs, err := planningio.Default.Abs(trimmed)
 	if err != nil {
 		return trimmed
 	}

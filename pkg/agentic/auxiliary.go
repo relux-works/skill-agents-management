@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/relux-works/skill-agents-management/internal/releasegrammar"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 // AuxRole is closed: callers cannot introduce a command or a named process.
@@ -87,7 +88,7 @@ func readAuxBinaryIdentity(p Plan) (auxBinaryIdentity, error) {
 	if path, err := launchBoundaryExecutable(p.Binary, p.WorkDir, p.Env); err != nil {
 		return auxBinaryIdentity{}, err
 	} else {
-		f, err := os.Open(path)
+		f, err := planningio.Default.Open(path)
 		if err != nil {
 			return auxBinaryIdentity{}, err
 		}

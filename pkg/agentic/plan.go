@@ -451,6 +451,22 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 			return Plan{}, &LocalProviderRefusal{Kind: LocalProviderUnbound}
 		}
 	}
+	// Carried local-provider settings validate HERE, before any
+	// filesystem-dependent dispatch: binary resolution, home and catalog
+	// reads, Curator and descriptor validation, and request preparation
+	// below. A refused setting refuses typed before the first read, so an
+	// unavailable binary or a missing home never masks the policy refusal
+	// (review finding settings-refusal-after-binary-resolution: the gate
+	// used to run inside Argv, after ResolveBinary). The plugin's
+	// Argv-side validation stays as defence in depth for direct plugin
+	// callers. Systems without the optional validator carry nothing.
+	if req.LocalProvider != nil && len(req.LocalProvider.Settings) != 0 {
+		if validator, ok := sys.(LocalProviderSettingsValidator); ok {
+			if err := validator.ValidateLocalProviderSettings(req, mode); err != nil {
+				return Plan{}, fmt.Errorf("agentic: %s refused its carried local provider settings: %w", id, err)
+			}
+		}
+	}
 	// Permission modes are validated before the pre-plan gate runs: a refused
 	// value must not trigger even a file read, and the unknown-value refusal
 	// fires in every mode while the scope refusal fires in every mode but one.

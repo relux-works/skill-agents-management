@@ -13,6 +13,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/agentic/internal/planningio"
 )
 
 var providerIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
@@ -43,6 +44,18 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	}
 	if strings.TrimSpace(req.Model.ID) == "" {
 		return nil, localProviderRefusal(agentic.LocalProviderUnbound, providerID)
+	}
+	// Carried settings re-validate HERE, before the first filesystem read
+	// of either path below: BuildPlan's pre-plan boundary already refused
+	// them before binary resolution, and this second line protects direct
+	// plugin callers. A refused key refuses before any file is
+	// materialised, and an admitted key joins the argv the seal binds.
+	var settingsArgv []string
+
+	if settingsValue, err := carriedLocalSettingsArgv(req.LocalProvider.Settings, providerID); err != nil {
+		return nil, err
+	} else {
+		settingsArgv = settingsValue
 	}
 	var root string
 
@@ -76,11 +89,12 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 		if path, err := materializeCatalog([]byte(snapshot.catalogData), providerID); err != nil {
 			return nil, err
 		} else {
-			return append(providerArgv(providerID, snapshot.entry()), catalogArgv(path)...), nil
+			argv := append(providerArgv(providerID, snapshot.entry()), catalogArgv(path)...)
+			return append(argv, settingsArgv...), nil
 		}
 	}
 	configPath := filepath.Join(root, "config.toml")
-	data, err := os.ReadFile(configPath)
+	data, err := planningio.Default.ReadFile(configPath)
 	if err != nil {
 		kind := agentic.LocalProviderReadFailed
 		if errors.Is(err, os.ErrNotExist) {
@@ -114,7 +128,8 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	if path, err := materializeCatalog(catalog.data, providerID); err != nil {
 		return nil, err
 	} else {
-		return append(providerArgv(providerID, provider), catalogArgv(path)...), nil
+		argv := append(providerArgv(providerID, provider), catalogArgv(path)...)
+		return append(argv, settingsArgv...), nil
 	}
 }
 
