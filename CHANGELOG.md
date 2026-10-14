@@ -1,26 +1,82 @@
 # Changelog
 
-## v0.5.57 — 2026-10-07
+## v0.5.64 — 2026-10-13
 
-- Export `codex.RepresentedProviderKeys()` as the single provider-snapshot key
-  contract; document consumer refusal of unknown keys without changing launch
-  plans, and pin the declaration to carried fields and emitted overrides.
+- Resolve local runtime and model rows from the Curator catalog:
+  `localmodels.LoadAt` reads `~/.curator/runtimes.toml` plus
+  `~/.curator/engines.toml` as the source of rows and engine pointers, with
+  the legacy `~/.agents/.configs/local-models.toml` as an explicit fallback
+  that emits a typed deprecation warning naming `runtimecatalog.ImportAt`.
+  The same runtime ID with different rows or engine pointer in both sources
+  refuses typed `conflicting`, never last-writer-wins; equal content resolves
+  from the Curator rows. Every failure is a sanitized `*localmodels.Refusal`
+  (`absent`, `malformed`, `read_failed`, `conflicting`, `unbound`,
+  `unsupported`); a read failure never falls back. `runtimes.toml` is strict:
+  unknown fields refuse as `malformed` (credential-shaped ones as
+  `unsupported`). Engine-owned `engines.toml` attributes beyond `engine` and
+  `weights` are tolerated but credential-walked at any depth; an unknown
+  `weights` member refuses `unsupported`. Only the exact `credential`
+  reference table is admitted, no credential values are read or carried,
+  refusal subjects are identifier-shaped or omitted, `engines.toml` is only
+  looked up, never written, and `Peek` memoizes per home paths. The additive
+  exact-weights fields (`engines.<name>.weights.id` and the model
+  `expected_weights_id` pin) are grammar-validated when present; absence
+  stays readable and unpinned.
 
-## Unreleased
+## v0.5.63 — 2026-10-13
 
-- Accept `launch-env-fragment-v2` alongside v1. The v2 `permissions`
-  member is required: production JSON decoding refuses a non-object
-  value, any member outside `mode`/`locked`/`source`, an absent
-  member, an explicit null, or a mistyped member, and the typed
-  validator enforces the §10.2 value contract (closed native/yolo
-  mode and profile/global/default source vocabularies; the lock is
-  engaged exactly for the global source; yolo requires an unlocked
-  profile source). The validated value is exposed typed on
-  `CuratorContext` and carried in the fragment identity and
-  provenance snapshot so a changed profile level or lock engagement
-  is stale identity. A v1 fragment carrying the member is malformed;
-  unknown revisions refuse with the existing typed revision refusal.
-  v1 plans keep their existing bytes.
+- Document the exact-local-weights extension of operator schema 1 in
+  `docs/operator-file-schema-v1.md`: the optional engine-owned
+  `engines.<name>.weights.id` and the optional runtime-model pin
+  `expected_weights_id` (exactly `gguf-sha256:<64 lowercase hex>`, never
+  trimmed), mandatory only at the certified local launch gate. This version
+  certifies single-file GGUF only; MLX rows stay legacy and unpinned. Unknown
+  `weights` members refuse certified execution. Documentation only; readers,
+  validation and the gate land with the `~/.curator` catalog launch path.
+
+- Add `LocalProviderBinding.Settings`, a typed, module-owned input that carries
+  operator settings into the Codex local-provider argv before `SealExecPlan`,
+  so `VerifyBeforeExec` holds for a plan built with them. The Codex plugin
+  validates every carried key against its own closed allow-list — only the
+  cosmetic/output-shape keys `hide_agent_reasoning` and
+  `show_raw_agent_reasoning` (boolean display switches, exactly `true` or
+  `false`) are admitted — and refuses credential, provider, model-identity,
+  sandbox, approval, network, tool and unknown keys typed at a pre-planning
+  boundary before binary resolution and any file read. Note that
+  `show_raw_agent_reasoning` surfaces raw reasoning content on stderr, which
+  consumers that capture stderr may persist in logs or transcripts. The
+  settings ride the sealed argv, so a post-seal argv change still refuses as
+  conflicting; the subscription (non-local) path is unchanged.
+  `codex.AllowedLocalProviderSettings` reports the allow-list.
+
+## v0.5.62 — 2026-10-12
+
+- Declare `muse-wonder-1.0-contributor` and `muse-wonder-full-1.0-contributor`
+  on the vendor-unresolved `muse` runtime (muse only, current, not
+  `Recommended`, effort `minimal`..`max` recommending `xhigh`, window
+  1,007,997 read from the Muse Code 1.4.6 provider catalog). The score is an
+  interpolated 34 between the measured `muse-spark-1.3` (33) and
+  `claude-fable-5-1` (43), shared by both rows; no Wonder run was measured. The
+  non-contributor ids stay unregistered, `muse-wonder` is declared as the short
+  alias of `muse-wonder-1.0-contributor` (shape of `muse-spark`; the full
+  variant has none), `max` is admitted for them and a word outside the axis is
+  refused, and the existing spark and 1.2 rows are unchanged.
+
+## v0.5.61 — 2026-10-12
+
+- Compare Curator fragment identity across revisions: a Revision-only
+  difference between accepted revisions (v1/v2/v3) is the same identity
+  when every other field is byte-equal, so a session recorded under v2
+  resumes on an otherwise identical v3 fragment instead of refusing
+  with stale identity. The stored revision must be accepted (anything
+  else is stale); the current side is validator-admitted before identity
+  runs, so identity gates the stored side only. A muse fragment stays
+  v3-only in identity as in validation — a stored pre-v3 muse fragment
+  never resumes. A v1 session still cannot resume on v2: v2 carries the
+  permissions member the v1 identity holds as absent, which is a
+  substantive delta.
+
+## v0.5.60 — 2026-10-12
 
 - Accept `launch-env-fragment-v3` alongside v1 and v2. claude_code,
   codex_cli, opencode and pi keep their exact v2 rules under v3 (one
@@ -43,17 +99,66 @@
   exactly like the other adapters — malformed unless absolute, otherwise
   refused as an unregistered mapping — never silently ignored.
 
-- Compare Curator fragment identity across revisions: a Revision-only
-  difference between accepted revisions (v1/v2/v3) is the same identity
-  when every other field is byte-equal, so a session recorded under v2
-  resumes on an otherwise identical v3 fragment instead of refusing
-  with stale identity. The stored revision must be accepted (anything
-  else is stale); the current side is validator-admitted before identity
-  runs, so identity gates the stored side only. A muse fragment stays
-  v3-only in identity as in validation — a stored pre-v3 muse fragment
-  never resumes. A v1 session still cannot resume on v2: v2 carries the
-  permissions member the v1 identity holds as absent, which is a
-  substantive delta.
+## v0.5.59 — 2026-10-11
+
+- Accept `launch-env-fragment-v2` alongside v1. The v2 `permissions`
+  member is required: production JSON decoding refuses a non-object
+  value, any member outside `mode`/`locked`/`source`, an absent
+  member, an explicit null, or a mistyped member, and the typed
+  validator enforces the §10.2 value contract (closed native/yolo
+  mode and profile/global/default source vocabularies; the lock is
+  engaged exactly for the global source; yolo requires an unlocked
+  profile source). The validated value is exposed typed on
+  `CuratorContext` and carried in the fragment identity and
+  provenance snapshot so a changed profile level or lock engagement
+  is stale identity. A v1 fragment carrying the member is malformed;
+  unknown revisions refuse with the existing typed revision refusal.
+  v1 plans keep their existing bytes.
+
+## v0.5.58 — 2026-10-10
+
+- Retire the Muse verified-release list: the plugin admits any well-formed
+  build the binary attests, parsed through the one `buildid` grammar
+  (`ParseBuildID`, `ParsePinnedBinaryName`, `ParseBuildIdentity`,
+  `CompareBuildIDs`), and seals the attested full build with its byte
+  digest, exact argv, posture and environment identity.
+
+- Resolve Muse yolo from bounded `--help` evidence: the flag maps only when
+  the selected binary's help declares it as its own option
+  (`ErrPermissionModeUnsupported` otherwise), the seal binds the help
+  digests and re-verifies them before every exec, and the public
+  no-evidence query reports `ErrMuseHelpEvidenceRequired` for yolo.
+
+- Carry a host-frozen Muse copy through `LaunchRequest.FrozenToolBinary`,
+  `FrozenToolBuild` and `FrozenToolSHA256`: a present tuple selects the
+  supplied copy for resolution, probing and sealing without PATH fallback,
+  and any defect refuses with `ErrMuseFrozenToolInvalid`.
+
+- Bound every Muse version and help probe during the read (64 KiB version,
+  1 MiB help), with process-group teardown, bounded drain past child exit
+  and typed `ProbeExecutionError` attempt records for host routing.
+
+- Echo the caller-supplied `ToolRelease` claim and `PermissionMode` verbatim on `Plan`, including zero values. The interactive seal binds the attested full build and resolved permission posture, and refuses a supplied release claim that disagrees with the attested release with `ErrMuseToolReleaseMismatch`.
+
+- Remove exported `ErrMuseSealReleaseUnverified` with the retired release table.
+
+- Declare `claude-haiku-5-5` and its floating alias `haiku` → `claude-haiku-5-5`
+  in `anthropic` (claude-code only, current, `low`..`max` recommended `medium`,
+  rank 22 interpolated between `claude-opus-5` and `claude-opus-4-8`, read off
+  Claude Code 2.1.290). Both rows declare the owner-imposed 100K operating
+  context window, and the claude-code plugin now exports a declared
+  `agentic.Model.ContextWindowTokens` as `CLAUDE_CODE_AUTO_COMPACT_WINDOW`;
+  a row declaring none leaves the child environment byte-identical.
+  `Launchable` carries the window and `BuildLaunch` refuses a vendor that
+  rewrites it.
+
+## Unreleased
+
+## v0.5.57 — 2026-10-07
+
+- Export `codex.RepresentedProviderKeys()` as the single provider-snapshot key
+  contract; document consumer refusal of unknown keys without changing launch
+  plans, and pin the declaration to carried fields and emitted overrides.
 
 ## v0.5.56 — 2026-10-07
 
