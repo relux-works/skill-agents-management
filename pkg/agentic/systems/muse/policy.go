@@ -3,6 +3,7 @@ package muse
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/relux-works/skill-agents-management/internal/nativeargs"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
@@ -64,16 +65,36 @@ func permissionMappingWithEvidence(declaration helpDeclaration, mode agentic.Per
 	return mapping, nil
 }
 
-// scanMuseNativePolicy refuses a caller suffix that already selects the same
+// scanMuseNativePolicy reserves foreign-context options only when isolation
+// is active, in either posture, and otherwise preserves the native suffix.
+// Under yolo it refuses a caller suffix that already selects the same
 // complete bypass posture that yolo would add. The explicit Muse yolo flag is
 // duplicate in any active flag position; the two bare switches together are
 // its documented equivalent. A lone switch is not a complete posture, and
 // text after -- is prompt data under nativeargs' shared parsing rule.
-func scanMuseNativePolicy(args []string) error {
+func scanMuseNativePolicy(args []string, yolo, isolate bool) error {
 	seenDisableApproval := false
 	seenDisableSandbox := false
 	for _, index := range nativeargs.FlagIndexes(args) {
-		name, _, hasValue := nativeargs.SplitFlagValue(args[index])
+		name, value, hasValue := nativeargs.SplitFlagValue(args[index])
+		if isolate {
+			config := ""
+			if name == museConfigFlag || name == "--config" {
+				config = value
+				if !hasValue && index+1 < len(args) {
+					config = args[index+1]
+				}
+			} else if strings.HasPrefix(args[index], museConfigFlag) {
+				config = strings.TrimPrefix(args[index], museConfigFlag)
+			}
+			key, _, _ := strings.Cut(config, "=")
+			if name == museNoForeignContextFlag || strings.TrimSpace(key) == museForeignSkillsKey {
+				return fmt.Errorf("%w: native arguments select foreign personal context already owned by the managed launch", agentic.ErrNativePolicyConflict)
+			}
+		}
+		if !yolo {
+			continue
+		}
 		switch name {
 		case museYoloFlag:
 			return fmt.Errorf("%w: native arguments already carry %q; refusing rather than emitting it twice",

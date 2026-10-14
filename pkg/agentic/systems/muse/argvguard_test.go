@@ -46,6 +46,9 @@ var museArgvSignature = []string{
 	"--workspace",
 	"--prompt-file",
 	"--reasoning-effort",
+	"--no-foreign-personal-context",
+	"context.foreign_personal_skills",
+	"context.foreign_personal_skills=false",
 }
 
 const museArgsFile = "pkg/agentic/systems/muse/args.go"
@@ -62,6 +65,9 @@ const codexContextFile = "pkg/agentic/systems/codex/context.go"
 // this module name their construction site Args, so a bare-name allowlist would
 // exempt every Args in the module from every plugin's guard.
 var museArgvConstructionAllowlist = map[string]string{
+	argvguard.AllowlistKey(museArgsFile, "museNoForeignContextFlag"):                              "the exec-only managed-context spelling",
+	argvguard.AllowlistKey(museArgsFile, "museForeignSkillsKey"):                                  "the managed-context config key read by the duplicate scanner",
+	argvguard.AllowlistKey(museArgsFile, "museForeignSkillsOff"):                                  "the TUI managed-context JSON boolean override",
 	argvguard.AllowlistKey(museArgsFile, "Args"):                                                  "the single exec and dry-run construction site",
 	argvguard.AllowlistKey(museArgsFile, "interactiveArgs"):                                       "the interactive branch reached only through Args",
 	argvguard.AllowlistKey(museArgsFile, "museYoloFlag"):                                          "the shared yolo spelling used by both builders and the duplicate scanner",
@@ -187,6 +193,20 @@ func TestTheMuseArgvGuardCatchesASecondConstructionSite(t *testing.T) {
 		wantFn  string
 		because string
 	}{
+		{
+			name:    "foreign context flag rebuilt elsewhere",
+			wantFn:  "foreignContext",
+			because: "managed context options must remain in the sealed argv construction",
+			source: `package other
+func foreignContext() []string { return []string{"--no-foreign-personal-context"} }`,
+		},
+		{
+			name:    "foreign skills override rebuilt elsewhere",
+			wantFn:  "foreignSkills",
+			because: "the TUI override is also owned by the single construction site",
+			source: `package other
+func foreignSkills() []string { return []string{"-c", "context.foreign_personal_skills=false"} }`,
+		},
 		{
 			name:    "a full second construction",
 			wantFn:  "buildMuseArgsAgain",

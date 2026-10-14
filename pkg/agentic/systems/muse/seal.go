@@ -212,6 +212,9 @@ func sealInteractiveExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error
 	if claimed := strings.TrimSpace(plan.ToolRelease); claimed != "" && claimed != probed.Release {
 		return nil, fmt.Errorf("%w: caller claims release %q, binary attests %q", ErrMuseToolReleaseMismatch, claimed, probed.Release)
 	}
+	if plan.ToolRelease == foreignPersonalContextRelease && hasCuratorRootContext(plan.Env) && probed.Build != foreignPersonalContextBuild {
+		return nil, fmt.Errorf("%w: foreign personal context options require verified build %q, binary attests %q", ErrMuseToolReleaseMismatch, foreignPersonalContextBuild, probed.Build)
+	}
 	var helpFullDigest, helpLinesDigest string
 	if mode == agentic.PermissionModeYolo {
 		if evidence, err := probeMuseHelpEvidence(probeCtx, plan.Binary, plan.Env, probed.Build, digest); err != nil {

@@ -714,3 +714,41 @@ func (m trailingEffortSystem) Argv(req agentic.LaunchRequest, mode agentic.Launc
 	}
 	return append(out, moved...), nil
 }
+
+// The source captures predate this capability. Extend their argv in memory,
+// preserving their provenance and every other observable launch field.
+func TestMuseManagedContextMatchesExtendedHeadlessGoldens(t *testing.T) {
+	for _, c := range parityCases {
+		t.Run(c.goldenID, func(t *testing.T) {
+			g, dirs, req := prepareParityCase(t, c)
+			cfg := t.TempDir()
+			writeMuseRootContext(t, cfg, curatorRootContextPrefix+"managed rules")
+			req.Env = agentic.SetEnvValue(req.Env, "XDG_CONFIG_HOME", cfg)
+			req.ToolRelease = foreignPersonalContextRelease
+			// Add CFG to the capture baseline so its pass-through does not
+			// appear as a new environment delta.
+			g.Capture.ParentEnv = agentic.SetEnvValue(g.Capture.ParentEnv, "XDG_CONFIG_HOME", cfg)
+			baseline := g
+			at := -1
+			for i, arg := range g.Surface.Args {
+				if arg == "--workspace" {
+					at = i + 2
+					break
+				}
+			}
+			if at < 0 {
+				t.Fatal("golden has no workspace pair to extend")
+			}
+			args := append([]string(nil), g.Surface.Args[:at]...)
+			args = append(args, "--no-foreign-personal-context")
+			g.Surface.Args = append(args, g.Surface.Args[at:]...)
+			plan := paritycase.BuildPlan(t, New(), req, c.mode)
+			if diffs := compareMuseGoldenPlan(g, plan, dirs.Substitutions()); len(diffs) != 0 {
+				t.Fatalf("managed plan differs from extended golden: %v", diffs)
+			}
+			if diffs := compareMuseGoldenPlan(baseline, plan, dirs.Substitutions()); !paritycase.NamesField(diffs, "Args") {
+				t.Fatalf("unextended golden did not require the new argument: %v", diffs)
+			}
+		})
+	}
+}

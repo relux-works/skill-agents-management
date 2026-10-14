@@ -54,10 +54,14 @@ import (
 // name an assignment file that does not exist yet. It is the source's literal
 // (adapter.go, museDryRunArgs).
 const (
-	promptFilePlaceholder   = "<prompt-file>"
-	museYoloFlag            = "--yolo"
-	museDisableApprovalFlag = "--disable-approval"
-	museDisableSandboxFlag  = "--disable-sandbox"
+	promptFilePlaceholder    = "<prompt-file>"
+	museYoloFlag             = "--yolo"
+	museDisableApprovalFlag  = "--disable-approval"
+	museDisableSandboxFlag   = "--disable-sandbox"
+	museNoForeignContextFlag = "--no-foreign-personal-context"
+	museConfigFlag           = "-c"
+	museForeignSkillsKey     = "context.foreign_personal_skills"
+	museForeignSkillsOff     = museForeignSkillsKey + "=false"
 )
 
 // Args dispatches each supported Muse launch mode to its argv builder,
@@ -124,6 +128,9 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	if workDir := req.WorkDir; workDir != "" {
 		args = append(args, "--workspace", workDir)
 	}
+	if suppressForeignPersonalContext(req) {
+		args = append(args, museNoForeignContextFlag)
+	}
 	if promptFile != "" {
 		args = append(args, "--prompt-file", promptFile)
 	}
@@ -159,10 +166,18 @@ func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
 	if req.WorkDir != "" {
 		args = append(args, "--workspace", req.WorkDir)
 	}
-	if effective == agentic.PermissionModeYolo {
-		if err := scanMuseNativePolicy(req.NativeArgs); err != nil {
+	isolate := suppressForeignPersonalContext(req)
+	if effective == agentic.PermissionModeYolo || isolate {
+		if err := scanMuseNativePolicy(req.NativeArgs, effective == agentic.PermissionModeYolo, isolate); err != nil {
 			return nil, fmt.Errorf("muse: %w", err)
 		}
+	}
+	if isolate {
+		// The TUI rejects the exec-only flag. Its native rules already win;
+		// the JSON boolean override disables the remaining foreign skills.
+		args = append(args, museConfigFlag, museForeignSkillsOff)
+	}
+	if effective == agentic.PermissionModeYolo {
 		// Posture mapping only: the flag is emitted here, but the
 		// evidence gate runs at seal time (see sealInteractiveExecPlan).
 		// Argv probes nothing, so mapping and sealing cannot observe
