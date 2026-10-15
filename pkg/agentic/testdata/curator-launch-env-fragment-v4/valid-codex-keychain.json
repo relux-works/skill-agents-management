@@ -1,0 +1,26 @@
+{
+  "env": {
+    "CODEX_HOME": "/manager/environments/companyA/codex_cli"
+  },
+  "environment": "codex_cli",
+  "fragment": "launch-env-fragment-v4",
+  "permissions": {
+    "locked": false,
+    "mode": "native",
+    "source": "profile"
+  },
+  "precedence": {
+    "placement": "winner-last",
+    "winner": "higher-weight"
+  },
+  "profile": {
+    "lock_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "name": "companyA"
+  },
+  "credential_store": {
+    "selection": "keychain",
+    "config_overrides": {
+      "cli_auth_credentials_store": "keyring"
+    }
+  }
+}

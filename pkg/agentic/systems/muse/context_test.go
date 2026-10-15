@@ -11,7 +11,7 @@ import (
 
 func validMuseTestContext() *agentic.CuratorContext {
 	return &agentic.CuratorContext{
-		Revision:    agentic.CuratorLaunchFragmentV3,
+		Revision:    agentic.CuratorLaunchFragmentV4,
 		Environment: "muse",
 		Profile:     agentic.CuratorProfilePin{Name: "managed-profile", LockSHA256: strings.Repeat("a", 64)},
 		Precedence:  agentic.CuratorPrecedence{Winner: "higher-weight", Placement: "winner-last"},
@@ -20,8 +20,10 @@ func validMuseTestContext() *agentic.CuratorContext {
 			"XDG_DATA_HOME":   "/managed/muse-home/data",
 			"XDG_STATE_HOME":  "/managed/muse-home/state",
 			"XDG_CACHE_HOME":  "/managed/muse-home/cache",
+			agentic.CuratorMuseCredentialBackendVariable: agentic.CuratorMuseCredentialBackendFile,
 		},
-		Permissions: &agentic.CuratorPermissions{Mode: agentic.CuratorPermissionNative, Locked: false, Source: agentic.CuratorPermissionSourceProfile},
+		Permissions:     &agentic.CuratorPermissions{Mode: agentic.CuratorPermissionNative, Locked: false, Source: agentic.CuratorPermissionSourceProfile},
+		CredentialStore: &agentic.CuratorCredentialStore{Selection: agentic.CuratorCredentialStoreFile},
 	}
 }
 

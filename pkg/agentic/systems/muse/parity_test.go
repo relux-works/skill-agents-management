@@ -1,6 +1,7 @@
 package muse
 
 import (
+	"reflect"
 	"sort"
 	"testing"
 
@@ -715,39 +716,38 @@ func (m trailingEffortSystem) Argv(req agentic.LaunchRequest, mode agentic.Launc
 	return append(out, moved...), nil
 }
 
-// The source captures predate this capability. Extend their argv in memory,
-// preserving their provenance and every other observable launch field.
+// The source captures predate the root-context fact. A v4 managed launch of
+// every headless golden, with and without the fact, must differ in exactly
+// one argument: --no-foreign-personal-context right after the workspace
+// pair. Env, binary, stdin and the rest of argv stay identical, so the fact
+// changes the exclusion and nothing else.
 func TestMuseManagedContextMatchesExtendedHeadlessGoldens(t *testing.T) {
 	for _, c := range parityCases {
 		t.Run(c.goldenID, func(t *testing.T) {
-			g, dirs, req := prepareParityCase(t, c)
-			cfg := t.TempDir()
-			writeMuseRootContext(t, cfg, curatorRootContextPrefix+"managed rules")
-			req.Env = agentic.SetEnvValue(req.Env, "XDG_CONFIG_HOME", cfg)
-			req.ToolRelease = foreignPersonalContextRelease
-			// Add CFG to the capture baseline so its pass-through does not
-			// appear as a new environment delta.
-			g.Capture.ParentEnv = agentic.SetEnvValue(g.Capture.ParentEnv, "XDG_CONFIG_HOME", cfg)
-			baseline := g
+			_, _, req := prepareParityCase(t, c)
+			home := t.TempDir()
+			req.Home = home
+			req.ToolRelease = "1.4.7"
+			req.Context = managedMuseContext(home, false)
+			base := paritycase.BuildPlan(t, New(), req, c.mode)
+			req.Context = managedMuseContext(home, true)
+			managed := paritycase.BuildPlan(t, New(), req, c.mode)
 			at := -1
-			for i, arg := range g.Surface.Args {
+			for i, arg := range base.Argv {
 				if arg == "--workspace" {
 					at = i + 2
 					break
 				}
 			}
 			if at < 0 {
-				t.Fatal("golden has no workspace pair to extend")
+				t.Fatal("plan has no workspace pair to extend")
 			}
-			args := append([]string(nil), g.Surface.Args[:at]...)
-			args = append(args, "--no-foreign-personal-context")
-			g.Surface.Args = append(args, g.Surface.Args[at:]...)
-			plan := paritycase.BuildPlan(t, New(), req, c.mode)
-			if diffs := compareMuseGoldenPlan(g, plan, dirs.Substitutions()); len(diffs) != 0 {
-				t.Fatalf("managed plan differs from extended golden: %v", diffs)
+			want := append(append(append([]string(nil), base.Argv[:at]...), "--no-foreign-personal-context"), base.Argv[at:]...)
+			if !reflect.DeepEqual(managed.Argv, want) {
+				t.Fatalf("managed argv = %q, want the base plus one exclusion %q", managed.Argv, want)
 			}
-			if diffs := compareMuseGoldenPlan(baseline, plan, dirs.Substitutions()); !paritycase.NamesField(diffs, "Args") {
-				t.Fatalf("unextended golden did not require the new argument: %v", diffs)
+			if !reflect.DeepEqual(managed.Env, base.Env) || managed.Binary != base.Binary {
+				t.Fatalf("the fact changed more than argv: env %q vs %q", managed.Env, base.Env)
 			}
 		})
 	}

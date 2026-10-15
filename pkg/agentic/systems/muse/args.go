@@ -128,7 +128,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	if workDir := req.WorkDir; workDir != "" {
 		args = append(args, "--workspace", workDir)
 	}
-	if suppressForeignPersonalContext(req) {
+	if requiresForeignContextExclusion(req) {
 		args = append(args, museNoForeignContextFlag)
 	}
 	if promptFile != "" {
@@ -166,7 +166,7 @@ func interactiveArgs(req agentic.LaunchRequest) ([]string, error) {
 	if req.WorkDir != "" {
 		args = append(args, "--workspace", req.WorkDir)
 	}
-	isolate := suppressForeignPersonalContext(req)
+	isolate := requiresForeignContextExclusion(req)
 	if effective == agentic.PermissionModeYolo || isolate {
 		if err := scanMuseNativePolicy(req.NativeArgs, effective == agentic.PermissionModeYolo, isolate); err != nil {
 			return nil, fmt.Errorf("muse: %w", err)

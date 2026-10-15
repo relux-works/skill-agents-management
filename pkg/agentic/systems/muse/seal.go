@@ -212,8 +212,11 @@ func sealInteractiveExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error
 	if claimed := strings.TrimSpace(plan.ToolRelease); claimed != "" && claimed != probed.Release {
 		return nil, fmt.Errorf("%w: caller claims release %q, binary attests %q", ErrMuseToolReleaseMismatch, claimed, probed.Release)
 	}
-	if plan.ToolRelease == foreignPersonalContextRelease && hasCuratorRootContext(plan.Env) && probed.Build != foreignPersonalContextBuild {
-		return nil, fmt.Errorf("%w: foreign personal context options require verified build %q, binary attests %q", ErrMuseToolReleaseMismatch, foreignPersonalContextBuild, probed.Build)
+	// The plan's typed fact, never a file under the managed home, decides
+	// whether exclusion is required; the attested build must be qualified.
+	if provenance, carried := plan.CuratorContextProvenanceSnapshot(); carried && provenance.Fragment.RootContext != nil &&
+		!foreignContextExclusionBuildQualified(probed.Release, probed.Build) {
+		return nil, fmt.Errorf("%w: binary attests release %q build %q", ErrForeignContextExclusionUnqualified, probed.Release, probed.Build)
 	}
 	var helpFullDigest, helpLinesDigest string
 	if mode == agentic.PermissionModeYolo {
@@ -672,7 +675,9 @@ func parseInteractiveSealDigest(digest string) (string, bool) {
 // carrying more than one entry for them, whoever appended it, even when
 // the duplicate repeats the sealed value.
 func isInteractiveSealSelector(name string) bool {
-	if name == museNoAutoUpdateEnv {
+	// The v4 credential backend selects the store Muse reads; sealing it means
+	// a later environment merge cannot undo the fragment's file policy.
+	if name == museNoAutoUpdateEnv || name == agentic.CuratorMuseCredentialBackendVariable {
 		return true
 	}
 	return strings.HasPrefix(name, "XDG_")

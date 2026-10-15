@@ -68,6 +68,15 @@ A caller may bypass Curator only through an explicit `source=none` choice. In th
 
 The public Curator protocol also defines `launch-env-fragment-v2`, which adds a required permissions member. This module accepts v1 and v2: on v2 the permissions member is required, and production JSON decoding refuses a non-object value, any member outside `mode`/`locked`/`source`, an absent member, an explicit null, or a mistyped member, while the typed validator enforces the closed mode/source vocabularies and the lock-engagement consistency rules; the validated value rides the typed projection and the fragment identity. It must not parse v2 as v1 or discard the permissions member. Later fragment revisions refuse without fallback, and the same rule applies to fields such as the reserved path transform until their capability is explicitly supported.
 
+`launch-env-fragment-v3` adds `muse` with exactly the four XDG homes. `launch-env-fragment-v4` (CIP-0017, CIP-0015) keeps the v3 contracts and adds two typed members: `credential_store` for every adapter and the Muse-only `root_context` fact, exactly `{"exclusive":true}`. Both are refused under an older token. `agentic.DecodeCuratorFragment` is the strict reader. It refuses a repeated key at any depth, an explicit null member and an unknown member before any typed value exists, because a null `root_context` would otherwise decode the same as an absent one. The typed validator then applies the per-environment rules:
+
+- A managed Muse launch requires v4, and v3 refuses with upgrade guidance.
+- Muse requires `credential_store` `{"selection":"file"}` and the env constant `TBH_CREDENTIAL_BACKEND=file`.
+- `codex_cli` admits native, or `file`/`keychain` with exactly the matching `cli_auth_credentials_store` override. Applying that `-c` override is not wired yet, so an agreeing non-native Codex store refuses as unsupported rather than launching without it.
+- Other adapters admit only native.
+
+The fact maps to the form-specific foreign-personal-context exclusion only on a qualified Muse build. The launcher never inspects files to decide it.
+
 ## 5. Compatibility and scope
 
 This contract covers the fragment-to-typed-context boundary, local child/session provenance, and fail-closed behavior. It does not define runtime catalog policy, provider/model selection, permission policy, engine lifecycle, a headless Curator entry point, host argv splitting, or how a session host maps an entry point to a PTY or app-server.

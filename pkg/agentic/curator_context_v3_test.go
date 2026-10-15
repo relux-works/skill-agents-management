@@ -20,12 +20,19 @@ import (
 // refuse fixture. v3 validation runs in BuildPlan before any plugin gate,
 // so the invalid table drives claude and codex plugins with v3-shaped
 // fragments the same way the malformed table already drives pi-shaped ones.
+//
+// Since launch-env-fragment-v4 (environments §10.2, CIP-0017) a managed muse
+// launch requires v4 and refuses v3, so the muse fixture below is the v4
+// shape: the four XDG homes plus TBH_CREDENTIAL_BACKEND=file and
+// credential_store {"selection":"file"}. The XDG shape rules and their
+// diagnostics are unchanged; curator_context_v4_test.go covers the v4
+// additions and the v3 upgrade refusal.
 
 const museV3HomeParent = "/managed/muse-home"
 
 func validMuseCuratorContext() agentic.CuratorContext {
 	return agentic.CuratorContext{
-		Revision:    agentic.CuratorLaunchFragmentV3,
+		Revision:    agentic.CuratorLaunchFragmentV4,
 		Environment: "muse",
 		Profile:     agentic.CuratorProfilePin{Name: "managed-profile", LockSHA256: strings.Repeat("a", 64)},
 		Precedence:  agentic.CuratorPrecedence{Winner: "higher-weight", Placement: "winner-last"},
@@ -34,8 +41,10 @@ func validMuseCuratorContext() agentic.CuratorContext {
 			"XDG_DATA_HOME":   museV3HomeParent + "/data",
 			"XDG_STATE_HOME":  museV3HomeParent + "/state",
 			"XDG_CACHE_HOME":  museV3HomeParent + "/cache",
+			agentic.CuratorMuseCredentialBackendVariable: agentic.CuratorMuseCredentialBackendFile,
 		},
-		Permissions: validAcceptanceCuratorPermissions(),
+		Permissions:     validAcceptanceCuratorPermissions(),
+		CredentialStore: &agentic.CuratorCredentialStore{Selection: agentic.CuratorCredentialStoreFile},
 	}
 }
 
@@ -93,11 +102,13 @@ func TestBuildPlanCuratorContextRefusesInvalidFragmentV3(t *testing.T) {
 				return context
 			}
 			cases := []invalidV3Case{
-				{name: "v2-token", conformance: "invalid-v2-token.json", wantMessage: malformedV3Suffix("muse fragments require launch-env-fragment-v3"), mutate: func(context *agentic.CuratorContext, _ *agentic.LaunchRequest) {
+				{name: "v2-token", conformance: "invalid-v2-token.json", wantMessage: malformedV3Suffix("muse fragments require launch-env-fragment-v4"), mutate: func(context *agentic.CuratorContext, _ *agentic.LaunchRequest) {
 					context.Revision = agentic.CuratorLaunchFragmentV2
+					context.CredentialStore = nil
 				}},
-				{name: "v1-muse", wantMessage: malformedV3Suffix("muse fragments require launch-env-fragment-v3"), mutate: func(context *agentic.CuratorContext, _ *agentic.LaunchRequest) {
+				{name: "v1-muse", wantMessage: malformedV3Suffix("muse fragments require launch-env-fragment-v4"), mutate: func(context *agentic.CuratorContext, _ *agentic.LaunchRequest) {
 					context.Revision = agentic.CuratorLaunchFragmentV1
+					context.CredentialStore = nil
 					context.Permissions = nil
 				}},
 				{name: "HOME-added", conformance: "invalid-HOME-added.json", wantMessage: malformedV3Suffix("muse fragments must not carry HOME"), mutate: func(context *agentic.CuratorContext, _ *agentic.LaunchRequest) {
@@ -248,7 +259,7 @@ func TestBuildPlanCuratorContextRefusesInvalidFragmentV3(t *testing.T) {
 						Intent:   agentic.CuratorSystemPromptAppend,
 					}
 				}},
-				{name: "permissions-absent", conformance: "invalid-permissions-absent.json", wantMessage: malformedV3Suffix("v3 fragments require the permissions member"), mutate: func(context *agentic.CuratorContext, _ *agentic.LaunchRequest) {
+				{name: "permissions-absent", conformance: "invalid-permissions-absent.json", wantMessage: malformedV3Suffix("v4 fragments require the permissions member"), mutate: func(context *agentic.CuratorContext, _ *agentic.LaunchRequest) {
 					context.Permissions = nil
 				}},
 				{name: "permissions-global-unlocked", conformance: "invalid-permissions-global-unlocked.json", wantMessage: malformedV3Suffix("permissions locked must be true exactly for the global source"), mutate: func(context *agentic.CuratorContext, _ *agentic.LaunchRequest) {
@@ -442,8 +453,8 @@ func TestBuildPlanMuseCuratorContextAcceptsFragmentV3(t *testing.T) {
 			if provenance.ManagedHomeVariable != "" || provenance.ManagedHome != museV3HomeParent {
 				t.Fatalf("muse provenance home = (%q, %q), want empty variable and parent %q", provenance.ManagedHomeVariable, provenance.ManagedHome, museV3HomeParent)
 			}
-			if len(provenance.Fragment.Env) != 4 {
-				t.Fatalf("muse fragment identity carries %d env entries, want four", len(provenance.Fragment.Env))
+			if len(provenance.Fragment.Env) != 5 {
+				t.Fatalf("muse fragment identity carries %d env entries, want the four XDG homes and the credential backend", len(provenance.Fragment.Env))
 			}
 			context.Env["XDG_DATA_HOME"] = "/evil/data"
 			provenance.MuseHomes.XDGDataHome = "/evil/data"
@@ -577,7 +588,7 @@ func TestBuildPlanMuseCuratorMuseHomesProjection(t *testing.T) {
 			if !reflect.DeepEqual(projected, *provenance.MuseHomes) {
 				t.Fatalf("MuseHomes = %#v, want the provenanced %#v", projected, *provenance.MuseHomes)
 			}
-			wantMessage := "agentic: malformed typed Curator context: muse home set requires a v3 muse fragment"
+			wantMessage := "agentic: malformed typed Curator context: muse home set requires a v4 muse fragment"
 			var nilContext *agentic.CuratorContext
 			if _, err := nilContext.MuseHomes(); err == nil || err.Error() != wantMessage {
 				t.Fatalf("nil MuseHomes err = %v, want %q", err, wantMessage)

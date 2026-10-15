@@ -1,0 +1,21 @@
+{
+  "env": {
+    "PI_CODING_AGENT_DIR": "/manager/environments/companyA/pi",
+    "TBH_CREDENTIAL_BACKEND": "file"
+  },
+  "environment": "pi",
+  "fragment": "launch-env-fragment-v4",
+  "permissions": {
+    "locked": false,
+    "mode": "native",
+    "source": "profile"
+  },
+  "precedence": {
+    "placement": "winner-last",
+    "winner": "higher-weight"
+  },
+  "profile": {
+    "lock_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "name": "companyA"
+  }
+}

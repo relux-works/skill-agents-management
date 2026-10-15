@@ -1,0 +1,337 @@
+[
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-muse-root.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-muse-no-root.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-missing-XDG_CONFIG_HOME.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-missing-XDG_DATA_HOME.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-missing-XDG_STATE_HOME.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-missing-XDG_CACHE_HOME.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-missing-TBH_CREDENTIAL_BACKEND.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-root-null.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-root-empty.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-root-boolean.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-root-false.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-root-string.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-root-extra.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-backend-keychain.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-backend-absolute.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-backend-empty.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-store-native.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-store-keychain.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-store-null.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-store-empty.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-store-extra.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-store-override.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-store-missing.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-HOME.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-foreign-parent.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-wrong-suffix.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-relative-path.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-unknown-top.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-unknown-revision.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-system-prompt.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-mcp.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-claude_code.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-claude_code-root.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-claude_code-backend.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-claude_code-native.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-claude_code-file.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-codex_cli.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-codex_cli-root.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-codex_cli-backend.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-codex_cli-native.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-codex-file.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-codex-file-disagreement.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-codex-file-missing-override.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-codex-keychain.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-codex-keychain-disagreement.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-codex-keychain-missing-override.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-codex-native-override.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-codex-unknown-override.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-opencode.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-opencode-root.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-opencode-backend.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-opencode-native.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-opencode-file.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-pi.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-pi-root.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-pi-backend.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "valid-pi-native.json",
+    "valid": true
+  },
+  {
+    "schema": "launch-env-fragment-v4.schema.json",
+    "instance": "invalid-pi-file.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v1.schema.json",
+    "instance": "invalid-v4-on-v1.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v1.schema.json",
+    "instance": "invalid-additions-on-v1.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v2.schema.json",
+    "instance": "invalid-v4-on-v2.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v2.schema.json",
+    "instance": "invalid-additions-on-v2.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v3.schema.json",
+    "instance": "invalid-v4-on-v3.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v3.schema.json",
+    "instance": "invalid-additions-on-v3.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v3.schema.json",
+    "instance": "invalid-v3-root_context.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v3.schema.json",
+    "instance": "invalid-v3-credential_store.json",
+    "valid": false
+  },
+  {
+    "schema": "launch-env-fragment-v3.schema.json",
+    "instance": "invalid-v3-backend.json",
+    "valid": false
+  }
+]

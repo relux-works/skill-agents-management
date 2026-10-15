@@ -1866,6 +1866,7 @@ func TestBuildPlanCuratorContextRefusesStaleIdentity(t *testing.T) {
 					"XDG_DATA_HOME":   moved + "/data",
 					"XDG_STATE_HOME":  moved + "/state",
 					"XDG_CACHE_HOME":  moved + "/cache",
+					agentic.CuratorMuseCredentialBackendVariable: agentic.CuratorMuseCredentialBackendFile,
 				}
 				context.ExpectedProvenance = &stored
 				_, err = buildMuseCuratorPlan(t, context, moved)

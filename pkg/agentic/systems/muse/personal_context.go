@@ -1,61 +1,53 @@
 package muse
 
 import (
-	"io"
-	"os"
-	"path/filepath"
+	"errors"
+	"fmt"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
-// curatorRootContextPrefix is curator-spec environments §5.1's stable v2
-// contract: curator c643b565, internal/contextmaterialize/contextmaterialize.go
-// HeaderTypeLine at :27 and Header() at :153-154. A v3 needs a coordinated change.
-const curatorRootContextPrefix = "<!--\ncurator-root-context-v2\n"
+// ErrForeignContextExclusionUnqualified refuses a launch whose Curator
+// fragment requires the foreign-personal-context exclusion on a Muse build
+// whose exclusion behavior has not been qualified (curator-spec environments
+// §7.9 "Muse qualification order"). The exclusion is never dropped silently.
+var ErrForeignContextExclusionUnqualified = errors.New("muse: required foreign personal context exclusion is unqualified on the selected build")
 
-// The supplied Muse 1.4.7-R6101.1 probes verified both launch forms. Earlier
-// 1.4.1/1.4.2 permission/network evidence says nothing about these options.
-const foreignPersonalContextBuild = "1.4.7-R6101.1"
-const foreignPersonalContextRelease = "1.4.7"
-
-func suppressForeignPersonalContext(req agentic.LaunchRequest) bool {
-	if req.ToolRelease != foreignPersonalContextRelease {
-		return false
-	}
-	if req.FrozenToolBuild != "" && req.FrozenToolBuild != foreignPersonalContextBuild {
-		return false
-	}
-	// Managed network launches replace CFG with a private config root; the
-	// request's root context would not be the file Muse reads there.
-	if !req.Network.IsZero() {
-		return false
-	}
-	return hasCuratorRootContext(childEnv(req.Env, req))
+// foreignContextExclusionQualified maps each Muse release to the exact build
+// on which environments §7.1 P1-P4 verified both exclusion spellings. 1.4.8
+// stays absent until Curator's 1.4.8 P1-P4 replay passes.
+var foreignContextExclusionQualified = map[string]string{
+	"1.4.7": "1.4.7-R6101.1",
 }
 
-// hasCuratorRootContext reads only the launch environment's effective CFG.
-// No HOME fallback or ambient environment can grant this capability. Reading
-// prefix+1 bytes bounds I/O and proves the file contains more than the header.
-func hasCuratorRootContext(env []string) bool {
-	cfg := envValue(env, "XDG_CONFIG_HOME")
-	if cfg == "" || !filepath.IsAbs(cfg) {
-		return false
+// requiresForeignContextExclusion reports whether the typed Curator fragment
+// carries the v4 root-context fact. It is the only input: no file under the
+// managed home is stat'ed, opened or recognized to decide exclusion
+// (environments §10.2), and absence never permits filesystem inference.
+func requiresForeignContextExclusion(req agentic.LaunchRequest) bool {
+	return req.Context != nil && req.Context.RootContext != nil && req.Context.RootContext.Exclusive
+}
+
+// validateForeignContextExclusion refuses before any launch surface is built
+// when the fact is present and the caller's release, or a frozen build it
+// names, is not a qualified exclusion build. An unknown release refuses too.
+func validateForeignContextExclusion(req agentic.LaunchRequest) error {
+	if !requiresForeignContextExclusion(req) {
+		return nil
 	}
-	path := filepath.Join(cfg, "muse", "AGENTS.md")
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() <= int64(len(curatorRootContextPrefix)) {
-		return false
+	build, qualified := foreignContextExclusionQualified[req.ToolRelease]
+	if !qualified {
+		return fmt.Errorf("%w: release %q", ErrForeignContextExclusionUnqualified, req.ToolRelease)
 	}
-	file, err := os.Open(path)
-	if err != nil {
-		return false
+	if req.FrozenToolBuild != "" && req.FrozenToolBuild != build {
+		return fmt.Errorf("%w: build %q (qualified %q)", ErrForeignContextExclusionUnqualified, req.FrozenToolBuild, build)
 	}
-	defer func() { _ = file.Close() }()
-	opened, err := file.Stat()
-	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
-		return false
-	}
-	var prefix [len(curatorRootContextPrefix) + 1]byte
-	_, err = io.ReadFull(file, prefix[:])
-	return err == nil && string(prefix[:len(curatorRootContextPrefix)]) == curatorRootContextPrefix
+	return nil
+}
+
+// foreignContextExclusionBuildQualified is the seal-time check against the
+// build the selected binary attests.
+func foreignContextExclusionBuildQualified(release, build string) bool {
+	qualified, ok := foreignContextExclusionQualified[release]
+	return ok && qualified == build
 }

@@ -23,11 +23,12 @@ func (*System) ValidateCuratorContext(req agentic.LaunchRequest, _ agentic.Launc
 }
 
 // validateMuseCuratorContext validates the request-side fragment boundary
-// and the two Muse combination gates: the fragment environment must be muse,
-// and a Curator-managed launch must not combine with a managed network scope
-// (the network adapter materializes a private XDG config root, which would
-// shadow the fragment's config value while data, state and cache still point
-// at the managed layout).
+// and the Muse combination gates: the fragment environment must be muse; a
+// Curator-managed launch must not combine with a managed network scope (the
+// network adapter materializes a private XDG config root, which would shadow
+// the fragment's config value while data, state and cache still point at the
+// managed layout, and would erase an established root-context fact); and a
+// root-context fact requires a qualified exclusion build.
 func validateMuseCuratorContext(req agentic.LaunchRequest) error {
 	if err := agentic.ValidateCuratorContext(req.Context, req.Home); err != nil {
 		return err
@@ -39,5 +40,5 @@ func validateMuseCuratorContext(req agentic.LaunchRequest) error {
 	if !req.Network.IsZero() {
 		return fmt.Errorf("%w: Muse Curator context cannot combine with a managed network scope", agentic.ErrCuratorContextUnsupported)
 	}
-	return nil
+	return validateForeignContextExclusion(req)
 }

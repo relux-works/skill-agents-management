@@ -121,15 +121,20 @@ func isCredentialShapedParentEnvName(name string) bool {
 // the final write.
 //
 // A Curator-managed launch replaces the inherited XDG homes with the
-// fragment's four verified values in section 7.1 declared order; HOME passes
-// through untouched. ChildEnv validates the fragment before this overlay
-// runs, so these are blind copies of already-validated values, never a
-// second validation.
+// fragment's four verified values in section 7.1 declared order, followed by
+// the v4 credential backend constant; HOME passes through untouched. The
+// backend is not in the parent allowlist, so no ambient value reaches the
+// child and the fragment's file policy wins. ChildEnv validates the fragment
+// before this overlay runs, so these are blind copies of already-validated
+// values, never a second validation.
 func childEnv(parent []string, req agentic.LaunchRequest) []string {
 	env := agentic.WithRunContext(filterMuseParentEnv(parent), req)
 	if req.Context != nil {
 		for _, variable := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"} {
 			env = agentic.SetEnvValue(env, variable, req.Context.Env[variable])
+		}
+		if backend, present := req.Context.Env[agentic.CuratorMuseCredentialBackendVariable]; present {
+			env = agentic.SetEnvValue(env, agentic.CuratorMuseCredentialBackendVariable, backend)
 		}
 	}
 	return agentic.SetEnvValue(env, museNoAutoUpdateEnv, "1")

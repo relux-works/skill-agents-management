@@ -991,18 +991,24 @@ selection; the vendor runtime catalog and its admitted pairs are unchanged.
   context is overlaid and `MUSE_NO_AUTO_UPDATE=1` is written last. The Muse
   parity test derives only those `EnvAdded` and `EnvRemoved` changes in memory;
   every other surface remains exact against the unchanged source golden.
-- **Managed root context excludes foreign personal context on verified Muse 1.4.7-R6101.1.**
-  With `LaunchRequest.ToolRelease=1.4.7`, the plugin checks only the effective
-  child `XDG_CONFIG_HOME`, including Curator fragment overlays.
-  `muse/AGENTS.md` must be a readable regular file, longer than the exact
-  `<!--\ncurator-root-context-v2\n` prefix and beginning with those bytes.
-  Exec and dry-run add `--no-foreign-personal-context`; the TUI instead adds
-  `-c context.foreign_personal_skills=false` after the workspace options.
-  The interactive seal includes that argv and attests the exact verified build.
-  Active isolation reserves these options against caller overrides in either
-  posture. Missing, invalid, or ambient-only context leaves argv unchanged;
-  1.4.1, 1.4.2, and unknown releases emit neither option. The permission
-  mapping remains independently driven by help evidence.
+- **Managed Muse launches require `launch-env-fragment-v4`; the typed root-context fact drives the exclusion.**
+  A v3 muse fragment refuses with upgrade guidance (curator-spec environments
+  §10.2, CIP-0017). The v4 env is the four XDG homes plus
+  `TBH_CREDENTIAL_BACKEND=file`, written after the homes and sealed, so an
+  ambient backend never reaches the child; `credential_store` must be exactly
+  `{"selection":"file"}`. When the fragment carries
+  `root_context: {"exclusive":true}`, exec and dry-run add
+  `--no-foreign-personal-context` and the TUI adds
+  `-c context.foreign_personal_skills=false` after the workspace options, in
+  either permission posture. Nothing under the managed home is read to decide
+  this: no fact, no exclusion, whatever file exists. A fact on a release or
+  build outside the qualified exclusion set (today only 1.4.7-R6101.1; 1.4.8
+  waits for Curator's P1-P4 replay) refuses with
+  `ErrForeignContextExclusionUnqualified` at plan time, and the interactive
+  seal refuses an attested build outside the set. Curator context never
+  combines with a managed network scope. Active isolation reserves these
+  options against caller overrides in either posture. The permission mapping
+  remains independently driven by help evidence.
 - **The effort transport is ARGV** (`--reasoning-effort`), and it is the one
   capability row that is no longer the extraction source's. The source declared
   `EffortTransportNone` because every muse model was effort-none;

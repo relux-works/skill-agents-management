@@ -1,0 +1,21 @@
+{
+  "env": {
+    "XDG_CONFIG_HOME": "/manager/environments/companyA/opencode",
+    "TBH_CREDENTIAL_BACKEND": "file"
+  },
+  "environment": "opencode",
+  "fragment": "launch-env-fragment-v4",
+  "permissions": {
+    "locked": false,
+    "mode": "native",
+    "source": "profile"
+  },
+  "precedence": {
+    "placement": "winner-last",
+    "winner": "higher-weight"
+  },
+  "profile": {
+    "lock_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "name": "companyA"
+  }
+}
