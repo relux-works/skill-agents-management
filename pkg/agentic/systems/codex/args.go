@@ -204,7 +204,9 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 				args = append(args, "-c", "sandbox_workspace_write.writable_roots="+roots)
 			}
 		}
-		args = append(args, "-m", model)
+		if model != "" {
+			args = append(args, "-m", model)
+		}
 		// With the tier refused above, appendReasoningAndTier contributes the
 		// effort override alone — the same spelling the other two grammars use,
 		// from the same fragment, so the three cannot drift.

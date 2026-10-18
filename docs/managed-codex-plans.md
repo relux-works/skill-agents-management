@@ -89,6 +89,16 @@ including denied sibling writes, must be validated by the consuming host.
 
 ## Refusals, finalization, and seals
 
+Validated interactive managed plans may leave `Model.ID` empty to preserve the
+native default. This applies to primaries carrying `ManagerToolDir` or
+`AdditionalWritableRoots`, and to exact-thread `CodexRemoteClient` plans. No
+model flag is rendered and `ModelIdentity` retains empty requested/launched
+values rather than inventing a selected model. Explicit-model argv is unchanged;
+remote clients retain the thread's selection as before. Worker/spawn modes,
+ordinary interactive requests without managed inputs, and whitespace-only IDs
+still refuse with `ErrModelMissing`. Managed validation and sealing apply equally
+to native-default plans.
+
 Malformed, conflicting or unsupported managed inputs unwrap to
 `agentic.ErrManagedLaunchInvalid`. Validation runs before request preparation
 and provider binary resolution. Plugins without `ManagedLaunchPlanner` refuse

@@ -2153,6 +2153,9 @@ validation runs the repository's `make vet` and `make test` gates.
 `AdditionalWritableRoots` carry exact native thread selection, child manager-tool
 lookup, and explicit runtime sandbox roots through `agentic.BuildPlan`. See
 [the public API, refusal bounds and consumer examples](docs/managed-codex-plans.md).
+These validated interactive managed shapes accept an empty `Model.ID` for the
+native default, render no model flag, and retain their process seals.
+Worker/spawn plans still require an explicit model.
 The existing `tools/launchcontext-mutants` runner exercises the managed-plan
 narrowing mutants; its exact command and `.temp/` evidence locations are listed
 in that document's validation tools section.

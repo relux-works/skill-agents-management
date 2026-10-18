@@ -7,6 +7,28 @@ func codexManagedPlanMutants() []mutant {
 		return mutant{name: "codex-managed-" + name, file: "pkg/agentic/systems/codex/" + file, replacements: []replacement{{before: before, after: after}}, testPackage: "./pkg/agentic/systems/codex", testName: test, runPattern: pattern, failureText: failure, narrows: bound}
 	}
 	return []mutant{
+		{
+			name: "codex-managed-empty-model-every-shape", file: "pkg/agentic/plan.go",
+			replacements: []replacement{{
+				before: `if strings.TrimSpace(req.Model.ID) == "" && !(req.Model.ID == "" && mode == LaunchModeInteractive && managedPlanner != nil) {`,
+				after:  `if strings.TrimSpace(req.Model.ID) == "" && req.Model.ID != "" {`,
+			}},
+			testPackage: "./pkg/agentic/systems/codex", testName: "TestManagedNativeDefaultRefusesWorkerModels", runPattern: "^TestManagedNativeDefaultRefusesWorkerModels$/^exec$", failureText: "worker missing model admitted",
+			narrows: "admits literal empty Model.ID for every shape, including workers; the whitespace-only model gate remains",
+		},
+		{
+			name: "codex-managed-worker-manager-empty-model", file: "pkg/agentic/plan.go",
+			replacements: []replacement{{
+				before: `mode == LaunchModeInteractive && managedPlanner != nil`,
+				after:  `(mode == LaunchModeInteractive || mode == LaunchModeExec) && managedPlanner != nil`,
+			}},
+			testPackage: "./pkg/agentic/systems/codex", testName: "TestManagedNativeDefaultRefusesWorkerModels", runPattern: "^TestManagedNativeDefaultRefusesWorkerModels$/^exec-with-manager$", failureText: "worker missing model admitted",
+			narrows: "admits only exec workers carrying validated manager inputs in addition to interactive managed shapes; ordinary workers still refuse",
+		},
+		member("native-default-empty-model-flag", "args.go",
+			`if model != "" {`, `if model != "" || req.ManagerToolDir != nil {`,
+			"TestManagedNativeDefaultModel", "^TestManagedNativeDefaultModel$/^manager$/^model=$", "managed model argv",
+			"renders an empty -m flag only for native-default managed primaries with ManagerToolDir; explicit-model rendering remains"),
 		member("manager-path-duplicate", "codex.go",
 			`if filepath.IsAbs(part) && filepath.Clean(part) == *req.ManagerToolDir {`,
 			`if filepath.IsAbs(part) && filepath.Clean(part) == *req.ManagerToolDir && part != *req.ManagerToolDir {`,
