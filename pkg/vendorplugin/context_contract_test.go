@@ -52,10 +52,13 @@ func TestSpawnRequestLaunchContextASTInventory(t *testing.T) {
 		})
 		return false
 	})
-	// These are resolution-owned identities, not caller payloads. The AST still
+	// These have explicit resolution or primary-plan owners, not SpawnRequest payloads. The AST still
 	// discovers every field; a new unmapped field fails closed.
 	owned := map[string]string{
-		"System": "resolved runtime system", "SystemModelIdentity": "vendor-owned native model identity",
+		"CodexRemoteClient":       "manager-owned visible client; direct agentic.BuildPlan input",
+		"ManagerToolDir":          "manager-owned primary/client executable directory; direct agentic.BuildPlan input",
+		"AdditionalWritableRoots": "manager-owned primary sandbox scope; direct agentic.BuildPlan input",
+		"System":                  "resolved runtime system", "SystemModelIdentity": "vendor-owned native model identity",
 		"Model": "admitted vendor model", "Effort": "admitted model effort",
 		"Runtime": "resolved runtime identity", "Vendor": "resolved broker identity",
 	}
@@ -76,7 +79,7 @@ func TestSpawnRequestLaunchContextASTInventory(t *testing.T) {
 					}
 					t.Logf("LaunchRequest.%s <- SpawnRequest.%v", name.Name, inputs)
 				} else if owner, ok := owned[name.Name]; ok {
-					t.Logf("LaunchRequest.%s: vendor-owned (%s)", name.Name, owner)
+					t.Logf("LaunchRequest.%s: explicit owner (%s)", name.Name, owner)
 				} else {
 					t.Errorf("LaunchRequest.%s has no SpawnRequest path or declared owner", name.Name)
 				}

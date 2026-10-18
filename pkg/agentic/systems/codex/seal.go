@@ -98,7 +98,11 @@ func isSealCommitment(value string) bool {
 // refuse as malformed with the same sanitized shape as every other local
 // catalog refusal, including a malformed TMPDIR selector on a catalog
 // export.
-func (*System) ImportSealedData(data agentic.SealedData) (agentic.ExecPlanVerifier, error) {
+func (system *System) ImportSealedData(data agentic.SealedData) (agentic.ExecPlanVerifier, error) {
+	if _, ok := data.Selectors[managedSealSelector]; ok {
+		return system.importManagedSeal(data)
+	}
+
 	if len(data.Artifacts) != 1 || data.Artifacts[0].Name != sealedCatalogName {
 		if tmpdirSeal, ok := importTempDirOnlySeal(data); ok {
 			return tmpdirSeal, nil

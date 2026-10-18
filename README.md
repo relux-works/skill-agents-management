@@ -2146,3 +2146,13 @@ narrowing mutants through private predicate seams, without source replacement.
 Run `go vet -mod=mod ./pkg/agentic ./pkg/agentic/systems/claude` for the affected
 packages. Logs belong in task-scoped `.temp/` directories. The Change Request
 validation runs the repository's `make vet` and `make test` gates.
+
+### Managed Codex plans
+
+`LaunchRequest.CodexRemoteClient`, `ManagerToolDir`, and
+`AdditionalWritableRoots` carry exact native thread selection, child manager-tool
+lookup, and explicit runtime sandbox roots through `agentic.BuildPlan`. See
+[the public API, refusal bounds and consumer examples](docs/managed-codex-plans.md).
+The existing `tools/launchcontext-mutants` runner exercises the managed-plan
+narrowing mutants; its exact command and `.temp/` evidence locations are listed
+in that document's validation tools section.

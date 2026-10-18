@@ -451,6 +451,17 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 			return Plan{}, &LocalProviderRefusal{Kind: LocalProviderUnbound}
 		}
 	}
+	var managedPlanner ManagedLaunchPlanner
+	if hasManagedLaunchInputs(req) {
+		var supported bool
+		managedPlanner, supported = sys.(ManagedLaunchPlanner)
+		if !supported {
+			return Plan{}, fmt.Errorf("%w: system has no managed planner", ErrManagedLaunchInvalid)
+		}
+		if err := managedPlanner.ValidateManagedLaunch(req, mode); err != nil {
+			return Plan{}, err
+		}
+	}
 	// Carried local-provider settings validate HERE, before any
 	// filesystem-dependent dispatch: binary resolution, home and catalog
 	// reads, Curator and descriptor validation, and request preparation
@@ -743,6 +754,15 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		// nil means no plugin bound anything at all. VerifyBeforeExec
 		// behaves identically either way; ExportSeal tells them apart.
 		plan.execVerifier = unsealedVerifier{}
+	}
+	if managedPlanner != nil {
+		if verifier, err := managedPlanner.SealManagedLaunch(req, plan, plan.execVerifier); err != nil {
+			return Plan{}, err
+		} else if verifier == nil {
+			return Plan{}, fmt.Errorf("%w: managed planner bound no verifier", ErrPluginContract)
+		} else {
+			plan.execVerifier = verifier
+		}
 	}
 	if plan.execVerifier != nil {
 		plan.baseProcess = snapshotProcess(plan)

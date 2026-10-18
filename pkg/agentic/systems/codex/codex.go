@@ -34,6 +34,7 @@ package codex
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/relux-works/curator-network-profiles/pkg/binding"
@@ -208,6 +209,36 @@ func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, e
 	}
 	if !req.Network.IsZero() {
 		env = dedupeManagedEnv(env)
+	}
+	if req.ManagerToolDir != nil {
+		if !managedAbsolutePath(*req.ManagerToolDir) || strings.ContainsRune(*req.ManagerToolDir, ':') {
+			return nil, managedRefusal("invalid manager tool directory")
+		}
+		path := codexPolicyEnvValue(env, "PATH")
+		if path != "" {
+			// Remove only lexical absolute aliases of the manager directory.
+			// Keep all other components verbatim, including empty components.
+			parts := strings.Split(path, ":")
+			kept := parts[:0]
+			for _, part := range parts {
+				if filepath.IsAbs(part) && filepath.Clean(part) == *req.ManagerToolDir {
+					continue
+				}
+				kept = append(kept, part)
+			}
+			if len(kept) > 0 {
+				path = strings.Join(kept, ":")
+				path = *req.ManagerToolDir + ":" + path
+			} else {
+				path = *req.ManagerToolDir
+			}
+		} else {
+			path = *req.ManagerToolDir
+		}
+		env = agentic.SetEnvValue(env, "PATH", path)
+	}
+	if req.CodexRemoteClient != nil {
+		env = agentic.SetEnvValue(env, "CODEX_HOME", req.Home)
 	}
 	if tempDir != "" {
 		env = agentic.SetEnvValue(env, TempDirEnv, tempDir)

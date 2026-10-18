@@ -32,6 +32,10 @@ type localRefusalCoverageRow struct {
 // occurrence disambiguates identical guards in one function in source order.
 var localRefusalCoverageTable = []localRefusalCoverageRow{
 	{file: "pkg/agentic/systems/codex/args.go", function: "Args", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestBuildPlanRefusesLocalProviderBindingAndTransportFailures"},
+	{file: "pkg/agentic/systems/codex/managed.go", function: "managedExecSeal.VerifyBeforeExec", guard: "if s.base != nil", returned: "return s.base.VerifyBeforeExec(p)", occurrence: 0, testName: "TestManagedWrappedCatalogAndTempDir"},
+	{file: "pkg/agentic/systems/codex/managed.go", function: "managedExecSeal.VerifySealedArtifacts", guard: "if ok", returned: "return v.VerifySealedArtifacts()", occurrence: 0, testName: "TestManagedWrappedCatalogAndTempDir"},
+	{file: "pkg/agentic/systems/codex/managed.go", function: "System.importManagedSeal", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestManagedWrappedCatalogAndTempDir"},
+	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if ok", returned: "return system.importManagedSeal(data)", occurrence: 0, testName: "TestManagedWrappedCatalogAndTempDir"},
 	{file: "pkg/agentic/systems/codex/args.go", function: "Args", guard: "if err != nil", returned: "return nil, err", occurrence: 1, testName: "TestManagedInventoryReadsTheChildEnv/conflicting CODEX_HOME keeps provider precedence"},
 	{file: "pkg/agentic/systems/codex/network.go", function: "managedFileServerEnvPairs", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestManagedInventoryReadsTheChildEnv/conflicting CODEX_HOME keeps provider precedence"},
 	{file: "pkg/agentic/systems/codex/network.go", function: "managedChildEnv", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestManagedInventoryReadsTheChildEnv/conflicting CODEX_HOME keeps provider precedence"},

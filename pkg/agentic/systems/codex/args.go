@@ -74,6 +74,13 @@ const yoloAliasFlag = "--yolo"
 // It is the single construction site. Every surface of this plugin that needs
 // codex flags calls it: System.Argv for all four modes, and nothing else.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	if err := New().ValidateManagedLaunch(req, mode); err != nil {
+		return nil, err
+	}
+	if target := req.CodexRemoteClient; target != nil {
+		args := []string{"--remote", target.Endpoint, "resume", target.ThreadID}
+		return append(args, req.NativeArgs...), nil
+	}
 	if _, err := req.PermissionMode.Resolve(); err != nil {
 		return nil, fmt.Errorf("codex: %w", err)
 	}
@@ -190,6 +197,13 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		args := appendContextConfigOverrides([]string{}, context)
 		args = append(args, fileServerPairs...)
 		args = append(args, context.curatorMCPArgs...)
+		if len(req.AdditionalWritableRoots) > 0 {
+			if roots, err := encodeTOMLValue(req.AdditionalWritableRoots); err != nil {
+				return nil, managedRefusal("writable roots cannot be encoded")
+			} else {
+				args = append(args, "-c", "sandbox_workspace_write.writable_roots="+roots)
+			}
+		}
 		args = append(args, "-m", model)
 		// With the tier refused above, appendReasoningAndTier contributes the
 		// effort override alone — the same spelling the other two grammars use,

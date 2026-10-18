@@ -5250,7 +5250,7 @@ func narrowingMutants() []mutant {
 	}
 	base = append(base, sealMutants()...)
 	base = append(base, toolprobeMutants()...)
-	return append(append(append(append(append(append(append(base, gateMutants...), claudeToolPolicyMutants()...), museNetworkMutants()...), museSealMutants()...), codexTempDirMutants()...), claudePlanSessionMutants()...), managedSessionMutants()...)
+	return append(append(append(append(append(append(append(append(base, gateMutants...), claudeToolPolicyMutants()...), museNetworkMutants()...), museSealMutants()...), codexTempDirMutants()...), claudePlanSessionMutants()...), managedSessionMutants()...), codexManagedPlanMutants()...)
 }
 
 // sealMutants narrows the exec-guard seal import and finalization gates

@@ -752,6 +752,24 @@ type LaunchRequest struct {
 	// applies no other normalization — no cleaning, no symlink or
 	// existence check — so the sealed bytes are exactly the host's bytes.
 	TempDir *string
+
+	// CodexRemoteClient requests an exact-thread remote visible client. Nil
+	// preserves the ordinary interactive grammar; present malformed targets
+	// refuse typed. Only the Codex interactive plugin supports this input.
+	CodexRemoteClient *CodexRemoteClientTarget
+
+	// ManagerToolDir is the explicit manager executable directory, prepended
+	// to the sanitized child PATH. Nil leaves PATH unchanged. A present value
+	// must be a clean absolute directory, with no PATH-list separator.
+	// The caller owns task-board/tb-sessiond installation and directory trust.
+	ManagerToolDir *string
+
+	// AdditionalWritableRoots is the exact ordered list of runtime directories
+	// added to Codex's workspace-write sandbox. Empty preserves existing argv.
+	// Paths must be clean and absolute; no expansion, parent grants, existence
+	// checks or symlink resolution occur. The consumer selects minimal roots
+	// and engages workspace-write in its permission policy.
+	AdditionalWritableRoots []string
 }
 
 // ErrTempDirInvalid refuses a present per-launch temp dir that is not a
