@@ -1001,11 +1001,15 @@ selection; the vendor runtime catalog and its admitted pairs are unchanged.
   `--no-foreign-personal-context` and the TUI adds
   `-c context.foreign_personal_skills=false` after the workspace options, in
   either permission posture. Nothing under the managed home is read to decide
-  this: no fact, no exclusion, whatever file exists. A fact on a release or
-  build outside the qualified exclusion set (today only 1.4.7-R6101.1; 1.4.8
-  waits for Curator's P1-P4 replay) refuses with
-  `ErrForeignContextExclusionUnqualified` at plan time, and the interactive
-  seal refuses an attested build outside the set. Curator context never
+  this: no fact, no exclusion, whatever file exists. Curator qualifies each
+  form separately, so the qualified set is per form: exec and dry-run admit
+  1.4.7-R6101.1, 1.4.10-R6427.1 and 1.4.11-R6667.1; the TUI admits only
+  1.4.7-R6101.1, because on 1.4.8, 1.4.10 and 1.4.11 the `-c` override
+  leaves one foreign skill loaded (Curator P4). A fact on a release or build
+  outside the set for the form the launch mode emits refuses with
+  `ErrForeignContextExclusionUnqualified` at plan time and in `Args`, and the
+  interactive seal refuses an attested build outside the interactive set.
+  `ChildEnv` has no launch mode: it refuses a build no form qualifies. Curator context never
   combines with a managed network scope. Active isolation reserves these
   options against caller overrides in either posture. The permission mapping
   remains independently driven by help evidence.

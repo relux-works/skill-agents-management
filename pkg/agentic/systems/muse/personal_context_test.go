@@ -92,20 +92,27 @@ func TestMuseForeignPersonalContextFollowsTheFact(t *testing.T) {
 }
 
 // TestMuseForeignPersonalContextRefusesUnqualifiedBuild: with the fact, a
-// release or frozen build outside the qualified set refuses at plan time,
-// before any launch surface exists (environments §7.9). 1.4.8 stays
-// unqualified until Curator's P1-P4 replay passes. Without the fact the
-// same requests do not refuse as unqualified.
+// release or frozen build outside the qualified set of the form a mode emits
+// refuses at plan time, before any launch surface exists (environments §7.9).
+// 1.4.10 and 1.4.11 are qualified for the exec form only (Curator records
+// 49d69b1c and 142bbda9): their exec and dry-run plans carry the exec flag,
+// and their interactive plans refuse. 1.4.8 qualifies neither form. Without
+// the fact none of these requests refuses as unqualified.
 func TestMuseForeignPersonalContextRefusesUnqualifiedBuild(t *testing.T) {
 	t.Parallel()
 	_, stubEnv := writeMuseVersionHelpStub(t, "printf '%s\\n' 'Muse Code 1.4.8 (1.4.8-R6256.1)'\n", museYoloHelpFixture)
 	cases := []struct {
 		name, release, frozen string
+		execQualified         bool
 	}{
-		{"release-1.4.8", "1.4.8", ""},
-		{"release-unknown", "", ""},
-		{"release-1.4.6", "1.4.6", ""},
-		{"frozen-build-other", "1.4.7", "1.4.7-R6102.1"},
+		{"release-1.4.8", "1.4.8", "", false},
+		{"release-unknown", "", "", false},
+		{"release-1.4.6", "1.4.6", "", false},
+		{"frozen-build-other", "1.4.7", "1.4.7-R6102.1", false},
+		{"release-1.4.10-exec-only", "1.4.10", "", true},
+		{"release-1.4.11-exec-only", "1.4.11", "", true},
+		{"frozen-1.4.10-other-build", "1.4.10", "1.4.10-R6428.1", false},
+		{"frozen-build-of-another-row", "1.4.11", "1.4.10-R6427.1", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -113,7 +120,15 @@ func TestMuseForeignPersonalContextRefusesUnqualifiedBuild(t *testing.T) {
 				home := t.TempDir()
 				req := agentic.LaunchRequest{System: systemID, Model: agentic.Model{ID: "echo"}, WorkDir: t.TempDir(), PromptPath: "assignment", Home: home,
 					Env: stubEnv, Context: managedMuseContext(home, true), ToolRelease: tc.release, FrozenToolBuild: tc.frozen}
-				if _, err := tryBuildMusePlan(t, New(), req, mode); !errors.Is(err, ErrForeignContextExclusionUnqualified) {
+				plan, err := tryBuildMusePlan(t, New(), req, mode)
+				if tc.execQualified && mode != agentic.LaunchModeInteractive {
+					if err != nil {
+						t.Fatalf("%s with the fact on an exec-qualified build: %v", mode, err)
+					}
+					if activeMuseFlagCount(plan.Argv, museNoForeignContextFlag) != 1 {
+						t.Fatalf("%s argv lacks the exec exclusion: %q", mode, plan.Argv)
+					}
+				} else if !errors.Is(err, ErrForeignContextExclusionUnqualified) {
 					t.Fatalf("%s with the fact: err = %v, want ErrForeignContextExclusionUnqualified", mode, err)
 				}
 				req.Context = managedMuseContext(home, false)
@@ -122,6 +137,74 @@ func TestMuseForeignPersonalContextRefusesUnqualifiedBuild(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestMuseForeignPersonalContextDirectCallersFollowTheForm: a direct plugin
+// caller that skips BuildPlan gets the same per-form answer. Args refuses
+// the interactive argv on an exec-only build and builds the exec argv;
+// ChildEnv, which has no mode, admits a build some form qualifies and refuses
+// one no form qualifies, including a frozen build no row names.
+func TestMuseForeignPersonalContextDirectCallersFollowTheForm(t *testing.T) {
+	t.Parallel()
+	for _, release := range []string{"1.4.10", "1.4.11"} {
+		home := t.TempDir()
+		req := agentic.LaunchRequest{Model: agentic.Model{ID: "echo"}, Home: home, Context: managedMuseContext(home, true), ToolRelease: release}
+		if got, err := Args(req, agentic.LaunchModeInteractive); !errors.Is(err, ErrForeignContextExclusionUnqualified) || got != nil {
+			t.Fatalf("%s interactive Args = %q, err %v", release, got, err)
+		}
+		got, err := Args(req, agentic.LaunchModeExec)
+		if err != nil || activeMuseFlagCount(got, museNoForeignContextFlag) != 1 {
+			t.Fatalf("%s exec Args = %q, err %v", release, got, err)
+		}
+		if _, err := New().ChildEnv(nil, req); err != nil {
+			t.Fatalf("%s ChildEnv refused an exec-qualified build: %v", release, err)
+		}
+	}
+	for _, tc := range []struct{ release, frozen string }{{"1.4.8", ""}, {"1.4.10", "1.4.10-R6428.1"}, {"1.4.7", "1.4.10-R6427.1"}} {
+		home := t.TempDir()
+		req := agentic.LaunchRequest{Model: agentic.Model{ID: "echo"}, Home: home, Context: managedMuseContext(home, true), ToolRelease: tc.release, FrozenToolBuild: tc.frozen}
+		if _, err := New().ChildEnv(nil, req); !errors.Is(err, ErrForeignContextExclusionUnqualified) {
+			t.Fatalf("ChildEnv %s/%s err = %v, want ErrForeignContextExclusionUnqualified", tc.release, tc.frozen, err)
+		}
+		req.Context = managedMuseContext(home, false)
+		if _, err := New().ChildEnv(nil, req); err != nil {
+			t.Fatalf("ChildEnv %s/%s without the fact: %v", tc.release, tc.frozen, err)
+		}
+	}
+}
+
+// TestMuseForeignPersonalContextFormTables: the seal asks the interactive
+// table, where an exec-only build is absent, and an undeclared mode must be
+// qualified in every form. BuildPlan's gate refuses an exec-only release
+// before the seal runs, so this direct check is the witness for the seal's
+// form choice.
+func TestMuseForeignPersonalContextFormTables(t *testing.T) {
+	t.Parallel()
+	for _, row := range []struct{ release, build string }{{"1.4.10", "1.4.10-R6427.1"}, {"1.4.11", "1.4.11-R6667.1"}} {
+		if !foreignContextExclusionBuildQualified(exclusionFormExec, row.release, row.build) {
+			t.Fatalf("%s missing from the exec table", row.build)
+		}
+		if foreignContextExclusionBuildQualified(exclusionFormInteractive, row.release, row.build) {
+			t.Fatalf("%s admitted by the interactive table", row.build)
+		}
+	}
+	for _, form := range []exclusionForm{exclusionFormExec, exclusionFormInteractive} {
+		if !foreignContextExclusionBuildQualified(form, "1.4.7", "1.4.7-R6101.1") {
+			t.Fatalf("1.4.7-R6101.1 missing from the %s table", form)
+		}
+		if foreignContextExclusionBuildQualified(form, "1.4.8", "1.4.8-R6256.1") {
+			t.Fatalf("1.4.8 admitted by the %s table", form)
+		}
+	}
+	home := t.TempDir()
+	req := agentic.LaunchRequest{Home: home, Context: managedMuseContext(home, true), ToolRelease: "1.4.10"}
+	if err := validateForeignContextExclusion(req, agentic.LaunchModeManagedSession); !errors.Is(err, ErrForeignContextExclusionUnqualified) {
+		t.Fatalf("undeclared mode on an exec-only build err = %v", err)
+	}
+	req.ToolRelease = "1.4.7"
+	if err := validateForeignContextExclusion(req, agentic.LaunchModeManagedSession); err != nil {
+		t.Fatalf("undeclared mode on a both-form build: %v", err)
 	}
 }
 

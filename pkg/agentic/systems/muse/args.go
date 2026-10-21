@@ -77,6 +77,11 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 	if err := admitNetwork(req); err != nil {
 		return nil, err
 	}
+	// The exclusion spelling this argv emits must be qualified for this
+	// form; BuildPlan has already checked it, a direct caller has not.
+	if err := validateForeignContextExclusion(req, mode); err != nil {
+		return nil, err
+	}
 	if !req.Network.IsZero() && mode == agentic.LaunchModeInteractive {
 		return nil, agentic.ErrNetworkScopeUnsupported
 	}

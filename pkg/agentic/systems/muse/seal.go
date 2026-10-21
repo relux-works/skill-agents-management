@@ -213,9 +213,10 @@ func sealInteractiveExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error
 		return nil, fmt.Errorf("%w: caller claims release %q, binary attests %q", ErrMuseToolReleaseMismatch, claimed, probed.Release)
 	}
 	// The plan's typed fact, never a file under the managed home, decides
-	// whether exclusion is required; the attested build must be qualified.
+	// whether exclusion is required; the attested build must be qualified
+	// for the interactive form, the only form a sealed plan carries.
 	if provenance, carried := plan.CuratorContextProvenanceSnapshot(); carried && provenance.Fragment.RootContext != nil &&
-		!foreignContextExclusionBuildQualified(probed.Release, probed.Build) {
+		!foreignContextExclusionBuildQualified(exclusionFormInteractive, probed.Release, probed.Build) {
 		return nil, fmt.Errorf("%w: binary attests release %q build %q", ErrForeignContextExclusionUnqualified, probed.Release, probed.Build)
 	}
 	var helpFullDigest, helpLinesDigest string

@@ -190,11 +190,17 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 // BuildPlan applies the generic patch afterwards, including OwnedEnv.
 //
 // A Curator-managed launch validates through the same pure builder the
-// BuildPlan gate uses, so direct plugin callers receive identical refusals;
-// the overlay itself is applied by childEnv after parent filtering.
+// BuildPlan gate uses, so direct plugin callers receive identical fragment
+// refusals; the overlay itself is applied by childEnv after parent filtering.
+// ChildEnv has no launch mode, and the exclusion qualification is per form:
+// it refuses a release no form qualifies and leaves the per-form refusal to
+// BuildPlan's gate and Args, which both know the mode.
 func (*System) ChildEnv(parent []string, req agentic.LaunchRequest) ([]string, error) {
 	if req.Context != nil {
 		if err := validateMuseCuratorContext(req); err != nil {
+			return nil, err
+		}
+		if err := validateForeignContextExclusionInSomeForm(req); err != nil {
 			return nil, err
 		}
 	}
