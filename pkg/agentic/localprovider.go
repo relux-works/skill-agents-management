@@ -77,9 +77,10 @@ func (e *LocalProviderRefusal) Is(target error) bool {
 // `false`.
 //
 // The carrier is deliberately key-agnostic: the Codex plugin owns the closed
-// allow-list and refuses every key it does not admit, so a new harness key
-// is a plugin change, never a change here. The plugin copies what it emits
-// and retains no reference to the caller's slice.
+// allow-list, drops exact keys already sealed by the plan and refuses every
+// other key it does not admit. A new harness key is a plugin change, never a
+// change here. The plugin copies what it emits and retains no reference to the
+// caller's slice.
 type LocalProviderSetting struct {
 	Key   string
 	Value string
@@ -113,13 +114,29 @@ type LocalProviderSettingsValidator interface {
 // exec seal, so a plan built with them still verifies. Nil or empty carries
 // nothing and keeps every existing plan byte-identical. Each entry is
 // validated against the Codex plugin's own settings policy at a pre-planning
-// boundary before binary resolution and any file read: only the
-// module-declared cosmetic/output-shape keys are admitted, and credential,
-// provider, model-identity, sandbox, approval, network, tool and unknown
-// keys are refused typed. The settings ride the sealed argv, so a post-seal
-// change is still refused as conflicting.
+// boundary before binary resolution and any file read. Exact keys already
+// emitted by the plan's model-selection fragments are dropped and reported by
+// name only in Plan.CarriedSettings; arbitrary model_* keys are never dropped.
+// Of the remaining settings, only module-declared cosmetic/output-shape keys
+// are admitted; credential, provider, unowned model, sandbox, approval, network,
+// tool and unknown keys are refused typed. Admitted settings ride the sealed
+// argv, so a post-seal change is still refused as conflicting.
 type LocalProviderBinding struct {
 	ID       string
 	Snapshot any
 	Settings []LocalProviderSetting
+}
+
+// LocalProviderSettingsStatus reports discarded operator settings by name
+// only. It is informational and grants no authority over execution.
+type LocalProviderSettingsStatus struct {
+	DroppedKeys []string `json:"dropped_keys,omitempty"`
+	Note        string   `json:"note,omitempty"`
+}
+
+// LocalProviderSettingsReporter is an optional pure reporting surface. The
+// planner asks only after successful validation; implementations retain no
+// setting values. Systems without drops return the zero status.
+type LocalProviderSettingsReporter interface {
+	LocalProviderSettingsStatus(LaunchRequest, LaunchMode) LocalProviderSettingsStatus
 }

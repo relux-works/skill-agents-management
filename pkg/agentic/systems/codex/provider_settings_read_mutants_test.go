@@ -152,6 +152,11 @@ func TestCarriedSettingsContractMutantsKilledByName(t *testing.T) {
 	copySettingsMutantModule(t, root, candidate)
 	for _, mutant := range []struct{ name, file, before, after, witness string }{
 		{
+			"report-retains-carried-value", "provider_settings.go",
+			`strings.Join(keys, ", ")`, `strings.Join(keys, ", ") + " operator-secret-model-G23"`,
+			"TestCarriedSettingsReportNamesWithoutValues",
+		},
+		{
 			"drop-arbitrary-model-prefix", "provider_settings.go",
 			`if owned[setting.Key] {`, `if owned[setting.Key] || strings.HasPrefix(setting.Key, "model_") {`,
 			"TestCarriedSettingsUnownedModelKeysStillRefuse",

@@ -567,6 +567,18 @@ proven against all four codex launch-surface goldens through the real
   interactive launches retain typed `unsupported` refusals. Hosted launches
   retain their existing argv, environment and effort behavior.
 
+  Carried operator settings cannot become a second model writer. The plugin
+  drops only exact keys emitted by the plan's model-selection fragments
+  (`model`, plus effort/tier companions when emitted), irrespective of their
+  values. `Plan.CarriedSettings` exposes sorted unique `dropped_keys` and a
+  names-only `note`; discarded values are never retained in this status or
+  the exported plan. Unowned `model_*` keys still refuse. With no dropped keys,
+  the optional `carried_settings` JSON field is absent and plan bytes remain
+  unchanged. The optional pure `LocalProviderSettingsReporter` interface adds
+  this informational status after successful validation; it grants no execution
+  authority. `TestCarriedSettingsReportNamesWithoutValues` checks both binding
+  paths and modes; `TestCarriedSettingsWithoutOwnedKeysMatchBaseline` pins parity.
+
   `codex.RepresentedProviderKeys()` is the public source of truth for the exact
   `[model_providers.<id>]` keys represented by the snapshot: `name`, `base_url`,
   `wire_api`, and `requires_openai_auth`. The first two are retained values;

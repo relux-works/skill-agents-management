@@ -8,6 +8,19 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
+// LocalProviderSettingsStatus reports only the names discarded by the same
+// pure classifier used by validation and argv construction, never their values.
+func (*System) LocalProviderSettingsStatus(req agentic.LaunchRequest, mode agentic.LaunchMode) agentic.LocalProviderSettingsStatus {
+	_, keys := splitPlanOwnedLocalSettings(req, mode)
+	if len(keys) == 0 {
+		return agentic.LocalProviderSettingsStatus{}
+	}
+	return agentic.LocalProviderSettingsStatus{
+		DroppedKeys: keys,
+		Note:        "Dropped plan-sealed operator settings: " + strings.Join(keys, ", "),
+	}
+}
+
 // allowedLocalProviderSettings is the CLOSED allow-list of Codex `-c` keys a
 // local-provider launch may carry through LocalProviderBinding.Settings —
 // never a deny-list. After exact plan-owned keys have been dropped, every

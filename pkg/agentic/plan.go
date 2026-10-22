@@ -59,6 +59,9 @@ type Plan struct {
 	// posture is what the seal holds, never a re-read of this echo.
 	PermissionMode PermissionMode
 
+	// CarriedSettings is absent when no operator setting was dropped.
+	CarriedSettings *LocalProviderSettingsStatus `json:"carried_settings,omitempty"`
+
 	Provenance LaunchProvenance
 
 	// Session is the native session record the system plugin filled from its
@@ -735,6 +738,13 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 		sessionPlanner:           planner,
 		curatorContextProvenance: contextProvenance,
 		networkProvenance:        networkProvenance,
+	}
+	if reporter, ok := sys.(LocalProviderSettingsReporter); ok {
+		status := reporter.LocalProviderSettingsStatus(req, mode)
+		if len(status.DroppedKeys) != 0 {
+			status.DroppedKeys = append([]string(nil), status.DroppedKeys...)
+			plan.CarriedSettings = &status
+		}
 	}
 	if planner, ok := sys.(AuxiliaryPlanner); ok {
 		plan.auxiliaryBasis = &auxiliaryBasis{planner: planner, workDir: plan.WorkDir, home: plan.Home}
