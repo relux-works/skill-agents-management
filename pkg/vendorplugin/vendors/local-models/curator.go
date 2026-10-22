@@ -92,6 +92,12 @@ func LoadAt(curatorDir, legacyPath string) (Config, *DeprecationWarning, error) 
 		if err != nil {
 			return Config{}, nil, err
 		}
+		if enginesPresent {
+			curatorCfg.EnginesConfig, err = filepath.Abs(filepath.Join(curatorDir, enginesFileName))
+			if err != nil {
+				return Config{}, nil, refuse(RefusalReadFailed, enginesFileName, "")
+			}
+		}
 		curatorValid = true
 	}
 
@@ -356,11 +362,13 @@ func parseCuratorModel(runtimeID, modelID string, entry map[string]any, runtimeE
 		return ModelEntry{}, refuse(RefusalConflicting, runtimesFileName, runtimeID)
 	}
 	var resolved plugin.Ref
+	weightsID := ""
 	if effective != nil {
 		resolved, err = resolveCuratorEngine(*effective, engines, enginesPresent)
 		if err != nil {
 			return ModelEntry{}, err
 		}
+		weightsID = engines[effective.Name].WeightsID
 	}
 	rawPointer, exists := entry["pointer"]
 	if !exists {
@@ -400,6 +408,7 @@ func parseCuratorModel(runtimeID, modelID string, entry map[string]any, runtimeE
 		Pointer:             pointer,
 		Engine:              resolved,
 		ExpectedWeightsID:   expectedWeights,
+		WeightsID:           weightsID,
 	}, nil
 }
 
@@ -609,8 +618,8 @@ func isLowerHex(value string) bool {
 
 // curatorLegacyDiffer reports whether an overlapping runtime ID carries
 // different rows in the two sources. It compares system, effective engine
-// reference, and every model field except the Curator-only weights pin; the
-// inference-engines header is not compared. Runtimes present in only one
+// reference, and every model field except the Curator-only weights identity
+// and operator pin; the inference-engines header is not compared. Runtimes present in only one
 // source are not a conflict. Model engines compare by effective value
 // (explicit model engine, else the runtime engine): the Curator parser
 // materializes the inherited engine into each model row while the legacy

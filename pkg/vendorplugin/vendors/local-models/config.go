@@ -70,6 +70,9 @@ type ModelEntry struct {
 	// means unpinned: readable, but never certified. Legacy
 	// local-models.toml has no pin and always leaves this empty.
 	ExpectedWeightsID string
+	// WeightsID is the resolved engine's declared weights identity, independent
+	// of the operator pin. Empty means the engine declares no weights identity.
+	WeightsID string `json:",omitempty"`
 }
 
 // RuntimeEntry is one declared runtime: its id, which agentic system drives
@@ -100,6 +103,9 @@ type Config struct {
 	// Empty means a manually constructed config and reads as the legacy
 	// source for provenance.
 	Source string
+	// EnginesConfig is the absolute engines.toml path read by LoadAt. Empty
+	// means no engine catalog was read, including the legacy fallback.
+	EnginesConfig string `json:",omitempty"`
 }
 
 // SourceName reports the effective source basename for provenance.

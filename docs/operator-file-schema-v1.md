@@ -174,6 +174,15 @@ mode = "local"        # engine-owned attribute, pending engine-owner confirmatio
 id = "gguf-sha256:1111111111111111111111111111111111111111111111111111111111111111"
 ```
 
+The reader exports the resolved engine's `weights.id` as `ModelEntry.WeightsID`,
+including when a model inherits its runtime's engine reference. Absence stays
+empty. This engine declaration and `ModelEntry.ExpectedWeightsID` (the
+operator pin) remain independent; loading the declaration never refreshes the
+pin or certifies the weights. `Config.EnginesConfig` exposes the absolute path
+of the engine catalog read by `LoadAt`, also available through
+`ConfigResult.Config`. Legacy fallback and an absent engine catalog leave it
+empty. This module does not choose an engine cache root.
+
 ```toml
 # runtimes.toml (illustrative; additive model metadata, schema_version stays 1)
 schema_version = 1

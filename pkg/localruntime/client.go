@@ -19,8 +19,9 @@ import (
 var ErrStatusReadFailed = errors.New("localruntime: status read failed")
 
 // ErrStatusQueryInvalid is returned when a status read lacks an explicit
-// project directory or engine profile. Falling back to the agent's current
-// directory could observe a different project's engine.
+// project directory or engine profile, or supplies a relative catalog/cache
+// path. Falling back to the agent's current directory could observe a
+// different project's engine.
 var ErrStatusQueryInvalid = errors.New("localruntime: status query is invalid")
 
 // statusCommandTimeout is this adapter's own bound on the `curator-engines
@@ -146,10 +147,20 @@ func (r *CLIStatusReader) Status(ctx context.Context, query StatusQuery) (Status
 	if !filepath.IsAbs(query.CuratorEnginesProject) || strings.TrimSpace(query.CuratorEnginesProfile) == "" {
 		return Status{}, fmt.Errorf("%w: an absolute project directory and non-empty engine profile are required", ErrStatusQueryInvalid)
 	}
+	if query.CuratorEnginesConfig != "" && !filepath.IsAbs(query.CuratorEnginesConfig) ||
+		query.CuratorEnginesCacheRoot != "" && !filepath.IsAbs(query.CuratorEnginesCacheRoot) {
+		return Status{}, fmt.Errorf("%w: explicit catalog and cache paths must be absolute", ErrStatusQueryInvalid)
+	}
 	boundedCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
 	args := []string{"status", "--engine", query.CuratorEnginesProfile, "--json"}
+	if query.CuratorEnginesConfig != "" {
+		args = append(args, "--config", query.CuratorEnginesConfig)
+	}
+	if query.CuratorEnginesCacheRoot != "" {
+		args = append(args, "--cache-root", query.CuratorEnginesCacheRoot)
+	}
 	output, err := r.run(boundedCtx, "curator-engines", args, query.CuratorEnginesProject)
 	if err != nil {
 		return Status{}, fmt.Errorf("%w: curator-engines status: %w", ErrStatusReadFailed, err)

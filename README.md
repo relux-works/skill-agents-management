@@ -1807,7 +1807,17 @@ sources. File locations and ownership:
   runtime ID refuses typed `conflicting` instead of last-writer-wins.
 
 `localmodels.LoadAt` is the production resolution entry point (`Peek`
-memoizes it per home paths). Every failure is a typed, sanitized
+memoizes it per home paths). Its `Config.EnginesConfig` carries the absolute
+engine catalog path actually read; each resolved `ModelEntry.WeightsID`
+carries the engine's optional weights declaration separately from the
+operator's `ExpectedWeightsID` pin. Neither value is inferred for the legacy
+fallback. SAM does not own cache-root selection. A status caller can pass
+explicit absolute paths through `localruntime.StatusQuery.CuratorEnginesConfig`
+and `CuratorEnginesCacheRoot`, which become `curator-engines status --config`
+and `--cache-root` arguments. Empty fields preserve the existing status argv
+and result; this transport reads no ambient path selectors.
+
+Every failure is a typed, sanitized
 `*localmodels.Refusal`: `absent`, `malformed`, `read_failed`, `conflicting`,
 `unbound`, or `unsupported`. A read failure never falls back to the legacy
 source. `runtimes.toml` is strict: unknown fields refuse as `malformed`

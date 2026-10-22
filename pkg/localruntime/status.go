@@ -83,6 +83,12 @@ type StatusQuery struct {
 	// CuratorEnginesProfile is the engine entry name selected by
 	// `curator-engines status --engine <name>`.
 	CuratorEnginesProfile string
+	// CuratorEnginesConfig optionally selects an absolute engines.toml path.
+	// Absence leaves catalog selection to curator-engines, as before.
+	CuratorEnginesConfig string `json:",omitempty"`
+	// CuratorEnginesCacheRoot optionally selects an absolute state/cache root.
+	// This package never chooses or derives that policy for the caller.
+	CuratorEnginesCacheRoot string `json:",omitempty"`
 }
 
 // Status is one status read's whole answer.
