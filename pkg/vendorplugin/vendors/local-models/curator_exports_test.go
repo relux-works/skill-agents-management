@@ -54,7 +54,11 @@ func TestCuratorEngineExportsWeightsAndPath(t *testing.T) {
 			if model.WeightsID != wantWeights || model.ExpectedWeightsID != wantPin {
 				t.Fatalf("weights = %q, pin = %q; want %q, %q", model.WeightsID, model.ExpectedWeightsID, wantWeights, wantPin)
 			}
-			if cfg.EnginesConfig != filepath.Join(dir, enginesFileName) {
+			wantPath, err := filepath.EvalSymlinks(filepath.Join(dir, enginesFileName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.EnginesConfig != wantPath {
 				t.Fatalf("EnginesConfig = %q, want loaded catalog", cfg.EnginesConfig)
 			}
 			result := resolveWithPaths(dir, legacy)
@@ -65,7 +69,7 @@ func TestCuratorEngineExportsWeightsAndPath(t *testing.T) {
 	}
 }
 
-// Relative catalog directories expose the absolute file actually read, while
+// Relative catalog directories expose the canonical file actually read, while
 // a missing engine catalog and legacy fallback leave the new exports absent.
 func TestCuratorEngineExportsPathAndAbsence(t *testing.T) {
 	dir, project := t.TempDir(), t.TempDir()
@@ -74,8 +78,12 @@ func TestCuratorEngineExportsPathAndAbsence(t *testing.T) {
 	body := curatorPiRuntimes(project)
 	writeCuratorFile(t, dir, runtimesFileName, body)
 	writeCuratorFile(t, dir, enginesFileName, curatorEnginesMLX)
+	wantPath, err := filepath.EvalSymlinks(filepath.Join(dir, enginesFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg, _, err := LoadAt(".", legacy)
-	if err != nil || cfg.EnginesConfig != filepath.Join(dir, enginesFileName) {
+	if err != nil || cfg.EnginesConfig != wantPath {
 		t.Fatalf("relative path resolution: config = %#v, err = %v", cfg, err)
 	}
 	if err := os.Remove(filepath.Join(dir, enginesFileName)); err != nil {

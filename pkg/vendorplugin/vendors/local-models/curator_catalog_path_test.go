@@ -14,7 +14,12 @@ import (
 func TestLoadAtCatalogPathSurvivesSymlinkRetarget(t *testing.T) {
 	for _, mode := range []string{"stable-control", "home-relative-control", "directory-link", "file-link"} {
 		t.Run(mode, func(t *testing.T) {
-			root := t.TempDir()
+			// Remove ambient TMPDIR aliases before adding the intentional
+			// links, so stable/HOME controls isolate the retarget behavior.
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
 			originalHome, decoyHome := filepath.Join(root, "original home"), filepath.Join(root, "decoy home")
 			original, decoy := filepath.Join(originalHome, ".curator"), filepath.Join(decoyHome, ".curator")
 			const originalID = "gguf-sha256:1111111111111111111111111111111111111111111111111111111111111111"
@@ -126,5 +131,36 @@ func TestLoadAtCatalogLinkFailuresStayTyped(t *testing.T) {
 				t.Fatal("ConfigResult leaked catalog target")
 			}
 		})
+	}
+}
+
+// Absolute and relative aliased directories export the canonical file that was
+// parsed, even when TMPDIR is already canonical. The alias is intentional here.
+func TestLoadAtCatalogAliasedInputExportsCanonicalPath(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Join(root, "actual catalog")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeCuratorFile(t, directory, runtimesFileName, curatorPiRuntimes(root))
+	writeCuratorFile(t, directory, enginesFileName, curatorEnginesMLX)
+	alias := filepath.Join(root, "catalog alias")
+	if err := os.Symlink(directory, alias); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(directory, enginesFileName)
+	t.Chdir(root)
+	for _, input := range []string{alias, filepath.Base(alias)} {
+		cfg, warning, err := LoadAt(input, filepath.Join(root, "absent-legacy.toml"))
+		if err != nil || warning != nil || cfg.EnginesConfig != want {
+			t.Fatalf("aliased input %q: path=%q, warning=%v, err=%v; want %q", input, cfg.EnginesConfig, warning, err, want)
+		}
+		parsed, err := os.ReadFile(cfg.EnginesConfig)
+		if err != nil || string(parsed) != curatorEnginesMLX {
+			t.Fatalf("exported path does not read the loaded catalog: %v", err)
+		}
 	}
 }

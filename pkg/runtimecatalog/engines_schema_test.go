@@ -97,7 +97,13 @@ pi_model_identity = "qwen-local/qwen-local"
 			}
 			return
 		}
-		if err != nil || warning != nil || len(config.Runtimes) != 1 || config.Runtimes[0].ID != "local-qwen" || len(config.Runtimes[0].Models) != 1 || config.EnginesConfig != filepath.Join(directory, EnginesFile) {
+		// A valid load exports the canonical catalog, including under an
+		// aliased TMPDIR; malformed schemas above must still refuse.
+		wantPath, resolveErr := filepath.EvalSymlinks(filepath.Join(directory, EnginesFile))
+		if resolveErr != nil {
+			t.Fatal(resolveErr)
+		}
+		if err != nil || warning != nil || len(config.Runtimes) != 1 || config.Runtimes[0].ID != "local-qwen" || len(config.Runtimes[0].Models) != 1 || config.EnginesConfig != wantPath {
 			t.Fatalf("LoadAt = %+v, warning = %v, err = %v", config, warning, err)
 		}
 	})
