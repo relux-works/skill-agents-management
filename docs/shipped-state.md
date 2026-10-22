@@ -425,6 +425,16 @@ facts positively absent. Partial or simultaneous variants refuse. This is a
 static contract candidate only; curator-engines owns process, SSH, polling,
 pressure, and supervision operations.
 
+The catalog-bound composition surface is `pkg/catalogobservation`: selected
+Config/runtime/model plus explicit cache root produce an immutable adapter and
+concrete graph node. MLX declares native-transformer; llama-cpp declares
+gguf-server. The standalone model-check uses this factory and requires the
+coordinated status-provenance/v1 envelope, refusing older/compat replies without
+it. Same-name catalog A/B fixtures admit A and refuse B. Released-producer
+acceptance and unchanged-byte digest comparison are separate follow-ups; see
+[catalog observation](catalog-engine-observation.md). Project-only NewAdapter
+remains compatible, and this change does not remove any downstream G31 refusal.
+
 ### 6. What the CLI answers today, and what that answer means
 
 `agents-management plugins` reads `agentic.Default` and reports `pi`, because

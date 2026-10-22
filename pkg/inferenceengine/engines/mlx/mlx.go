@@ -1,6 +1,6 @@
 // Package mlx declares the configured MLX inference-engine plugin.
 //
-// The plugin is an identity and graph node only. It does not discover, start,
+// The plugin declares identity and observation kind. It does not discover, start,
 // connect to, or execute a local model runtime.
 package mlx
 
@@ -22,4 +22,9 @@ func New() Plugin { return Plugin{} }
 // switch or a second registry.
 func (Plugin) PluginDeclaration() plugin.Declaration {
 	return plugin.Declaration{ID: ID, Kind: inferenceengine.Kind}
+}
+
+// ObservationKind binds MLX to the native-transformer readings contract.
+func (Plugin) ObservationKind() inferenceengine.EngineKind {
+	return inferenceengine.EngineKindNativeTransformer
 }

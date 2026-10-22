@@ -14,10 +14,11 @@ import (
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pi"
-	"github.com/relux-works/skill-agents-management/pkg/engineobservation"
+	"github.com/relux-works/skill-agents-management/pkg/catalogobservation"
 	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine/engines/llamacpp"
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine/engines/mlx"
 	"github.com/relux-works/skill-agents-management/pkg/localruntime"
-	"github.com/relux-works/skill-agents-management/pkg/plugin"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 	localmodels "github.com/relux-works/skill-agents-management/pkg/vendorplugin/vendors/local-models"
 	"github.com/spf13/cobra"
@@ -69,33 +70,29 @@ type modelCheckProcessResult struct {
 }
 
 type modelCheckDependencies struct {
-	loadConfig        func() localmodels.ConfigResult
-	statusReader      localruntime.StatusReader
-	runProcess        func(context.Context, agentic.Plan) modelCheckProcessResult
-	getwd             func() (string, error)
-	environ           func() []string
-	openEvidence      func(path string) (*os.File, error)
-	newEngineAdapters func(engine plugin.Ref, scope modelCheckEngineScope) ([]vendorplugin.EngineObservationAdapter, error)
+	loadConfig       func() localmodels.ConfigResult
+	statusReader     localruntime.StatusReader
+	runProcess       func(context.Context, agentic.Plan) modelCheckProcessResult
+	getwd            func() (string, error)
+	environ          func() []string
+	openEvidence     func(path string) (*os.File, error)
+	newEngineBinding modelCheckBindingFactory
+	cacheRoot        func() (string, error)
 }
 
-// modelCheckEngineScope is the selected engine-bound launch identity the
-// observation adapter serves: exactly the runtime/model pointer the registry
-// was built for, never a fallback.
-type modelCheckEngineScope struct {
-	Runtime vendorplugin.RuntimeID
-	Model   vendorplugin.ModelID
-	Project string
-	Profile string
-}
+// modelCheckBindingFactory is the public catalog composition seam. Tests may
+// substitute explicit legacy adapter controls; production never falls back.
+type modelCheckBindingFactory func(localmodels.Config, vendorplugin.RuntimeID, vendorplugin.ModelID, string) (catalogobservation.Binding, error)
 
 var modelCheckDeps = modelCheckDependencies{
-	loadConfig:        localmodels.Peek,
-	statusReader:      localruntime.NewCLIStatusReader(),
-	runProcess:        runModelCheckProcess,
-	getwd:             os.Getwd,
-	environ:           os.Environ,
-	openEvidence:      openModelCheckEvidence,
-	newEngineAdapters: newModelCheckEngineAdapters,
+	loadConfig:       localmodels.Peek,
+	statusReader:     localruntime.NewCLIStatusReader(),
+	runProcess:       runModelCheckProcess,
+	getwd:            os.Getwd,
+	environ:          os.Environ,
+	openEvidence:     openModelCheckEvidence,
+	newEngineBinding: newModelCheckEngineBinding,
+	cacheRoot:        os.UserCacheDir,
 }
 
 // openModelCheckEvidence creates the evidence file exclusively with mode
@@ -105,35 +102,15 @@ func openModelCheckEvidence(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 }
 
-// newModelCheckEngineAdapters builds the production observation adapter for
-// an engine-bound runtime, or no adapters when the selected runtime names no
-// engine. The adapter observes the manager's released status readings over
-// the query's own project directory.
-func newModelCheckEngineAdapters(engine plugin.Ref, scope modelCheckEngineScope) ([]vendorplugin.EngineObservationAdapter, error) {
-	if engine == (plugin.Ref{}) {
-		return nil, nil
-	}
-	// NativeTransformer is the declared kind because local-models.toml names
-	// engine identities, not implementation kinds, and both kinds share the
-	// closed validation rules (the kind-parameterized policy tests prove the
-	// outcome is kind-independent; BuildLaunch discards the resolution after
-	// validation).
-	adapter, err := engineobservation.NewAdapter(engine, inferenceengine.EngineKindNativeTransformer, modelCheckProjectResolver(scope))
+// newModelCheckEngineBinding selects concrete engine implementations, then
+// delegates selected-row/catalog resolution to the public factory. Cache-root
+// selection is explicit CLI policy and not inferred by the adapter or factory.
+func newModelCheckEngineBinding(cfg localmodels.Config, runtime vendorplugin.RuntimeID, model vendorplugin.ModelID, cacheRoot string) (catalogobservation.Binding, error) {
+	factory, err := catalogobservation.NewFactory(mlx.New(), llamacpp.New())
 	if err != nil {
-		return nil, err
+		return catalogobservation.Binding{}, err
 	}
-	return []vendorplugin.EngineObservationAdapter{adapter}, nil
-}
-
-// modelCheckProjectResolver answers the query's project only when the
-// authoritative query matches the selected scope exactly.
-func modelCheckProjectResolver(scope modelCheckEngineScope) engineobservation.ResolveProject {
-	return func(query vendorplugin.EngineObservationQuery) (string, bool) {
-		if query.Runtime != scope.Runtime || query.Model != scope.Model || query.Profile != scope.Profile {
-			return "", false
-		}
-		return scope.Project, true
-	}
+	return factory.ForBinding(cfg, runtime, model, cacheRoot)
 }
 
 var modelCheckCmd = newModelCheckCommand(&modelCheckDeps)
@@ -243,7 +220,7 @@ func runModelCheck(parent context.Context, options modelCheckOptions, deps *mode
 		return finish()
 	}
 
-	registry, err := buildModelCheckRegistry(loaded.Config, vendorplugin.RuntimeID(options.runtime), vendorplugin.ModelID(options.model), deps.statusReader, deps.newEngineAdapters)
+	registry, err := buildModelCheckRegistry(loaded.Config, vendorplugin.RuntimeID(options.runtime), vendorplugin.ModelID(options.model), deps.statusReader, deps.newEngineBinding, deps.cacheRoot)
 	if err != nil {
 		report.Status = modelCheckStatusFailed
 		report.Reason = "configured_model_unavailable"
@@ -293,7 +270,7 @@ func runModelCheck(parent context.Context, options modelCheckOptions, deps *mode
 	return finish()
 }
 
-func buildModelCheckRegistry(cfg localmodels.Config, runtimeID vendorplugin.RuntimeID, modelID vendorplugin.ModelID, statusReader localruntime.StatusReader, newAdapters func(plugin.Ref, modelCheckEngineScope) ([]vendorplugin.EngineObservationAdapter, error)) (*vendorplugin.Registry, error) {
+func buildModelCheckRegistry(cfg localmodels.Config, runtimeID vendorplugin.RuntimeID, modelID vendorplugin.ModelID, statusReader localruntime.StatusReader, newBinding modelCheckBindingFactory, cacheRoot func() (string, error)) (*vendorplugin.Registry, error) {
 	runtime, ok := localmodelsRuntime(cfg, runtimeID)
 	if !ok || runtime.System != "pi" {
 		return nil, fmt.Errorf("model-check: runtime is not a configured Pi runtime")
@@ -310,20 +287,31 @@ func buildModelCheckRegistry(cfg localmodels.Config, runtimeID vendorplugin.Runt
 	if err := systems.Register(pi.New(statusReader)); err != nil {
 		return nil, err
 	}
-	adapters, err := newAdapters(runtime.Engine, modelCheckEngineScope{
-		Runtime: runtime.ID,
-		Model:   modelID,
-		Project: model.Pointer.CuratorEnginesProject,
-		Profile: model.Pointer.CuratorEnginesProfile,
-	})
+	cache := ""
+	if model.Engine.ID != "" || runtime.Engine.ID != "" {
+		var err error
+		cache, err = cacheRoot()
+		if err != nil {
+			return nil, err
+		}
+	}
+	binding, err := newBinding(cfg, runtimeID, modelID, cache)
 	if err != nil {
 		return nil, err
 	}
-	registry, err := vendorplugin.NewRegistryWithEngineObservationAdapters(systems, adapters...)
+	registry, err := vendorplugin.NewRegistryWithEngineObservationAdapters(systems, binding.Adapters...)
 	if err != nil {
 		return nil, err
+	}
+	if binding.Engine != nil {
+		if err := registry.RegisterPlugin(binding.Engine); err != nil {
+			return nil, err
+		}
 	}
 	for _, engine := range selected.EnginePlugins() {
+		if binding.Engine != nil && engine.PluginDeclaration().Ref() == binding.Engine.PluginDeclaration().Ref() {
+			continue
+		}
 		if err := registry.RegisterPlugin(engine); err != nil {
 			return nil, err
 		}

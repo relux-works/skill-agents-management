@@ -453,6 +453,13 @@ the runtime does not bind (`ErrUnknownModel`) and an effort outside the row's
 vocabulary are refused. Provider login in the managed home is the operator's,
 through Pi's own `/login`; this module never touches credentials.
 
+For local-model engine bindings, use the public
+[`catalogobservation.NewFactory` recipe](catalog-engine-observation.md). It
+consumes the selected LoadAt config and an explicit cache root, returns the
+concrete graph node and scoped adapters, and requires producer-reported catalog
+identity before readings can reach admission. A pointer-only row needs no
+catalog observation. Do not reconstruct a private engine-ID/kind table.
+
 ## What stays yours
 
 The module ends at a plan. A consumer still owns:

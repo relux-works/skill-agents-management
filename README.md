@@ -1919,8 +1919,15 @@ covers admission and the child process. Pi and every admission status
 subprocess run in their own process groups so the deadline kill reaches
 descendants holding their pipes; an unmet expectation or any refusal exits
 nonzero. Engine-bound models are observed through the
-`pkg/engineobservation` adapter over `curator-engines status --json` readings
-(observed-process/v3), strictly decoded with exact-case closed keys and
+public `pkg/catalogobservation` factory, which binds `Config.EnginesConfig`
+and the CLI's explicit `os.UserCacheDir()` cache-root policy. Its adapter passes
+`--config` and `--cache-root` with the selected project as cwd, requires
+`status-provenance/v1` (coordinated for curator-engines v0.4.3), and rejects
+missing/mismatched catalog provenance before Pi preflight. MLX declares
+`native-transformer`; llama-cpp declares `gguf-server`. See
+[catalog-bound observation](docs/catalog-engine-observation.md) for the public
+API, canonical path rules and digest-comparison limit. The readings
+(observed-process/v3) are strictly decoded with exact-case closed keys and
 duplicate rejection: healthy readings reach Pi, while failed, stale,
 malformed or not-observed readings — and any status read failure — refuse
 before Pi starts and stay unknown, never a pass. The evidence file is created
@@ -2021,6 +2028,7 @@ permission and cancels superseded runs. Results and logs are in GitHub Actions.
 | `make` | build, test, vet, regress and install the CLI | `make build` / `test` / `vet` / `regress` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
 | Go toolchain | package tests and static analysis | `go test -mod=mod ./... -count=1` / `go vet -mod=mod ./...`; `make test` / `make vet` wrap the repository gates | terminal output and task-scoped logs in `.temp/` |
 | Codex carried-settings read-order tests | record planner filesystem/resolver operations and kill model-only ignored-result reads, including direct-reader bypasses | `go test ./pkg/agentic/systems/codex -run '^TestCarriedSettings' -count=1 -v` | terminal output; task logs in `.temp/`; mutated module copies in `t.TempDir()` |
+| Catalog observation tests | verify selected scope, explicit carriers, status-provenance/v1, public factory and model-check refusal/positive controls | `GOFLAGS= go test ./pkg/engineobservation ./pkg/catalogobservation -count=1`; `GOFLAGS= go test ./tools/agents-management/cmd -run '^TestModelCheckCatalogProductionBinding$' -count=1` | terminal output; task-scoped logs and disposable mutation fixtures in `.temp/` |
 | Curator catalog path regression and mutant | verify resolved catalog identity across symlink retargets and HOME changes; kill an Abs-only loader | `go test ./pkg/vendorplugin/vendors/local-models -run '^TestLoadAtCatalog' -count=1 -v` | terminal output; task logs in `.temp/`; mutant overlay in `t.TempDir()` |
 | changelog release | validate landing fragments; aggregate them before the tagger commits and tags | `.scripts/changelog-release.sh --check`; `.scripts/changelog-release.sh [--allow-empty] <version> <YYYY-MM-DD>` | reads `changelog.d/`; release updates `CHANGELOG.md` and removes consumed fragments |
 | changelog behavioral and mutation tests | drive the release entry point in disposable Git repositories; require named narrowing mutants to fail their behavioral witnesses | `GOWORK=off go test -count=1 -v ./internal/changelog/` | terminal output; task logs in `.temp/`; isolated fixtures and mutant script copies in the Go test temp directory |
@@ -2029,7 +2037,7 @@ permission and cancels superseded runs. Results and logs are in GitHub Actions.
 | `agents-management model-check` | exercise one configured managed-Pi/model result under a caller deadline | `agents-management model-check --runtime <id> --model <id> --prompt <text> --expect <text> --deadline 45s --evidence /path/to/new-result.json` | exclusive mode-0600 JSON summary at the requested path; command output and validation logs under `.temp/` |
 | Codex CLI | launch target for `pkg/agentic/systems/codex`; custom local providers are selected with generated config overrides and private `CODEX_HOME/config.toml` entries | `codex --version`; runtime launches execute the `Binary` and `Argv` returned by `agentic.BuildPlan` | child work under the requested `WorkDir`; private settings remain under `CODEX_HOME` |
 | Muse Code | launch target for `pkg/agentic/systems/muse`; pinned help verifies the TUI and headless option grammar | `MUSE_NO_AUTO_UPDATE=1 muse --version` / `muse --help` / `muse exec --help` (use a throwaway `HOME` when checking a pinned release) | plans come from `agentic.BuildPlan`; pinned help/version output and task logs under `.temp/` |
-| `curator-engines` | read local engine status for local-model preflight and availability; this package never calls lifecycle-changing commands | `curator-engines status --engine <profile> --json` with the selected project as the working directory | JSON to stdout; validation logs under `.temp/TASK-<id>/` |
+| `curator-engines` | read local engine status; catalog-bound observation requires status-provenance/v1, with no lifecycle-changing commands | `curator-engines status --engine <profile> --json --config <absolute-catalog> --cache-root <absolute-root>` for catalog observation; project-only preflight retains the legacy invocation | JSON to stdout; validation logs under `.temp/TASK-<id>/` |
 | `pi` | native Pi executable used by retained local-model Exec plans | `--no-approve --no-extensions --no-session --tools read,bash,edit,write --model <provider>/<model> --print <prompt>`; plan resolution uses the launch environment's `PATH` | child stdout/stderr are owned by the launch consumer; dry-run only returns a plan |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
 | model registry capture | regenerate the vendor fixtures: the source's model rows and frozen v2 tiers (read from its Go sources) and the admitted-pair digests (read from its own binary) | `.scripts/capture-model-registry.sh` | `pkg/vendorplugin/testdata/source-model-registry.json`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`, scratch in `.temp/capture-model-registry/` |

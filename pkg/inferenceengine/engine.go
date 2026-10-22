@@ -14,6 +14,14 @@ import (
 // Kind is declared here, as plugin data, rather than in the registry.
 const Kind plugin.Kind = "inference-engine"
 
+// ObservationPlugin declares the concrete observation kind owned by an engine
+// implementation. Identity-only configured nodes do not implement it.
+// The declaration must be immutable, like PluginDeclaration.
+type ObservationPlugin interface {
+	plugin.Plugin
+	ObservationKind() EngineKind
+}
+
 // Configured is an identity-only inference-engine plugin supplied by operator
 // configuration. Process construction is deliberately separate: an engine may
 // already be supervised outside the agent launch, or contribute a PlanNode

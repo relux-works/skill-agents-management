@@ -15,8 +15,10 @@ import (
 
 	"github.com/relux-works/skill-agents-management/internal/execfixture"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/catalogobservation"
 	"github.com/relux-works/skill-agents-management/pkg/engineobservation"
 	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine/engines/mlx"
 	"github.com/relux-works/skill-agents-management/pkg/localruntime"
 	"github.com/relux-works/skill-agents-management/pkg/plugin"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
@@ -53,29 +55,36 @@ func setModelCheckTestDeps(t *testing.T, config localmodels.ConfigResult, reader
 		openEvidence: openModelCheckEvidence,
 		// Hermetic by default: no observation adapter, so no subprocess.
 		// Engine tests override with setModelCheckEngineAdapters.
-		newEngineAdapters: func(plugin.Ref, modelCheckEngineScope) ([]vendorplugin.EngineObservationAdapter, error) {
-			return nil, nil
+		newEngineBinding: func(localmodels.Config, vendorplugin.RuntimeID, vendorplugin.ModelID, string) (catalogobservation.Binding, error) {
+			return catalogobservation.Binding{}, nil
 		},
+		cacheRoot: func() (string, error) { return t.TempDir(), nil },
 	}
 	t.Cleanup(func() { modelCheckDeps = previous })
 }
 
 // setModelCheckEngineAdapters overrides the observation-adapter seam after
 // setModelCheckTestDeps, for engine-bound tests that script readings.
-func setModelCheckEngineAdapters(t *testing.T, fn func(plugin.Ref, modelCheckEngineScope) ([]vendorplugin.EngineObservationAdapter, error)) {
+func setModelCheckEngineAdapters(t *testing.T, fn modelCheckBindingFactory) {
 	t.Helper()
-	previous := modelCheckDeps.newEngineAdapters
-	modelCheckDeps.newEngineAdapters = fn
-	t.Cleanup(func() { modelCheckDeps.newEngineAdapters = previous })
+	previous := modelCheckDeps.newEngineBinding
+	modelCheckDeps.newEngineBinding = fn
+	t.Cleanup(func() { modelCheckDeps.newEngineBinding = previous })
 }
 
-// modelCheckAdaptersWithRunner scripts the readings subprocess behind a
-// production-shaped adapter: the same constructor and scope resolver as the
-// shipped wiring, with only the command runner substituted.
-func modelCheckAdaptersWithRunner(t *testing.T, output []byte, runErr error, calls *int) func(plugin.Ref, modelCheckEngineScope) ([]vendorplugin.EngineObservationAdapter, error) {
+// modelCheckAdaptersWithRunner preserves the project-only adapter's strict
+// readings/deadline controls through a substituted dependency. These are NOT
+// claims of catalog attestation; the production public-factory path has separate
+// controls for status-provenance/v1.
+func modelCheckAdaptersWithRunner(t *testing.T, output []byte, runErr error, calls *int) modelCheckBindingFactory {
 	t.Helper()
-	return func(engine plugin.Ref, scope modelCheckEngineScope) ([]vendorplugin.EngineObservationAdapter, error) {
-		adapter, err := engineobservation.NewAdapter(engine, inferenceengine.EngineKindNativeTransformer, modelCheckProjectResolver(scope),
+	return func(cfg localmodels.Config, runtime vendorplugin.RuntimeID, model vendorplugin.ModelID, _ string) (catalogobservation.Binding, error) {
+		row := cfg.Runtimes[0].Models[model]
+		engine := row.Engine
+		adapter, err := engineobservation.NewAdapter(engine, inferenceengine.EngineKindNativeTransformer,
+			func(q vendorplugin.EngineObservationQuery) (string, bool) {
+				return row.Pointer.CuratorEnginesProject, q.Engine == engine && q.Runtime == runtime && q.Model == model && q.Profile == row.Pointer.CuratorEnginesProfile
+			},
 			engineobservation.WithCommandRunner(func(context.Context, string, []string, string) ([]byte, error) {
 				if calls != nil {
 					*calls++
@@ -83,9 +92,9 @@ func modelCheckAdaptersWithRunner(t *testing.T, output []byte, runErr error, cal
 				return output, runErr
 			}))
 		if err != nil {
-			t.Fatalf("scripted engine adapter: %v", err)
+			t.Fatalf("legacy scripted adapter: %v", err)
 		}
-		return []vendorplugin.EngineObservationAdapter{adapter}, nil
+		return catalogobservation.Binding{Engine: mlx.New(), Adapters: []vendorplugin.EngineObservationAdapter{adapter}}, nil
 	}
 }
 
@@ -1219,7 +1228,7 @@ func TestModelCheckEmptyOutputRefuses(t *testing.T) {
 // BUG-261002-13ll6s: the runRoot shape opened the caller deadline before the
 // descendant inherited the pipe, so the G1-adapter mutant survived whenever
 // startup lost the race. The witness now shares the rev-5 readiness-gated
-// proof: it drives the production adapter wiring (newModelCheckEngineAdapters
+// proof: it drives the production adapter wiring (newModelCheckEngineBinding
 // with the real subprocess runner) under a cancellable context, waits for
 // the child and descendant readiness markers, and only then opens the
 // measured window. The window close cancels the observation context; exec's
@@ -1235,21 +1244,23 @@ func TestModelCheckAdapterDeadlineDescendantRefuses(t *testing.T) {
 	fixture := prepareModelCheckDescendantFixture(t, "curator-engines", family.script)
 	t.Setenv("PATH", fixture.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("MODELCHECK_READY_DIR", fixture.ReadyDir)
-	engine := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
-	scope := modelCheckEngineScope{
-		Runtime: vendorplugin.RuntimeID(modelCheckTestRuntime),
-		Model:   vendorplugin.ModelID(modelCheckTestModel),
-		Project: fixture.Dir,
-		Profile: "model-check-test",
+	cfg := modelCheckTestConfig(true)
+	cfg.EnginesConfig = filepath.Join(fixture.Dir, "engines.toml")
+	if err := os.WriteFile(cfg.EnginesConfig, []byte("[engines.model-check-test]\nengine = \"mlx\"\n"), 0600); err != nil {
+		t.Fatal(err)
 	}
-	adapters, err := newModelCheckEngineAdapters(engine, scope)
+	row := cfg.Runtimes[0].Models[modelCheckTestModel]
+	row.Pointer.CuratorEnginesProject = fixture.Dir
+	cfg.Runtimes[0].Models[modelCheckTestModel] = row
+	binding, err := newModelCheckEngineBinding(cfg, modelCheckTestRuntime, modelCheckTestModel, fixture.Dir)
 	if err != nil {
-		t.Fatalf("production engine adapters: %v", err)
+		t.Fatalf("production engine binding: %v", err)
 	}
+	adapters := binding.Adapters
 	if len(adapters) != 1 {
-		t.Fatalf("production engine adapters = %d, want exactly 1", len(adapters))
+		t.Fatalf("production adapters=%d", len(adapters))
 	}
-	query := vendorplugin.EngineObservationQuery{Engine: engine, Runtime: scope.Runtime, Model: scope.Model, Profile: scope.Profile}
+	query := vendorplugin.EngineObservationQuery{Engine: row.Engine, Runtime: modelCheckTestRuntime, Model: modelCheckTestModel, Profile: row.Pointer.CuratorEnginesProfile}
 	proof := proveModelCheckDescendantKill(t, fixture, family.markers, modelCheckDescendantReadyBound, modelCheckDescendantWindow, func(ctx context.Context) error {
 		_, err := adapters[0].ObserveEngine(ctx, query)
 		return err

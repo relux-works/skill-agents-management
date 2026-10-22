@@ -112,6 +112,7 @@ type ResolveProject func(vendorplugin.EngineObservationQuery) (project string, o
 // Adapter is a vendorplugin.EngineObservationAdapter backed by the released
 // `curator-engines status --json` readings surface.
 type Adapter struct {
+	catalog          *CatalogScope
 	engine           plugin.Ref
 	kind             inferenceengine.EngineKind
 	resolve          ResolveProject
@@ -208,6 +209,9 @@ func (a *Adapter) ObserveEngine(ctx context.Context, query vendorplugin.EngineOb
 	defer cancel()
 
 	args := []string{"status", "--engine", query.Profile, "--json"}
+	if a.catalog != nil {
+		args = append(args, "--config", a.catalog.EnginesConfig, "--cache-root", a.catalog.CacheRoot)
+	}
 	output, err := a.run(boundedCtx, "curator-engines", args, project)
 	if err != nil {
 		// Attribute to the caller only when the caller's own context fired;
@@ -221,6 +225,11 @@ func (a *Adapter) ObserveEngine(ctx context.Context, query vendorplugin.EngineOb
 	}
 	if len(output) > a.responseMaxBytes {
 		return vendorplugin.EngineObservation{}, fmt.Errorf("%w: response is %d bytes, exceeding the %d byte cap", ErrReadingsReadFailed, len(output), a.responseMaxBytes)
+	}
+	if a.catalog != nil {
+		if err := decodeCatalogProvenance(output, *a.catalog); err != nil {
+			return vendorplugin.EngineObservation{}, err
+		}
 	}
 
 	readings, err := transcribeReadings(output)
