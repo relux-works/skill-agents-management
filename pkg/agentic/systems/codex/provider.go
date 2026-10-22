@@ -51,8 +51,9 @@ func localProviderArgs(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]st
 	// plugin callers. A refused key refuses before any file is
 	// materialised, and an admitted key joins the argv the seal binds.
 	var settingsArgv []string
+	settings, _ := splitPlanOwnedLocalSettings(req, mode)
 
-	if settingsValue, err := carriedLocalSettingsArgv(req.LocalProvider.Settings, providerID); err != nil {
+	if settingsValue, err := carriedLocalSettingsArgv(settings, providerID); err != nil {
 		return nil, err
 	} else {
 		settingsArgv = settingsValue

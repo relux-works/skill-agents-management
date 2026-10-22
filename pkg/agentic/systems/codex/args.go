@@ -134,7 +134,6 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 			fileServerPairs = pairs
 		}
 	}
-	model := strings.TrimSpace(req.Model.ID)
 	switch mode {
 	case agentic.LaunchModeExec, agentic.LaunchModeDryRun:
 		args := compositionArgvPrefix(req)
@@ -152,7 +151,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		if profile := strings.TrimSpace(req.Profile); profile != "" {
 			args = append(args, "-p", profile)
 		}
-		args = append(args, "exec", "-m", model)
+		args = appendModelSelection(append(args, "exec"), req, mode)
 		args = append(args, localProvider...)
 		args = appendReasoningAndTier(args, req)
 		args = append(args, bypassApprovalsAndSandboxFlag)
@@ -170,8 +169,8 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		args := appendContextConfigOverrides([]string{}, context)
 		args = append(args, fileServerPairs...)
 		args = append(args, context.curatorMCPArgs...)
+		args = appendModelSelection(args, req, mode)
 		args = append(args,
-			"--model", model,
 			"--search",
 			"--sandbox", "danger-full-access",
 			"--ask-for-approval", "never",
@@ -204,9 +203,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 				args = append(args, "-c", "sandbox_workspace_write.writable_roots="+roots)
 			}
 		}
-		if model != "" {
-			args = append(args, "-m", model)
-		}
+		args = appendModelSelection(args, req, mode)
 		// With the tier refused above, appendReasoningAndTier contributes the
 		// effort override alone — the same spelling the other two grammars use,
 		// from the same fragment, so the three cannot drift.
@@ -326,4 +323,18 @@ func compositionArgvPrefix(req agentic.LaunchRequest) []string {
 // alias the request's backing array.
 func nativeArgsSuffix(req agentic.LaunchRequest) []string {
 	return append([]string{}, req.NativeArgs...)
+}
+
+// appendModelSelection is the model fragment used by Args and by the carried
+// settings ownership classifier. Ownership therefore follows emitted argv.
+func appendModelSelection(args []string, req agentic.LaunchRequest, mode agentic.LaunchMode) []string {
+	model := strings.TrimSpace(req.Model.ID)
+	if mode == agentic.LaunchModeInteractive && model == "" {
+		return args
+	}
+	flag := "-m"
+	if mode == agentic.LaunchModeManagedSession {
+		flag = "--model"
+	}
+	return append(args, flag, model)
 }

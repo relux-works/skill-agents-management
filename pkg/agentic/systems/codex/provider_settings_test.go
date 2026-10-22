@@ -162,12 +162,12 @@ func carriedSettingsRefusalRows() []carriedSettingsRefusalRow {
 	return []carriedSettingsRefusalRow{
 		{name: "credential", settings: []agentic.LocalProviderSetting{{Key: "api_key", Value: "test-only-not-a-credential"}}, kind: agentic.LocalProviderUnsupported, want: agentic.ErrLocalProviderUnsupported},
 		{name: "provider", settings: []agentic.LocalProviderSetting{{Key: "model_provider", Value: "local-other"}}, kind: agentic.LocalProviderUnsupported, want: agentic.ErrLocalProviderUnsupported},
-		// The model row carries a boolean value so the closed allow-list
+		// The unowned model row carries a boolean value so the closed allow-list
 		// is the only gate it can meet: under the admit-model narrowing
 		// mutant this exact row is admitted instead of refused, and under
 		// the defer-model-to-argv ordering mutant it falls through to
 		// binary resolution instead of refusing at the pre-plan boundary.
-		{name: "model-identity", settings: []agentic.LocalProviderSetting{{Key: "model", Value: "true"}}, kind: agentic.LocalProviderUnsupported, want: agentic.ErrLocalProviderUnsupported},
+		{name: "unowned-model", settings: []agentic.LocalProviderSetting{{Key: "model_reasoning_summary", Value: "true"}}, kind: agentic.LocalProviderUnsupported, want: agentic.ErrLocalProviderUnsupported},
 		{name: "sandbox", settings: []agentic.LocalProviderSetting{{Key: "sandbox_mode", Value: "workspace-write"}}, kind: agentic.LocalProviderUnsupported, want: agentic.ErrLocalProviderUnsupported},
 		{name: "approval", settings: []agentic.LocalProviderSetting{{Key: "approval_policy", Value: "never"}}, kind: agentic.LocalProviderUnsupported, want: agentic.ErrLocalProviderUnsupported},
 		{name: "network", settings: []agentic.LocalProviderSetting{{Key: "sandbox_workspace_write.network_access", Value: "true"}}, kind: agentic.LocalProviderUnsupported, want: agentic.ErrLocalProviderUnsupported},
@@ -276,7 +276,7 @@ func TestCarriedSettingsRefuseBeforeBinaryResolution(t *testing.T) {
 // TestCarriedSettingsRefuseOnAnOtherwiseValidHome proves the refusal is the
 // settings policy, not a missing home: the config is valid and the plan
 // would succeed without the refused key. It is the narrowing-mutant witness:
-// under admit-model this exact key is admitted and the test fails.
+// under the legacy admit-model selector this unowned key is admitted and the test fails.
 func TestCarriedSettingsRefuseOnAnOtherwiseValidHome(t *testing.T) {
 	home, workDir := t.TempDir(), t.TempDir()
 	writeProviderConfig(t, home, "local-story", "http://127.0.0.1:38171/v1", "responses", false)
@@ -287,8 +287,8 @@ func TestCarriedSettingsRefuseOnAnOtherwiseValidHome(t *testing.T) {
 	if err := bare.VerifyBeforeExec(); err != nil {
 		t.Fatalf("VerifyBeforeExec(bare): %v", err)
 	}
-	_, err = buildCodexPlan(t, settingsRequest(t, home, workDir, []agentic.LocalProviderSetting{{Key: "model", Value: "true"}}))
-	requireLocalSettingsRefusal(t, err, agentic.LocalProviderUnsupported, agentic.ErrLocalProviderUnsupported, "model", "true")
+	_, err = buildCodexPlan(t, settingsRequest(t, home, workDir, []agentic.LocalProviderSetting{{Key: "model_reasoning_summary", Value: "true"}}))
+	requireLocalSettingsRefusal(t, err, agentic.LocalProviderUnsupported, agentic.ErrLocalProviderUnsupported, "model_reasoning_summary", "true")
 }
 
 // TestCarriedSettingsSealStillRefusesChangedArgv is AC3: the carried settings
@@ -356,7 +356,7 @@ func TestCarriedSettingsAdmitMutantKilledByName(t *testing.T) {
 		mutant  string
 		witness string
 	}{
-		// The allow-list gate: with model admitted, the valid-home
+		// The allow-list gate: with an unowned model key admitted, the valid-home
 		// witness plans instead of refusing.
 		{mutant: "admit-model", witness: "TestCarriedSettingsRefuseOnAnOtherwiseValidHome"},
 		// The shape gate: with the spaced key past the shape check, the
@@ -369,7 +369,7 @@ func TestCarriedSettingsAdmitMutantKilledByName(t *testing.T) {
 		// The duplicate gate: with the second entry carried, the
 		// duplicate row plans instead of conflicting.
 		{mutant: "admit-duplicate", witness: "TestCarriedSettingsRefuseBeforeAnyFileIsMaterialised"},
-		// The pre-plan ordering: with model deferred to Argv, the
+		// The pre-plan ordering: with an unowned model key deferred to Argv, the
 		// unavailable-binary witness meets the binary error instead of
 		// the typed refusal — while every other refused class still
 		// refuses at the pre-plan boundary.

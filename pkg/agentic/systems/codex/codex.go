@@ -150,10 +150,15 @@ func (*System) ResolveBinary(req agentic.LaunchRequest) (string, error) {
 // setting refuses typed before the first read. It is pure — the request's
 // settings against this plugin's own closed policy, no filesystem access —
 // and Argv re-validates as defence in depth for direct plugin callers.
-func (*System) ValidateLocalProviderSettings(req agentic.LaunchRequest, _ agentic.LaunchMode) error {
+func (*System) ValidateLocalProviderSettings(req agentic.LaunchRequest, mode agentic.LaunchMode) error {
 	if req.LocalProvider == nil || len(req.LocalProvider.Settings) == 0 {
 		return nil
 	}
+	// Copy the binding before replacing its carrier; the caller owns it.
+	settings, _ := splitPlanOwnedLocalSettings(req, mode)
+	binding := *req.LocalProvider
+	binding.Settings = settings
+	req.LocalProvider = &binding
 	return validateCarriedLocalSettingsPrePlan(req.LocalProvider.Settings, req.LocalProvider.ID)
 }
 

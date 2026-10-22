@@ -9,10 +9,10 @@ func init() {
 	case "":
 	case "admit-model":
 		// Narrow the closed allow-list by exactly one refused-class member:
-		// the model-identity key. The gate stays present — every other
-		// refused key still refuses — so the witness must fail on this one
+		// an unowned model companion; the selector name stays stable.
+		// The gate stays present — every other refused key still refuses — so the witness must fail on this one
 		// admission, not on a deleted gate.
-		allowedLocalProviderSettings["model"] = true
+		allowedLocalProviderSettings["model_reasoning_summary"] = true
 	case "admit-spaced-key":
 		// Weaken the shape gate for exactly one malformed member: the
 		// leading-space key. The allow-list still refuses it, so the
@@ -29,8 +29,8 @@ func init() {
 		settingsMutantAdmitDuplicate = true
 	case "defer-model-to-argv":
 		// Weaken the pre-plan ordering for exactly one refused class: the
-		// model-identity key skips the pre-plan boundary and still refuses
-		// at the Argv-side gate. With an unavailable binary the deferred
+		// unowned model companion skips the pre-plan boundary and still
+		// refuses at the Argv-side gate. With an unavailable binary the deferred
 		// key meets the binary error instead of the typed refusal, so the
 		// ordering witness fails; every other refused class still refuses
 		// before binary resolution.

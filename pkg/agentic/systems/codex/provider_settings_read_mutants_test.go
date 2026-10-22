@@ -16,7 +16,7 @@ import (
 )
 
 // Source mutants keep the validator call and all policy gates present. They
-// add one discarded-result read for model keys only, before validation. No
+// add one discarded-result read for unowned model keys only, before validation. No
 // mutation flag or test-only branch is linked into the production planner.
 // Copying the module also makes the AST guard inspect exactly what Go compiles;
 // a compiler overlay alone would leave on-disk source guards reading a control.
@@ -50,7 +50,7 @@ func TestCarriedSettingsReadOrderMutantsKilledByName(t *testing.T) {
 		{"ignored-model-raw-read", `os.ReadFile(req.Home + "/config.toml")`, "\t\"os\"\n", "TestPlannerReadsUseObservableBoundary", "unobserved planner read os.ReadFile"},
 	} {
 		t.Run(mutant.name, func(t *testing.T) {
-			inserted := "\tfor _, setting := range req.LocalProvider.Settings {\n\t\tif setting.Key == \"model\" {\n\t\t\t_, _ = " + mutant.expression + "\n\t\t}\n\t}\n" + anchor
+			inserted := "\tfor _, setting := range req.LocalProvider.Settings {\n\t\tif setting.Key == \"model_reasoning_summary\" {\n\t\t\t_, _ = " + mutant.expression + "\n\t\t}\n\t}\n" + anchor
 			mutated := strings.Replace(string(source), anchor, inserted, 1)
 			if mutant.imports != "" {
 				mutated = strings.Replace(mutated, "import (\n", "import (\n"+mutant.imports, 1)
@@ -151,6 +151,11 @@ func TestCarriedSettingsContractMutantsKilledByName(t *testing.T) {
 	candidate := t.TempDir()
 	copySettingsMutantModule(t, root, candidate)
 	for _, mutant := range []struct{ name, file, before, after, witness string }{
+		{
+			"drop-arbitrary-model-prefix", "provider_settings.go",
+			`if owned[setting.Key] {`, `if owned[setting.Key] || strings.HasPrefix(setting.Key, "model_") {`,
+			"TestCarriedSettingsUnownedModelKeysStillRefuse",
+		},
 		{
 			"snapshot-ignores-same-name-bytes", "provider_settings_test.go",
 			`hex.EncodeToString(sum[:])`, `hex.EncodeToString(sum[:0])`,

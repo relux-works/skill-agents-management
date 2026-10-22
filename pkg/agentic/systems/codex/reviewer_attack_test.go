@@ -10,8 +10,9 @@ import (
 	"testing"
 )
 
+// An unowned model key must refuse before lookup; model itself is now dropped.
 func TestReviewRefusalBeforeBinaryResolution(t *testing.T) {
-	req := settingsRequest(t, t.TempDir(), t.TempDir(), []agentic.LocalProviderSetting{{Key: "model", Value: "true"}})
+	req := settingsRequest(t, t.TempDir(), t.TempDir(), []agentic.LocalProviderSetting{{Key: "model_reasoning_summary", Value: "true"}})
 	for i, item := range req.Env {
 		if strings.HasPrefix(item, "PATH=") {
 			req.Env[i] = "PATH=" + filepath.Join(t.TempDir(), "missing-binary-directory")

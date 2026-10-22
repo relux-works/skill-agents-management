@@ -1,0 +1,67 @@
+{
+  "System": "codex",
+  "Mode": 0,
+  "Binary": "\u003cbinary\u003e",
+  "Argv": [
+    "--search",
+    "-a",
+    "never",
+    "exec",
+    "-m",
+    "Qwen3.8-27B-Q4_K_M",
+    "-c",
+    "model_provider=\"local-story\"",
+    "-c",
+    "model_providers.local-story.name=\"task local provider\"",
+    "-c",
+    "model_providers.local-story.base_url=\"http://127.0.0.1/v1\"",
+    "-c",
+    "model_providers.local-story.wire_api=\"responses\"",
+    "-c",
+    "model_providers.local-story.requires_openai_auth=false",
+    "-c",
+    "model_catalog_json=\"\u003ccatalog\u003e\"",
+    "-c",
+    "hide_agent_reasoning=true",
+    "-c",
+    "model_reasoning_effort=\"low\"",
+    "--dangerously-bypass-approvals-and-sandbox",
+    "--skip-git-repo-check",
+    "-C",
+    "\u003cwork\u003e",
+    "-"
+  ],
+  "Env": [
+    "PATH=\u003cbin\u003e",
+    "CODEX_HOME=\u003chome\u003e"
+  ],
+  "Stdin": {
+    "Attached": false,
+    "Bytes": null
+  },
+  "WorkDir": "\u003cwork\u003e",
+  "Home": "\u003chome\u003e",
+  "ModelIdentity": {
+    "Requested": "Qwen3.8-27B-Q4_K_M",
+    "Launched": "Qwen3.8-27B-Q4_K_M"
+  },
+  "ToolRelease": "",
+  "PermissionMode": "",
+  "Provenance": {
+    "Broker": "",
+    "Runtime": "",
+    "Profile": "",
+    "Model": "",
+    "Publisher": "",
+    "Family": "",
+    "RequestedEngine": {
+      "ID": "",
+      "Kind": ""
+    },
+    "ResolvedEngine": {
+      "ID": "",
+      "Kind": ""
+    }
+  },
+  "Session": null
+}
