@@ -116,7 +116,14 @@ engine kind. Each entry must provide a non-empty `engine` kind string for this
 lookup; the rest of its body remains owned by `curator-engines`. This package
 does not add, edit, or infer engine entries.
 
+The top-level `schema_version`, when present, must be the TOML integer `1`.
+It may be omitted for compatibility with existing catalogs. Any other value or
+type refuses as `malformed`; other unknown top-level keys still refuse, with
+credential-shaped keys reported as `unsupported`.
+
 ```toml
+schema_version = 1
+
 [engines.local-qwen]
 engine = "mlx"
 # Remaining entry body is defined and validated by curator-engines.
@@ -157,6 +164,8 @@ by the engine owner.
 
 ```toml
 # engines.toml (illustrative; engine-owned body)
+schema_version = 1
+
 [engines.local-qwen-gguf]
 engine = "llama-cpp"
 mode = "local"        # engine-owned attribute, pending engine-owner confirmation

@@ -492,7 +492,14 @@ func parseCuratorEngines(data []byte) (map[string]curatorEngineEntry, error) {
 		return nil, refuse(RefusalMalformed, enginesFileName, "")
 	}
 	for key, value := range document {
-		if key != "engines" {
+		switch key {
+		case "schema_version":
+			version, ok := value.(int64)
+			if !ok || version != 1 {
+				return nil, refuse(RefusalMalformed, enginesFileName, "schema_version")
+			}
+		case "engines":
+		default:
 			return nil, unknownFieldRefusal(enginesFileName, "", key, value)
 		}
 	}

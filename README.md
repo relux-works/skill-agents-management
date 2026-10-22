@@ -1798,7 +1798,8 @@ sources. File locations and ownership:
 - `~/.curator/engines.toml` — the engine catalog: one `[engines.<name>]`
   entry per engine with its `engine` kind and optional `weights.id`. Owned by
   `curator-engines`; this module only looks entries up to validate references
-  and never writes the file.
+  and never writes the file. Its optional top-level `schema_version` must be
+  the TOML integer `1`; existing catalogs without it remain accepted.
 - `~/.agents/.configs/local-models.toml` — the legacy source, operator-owned
   and deprecated. Import it once with `runtimecatalog.ImportAt`, then remove
   it. While present alone it still resolves, with a typed deprecation warning
