@@ -35,6 +35,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/relux-works/skill-agents-management/internal/enginecatalogschema"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
 	"github.com/relux-works/skill-agents-management/pkg/plugin"
@@ -503,8 +504,7 @@ func parseCuratorEngines(data []byte) (map[string]curatorEngineEntry, error) {
 	for key, value := range document {
 		switch key {
 		case "schema_version":
-			version, ok := value.(int64)
-			if !ok || version != 1 {
+			if !enginecatalogschema.ValidVersion(document) {
 				return nil, refuse(RefusalMalformed, enginesFileName, "schema_version")
 			}
 		case "engines":

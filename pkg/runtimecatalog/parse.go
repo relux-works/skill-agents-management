@@ -5,6 +5,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/relux-works/skill-agents-management/internal/enginecatalogschema"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/vendorplugin"
 )
@@ -65,6 +66,9 @@ func ParseEngineCatalog(data []byte) (EngineCatalog, error) {
 	document, err := parseDocument(EnginesFile, data)
 	if err != nil {
 		return EngineCatalog{}, err
+	}
+	if !enginecatalogschema.ValidVersion(document) {
+		return EngineCatalog{}, refuse(RefusalMalformed, EnginesFile, "schema_version")
 	}
 	rawEngines, ok := table(document["engines"])
 	if !ok {
