@@ -103,8 +103,8 @@ type Config struct {
 	// Empty means a manually constructed config and reads as the legacy
 	// source for provenance.
 	Source string
-	// EnginesConfig is the absolute engines.toml path read by LoadAt. Empty
-	// means no engine catalog was read, including the legacy fallback.
+	// EnginesConfig is the absolute, symlink-resolved engines.toml path read
+	// by LoadAt. Empty means no catalog was read, including legacy fallback.
 	EnginesConfig string `json:",omitempty"`
 }
 

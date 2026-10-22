@@ -1819,8 +1819,11 @@ sources. File locations and ownership:
   runtime ID refuses typed `conflicting` instead of last-writer-wins.
 
 `localmodels.LoadAt` is the production resolution entry point (`Peek`
-memoizes it per home paths). Its `Config.EnginesConfig` carries the absolute
-engine catalog path actually read; each resolved `ModelEntry.WeightsID`
+memoizes it per home paths). It resolves the absolute engine catalog path's
+symlinks once before reading, then parses and exports that same resolved path
+in `Config.EnginesConfig`. Retargeting an operator directory or leaf symlink
+after load cannot redirect later consumers; edits at the resolved file path
+are still possible. Each resolved `ModelEntry.WeightsID`
 carries the engine's optional weights declaration separately from the
 operator's `ExpectedWeightsID` pin. Neither value is inferred for the legacy
 fallback. SAM does not own cache-root selection. A status caller can pass
@@ -2012,6 +2015,7 @@ permission and cancels superseded runs. Results and logs are in GitHub Actions.
 | `make` | build, test, vet, regress and install the CLI | `make build` / `test` / `vet` / `regress` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
 | Go toolchain | package tests and static analysis | `go test -mod=mod ./... -count=1` / `go vet -mod=mod ./...`; `make test` / `make vet` wrap the repository gates | terminal output and task-scoped logs in `.temp/` |
 | Codex carried-settings read-order tests | record planner filesystem/resolver operations and kill model-only ignored-result reads, including direct-reader bypasses | `go test ./pkg/agentic/systems/codex -run '^TestCarriedSettings' -count=1 -v` | terminal output; task logs in `.temp/`; mutated module copies in `t.TempDir()` |
+| Curator catalog path regression and mutant | verify resolved catalog identity across symlink retargets and HOME changes; kill an Abs-only loader | `go test ./pkg/vendorplugin/vendors/local-models -run '^TestLoadAtCatalog' -count=1 -v` | terminal output; task logs in `.temp/`; mutant overlay in `t.TempDir()` |
 | changelog release | validate landing fragments; aggregate them before the tagger commits and tags | `.scripts/changelog-release.sh --check`; `.scripts/changelog-release.sh [--allow-empty] <version> <YYYY-MM-DD>` | reads `changelog.d/`; release updates `CHANGELOG.md` and removes consumed fragments |
 | changelog behavioral and mutation tests | drive the release entry point in disposable Git repositories; require named narrowing mutants to fail their behavioral witnesses | `GOWORK=off go test -count=1 -v ./internal/changelog/` | terminal output; task logs in `.temp/`; isolated fixtures and mutant script copies in the Go test temp directory |
 | `golangci-lint` | lint all Go packages | `golangci-lint run ./...` | terminal output; task logs under `.temp/` |

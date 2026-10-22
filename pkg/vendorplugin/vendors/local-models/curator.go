@@ -78,10 +78,11 @@ func LoadAt(curatorDir, legacyPath string) (Config, *DeprecationWarning, error) 
 	var curatorCfg Config
 	curatorValid := false
 	if runtimesPresent {
-		enginesData, enginesPresent, err := readOptionalFile(curatorDir, enginesFileName)
+		enginesData, enginesPath, err := readOptionalEngineCatalog(curatorDir)
 		if err != nil {
 			return Config{}, nil, err
 		}
+		enginesPresent := enginesPath != ""
 		engines := map[string]curatorEngineEntry{}
 		if enginesPresent {
 			engines, err = parseCuratorEngines(enginesData)
@@ -93,12 +94,7 @@ func LoadAt(curatorDir, legacyPath string) (Config, *DeprecationWarning, error) 
 		if err != nil {
 			return Config{}, nil, err
 		}
-		if enginesPresent {
-			curatorCfg.EnginesConfig, err = filepath.Abs(filepath.Join(curatorDir, enginesFileName))
-			if err != nil {
-				return Config{}, nil, refuse(RefusalReadFailed, enginesFileName, "")
-			}
-		}
+		curatorCfg.EnginesConfig = enginesPath
 		curatorValid = true
 	}
 
@@ -686,6 +682,31 @@ func curatorModelEqual(a ModelEntry, aRuntime plugin.Ref, b ModelEntry, bRuntime
 		}
 	}
 	return true
+}
+
+// Resolve once before reading: callers retain the same target we parse even
+// if the operator later retargets a directory or leaf symlink. This pins the
+// path, not the contents of a file subsequently edited at that resolved path.
+func readOptionalEngineCatalog(directory string) ([]byte, string, error) {
+	path, err := filepath.Abs(filepath.Join(directory, enginesFileName))
+	if err != nil {
+		return nil, "", refuse(RefusalReadFailed, enginesFileName, "")
+	}
+	if _, err := os.Lstat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, "", nil
+		}
+		return nil, "", refuse(RefusalReadFailed, enginesFileName, "")
+	}
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, "", refuse(RefusalReadFailed, enginesFileName, "")
+	}
+	data, err := os.ReadFile(resolvedPath)
+	if err != nil {
+		return nil, "", refuse(RefusalReadFailed, enginesFileName, "")
+	}
+	return data, resolvedPath, nil
 }
 
 func readOptionalFile(directory, file string) ([]byte, bool, error) {
