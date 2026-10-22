@@ -91,6 +91,10 @@ type catalogExecSeal struct {
 	tmpdir          string
 	tmpdirBound     bool
 	tmpdirCommitted bool
+	// Reports are immutable seal inputs, including absence. Imported guards
+	// retain their digest instead of reconstructing report data from a plan.
+	carriedSettings               *agentic.LocalProviderSettingsStatus
+	importedCarriedSettingsDigest string
 }
 
 // sealedTempDirSelection reads the plan's TMPDIR selection: the value when
@@ -146,6 +150,9 @@ func verifySealedTempDir(seal *catalogExecSeal, env []string) error {
 }
 
 func (seal *catalogExecSeal) VerifyBeforeExec(plan agentic.Plan) error {
+	if err := seal.verifyCarriedSettings(plan.CarriedSettings); err != nil {
+		return err
+	}
 	if seal.path == "" {
 		// A TempDir-only seal binds no catalog: the TMPDIR selection is
 		// the whole seal. Exact-process binding for such plans arrives
@@ -161,10 +168,19 @@ func (seal *catalogExecSeal) VerifyBeforeExec(plan agentic.Plan) error {
 	return verifyLaunchCatalog(seal.path, seal.digest, seal.providerID)
 }
 
+// Finalization may overlay argv/environment, but cannot rewrite the report.
+// Imported finalized guards use this check as well as artifact verification.
+func (seal *catalogExecSeal) VerifyFinalizedPlan(plan agentic.Plan) error {
+	if err := seal.verifyCarriedSettings(plan.CarriedSettings); err != nil {
+		return err
+	}
+	return seal.VerifySealedArtifacts()
+}
+
 // SealExecPlan binds the binary, exact argv and catalog digest to the plan,
-// plus the plan's TMPDIR selection when it carries exactly one TMPDIR
-// entry. A plan with neither a local catalog nor a TMPDIR selection seals
-// to nothing, exactly as before.
+// plus report presence/contents and the plan's TMPDIR selection when it carries
+// exactly one TMPDIR entry. A plan with neither a local catalog nor a TMPDIR
+// selection seals to nothing, exactly as before.
 // The consumer invokes Plan.VerifyBeforeExec immediately before its own Start.
 func (*System) SealExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error) {
 	tmpdir, tmpdirBound := sealedTempDirSelection(plan.Env)
@@ -185,10 +201,10 @@ func (*System) SealExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error)
 			continue
 		}
 		digest := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(path), "catalog-"), ".json")
-		return &catalogExecSeal{path: path, digest: digest, binary: plan.Binary, argv: append([]string(nil), plan.Argv...), tmpdir: tmpdir, tmpdirBound: tmpdirBound}, nil
+		return &catalogExecSeal{path: path, digest: digest, binary: plan.Binary, argv: append([]string(nil), plan.Argv...), tmpdir: tmpdir, tmpdirBound: tmpdirBound, carriedSettings: cloneCarriedSettingsReport(plan.CarriedSettings)}, nil
 	}
 	if !tmpdirBound {
 		return nil, nil
 	}
-	return &catalogExecSeal{binary: plan.Binary, argv: append([]string(nil), plan.Argv...), tmpdir: tmpdir, tmpdirBound: true}, nil
+	return &catalogExecSeal{binary: plan.Binary, argv: append([]string(nil), plan.Argv...), tmpdir: tmpdir, tmpdirBound: true, carriedSettings: cloneCarriedSettingsReport(plan.CarriedSettings)}, nil
 }

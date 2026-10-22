@@ -576,7 +576,13 @@ proven against all four codex launch-surface goldens through the real
   the optional `carried_settings` JSON field is absent and plan bytes remain
   unchanged. The optional pure `LocalProviderSettingsReporter` interface adds
   this informational status after successful validation; it grants no execution
-  authority. `TestCarriedSettingsReportNamesWithoutValues` checks both binding
+  authority. The Codex seal deep-copies report presence, dropped names and note;
+  later edits, removal or injection refuse typed `conflicting`. Finalization
+  cannot adopt a changed report, and exported/imported guards bind its digest
+  through a plugin selector without retaining discarded values. No-drop guard
+  exports add no selector. `TestCarriedSettingsSealRejectsReportTampering` and
+  `TestCarriedSettingsReportSurvivesSealLifecycle` cover both modes/bindings and
+  finalization/import. `TestCarriedSettingsReportNamesWithoutValues` checks both binding
   paths and modes; `TestCarriedSettingsWithoutOwnedKeysMatchBaseline` pins parity.
 
   `codex.RepresentedProviderKeys()` is the public source of truth for the exact

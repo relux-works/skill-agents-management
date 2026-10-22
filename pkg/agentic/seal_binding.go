@@ -155,14 +155,23 @@ func cloneSealedData(data SealedData) SealedData {
 // Session is part of what the snapshot binds: the record is derived from the
 // argv, so a Session edited after sealing describes a launch the sealed argv
 // does not carry and refuses like any other changed field.
+// The carried-settings report is also copied here so finalization cannot
+// adopt falsified or erased drop evidence as a new sealed input.
 type processSnapshot struct {
-	binary    string
-	argv, env []string
-	session   *PlanSession
+	binary          string
+	argv, env       []string
+	session         *PlanSession
+	carriedSettings *LocalProviderSettingsStatus
 }
 
 func snapshotProcess(p Plan) *processSnapshot {
-	return &processSnapshot{p.Binary, slices.Clone(p.Argv), slices.Clone(p.Env), cloneSession(p.Session)}
+	var report *LocalProviderSettingsStatus
+	if p.CarriedSettings != nil {
+		copy := *p.CarriedSettings
+		copy.DroppedKeys = slices.Clone(copy.DroppedKeys)
+		report = &copy
+	}
+	return &processSnapshot{p.Binary, slices.Clone(p.Argv), slices.Clone(p.Env), cloneSession(p.Session), report}
 }
 func (s *processSnapshot) verify(p Plan) error {
 	if p.Binary != s.binary || !slices.Equal(p.Argv, s.argv) || !slices.Equal(p.Env, s.env) {
@@ -171,5 +180,15 @@ func (s *processSnapshot) verify(p Plan) error {
 	if !sessionsEqual(p.Session, s.session) {
 		return fmt.Errorf("%w: session record changed before finalization", ErrFinalizedProcessChanged)
 	}
+	if !carriedSettingsStatusesEqual(p.CarriedSettings, s.carriedSettings) {
+		return fmt.Errorf("%w: carried settings report changed before finalization", ErrFinalizedProcessChanged)
+	}
 	return nil
+}
+
+func carriedSettingsStatusesEqual(a, b *LocalProviderSettingsStatus) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Note == b.Note && (a.DroppedKeys == nil) == (b.DroppedKeys == nil) && slices.Equal(a.DroppedKeys, b.DroppedKeys)
 }

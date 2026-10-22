@@ -30,8 +30,11 @@ const (
 // A bound TMPDIR selection travels as a keyed commitment under the TMPDIR
 // selector name, never as the literal directory: the importer commits the
 // presented value before comparing. A TempDir-only seal exports no
-// artifacts; a catalog seal without a TMPDIR selection exports no
-// selectors.
+// artifacts; a catalog seal without a TMPDIR selection or carried report
+// exports no selectors.
+// A carried-settings report adds only its digest; absent reports leave the
+// original export bytes unchanged. Import preserves this binding without
+// reconstructing or adopting any report from the plan being verified.
 func (seal *catalogExecSeal) ExportSealedData() agentic.SealedData {
 	var artifacts []agentic.SealedArtifact
 	if seal.path != "" {
@@ -48,6 +51,12 @@ func (seal *catalogExecSeal) ExportSealedData() agentic.SealedData {
 			commitment = agentic.CommitSealLiteral(TempDirEnv, seal.tmpdir)
 		}
 		selectors = map[string]string{TempDirEnv: commitment}
+	}
+	if digest := seal.carriedSettingsDigest(); digest != "" {
+		if selectors == nil {
+			selectors = make(map[string]string)
+		}
+		selectors[carriedSettingsSealSelector] = digest
 	}
 	return agentic.SealedData{
 		Binary:    seal.binary,
@@ -102,9 +111,16 @@ func (system *System) ImportSealedData(data agentic.SealedData) (agentic.ExecPla
 	if _, ok := data.Selectors[managedSealSelector]; ok {
 		return system.importManagedSeal(data)
 	}
+	reportDigest, reportPresent := data.Selectors[carriedSettingsSealSelector]
+	if reportPresent {
+		if _, valid := parseSealedDigest(reportDigest); !valid {
+			return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, "")
+		}
+	}
 
 	if len(data.Artifacts) != 1 || data.Artifacts[0].Name != sealedCatalogName {
 		if tmpdirSeal, ok := importTempDirOnlySeal(data); ok {
+			tmpdirSeal.importedCarriedSettingsDigest = reportDigest
 			return tmpdirSeal, nil
 		}
 		return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, "")
@@ -120,7 +136,7 @@ func (system *System) ImportSealedData(data agentic.SealedData) (agentic.ExecPla
 	if err := verifyLaunchCatalog(artifact.Path, digest, ""); err != nil {
 		return nil, err
 	}
-	seal := &catalogExecSeal{path: artifact.Path, digest: digest, binary: data.Binary, argv: append([]string(nil), data.Argv...)}
+	seal := &catalogExecSeal{path: artifact.Path, digest: digest, binary: data.Binary, argv: append([]string(nil), data.Argv...), importedCarriedSettingsDigest: reportDigest}
 	if commitment, ok := data.Selectors[TempDirEnv]; ok {
 		if !isSealCommitment(commitment) {
 			return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, "")

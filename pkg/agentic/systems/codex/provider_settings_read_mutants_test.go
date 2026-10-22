@@ -152,6 +152,11 @@ func TestCarriedSettingsContractMutantsKilledByName(t *testing.T) {
 	copySettingsMutantModule(t, root, candidate)
 	for _, mutant := range []struct{ name, file, before, after, witness string }{
 		{
+			"omit-carried-report-seal-binding", "provider_settings_seal.go",
+			`if carriedSettingsSealDigest(report) != seal.carriedSettingsDigest() {`, `if false {`,
+			"TestCarriedSettingsSealRejectsReportTampering",
+		},
+		{
 			"report-retains-carried-value", "provider_settings.go",
 			`strings.Join(keys, ", ")`, `strings.Join(keys, ", ") + " operator-secret-model-G23"`,
 			"TestCarriedSettingsReportNamesWithoutValues",

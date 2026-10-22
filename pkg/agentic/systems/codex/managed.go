@@ -201,6 +201,14 @@ func (s *managedExecSeal) VerifySealedArtifacts() error {
 	}
 	return nil
 }
+
+// Preserve plan-aware checks from the wrapped catalog seal after finalization.
+func (s *managedExecSeal) VerifyFinalizedPlan(p agentic.Plan) error {
+	if v, ok := s.base.(agentic.ExecFinalizedPlanVerifier); ok {
+		return v.VerifyFinalizedPlan(p)
+	}
+	return s.VerifySealedArtifacts()
+}
 func (s *managedExecSeal) ValidateFinalizeOverlays(o agentic.FinalizeOverlays) error {
 	if len(o.NativeTail) > 0 || o.Reservation != nil {
 		return managedRefusal("managed native tail and session reservations must be supplied before planning")
@@ -247,7 +255,7 @@ func (s *System) importManagedSeal(data agentic.SealedData) (agentic.ExecPlanVer
 				return nil, managedRefusal("malformed managed selector")
 			}
 			held[name] = value
-		case TempDirEnv:
+		case TempDirEnv, carriedSettingsSealSelector:
 			selectors[name] = value
 		default:
 			return nil, managedRefusal("unknown managed selector")

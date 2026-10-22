@@ -59,7 +59,9 @@ type Plan struct {
 	// posture is what the seal holds, never a re-read of this echo.
 	PermissionMode PermissionMode
 
-	// CarriedSettings is absent when no operator setting was dropped.
+	// CarriedSettings is absent when no operator setting was dropped. Codex
+	// binds its presence and contents to the seal so drop evidence cannot be
+	// erased or edited after planning; it grants no execution authority.
 	CarriedSettings *LocalProviderSettingsStatus `json:"carried_settings,omitempty"`
 
 	Provenance LaunchProvenance
