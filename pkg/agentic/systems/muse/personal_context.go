@@ -38,15 +38,18 @@ func (f exclusionForm) String() string {
 // under environments §7.1 P1-P4. Rows come only from those records:
 //
 //   - 1.4.7-R6101.1: both forms.
-//   - 1.4.10-R6427.1 (curator 49d69b1c) and 1.4.11-R6667.1 (curator
-//     142bbda9): exec only. Interactive P4 fails on both: the boolean
-//     override leaves one foreign skill loaded.
-//   - 1.4.8: neither form.
+//   - 1.4.10-R6427.1 (curator 49d69b1c), 1.4.11-R6667.1 (curator
+//     142bbda9) and 1.4.13-R6996.1 (curator 44bb3326): exec only.
+//     Interactive P4 fails on all three: the boolean override leaves one
+//     foreign skill loaded.
+//   - 1.4.8: neither form. 1.4.12 was skipped as superseded and has no
+//     record, so neither form either.
 var foreignContextExclusionQualified = map[exclusionForm]map[string]string{
 	exclusionFormExec: {
 		"1.4.7":  "1.4.7-R6101.1",
 		"1.4.10": "1.4.10-R6427.1",
 		"1.4.11": "1.4.11-R6667.1",
+		"1.4.13": "1.4.13-R6996.1",
 	},
 	exclusionFormInteractive: {
 		"1.4.7": "1.4.7-R6101.1",

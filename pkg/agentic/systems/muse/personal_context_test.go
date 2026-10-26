@@ -94,9 +94,10 @@ func TestMuseForeignPersonalContextFollowsTheFact(t *testing.T) {
 // TestMuseForeignPersonalContextRefusesUnqualifiedBuild: with the fact, a
 // release or frozen build outside the qualified set of the form a mode emits
 // refuses at plan time, before any launch surface exists (environments §7.9).
-// 1.4.10 and 1.4.11 are qualified for the exec form only (Curator records
-// 49d69b1c and 142bbda9): their exec and dry-run plans carry the exec flag,
-// and their interactive plans refuse. 1.4.8 qualifies neither form. Without
+// 1.4.10, 1.4.11 and 1.4.13 are qualified for the exec form only (Curator
+// records 49d69b1c, 142bbda9 and 44bb3326): their exec and dry-run plans
+// carry the exec flag, and their interactive plans refuse. 1.4.8 and the
+// skipped 1.4.12 qualify neither form. Without
 // the fact none of these requests refuses as unqualified.
 func TestMuseForeignPersonalContextRefusesUnqualifiedBuild(t *testing.T) {
 	t.Parallel()
@@ -113,6 +114,10 @@ func TestMuseForeignPersonalContextRefusesUnqualifiedBuild(t *testing.T) {
 		{"release-1.4.11-exec-only", "1.4.11", "", true},
 		{"frozen-1.4.10-other-build", "1.4.10", "1.4.10-R6428.1", false},
 		{"frozen-build-of-another-row", "1.4.11", "1.4.10-R6427.1", false},
+		{"release-1.4.13-exec-only", "1.4.13", "", true},
+		{"frozen-1.4.13-other-build", "1.4.13", "1.4.13-R6997.1", false},
+		{"release-1.4.12-skipped", "1.4.12", "", false},
+		{"frozen-1.4.12-build", "1.4.12", "1.4.12-R6909.1", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -147,7 +152,7 @@ func TestMuseForeignPersonalContextRefusesUnqualifiedBuild(t *testing.T) {
 // one no form qualifies, including a frozen build no row names.
 func TestMuseForeignPersonalContextDirectCallersFollowTheForm(t *testing.T) {
 	t.Parallel()
-	for _, release := range []string{"1.4.10", "1.4.11"} {
+	for _, release := range []string{"1.4.10", "1.4.11", "1.4.13"} {
 		home := t.TempDir()
 		req := agentic.LaunchRequest{Model: agentic.Model{ID: "echo"}, Home: home, Context: managedMuseContext(home, true), ToolRelease: release}
 		if got, err := Args(req, agentic.LaunchModeInteractive); !errors.Is(err, ErrForeignContextExclusionUnqualified) || got != nil {
@@ -161,7 +166,7 @@ func TestMuseForeignPersonalContextDirectCallersFollowTheForm(t *testing.T) {
 			t.Fatalf("%s ChildEnv refused an exec-qualified build: %v", release, err)
 		}
 	}
-	for _, tc := range []struct{ release, frozen string }{{"1.4.8", ""}, {"1.4.10", "1.4.10-R6428.1"}, {"1.4.7", "1.4.10-R6427.1"}} {
+	for _, tc := range []struct{ release, frozen string }{{"1.4.8", ""}, {"1.4.12", ""}, {"1.4.10", "1.4.10-R6428.1"}, {"1.4.13", "1.4.13-R6909.1"}, {"1.4.7", "1.4.10-R6427.1"}} {
 		home := t.TempDir()
 		req := agentic.LaunchRequest{Model: agentic.Model{ID: "echo"}, Home: home, Context: managedMuseContext(home, true), ToolRelease: tc.release, FrozenToolBuild: tc.frozen}
 		if _, err := New().ChildEnv(nil, req); !errors.Is(err, ErrForeignContextExclusionUnqualified) {
@@ -181,7 +186,7 @@ func TestMuseForeignPersonalContextDirectCallersFollowTheForm(t *testing.T) {
 // form choice.
 func TestMuseForeignPersonalContextFormTables(t *testing.T) {
 	t.Parallel()
-	for _, row := range []struct{ release, build string }{{"1.4.10", "1.4.10-R6427.1"}, {"1.4.11", "1.4.11-R6667.1"}} {
+	for _, row := range []struct{ release, build string }{{"1.4.10", "1.4.10-R6427.1"}, {"1.4.11", "1.4.11-R6667.1"}, {"1.4.13", "1.4.13-R6996.1"}} {
 		if !foreignContextExclusionBuildQualified(exclusionFormExec, row.release, row.build) {
 			t.Fatalf("%s missing from the exec table", row.build)
 		}
@@ -195,6 +200,9 @@ func TestMuseForeignPersonalContextFormTables(t *testing.T) {
 		}
 		if foreignContextExclusionBuildQualified(form, "1.4.8", "1.4.8-R6256.1") {
 			t.Fatalf("1.4.8 admitted by the %s table", form)
+		}
+		if foreignContextExclusionBuildQualified(form, "1.4.12", "1.4.12-R6909.1") {
+			t.Fatalf("skipped 1.4.12 admitted by the %s table", form)
 		}
 	}
 	home := t.TempDir()

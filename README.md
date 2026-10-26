@@ -1021,9 +1021,10 @@ selection; the vendor runtime catalog and its admitted pairs are unchanged.
   either permission posture. Nothing under the managed home is read to decide
   this: no fact, no exclusion, whatever file exists. Curator qualifies each
   form separately, so the qualified set is per form: exec and dry-run admit
-  1.4.7-R6101.1, 1.4.10-R6427.1 and 1.4.11-R6667.1; the TUI admits only
-  1.4.7-R6101.1, because on 1.4.8, 1.4.10 and 1.4.11 the `-c` override
-  leaves one foreign skill loaded (Curator P4). A fact on a release or build
+  1.4.7-R6101.1, 1.4.10-R6427.1, 1.4.11-R6667.1 and 1.4.13-R6996.1; the
+  TUI admits only 1.4.7-R6101.1, because on 1.4.8, 1.4.10, 1.4.11 and 1.4.13
+  the `-c` override leaves one foreign skill loaded (Curator P4). 1.4.12 was
+  skipped as superseded and qualifies neither form. A fact on a release or build
   outside the set for the form the launch mode emits refuses with
   `ErrForeignContextExclusionUnqualified` at plan time and in `Args`, and the
   interactive seal refuses an attested build outside the interactive set.
