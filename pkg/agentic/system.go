@@ -468,6 +468,11 @@ const PermissionGrammarV1 PermissionGrammarVersion = "permission-grammar-v1"
 // expanded refusal grammar.
 const PermissionGrammarV2 PermissionGrammarVersion = "permission-grammar-v2"
 
+// PermissionGrammarV3 retains V2 and refuses Codex policy aliases and attached
+// short policy forms whose forwarding the 0.164.0 qualification did not prove.
+// Existing V2 rows keep their original behavior.
+const PermissionGrammarV3 PermissionGrammarVersion = "permission-grammar-v3"
+
 // ReleaseCapability is one row of the versioned provider-capability table:
 // what one tool release, verified under one grammar version, admits. The
 // table is keyed by (environment, tool release); each plugin holds its
@@ -504,16 +509,16 @@ type ReleaseCapability struct {
 func LookupReleaseCapability(rows []ReleaseCapability, release string) (ReleaseCapability, error) {
 	trimmed := strings.TrimSpace(release)
 	if trimmed == "" {
-		return ReleaseCapability{}, fmt.Errorf("%w: no tool release was established (detection failed or never ran); yolo requires a release verified under %s or %s, while native forwards verbatim",
-			ErrPermissionModeUnverifiedRelease, PermissionGrammarV1, PermissionGrammarV2)
+		return ReleaseCapability{}, fmt.Errorf("%w: no tool release was established (detection failed or never ran); yolo requires a release verified under %s, %s or %s, while native forwards verbatim",
+			ErrPermissionModeUnverifiedRelease, PermissionGrammarV1, PermissionGrammarV2, PermissionGrammarV3)
 	}
 	for _, row := range rows {
 		if strings.TrimSpace(row.Release) != trimmed {
 			continue
 		}
-		if row.Grammar != PermissionGrammarV1 && row.Grammar != PermissionGrammarV2 {
-			return ReleaseCapability{}, fmt.Errorf("%w: tool release %q names grammar %q, which this module does not implement (implemented: %s, %s); yolo selects no mapping under an unimplemented grammar",
-				ErrPermissionModeUnverifiedRelease, trimmed, row.Grammar, PermissionGrammarV1, PermissionGrammarV2)
+		if row.Grammar != PermissionGrammarV1 && row.Grammar != PermissionGrammarV2 && row.Grammar != PermissionGrammarV3 {
+			return ReleaseCapability{}, fmt.Errorf("%w: tool release %q names grammar %q, which this module does not implement (implemented: %s, %s, %s); yolo selects no mapping under an unimplemented grammar",
+				ErrPermissionModeUnverifiedRelease, trimmed, row.Grammar, PermissionGrammarV1, PermissionGrammarV2, PermissionGrammarV3)
 		}
 		return row, nil
 	}
@@ -521,8 +526,8 @@ func LookupReleaseCapability(rows []ReleaseCapability, release string) (ReleaseC
 	for _, row := range rows {
 		verified = append(verified, strings.TrimSpace(row.Release))
 	}
-	return ReleaseCapability{}, fmt.Errorf("%w: tool release %q is not verified under %s or %s (verified releases: %s); yolo fails closed on drift, while native forwards verbatim",
-		ErrPermissionModeUnverifiedRelease, trimmed, PermissionGrammarV1, PermissionGrammarV2, strings.Join(verified, ", "))
+	return ReleaseCapability{}, fmt.Errorf("%w: tool release %q is not verified under %s, %s or %s (verified releases: %s); yolo fails closed on drift, while native forwards verbatim",
+		ErrPermissionModeUnverifiedRelease, trimmed, PermissionGrammarV1, PermissionGrammarV2, PermissionGrammarV3, strings.Join(verified, ", "))
 }
 
 // LaunchRequest is everything a caller supplies for one launch. It is the

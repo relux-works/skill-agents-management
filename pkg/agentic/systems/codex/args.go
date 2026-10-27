@@ -237,7 +237,7 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		if mapping, err := permissionMapping(req.ToolRelease, context.permission); err != nil {
 			return nil, err
 		} else {
-			if err := scanNativePolicy(req.NativeArgs); err != nil {
+			if err := scanNativePolicy(req.NativeArgs, mapping.Grammar); err != nil {
 				return nil, fmt.Errorf("codex: %w", err)
 			}
 			return append(append(args, mapping.Flag), nativeArgsSuffix(req)...), nil

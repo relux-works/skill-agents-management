@@ -120,11 +120,12 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 			agentic.ErrPermissionModeNotInteractive, strings.TrimSpace(string(req.PermissionMode)))
 	}
 	if values.hasPermission && effective == agentic.PermissionModeYolo {
-		if _, err := permissionMapping(req.ToolRelease, effective); err != nil {
+		if mapping, err := permissionMapping(req.ToolRelease, effective); err != nil {
 			return values, err
-		}
-		if err := scanNativePolicy(req.NativeArgs); err != nil {
-			return values, fmt.Errorf("codex: %w", err)
+		} else {
+			if err := scanNativePolicy(req.NativeArgs, mapping.Grammar); err != nil {
+				return values, fmt.Errorf("codex: %w", err)
+			}
 		}
 	}
 	values.permission = effective

@@ -24,6 +24,8 @@ func TestRegistryClassifiesVersionedNonInteractiveFormsByEnvironmentAndPlacement
 		{"claude print equals placement", "claude-code", "2.1.261", []string{"--print=true"}, agentic.NonInteractiveFormPrint, agentic.PermissionGrammarV2},
 		{"claude print with separate prompt", "claude-code", "2.1.261", []string{"--print", "summarize this"}, agentic.NonInteractiveFormPrint, agentic.PermissionGrammarV2},
 		{"codex exec command", "codex", "0.153.2", []string{"exec", "summarize this"}, agentic.NonInteractiveFormExec, agentic.PermissionGrammarV2},
+		{"codex 0.164 exec command", "codex", "0.164.0", []string{"exec", "summarize this"}, agentic.NonInteractiveFormExec, agentic.PermissionGrammarV3},
+		{"codex 0.164 exec after root option", "codex", "0.164.0", []string{"--model=example", "e"}, agentic.NonInteractiveFormExec, agentic.PermissionGrammarV3},
 		{"codex exec alias", "codex", "0.153.2", []string{"e", "summarize this"}, agentic.NonInteractiveFormExec, agentic.PermissionGrammarV2},
 		{"codex exec after equals option", "codex", "0.153.2", []string{"--model=gpt-test", "exec", "summarize this"}, agentic.NonInteractiveFormExec, agentic.PermissionGrammarV2},
 		{"codex exec after separate option", "codex", "0.153.2", []string{"--model", "gpt-test", "exec", "summarize this"}, agentic.NonInteractiveFormExec, agentic.PermissionGrammarV2},

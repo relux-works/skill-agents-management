@@ -146,7 +146,7 @@ func TestLookupReleaseCapabilityReadsOneRowPerRelease(t *testing.T) {
 	t.Run("a row naming an unimplemented grammar selects no mapping", func(t *testing.T) {
 		// Helper-direct and disclosed as a bound: this synthetic row names
 		// a future grammar that the current scanners do not implement.
-		future := []ReleaseCapability{{Release: "3.0.0", Grammar: "permission-grammar-v3", YoloSupported: true}}
+		future := []ReleaseCapability{{Release: "3.0.0", Grammar: "permission-grammar-v4", YoloSupported: true}}
 		_, err := LookupReleaseCapability(future, "3.0.0")
 		if !errors.Is(err, ErrPermissionModeUnverifiedRelease) {
 			t.Fatalf("err = %v, want ErrPermissionModeUnverifiedRelease", err)

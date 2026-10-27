@@ -13,14 +13,14 @@ import (
 // tool releases whose yolo mapping this plugin verified, each under the
 // grammar version it was verified against.
 //
-// There is exactly one row: codex 0.153.2, the release this plugin's
-// grammar comments were checked against. The mapping it verifies is the
-// bypass const in args.go; the grammar it names closes the `-c` keys
-// below. A newer release — installed 0.153.4 included — has no row
-// until it is re-verified, and yolo there fails closed while native
-// forwards verbatim.
+// Codex 0.164.0 was independently qualified against the installed binary's
+// help, config validation and generated schema; see
+// .out/codex-0164-qualification.md. The new V3 row retains the V2
+// subset and refuses unqualified alias/attached forms. Unlisted releases still
+// fail closed for mapping and classification.
 var verifiedReleases = []agentic.ReleaseCapability{
 	{Release: "0.153.2", Grammar: agentic.PermissionGrammarV2, YoloSupported: true},
+	{Release: "0.164.0", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 }
 
 // configFlag and configFlagLong are the two spellings of the config
@@ -83,7 +83,7 @@ func (*System) ClassifyNonInteractiveArgs(toolRelease string, suffix []string) (
 	}
 	var form agentic.NonInteractiveForm
 
-	if formValue, err := classifyCodexNonInteractiveForm(suffix); err != nil {
+	if formValue, err := classifyCodexNonInteractiveForm(suffix, capability.Release); err != nil {
 		return agentic.NativeArgsClassification{}, fmt.Errorf("codex: %w", err)
 	} else {
 		form = formValue
@@ -125,7 +125,7 @@ func permissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic
 	return mapping, nil
 }
 
-func classifyCodexNonInteractiveForm(suffix []string) (agentic.NonInteractiveForm, error) {
+func classifyCodexNonInteractiveForm(suffix []string, toolRelease string) (agentic.NonInteractiveForm, error) {
 	for i := 0; i < len(suffix); i++ {
 		el := suffix[i]
 		if nativeargs.IsSeparator(el) {
@@ -138,7 +138,9 @@ func classifyCodexNonInteractiveForm(suffix []string) (agentic.NonInteractiveFor
 			return agentic.NonInteractiveFormNone, nil
 		}
 		name, _, hasValue := nativeargs.SplitFlagValue(el)
-		if codexRootOptionTakesValue(name) {
+		// 0.164.0 removed this old scalar option. Do not infer a command
+		// behind it; the existing unknown-option path must refuse instead.
+		if codexRootOptionTakesValue(name) && (toolRelease != "0.164.0" || name != "--remote-auth-token") {
 			if !hasValue {
 				if i+1 >= len(suffix) || nativeargs.IsSeparator(suffix[i+1]) {
 					return agentic.NonInteractiveFormNone, nil
@@ -194,10 +196,16 @@ func codexRootOptionIsBoolean(name string) bool {
 // non-conflicting config keys and unknown top-level flags. The scan only
 // reads flag positions supplied by nativeargs.FlagIndexes, so `exec`
 // placement is visible while text after `--` remains prompt.
-func scanNativePolicy(args []string) error {
+func scanNativePolicy(args []string, grammar agentic.PermissionGrammarVersion) error {
 	for _, i := range nativeargs.FlagIndexes(args) {
 		el := args[i]
 		name, value, hasValue := nativeargs.SplitFlagValue(el)
+		// Parsing an alias or attached policy option is not proof of its
+		// interaction with the mapped bypass. V3 refuses these forms without
+		// rewriting caller arguments or changing the historical V2 row.
+		if grammar == agentic.PermissionGrammarV3 && (name == yoloAliasFlag || name == "--not-so-yolo" || (name != "-a" && isAttachedShortValue(el, "-a")) || (name != "-s" && isAttachedShortValue(el, "-s"))) {
+			return fmt.Errorf("%w: codex policy form %q is not qualified under %s", agentic.ErrNativePolicyUnknown, el, grammar)
+		}
 		if name == configFlagLong || name == configFlag {
 			override := value
 			placement := agentic.NativePolicyPlacementEquals

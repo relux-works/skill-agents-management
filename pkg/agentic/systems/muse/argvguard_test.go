@@ -79,6 +79,7 @@ var museArgvConstructionAllowlist = map[string]string{
 	argvguard.AllowlistKey("pkg/agentic/systems/muse/policy.go", "scanMuseNativePolicy"):          "reads caller-owned duplicate posture flags and emits no argv",
 	argvguard.AllowlistKey("pkg/agentic/systems/muse/headless.go", "requireHeadlessBypass"):       "reads the built headless posture at plan time and emits no argv",
 	argvguard.AllowlistKey(codexArgsFile, "yoloAliasFlag"):                                        "Codex's native alias has the same spelling as Muse's flag; this constant is read by the Codex classifier and is never emitted",
+	argvguard.AllowlistKey(codexPolicyFile, "scanNativePolicy"):                                   "Codex V3 compares the provider-owned yolo alias only to refuse an unqualified caller policy form; it constructs no argv",
 	argvguard.AllowlistKey(codexPolicyFile, "codexRootOptionIsBoolean"):                           "the Codex classifier recognizes the overlapping native alias while reading caller args; it emits no argv",
 	argvguard.AllowlistKey(codexContextFile, "isCodexPermissionSelector"):                         "the typed-context conflict classifier recognizes the overlapping native alias while reading caller args; it emits no argv",
 }
