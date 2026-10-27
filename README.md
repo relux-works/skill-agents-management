@@ -207,8 +207,9 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   | `pi-native` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
 
   Codex 0.164.0 qualification against the installed binary is recorded in
-  [.out/codex-0164-qualification.md](.out/codex-0164-qualification.md), including
-  exact help, startup-validation commands and binary-generated config schema.
+  [Curator's qualification record](https://github.com/relux-works/curator/blob/main/docs/qualification/codex-0.164.0.md)
+  ([record PR](https://github.com/relux-works/curator/pull/200)), including
+  sanitized help extracts, startup-validation commands and schema observations.
   V3 retains the closed V2 subset and refuses `--yolo`, `--not-so-yolo` and
   attached `-a…` / `-s…` forms under yolo because their interaction with the
   bypass was not qualified. It leaves caller arguments untouched. New or removed

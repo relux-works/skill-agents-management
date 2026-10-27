@@ -10,7 +10,7 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
-// The real-binary qualification is .out/codex-0164-qualification.md. These
+// The real-binary qualification is curator/docs/qualification/codex-0.164.0.md. These
 // tests prove planner/scanner behavior, not execution by a model or sandbox.
 func TestCodex0164PermissionMappingAndArgv(t *testing.T) {
 	t.Parallel()

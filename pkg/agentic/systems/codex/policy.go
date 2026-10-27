@@ -15,7 +15,8 @@ import (
 //
 // Codex 0.164.0 was independently qualified against the installed binary's
 // help, config validation and generated schema; see
-// .out/codex-0164-qualification.md. The new V3 row retains the V2
+// curator/docs/qualification/codex-0.164.0.md (record PR:
+// https://github.com/relux-works/curator/pull/200). The V3 row retains the V2
 // subset and refuses unqualified alias/attached forms. Unlisted releases still
 // fail closed for mapping and classification.
 var verifiedReleases = []agentic.ReleaseCapability{
