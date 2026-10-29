@@ -111,7 +111,7 @@ func permissionAdmissionRequest(workDir string) vendorplugin.SpawnRequest {
 		WorkDir:     workDir,
 		Home:        filepath.Join(workDir, ".claude-home"),
 		Env:         []string{"PATH=" + filepath.Join(filepath.Dir(workDir), "bin"), "HOME=" + workDir},
-		ToolRelease: "2.1.261",
+		ToolRelease: "2.1.312",
 	}
 }
 
@@ -208,7 +208,7 @@ func TestBuildLaunchWithEnvironmentRefusesVendorPermissionRequestMutation(t *tes
 				req.PermissionMode = agentic.PermissionModeYolo
 				req.ToolRelease = "2.1.274"
 			},
-			mutate: func(launch *agentic.LaunchRequest) { launch.ToolRelease = "2.1.261" },
+			mutate: func(launch *agentic.LaunchRequest) { launch.ToolRelease = "2.1.312" },
 		},
 		{
 			name: "conflicting native arguments cannot be dropped",

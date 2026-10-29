@@ -12,6 +12,37 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
+// pinnedClaudeRelease is one installed release the pinned comparisons run
+// against: its minified anchors, whose names are release-specific. Only
+// in-window releases have a row, because the embedded tables describe those
+// alone; 2.1.288 is outside the owner's support window and its sets lack the
+// rows 2.1.312 adds. Any other release skips; a missing anchor fails the
+// pinned check rather than falling back.
+type pinnedClaudeRelease struct {
+	ListStart, ListEnd, ListName      string
+	EagerStart, EagerEnd, EagerReturn string
+}
+
+var pinnedClaudeReleases = map[string]pinnedClaudeRelease{
+	"2.1.312": {ListStart: "function Hu(", ListEnd: "function R(", ListName: "Hu",
+		EagerStart: `var a=new Set(["--prefill"`, EagerEnd: "function Lb(", EagerReturn: "{NI:hS,sets:{i:[...a],xar:[...rto],a:[...d]}}"},
+}
+
+// pinnedClaudeVersion returns the installed pinned release or skips.
+func pinnedClaudeVersion(ctx context.Context, t *testing.T, path string) (string, pinnedClaudeRelease) {
+	t.Helper()
+	version, err := exec.CommandContext(ctx, path, "--version").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, suffixed := strings.CutSuffix(strings.TrimSpace(string(version)), " (Claude Code)")
+	pinned, known := pinnedClaudeReleases[release]
+	if !suffixed || !known {
+		t.Skipf("not a pinned release: %s", version)
+	}
+	return release, pinned
+}
+
 // Node is used only to execute the installed pinned parser functions verbatim;
 // reimplementing those in a test would share the assumption being compared.
 // No Claude session, configuration or credential store is accessed.
@@ -22,13 +53,7 @@ func TestPinnedClaudeNativeGrammarComparison(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	version, err := exec.CommandContext(ctx, path, "--version").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.TrimSpace(string(version)) != "2.1.288 (Claude Code)" {
-		t.Skipf("not the pinned release: %s", version)
-	}
+	_, pinned := pinnedClaudeVersion(ctx, t, path)
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("Node unavailable for pinned native parser comparison")
@@ -110,9 +135,10 @@ func TestPinnedClaudeNativeGrammarComparison(t *testing.T) {
 	}
 	input, err := json.Marshal(struct {
 		Path    string
+		Anchors pinnedClaudeRelease
 		Arities map[string]string
 		Cases   []sample
-	}{path, nativeArities, cases})
+	}{path, pinned, nativeArities, cases})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,10 +148,10 @@ func TestPinnedClaudeNativeGrammarComparison(t *testing.T) {
 const fs=require('fs');const input=JSON.parse(fs.readFileSync(0,'utf8'));
 const bytes=fs.readFileSync(input.Path).toString('latin1');
 const start=bytes.indexOf('parseOptions(t){',170000000), end=bytes.indexOf('opts(){',start);
-const first=bytes.indexOf('function Fp(',170000000), last=bytes.indexOf('function p(',first);
+const first=bytes.indexOf(input.Anchors.ListStart,170000000), last=bytes.indexOf(input.Anchors.ListEnd,first);
 if(start<0||end<0||first<0||last<0)throw Error('pinned native anchors missing');
 const parse=new Function('return ({'+bytes.slice(start,end)+'}).parseOptions')();
-const Fp=new Function(bytes.slice(first,last)+';return Fp;')();
+const Fp=new Function(bytes.slice(first,last)+';return '+input.Anchors.ListName+';')();
 const output=input.Cases.map(sample=>{
  const events=[];const host={_combineFlagAndOptionalValue:true,
  _findOption(name){const arity=input.Arities[name];if(!arity)return null;
@@ -194,8 +220,9 @@ const output=input.Cases.map(sample=>{
 // Fp list tokenizer over a Unicode corpus, the NI eager --settings scan over
 // an ownership corpus, and the embedded eager skip sets against the binary's
 // own sets. Node executes the pinned functions verbatim at test time; the
-// archive carries no copied native bundle. Skips without pinned Claude 2.1.288
-// or Node. No session, configuration or credential store is accessed.
+// archive carries no copied native bundle. Skips without an in-window pinned
+// Claude release (2.1.312) or Node. No session, configuration or
+// credential store is accessed.
 func TestPinnedClaudeNativeListAndSettingsComparison(t *testing.T) {
 	path, err := exec.LookPath(executableName)
 	if err != nil {
@@ -203,13 +230,7 @@ func TestPinnedClaudeNativeListAndSettingsComparison(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	version, err := exec.CommandContext(ctx, path, "--version").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.TrimSpace(string(version)) != "2.1.288 (Claude Code)" {
-		t.Skipf("not the pinned release: %s", version)
-	}
+	_, pinned := pinnedClaudeVersion(ctx, t, path)
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("Node unavailable for pinned native comparison")
@@ -255,6 +276,10 @@ func TestPinnedClaudeNativeListAndSettingsComparison(t *testing.T) {
 		{"-cn", "--settings=" + deny},
 		{"--exec", "--settings", deny},
 		{"--setting-sources", "a", "--settings", deny},
+		// Hidden scalar options that 2.1.312 adds own the next token.
+		{"--fast-mode", "--settings", deny},
+		{"--runner-declares", "--settings", deny},
+		{"--runner-declares", "a", "--settings", deny},
 	}
 	fpCases := [][]string{
 		{"\ufeffAskUserQuestion"},
@@ -295,9 +320,10 @@ func TestPinnedClaudeNativeListAndSettingsComparison(t *testing.T) {
 	}
 	input, err := json.Marshal(struct {
 		Path    string
+		Anchors pinnedClaudeRelease
 		NICases [][]string
 		FpCases [][]string
-	}{path, niCases, fpCases})
+	}{path, pinned, niCases, fpCases})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,8 +334,9 @@ const fs=require('fs');const input=JSON.parse(fs.readFileSync(0,'utf8'));
 const bytes=fs.readFileSync(input.Path).toString('latin1');
 function extract(start,end){const s=bytes.indexOf(start,170000000),e=bytes.indexOf(end,s);
 if(s<0||e<0)throw Error('pinned native anchors missing: '+start);return bytes.slice(s,e)}
-const Fp=new Function(extract('function Fp(','function p(')+';return Fp')();
-const eager=new Function(extract('var i=new Set(["--prefill"','function SC(')+';return {NI:NI,sets:{i:[...i],xar:[...xar],a:[...a]}}')();
+const A=input.Anchors;
+const Fp=new Function(extract(A.ListStart,A.ListEnd)+';return '+A.ListName)();
+const eager=new Function(extract(A.EagerStart,A.EagerEnd)+';return '+A.EagerReturn)();
 const ni=input.NICases.map(args=>eager.NI('--settings',args)??null);
 const fp=input.FpCases.map(values=>Fp(values));
 process.stdout.write(JSON.stringify({sets:eager.sets,ni:ni,fp:fp}));`

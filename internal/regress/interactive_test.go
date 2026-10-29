@@ -114,7 +114,7 @@ var interactiveCases = map[string]interactiveCase{
 	"claude-code": {
 		system: claude.New(), stub: "claude",
 		yoloFlag:    "--dangerously-skip-permissions",
-		toolRelease: "2.1.261",
+		toolRelease: "2.1.312",
 		exec: func(t *testing.T, req agentic.LaunchRequest, workDir string) agentic.LaunchRequest {
 			req.PromptPath = paritycase.WritePromptFile(t, workDir, "body")
 			return req

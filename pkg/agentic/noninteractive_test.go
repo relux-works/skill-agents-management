@@ -20,9 +20,9 @@ func TestRegistryClassifiesVersionedNonInteractiveFormsByEnvironmentAndPlacement
 		form    agentic.NonInteractiveForm
 		grammar agentic.PermissionGrammarVersion
 	}{
-		{"claude print short flag", "claude-code", "2.1.261", []string{"-p"}, agentic.NonInteractiveFormPrint, agentic.PermissionGrammarV2},
-		{"claude print equals placement", "claude-code", "2.1.261", []string{"--print=true"}, agentic.NonInteractiveFormPrint, agentic.PermissionGrammarV2},
-		{"claude print with separate prompt", "claude-code", "2.1.261", []string{"--print", "summarize this"}, agentic.NonInteractiveFormPrint, agentic.PermissionGrammarV2},
+		{"claude print short flag", "claude-code", "2.1.312", []string{"-p"}, agentic.NonInteractiveFormPrint, agentic.PermissionGrammarV3},
+		{"claude print equals placement", "claude-code", "2.1.312", []string{"--print=true"}, agentic.NonInteractiveFormPrint, agentic.PermissionGrammarV3},
+		{"claude print with separate prompt", "claude-code", "2.1.312", []string{"--print", "summarize this"}, agentic.NonInteractiveFormPrint, agentic.PermissionGrammarV3},
 		{"codex exec command", "codex", "0.153.2", []string{"exec", "summarize this"}, agentic.NonInteractiveFormExec, agentic.PermissionGrammarV2},
 		{"codex 0.164 exec command", "codex", "0.164.0", []string{"exec", "summarize this"}, agentic.NonInteractiveFormExec, agentic.PermissionGrammarV3},
 		{"codex 0.164 exec after root option", "codex", "0.164.0", []string{"--model=example", "e"}, agentic.NonInteractiveFormExec, agentic.PermissionGrammarV3},
@@ -56,9 +56,9 @@ func TestRegistryClassifierStopsBeforePromptText(t *testing.T) {
 		suffix  []string
 		grammar agentic.PermissionGrammarVersion
 	}{
-		{"claude print-looking prompt", "claude-code", "2.1.261", []string{"--", "--print"}, agentic.PermissionGrammarV2},
-		{"claude short print-looking prompt", "claude-code", "2.1.261", []string{"--", "-p"}, agentic.PermissionGrammarV2},
-		{"claude print-looking prompt after a flag", "claude-code", "2.1.261", []string{"--verbose", "--", "--print"}, agentic.PermissionGrammarV2},
+		{"claude print-looking prompt", "claude-code", "2.1.312", []string{"--", "--print"}, agentic.PermissionGrammarV3},
+		{"claude short print-looking prompt", "claude-code", "2.1.312", []string{"--", "-p"}, agentic.PermissionGrammarV3},
+		{"claude print-looking prompt after a flag", "claude-code", "2.1.312", []string{"--verbose", "--", "--print"}, agentic.PermissionGrammarV3},
 		{"codex exec-looking prompt", "codex", "0.153.2", []string{"--", "exec"}, agentic.PermissionGrammarV2},
 		{"pi print-looking prompt", "pi-native", "0.84.2", []string{"--", "--print"}, agentic.PermissionGrammarV1},
 		{"pi short print-looking prompt", "pi-native", "0.84.2", []string{"--", "-p"}, agentic.PermissionGrammarV1},

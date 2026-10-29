@@ -234,7 +234,7 @@ func TestAskUserQuestionDenialUnconditionalUnderYolo(t *testing.T) {
 		t.Run(strings.Join(native, " "), func(t *testing.T) {
 			req := interactiveRequest(tempSlot(t))
 			req.PermissionMode = agentic.PermissionModeYolo
-			req.ToolRelease = "2.1.261"
+			req.ToolRelease = "2.1.312"
 			req.NativeArgs = native
 			argv := argvFor(t, req, agentic.LaunchModeInteractive)
 			want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag}, native...)
@@ -280,7 +280,7 @@ func TestReEnablingAskUserQuestionIsRefused(t *testing.T) {
 				req := interactiveRequest(workDir)
 				if posture.yolo {
 					req.PermissionMode = agentic.PermissionModeYolo
-					req.ToolRelease = "2.1.261"
+					req.ToolRelease = "2.1.312"
 				}
 				req.NativeArgs = row.native
 				err := planErrorFor(t, req, agentic.LaunchModeInteractive)
@@ -399,7 +399,7 @@ func TestAskUserQuestionECMAScriptRuleTokenization(t *testing.T) {
 				req := interactiveRequest(workDir)
 				if posture.yolo {
 					req.PermissionMode = agentic.PermissionModeYolo
-					req.ToolRelease = "2.1.261"
+					req.ToolRelease = "2.1.312"
 				}
 				req.NativeArgs = []string{"--allowedTools=" + row.member}
 				err := planErrorFor(t, req, agentic.LaunchModeInteractive)
@@ -607,8 +607,8 @@ func TestPinnedClaudeAcceptsDisallowedTools(t *testing.T) {
 	if versionErr != nil {
 		t.Fatalf("claude --version: %v", versionErr)
 	}
-	if strings.TrimSpace(string(version)) != "2.1.288 (Claude Code)" {
-		t.Skipf("installed version %q is not pinned 2.1.288", version)
+	if release, suffixed := strings.CutSuffix(strings.TrimSpace(string(version)), " (Claude Code)"); !suffixed || pinnedClaudeReleases[release].ListName == "" {
+		t.Skipf("installed version %q is not a pinned release", version)
 	}
 	help, err := exec.CommandContext(ctx, path, "--help").Output()
 	if err != nil {

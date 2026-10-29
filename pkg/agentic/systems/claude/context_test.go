@@ -10,7 +10,7 @@ import (
 
 func TestBuildPlanTranslatesClaudeContextChannels(t *testing.T) {
 	req := interactiveRequest(tempSlot(t))
-	req.ToolRelease = "2.1.261"
+	req.ToolRelease = "2.1.312"
 	req.ContextDescriptors = []agentic.ContextDescriptor{
 		{Kind: agentic.ContextMCPServers, MCP: &agentic.MCPServersContext{Servers: []agentic.MCPServerDescriptor{
 			{Name: "board", Transport: agentic.MCPTransportHTTP, URL: "https://mcp.example.test"},
@@ -146,7 +146,7 @@ func TestClaudeContextDescriptorRefusalsReachBuildPlan(t *testing.T) {
 			name: "permission yolo plus native policy selector",
 			mutate: func(req *agentic.LaunchRequest) {
 				req.ContextDescriptors = []agentic.ContextDescriptor{{Kind: agentic.ContextPermission, Permission: &agentic.PermissionContext{Mode: agentic.PermissionModeYolo}}}
-				req.ToolRelease = "2.1.261"
+				req.ToolRelease = "2.1.312"
 				req.NativeArgs = []string{permissionModeFlag, "acceptEdits"}
 			},
 			wantError: agentic.ErrNativePolicyConflict,
