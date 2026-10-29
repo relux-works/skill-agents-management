@@ -232,8 +232,13 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   did not prove how they interact with the bypass. It also refuses the explicit
   configuration it cannot vouch for:
   - `--managed-settings` and `--project-config-root`;
-  - an effective `--settings` source, inline or a file, whose `permissions`
-    object carries any member besides `allow`, `deny`, `ask` and
+  - an effective `--settings` source, inline or a file, with any top-level
+    member outside the allowlist `$schema` (string), `model` (string),
+    `permissions` and an empty `env`. For example, 2.1.312 runs flag-settings
+    `hooks` before mode evaluation, so a PreToolUse hook answering `ask` or
+    `deny` overrides the bypass per call. Plugin and other executable
+    customization, and keys a release adds later, are unqualified too;
+  - a `permissions` object in that source with any member besides `allow`, `deny`, `ask` and
     `additionalDirectories`. 2.1.312 skips the bypass mode when
     `disableBypassPermissionsMode` is `"disable"`, and `defaultMode` selects
     another mode;
@@ -244,7 +249,9 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
     can also redirect configuration roots.
 
   Native forwards all of these verbatim, and implicit user and project
-  configuration stays outside this argv policy.
+  configuration stays outside this argv policy. That includes the hooks and
+  `env` a project's `.claude/settings.local.json` installs; neither Curator nor
+  curator-run passes `--settings` to Claude.
 
   The Claude 2.1.261 row is retired under the owner's support window
   (2026-10-29: harness releases from about the last two weeks). The Claude

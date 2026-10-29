@@ -372,3 +372,94 @@ func TestClaude2312YoloRefusesSettingsEnv(t *testing.T) {
 		}
 	}
 }
+
+// Under V3 yolo the explicit settings source is checked against a top-level
+// allowlist: any member outside `$schema`, `model`, `permissions` and an
+// empty `env` refuses before any plan, through both permission request
+// channels. This covers a PreToolUse hook that answers "ask" (2.1.312 runs
+// flag-settings hooks before mode evaluation), inline in separate and equals
+// form, from a file, beside qualified permissions, and as the last of
+// repeated sources, plus a plugin source and an unknown key. A qualified key
+// of the wrong shape refuses as invalid settings. Native forwards each
+// refused form. Positives: every qualified key together, and a hook source
+// followed by a harmless last source, which native takes instead.
+func TestClaude2312YoloSettingsTopLevelAllowlist(t *testing.T) {
+	t.Parallel()
+	hook := `{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"printf '{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"}}'"}]}]}}`
+	workDir := tempSlot(t)
+	if err := os.WriteFile(filepath.Join(workDir, "hook.json"), []byte(hook), 0600); err != nil {
+		t.Fatal(err)
+	}
+	channels := map[string]func(args ...string) agentic.LaunchRequest{
+		"request-mode": func(args ...string) agentic.LaunchRequest {
+			req := interactiveRequest(workDir)
+			req.PermissionMode = agentic.PermissionModeYolo
+			req.ToolRelease = "2.1.312"
+			req.NativeArgs = args
+			return req
+		},
+		"context-descriptor": func(args ...string) agentic.LaunchRequest {
+			req := interactiveRequest(workDir)
+			req.ContextDescriptors = []agentic.ContextDescriptor{{Kind: agentic.ContextPermission, Permission: &agentic.PermissionContext{Mode: agentic.PermissionModeYolo}}}
+			req.ToolRelease = "2.1.312"
+			req.NativeArgs = args
+			return req
+		},
+	}
+	refused := []struct {
+		member string
+		args   []string
+	}{
+		{"hooks", []string{"--settings", hook}},
+		{"hooks", []string{"--settings=" + hook}},
+		{"hooks", []string{"--settings", "hook.json"}},
+		{"hooks", []string{"--settings=hook.json"}},
+		{"hooks", []string{"--settings", `{"model":"x"}`, "--settings", hook}},
+		{"hooks", []string{"--settings", `{"permissions":{"deny":["Bash(rm *)"]},"hooks":{}}`}},
+		{"enabledPlugins", []string{"--settings", `{"enabledPlugins":{"tool@market":true}}`}},
+		{"futureSetting", []string{"--settings", `{"model":"x","futureSetting":1}`}},
+	}
+	for name, yolo := range channels {
+		for _, c := range refused {
+			t.Run(name+"/"+strings.Join(c.args, " "), func(t *testing.T) {
+				err := planErrorFor(t, yolo(c.args...), agentic.LaunchModeInteractive)
+				if !errors.Is(err, agentic.ErrNativePolicyUnknown) {
+					t.Fatalf("yolo: err = %v, want ErrNativePolicyUnknown", err)
+				}
+				for _, want := range []string{c.member, string(agentic.PermissionGrammarV3)} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("refusal %q does not name %q", err, want)
+					}
+				}
+			})
+		}
+		for _, args := range [][]string{
+			{"--settings", `{"model":1}`},
+			{"--settings", `{"model":null}`},
+			{"--settings", `{"$schema":["x"]}`},
+		} {
+			err := planErrorFor(t, yolo(args...), agentic.LaunchModeInteractive)
+			var settingsErr *agentic.SettingsPolicyError
+			if !errors.As(err, &settingsErr) || settingsErr.Kind != agentic.SettingsPolicyInvalid {
+				t.Fatalf("%s %q: err = %v, want the invalid settings kind", name, args, err)
+			}
+		}
+		for _, args := range [][]string{
+			{"--settings", `{"$schema":"https://json.schemastore.org/claude-code-settings.json","model":"claude-x","permissions":{"allow":["Read"],"deny":["Bash(rm *)"],"ask":["Edit"],"additionalDirectories":["/tmp"]},"env":{}}`},
+			{"--settings", hook, "--settings", `{"model":"x"}`},
+		} {
+			if got := argvFor(t, yolo(args...), agentic.LaunchModeInteractive); !slices.Contains(got, bypassPermissionsFlag) || !slices.Equal(got[len(got)-len(args):], args) {
+				t.Fatalf("%s %q: Argv = %#v, want the bypass and the caller settings unchanged", name, args, got)
+			}
+		}
+	}
+	native := interactiveRequest(workDir)
+	native.ToolRelease = "2.1.312"
+	for _, c := range refused {
+		native.NativeArgs = c.args
+		want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, c.args...)
+		if got := argvFor(t, native, agentic.LaunchModeInteractive); !reflect.DeepEqual(got, want) {
+			t.Fatalf("native %q: Argv = %#v, want %#v", c.args, got, want)
+		}
+	}
+}

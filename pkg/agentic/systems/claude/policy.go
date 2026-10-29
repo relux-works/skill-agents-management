@@ -63,6 +63,21 @@ var v3UnqualifiedSelectors = map[string]bool{
 	projectConfigRootFlag:     true,
 }
 
+// v3QualifiedSettingsKeys are the top-level members of an explicit settings
+// source V3 admits beside the mapped bypass, each with a qualified shape: the
+// two string annotations `$schema` and `model`, `permissions` (members below)
+// and an empty `env`. Everything else is unqualified until shown not to touch
+// the bypass. 2.1.312 runs flag-settings `hooks` before mode evaluation, so a
+// PreToolUse hook answering "ask" or "deny" overrides the bypass per call; a
+// plugin, helper or other executable customization is unqualified for the
+// same reason, and so is any key this release adds later.
+var v3QualifiedSettingsKeys = map[string]bool{
+	"$schema":     true,
+	"model":       true,
+	"permissions": true,
+	"env":         true,
+}
+
 // v3QualifiedPermissionKeys are the members of an explicit settings
 // `permissions` object V3 admits beside the mapped bypass: the rule lists and
 // extra directories. Any other member is unqualified. 2.1.312's permission
@@ -76,8 +91,10 @@ var v3QualifiedPermissionKeys = map[string]bool{
 }
 
 // scanYoloSettings inspects the effective explicit --settings source, inline
-// JSON or a file, under V3 yolo, and refuses before launch an unqualified
-// permissions member or any member of a non-empty top-level `env`. 2.1.312
+// JSON or a file, under V3 yolo, and refuses before launch any top-level
+// member outside v3QualifiedSettingsKeys, a qualified member of the wrong
+// shape, an unqualified permissions member, or any member of a non-empty
+// top-level `env`. 2.1.312
 // applies a flag-settings `env` to its own process before it resolves the
 // permission mode, and CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1 there forces mode
 // "default" over the bypass flag; no env member is qualified yet, and an env
@@ -100,6 +117,17 @@ func scanYoloSettings(req agentic.LaunchRequest, grammar agentic.PermissionGramm
 	settings, kind := readSettingsObject(source, req.WorkDir)
 	if kind != "" {
 		return settingsPolicyRefusal(kind)
+	}
+	for _, key := range sortedKeys(settings) {
+		if !v3QualifiedSettingsKeys[key] {
+			return fmt.Errorf("%w: claude settings member %q is not qualified under %s", agentic.ErrNativePolicyUnknown, key, grammar)
+		}
+	}
+	for _, key := range []string{"$schema", "model"} {
+		var text string
+		if raw, present := settings[key]; present && (string(raw) == "null" || json.Unmarshal(raw, &text) != nil) {
+			return settingsPolicyRefusal(agentic.SettingsPolicyInvalid)
+		}
 	}
 	if raw, present := settings["env"]; present {
 		var env map[string]json.RawMessage

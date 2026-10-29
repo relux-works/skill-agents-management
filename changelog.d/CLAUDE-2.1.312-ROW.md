@@ -3,8 +3,10 @@
   V3 retains every V2 refusal and also refuses `--inherit-permission-mode`,
   `--plan-mode-required`, `--permission-prompts` and `--enable-auto-mode` under
   yolo, since their interaction with the bypass is not qualified. It also
-  refuses `--managed-settings`, `--project-config-root`, and an explicit
-  `--settings` source whose `permissions` object carries anything besides
+  refuses `--managed-settings`, `--project-config-root`, an explicit
+  `--settings` source with a top-level member outside `$schema`, `model`,
+  `permissions` and an empty `env` (for example `hooks`, whose PreToolUse
+  decision overrides the bypass per call), and one whose `permissions` object carries anything besides
   `allow`, `deny`, `ask` and `additionalDirectories` (for example
   `disableBypassPermissionsMode` or `defaultMode`), or a non-empty top-level
   `env` (2.1.312 applies it before resolving the mode, and
