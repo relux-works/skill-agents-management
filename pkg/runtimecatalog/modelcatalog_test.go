@@ -419,3 +419,90 @@ func TestModelCatalogDiagnosticsNeverEchoUntrustedText(t *testing.T) {
 		t.Fatalf("valid-id control: %v", err)
 	}
 }
+
+// effort_scale is catalog-wide: a scale-only catalog, a vendor the catalog adds
+// no rows to, and a vendor with an empty models table all rank bounds on the
+// extended scale, while the frozen v2 pair set is unchanged. Expectations are
+// derived from the module's own vocabulary and EffortOrder, not from the code
+// under test. (Review round 2, R2-1.)
+func TestModelCatalogScaleReachesEveryVendor(t *testing.T) {
+	const scaleOnly = "schema_version = 1\n[[effort_scale]]\nword = \"deep\"\nafter = \"high\"\n"
+	expect := func(model vendorplugin.Model, below bool) string {
+		order := vendorplugin.EffortOrder()
+		position := func(word string) int {
+			for i, w := range order {
+				if w == word {
+					return i
+				}
+			}
+			return -1
+		}
+		var words []string
+		for _, word := range order {
+			if indexIn(model.Effort.Vocabulary, word) < 0 {
+				continue
+			}
+			if below && position(word) <= position("high") || !below && position(word) > position("high") {
+				words = append(words, word)
+			}
+		}
+		return strings.Join(words, " ")
+	}
+	check := func(name string, vendor vendorplugin.Vendor, id vendorplugin.ModelID) {
+		t.Helper()
+		for _, model := range vendor.Models() {
+			if model.ID != id {
+				continue
+			}
+			if got, want := strings.Join(vendorplugin.EffectiveEffortsUnderBound(model, "deep", vendorplugin.EffortCriterionLessOrEqual), " "), expect(model, true); got != want || got == "" {
+				t.Fatalf("%s %s below deep: %q, want %q", name, id, got, want)
+			}
+			if got := strings.Join(vendorplugin.EffectiveEffortsUnderBound(model, "deep", vendorplugin.EffortCriterionGreaterOrEqual), " "); got != expect(model, false) {
+				t.Fatalf("%s %s above deep: %q, want %q", name, id, got, expect(model, false))
+			}
+			return
+		}
+		t.Fatalf("%s: %s not declared", name, id)
+	}
+	for name, text := range map[string]string{
+		"scale only":       scaleOnly,
+		"empty models":     scaleOnly + "[vendors.openai.models]\n",
+		"rows elsewhere":   scaleOnly + "[vendors.anthropic.models.\"claude-x-test\"]\nsystems = [\"claude-code\"]\neffort = { support = \"none\" }\n",
+		"rows on this one": scaleOnly + "[vendors.openai.models.\"gpt-6-9-test\"]\nsystems = [\"codex\"]\neffort = { support = \"none\" }\n",
+	} {
+		applied, err := parse(t, text).Apply(openai.New())
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		check(name, applied, "gpt-5.6-sol")
+	}
+	untouched, err := parse(t, scaleOnly+"[vendors.openai.models.\"gpt-6-9-test\"]\nsystems = [\"codex\"]\neffort = { support = \"none\" }\n").Apply(anthropic.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("untouched second vendor", untouched, "claude-opus-5-5")
+
+	with := catalogRegistry(t, parse(t, scaleOnly))
+	without := catalogRegistry(t, runtimecatalog.ModelCatalog{})
+	ceiling := vendorplugin.V2Ceiling{Runtime: "codex", Model: "gpt-5.6-sol", ModelCriterion: vendorplugin.ModelCriterionLessOrEqual, Effort: "high"}
+	got, err := vendorplugin.ExpandV2Ceiling(with, ceiling)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := vendorplugin.ExpandV2Ceiling(without, ceiling)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Digest() != want.Digest() {
+		t.Fatalf("a scale-only catalog changed the v2 pair set: %v vs %v", got.PinnedPairs(), want.PinnedPairs())
+	}
+}
+
+func indexIn(values []string, word string) int {
+	for i, value := range values {
+		if value == word {
+			return i
+		}
+	}
+	return -1
+}

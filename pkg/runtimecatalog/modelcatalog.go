@@ -334,7 +334,10 @@ func (c ModelCatalog) Apply(vendor vendorplugin.Vendor) (vendorplugin.Vendor, er
 			entry = &c.Vendors[i]
 		}
 	}
-	if entry == nil || len(entry.Models) == 0 {
+	// effort_scale is catalog-wide: a vendor the catalog adds no rows to
+	// still ranks bounds on the extended scale. Only a catalog with neither
+	// rows for this vendor nor a scale extension leaves it untouched.
+	if (entry == nil || len(entry.Models) == 0) && len(c.EffortScale) == 0 {
 		return vendor, nil
 	}
 	scale, err := c.EffectiveEffortScale()
@@ -343,7 +346,11 @@ func (c ModelCatalog) Apply(vendor vendorplugin.Vendor) (vendorplugin.Vendor, er
 	}
 	models := vendor.Models()
 	var added []vendorplugin.Model
-	for _, row := range entry.Models {
+	var rows []CatalogModel
+	if entry != nil {
+		rows = entry.Models
+	}
+	for _, row := range rows {
 		subject := string(entry.ID) + "/" + string(row.ID)
 		if index := modelIndex(models, row.ID); index >= 0 {
 			// An alias row must declare its target's effort exactly, so an
