@@ -316,7 +316,9 @@ func (c ModelCatalog) EffectiveEffortScale() ([]string, error) {
 }
 
 // Apply returns the vendor with this catalog's rows for it merged in. A vendor
-// the catalog does not name is returned unchanged. Every refusal is a typed
+// the catalog does not name, when the catalog also extends no effort scale, is
+// returned unchanged; otherwise every effort-bearing row carries the effective
+// scale. Every refusal is a typed
 // Refusal naming the vendor/model, never file contents:
 //   - conflicting: a row that redefines a module declaration beyond adding
 //     effort words, an extension of a model with no effort axis, or an id or
