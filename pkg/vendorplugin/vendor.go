@@ -664,6 +664,14 @@ type Model struct {
 	// registry was built against. That check is the dependency direction, and
 	// Registry.Register is where it happens.
 	Systems []agentic.SystemID
+
+	// OperatorDeclared marks a row the operator's model catalog
+	// (runtimecatalog, catalog.toml) added rather than the module's own
+	// declaration. Such a row carries no benchmark observation, so it is
+	// admitted when named explicitly but never placed in a Lineup: adding a
+	// model to configuration must not change what an unconfigured launch picks.
+	// The zero value is every row this module declares.
+	OperatorDeclared bool
 }
 
 // Validate refuses a row that could not be launched or chosen. It does NOT
