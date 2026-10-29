@@ -394,9 +394,10 @@ effort  = { support = "required", accepts = ["high", "deep", "deeper", "xhigh"],
 	}
 }
 
-// Diagnostics carry only validated identifiers: a key with a line break, a
-// path-like key, an invalid vendor id and an invalid model id never reach the
-// refusal text; a valid id is named as the control. (Review finding 3.)
+// Diagnostics carry only validated identifiers: hostile keys at the top,
+// vendor, model and effort levels, invalid vendor and model ids, an alias value
+// and both scale fields never reach the refusal text; a valid id is named as
+// the control. (Review finding 3 and round-2 request a.)
 func TestModelCatalogDiagnosticsNeverEchoUntrustedText(t *testing.T) {
 	const marker = "confidential-marker"
 	for name, text := range map[string]string{
@@ -405,6 +406,11 @@ func TestModelCatalogDiagnosticsNeverEchoUntrustedText(t *testing.T) {
 		"nested key":       "schema_version = 1\n[vendors.openai.models.x]\n\"" + marker + "\\nx\" = 1\n",
 		"invalid vendor":   "schema_version = 1\n[vendors.\"bad\\n" + marker + "\".models.x]\nsystems = [\"codex\"]\n",
 		"invalid model id": "schema_version = 1\n[vendors.openai.models.\"bad\\u001b" + marker + "\"]\nsystems = [\"codex\"]\n",
+		"vendor-level key": "schema_version = 1\n[vendors.openai]\nmodels = {}\n\"" + marker + "\\nx\" = 1\n",
+		"effort-level key": "schema_version = 1\n[vendors.openai.models.x]\nsystems = [\"codex\"]\neffort = { \"" + marker + "\\nx\" = 1 }\n",
+		"alias value":      "schema_version = 1\n[vendors.openai.models.x]\nsystems = [\"codex\"]\naliases = [\"bad\\n" + marker + "\"]\n",
+		"scale word":       "schema_version = 1\n[[effort_scale]]\nword = \"bad\\n" + marker + "\"\nafter = \"max\"\n",
+		"scale after":      "schema_version = 1\n[[effort_scale]]\nword = \"deep\"\nafter = \"bad\\n" + marker + "\"\n",
 	} {
 		_, err := runtimecatalog.ParseModelCatalog([]byte(text))
 		if err == nil {

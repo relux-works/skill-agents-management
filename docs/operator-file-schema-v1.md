@@ -296,7 +296,11 @@ effort      = { accepts = ["minimal"] }            # only accepts may extend it
 - A row naming a module model may only carry `effort = { accepts = [...] }`. The
   words are added to that model and to every alias of it, as
   `EffortDeclaration.OperatorAccepts`: launches admit them, but the module's own
-  `Vocabulary` is unchanged, so frozen policy (the v2 snapshot) never widens. Anything else
+  `Vocabulary` is unchanged, so frozen policy (the v2 snapshot) never widens.
+  One explicit exception: a v2 `equal` ceiling names its model directly rather
+  than through the frozen tiers, so an `equal` ceiling naming a catalog-only id
+  becomes expandable once that id is catalogued. That is the ceiling author's
+  explicit choice, not a widening of ordered membership. Anything else
   refuses as `conflicting`, as does extending a model with no effort axis or an
   id or alias that collides with an existing row.
 - Every effort word must be on the effective scale (the module's order extended
