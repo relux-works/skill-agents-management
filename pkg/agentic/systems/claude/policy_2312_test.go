@@ -265,3 +265,28 @@ func TestClaude2312YoloRefusesUnqualifiedSettings(t *testing.T) {
 		}
 	}
 }
+
+// Documented limit, not a guarantee: the option tables describe in-window
+// releases only, so the native-mode re-enable scan reads the token after
+// --fast-mode as its value on every release. That matches 2.1.312. On an
+// out-of-window release such as 2.1.261, which does not know --fast-mode, the
+// binary would read that token as a flag, and the module does not see the
+// re-enable. Yolo there still fails closed (TestClaudeRetiredReleaseRefusesYolo).
+// The control shows the scan itself still refuses a bare re-enable on both.
+func TestClaudeOutOfWindowNativeScansUseInWindowTables(t *testing.T) {
+	t.Parallel()
+	workDir := tempSlot(t)
+	base := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}
+	for _, release := range []string{"2.1.312", "2.1.261"} {
+		req := interactiveRequest(workDir)
+		req.ToolRelease = release
+		req.NativeArgs = []string{"--fast-mode", "--allowedTools=AskUserQuestion"}
+		if got, want := argvFor(t, req, agentic.LaunchModeInteractive), append(append([]string{}, base...), req.NativeArgs...); !reflect.DeepEqual(got, want) {
+			t.Fatalf("native %s: Argv = %#v, want %#v", release, got, want)
+		}
+		req.NativeArgs = []string{"--allowedTools=AskUserQuestion"}
+		if err := planErrorFor(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrDeniedToolReEnabled) {
+			t.Fatalf("native %s bare re-enable: err = %v, want ErrDeniedToolReEnabled", release, err)
+		}
+	}
+}

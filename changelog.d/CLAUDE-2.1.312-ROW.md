@@ -6,9 +6,12 @@
   refuses `--managed-settings`, `--project-config-root`, and an explicit
   `--settings` source whose `permissions` object carries anything besides
   `allow`, `deny`, `ask` and `additionalDirectories` (for example
-  `disableBypassPermissionsMode` or `defaultMode`). Native forwards them. The option and eager tables gain the hidden required options
-  `--fast-mode` and `--runner-declares`, and the pinned native comparisons are
-  keyed by release so they run against the installed 2.1.312.
+  `disableBypassPermissionsMode` or `defaultMode`). Native forwards them.
+  The option and eager tables, renamed `claude-options.tsv` and
+  `claude-eager.tsv`, gain the hidden required options `--fast-mode` and
+  `--runner-declares`, and describe in-window releases only. The pinned native
+  comparisons are keyed by release and run against the installed 2.1.312;
+  2.1.288 is out of the window and has no comparison row.
 - Retire the Claude 2.1.261 yolo row under the owner's harness support window
   (releases from about the last two weeks, 2026-10-29). The Claude option
   tables describe in-window releases only, so yolo on 2.1.261 and every other

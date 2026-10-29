@@ -223,8 +223,8 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   same six `--permission-mode` values and the bypass flag, and every visible
   option keeps its pinned arity. The pinned comparison tests run the binary's
   own Commander parser, disallowed-tools normalizer and eager `--settings`
-  scan. The anchors are release-keyed, so the tests run on 2.1.288 and 2.1.312
-  and skip on any other release. The release adds two hidden options with a
+  scan. Their anchors are keyed by release and listed only for in-window
+  releases, so the tests run on 2.1.312 and skip on any other release. The release adds two hidden options with a
   required value, `--fast-mode` and `--runner-declares`, and the option and
   eager tables now own their value. Under yolo, V3 keeps the V2 refusals and
   also refuses `--inherit-permission-mode`, `--plan-mode-required`,
@@ -778,14 +778,18 @@ frozen RUNTIME id `claude`; `parity_test.go` maps between them in one place.
   `AskUserQuestion`. Unanchored allow globs (`*`, `Ask*`) do not match native
   built-in tools; unrelated rules pass. Implicit configuration, later file
   changes and session-time permission updates are outside this plan-time check.
-- **Policy options follow pinned native value ownership.** The Claude 2.1.288
-  help arity table is embedded from `claude-2.1.288-options.tsv` by
+- **Policy options follow pinned native value ownership.** The Claude help
+  arity table for in-window releases (2.1.288's rows plus the two hidden
+  value-taking options 2.1.312 adds) is embedded from `claude-options.tsv` by
   `nativegrammar.go`. Required scalar options consume
   even dash-leading values; variadic options own the first value and stop later
   values at flags. Optional values stop at flags (`--remote-control=...` owns
   its attached text; `--remote-control --allowedTools=...` does not).
   The eager scanner skip sets are embedded from
-  `claude-2.1.288-eager.tsv`, transcribed from the pinned binary.
+  `claude-eager.tsv`, transcribed from the pinned binary. An out-of-window
+  binary is unsupported: one that does not know `--fast-mode` or
+  `--runner-declares` reads the token after them as a flag, while these
+  tables read it as their value.
   An attached deny value keeps the module denial from consuming the goal or
   positional prompt. Known hidden scalar prompt/settings options are included;
   unknown future native options are forwarded without a grammar claim.

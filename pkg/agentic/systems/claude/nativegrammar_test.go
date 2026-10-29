@@ -13,19 +13,17 @@ import (
 )
 
 // pinnedClaudeRelease is one installed release the pinned comparisons run
-// against: its minified anchors, whose names are release-specific, and the
-// embedded eager rows that release's own sets do not carry. Any other release
-// skips; a missing anchor fails the pinned check rather than falling back.
+// against: its minified anchors, whose names are release-specific. Only
+// in-window releases have a row, because the embedded tables describe those
+// alone; 2.1.288 is outside the owner's support window and its sets lack the
+// rows 2.1.312 adds. Any other release skips; a missing anchor fails the
+// pinned check rather than falling back.
 type pinnedClaudeRelease struct {
 	ListStart, ListEnd, ListName      string
 	EagerStart, EagerEnd, EagerReturn string
-	AbsentEager                       []string
 }
 
 var pinnedClaudeReleases = map[string]pinnedClaudeRelease{
-	"2.1.288": {ListStart: "function Fp(", ListEnd: "function p(", ListName: "Fp",
-		EagerStart: `var i=new Set(["--prefill"`, EagerEnd: "function SC(", EagerReturn: "{NI:NI,sets:{i:[...i],xar:[...xar],a:[...a]}}",
-		AbsentEager: []string{"--fast-mode", "--runner-declares"}},
 	"2.1.312": {ListStart: "function Hu(", ListEnd: "function R(", ListName: "Hu",
 		EagerStart: `var a=new Set(["--prefill"`, EagerEnd: "function Lb(", EagerReturn: "{NI:hS,sets:{i:[...a],xar:[...rto],a:[...d]}}"},
 }
@@ -222,8 +220,8 @@ const output=input.Cases.map(sample=>{
 // Fp list tokenizer over a Unicode corpus, the NI eager --settings scan over
 // an ownership corpus, and the embedded eager skip sets against the binary's
 // own sets. Node executes the pinned functions verbatim at test time; the
-// archive carries no copied native bundle. Skips without a pinned Claude
-// release (2.1.288 or 2.1.312) or Node. No session, configuration or
+// archive carries no copied native bundle. Skips without an in-window pinned
+// Claude release (2.1.312) or Node. No session, configuration or
 // credential store is accessed.
 func TestPinnedClaudeNativeListAndSettingsComparison(t *testing.T) {
 	path, err := exec.LookPath(executableName)
@@ -375,22 +373,11 @@ process.stdout.write(JSON.stringify({sets:eager.sets,ni:ni,fp:fp}));`
 	for _, name := range result.Sets.A {
 		nativeOptional[name] = true
 	}
-	// Rows a release does not carry must really be absent from its sets.
-	absent := map[string]bool{}
-	for _, name := range pinned.AbsentEager {
-		if nativeScalar[name] || nativeOptional[name] {
-			t.Fatalf("eager row %s is declared absent from this release but its native sets carry it", name)
-		}
-		absent[name] = true
-	}
-	if len(claudeEagerArity)-len(absent) != len(nativeScalar)+len(nativeOptional) {
-		t.Fatalf("embedded eager table has %d rows (%d declared absent), native sets have %d scalar/variadic plus %d optional",
-			len(claudeEagerArity), len(absent), len(nativeScalar), len(nativeOptional))
+	if len(claudeEagerArity) != len(nativeScalar)+len(nativeOptional) {
+		t.Fatalf("embedded eager table has %d rows, native sets have %d scalar/variadic plus %d optional",
+			len(claudeEagerArity), len(nativeScalar), len(nativeOptional))
 	}
 	for name, arity := range claudeEagerArity {
-		if absent[name] {
-			continue
-		}
 		switch arity {
 		case eagerVariadic:
 			if !nativeScalar[name] || !nativeVariadic[name] {
