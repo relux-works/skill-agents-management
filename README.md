@@ -239,7 +239,8 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
     `deny` overrides the bypass per call. Plugin and other executable
     customization, and keys a release adds later, are unqualified too;
   - a `permissions` object in that source with any member besides `allow`, `deny`, `ask` and
-    `additionalDirectories`. 2.1.312 skips the bypass mode when
+    `additionalDirectories`, or one of those that is not an array of strings
+    (invalid settings). 2.1.312 skips the bypass mode when
     `disableBypassPermissionsMode` is `"disable"`, and `defaultMode` selects
     another mode;
   - a non-empty top-level `env` object in that source. 2.1.312 applies a

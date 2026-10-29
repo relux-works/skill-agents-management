@@ -80,7 +80,8 @@ var v3QualifiedSettingsKeys = map[string]bool{
 
 // v3QualifiedPermissionKeys are the members of an explicit settings
 // `permissions` object V3 admits beside the mapped bypass: the rule lists and
-// extra directories. Any other member is unqualified. 2.1.312's permission
+// extra directories, each an array of strings. Any other member is
+// unqualified. 2.1.312's permission
 // resolver skips the bypass mode when `disableBypassPermissionsMode` is
 // "disable", and `defaultMode` selects another mode.
 var v3QualifiedPermissionKeys = map[string]bool{
@@ -150,8 +151,28 @@ func scanYoloSettings(req agentic.LaunchRequest, grammar agentic.PermissionGramm
 		if !v3QualifiedPermissionKeys[key] {
 			return fmt.Errorf("%w: claude settings permissions member %q is not qualified under %s", agentic.ErrNativePolicyUnknown, key, grammar)
 		}
+		if !stringArray(permissions[key]) {
+			return settingsPolicyRefusal(agentic.SettingsPolicyInvalid)
+		}
 	}
 	return nil
+}
+
+// stringArray reports whether raw is a non-null JSON array whose elements
+// are all non-null strings, the shape 2.1.312 declares for every qualified
+// permissions member.
+func stringArray(raw json.RawMessage) bool {
+	var members []json.RawMessage
+	if string(raw) == "null" || json.Unmarshal(raw, &members) != nil {
+		return false
+	}
+	for _, member := range members {
+		var text string
+		if string(member) == "null" || json.Unmarshal(member, &text) != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // sortedKeys lists an object's member names in byte order, so a refusal names

@@ -463,3 +463,47 @@ func TestClaude2312YoloSettingsTopLevelAllowlist(t *testing.T) {
 		}
 	}
 }
+
+// Under V3 yolo every qualified permissions member must be a non-null array
+// of non-null strings, the shape 2.1.312 declares; a scalar, an object, null
+// or a mixed array in deny, ask, additionalDirectories or allow refuses as
+// invalid settings before any plan, through both permission request
+// channels. Empty and non-empty string arrays stay admitted.
+func TestClaude2312YoloPermissionMemberShapes(t *testing.T) {
+	t.Parallel()
+	workDir := tempSlot(t)
+	channels := map[string]func(args ...string) agentic.LaunchRequest{
+		"request-mode": func(args ...string) agentic.LaunchRequest {
+			req := interactiveRequest(workDir)
+			req.PermissionMode = agentic.PermissionModeYolo
+			req.ToolRelease = "2.1.312"
+			req.NativeArgs = args
+			return req
+		},
+		"context-descriptor": func(args ...string) agentic.LaunchRequest {
+			req := interactiveRequest(workDir)
+			req.ContextDescriptors = []agentic.ContextDescriptor{{Kind: agentic.ContextPermission, Permission: &agentic.PermissionContext{Mode: agentic.PermissionModeYolo}}}
+			req.ToolRelease = "2.1.312"
+			req.NativeArgs = args
+			return req
+		},
+	}
+	for name, yolo := range channels {
+		for _, member := range []string{"deny", "ask", "additionalDirectories", "allow"} {
+			for _, value := range []string{`"Bash(rm *)"`, `{"defaultMode":"plan"}`, `null`, `[null]`, `["Read",7]`, `[{"defaultMode":"plan"}]`} {
+				args := []string{"--settings", `{"permissions":{"` + member + `":` + value + `}}`}
+				err := planErrorFor(t, yolo(args...), agentic.LaunchModeInteractive)
+				var settingsErr *agentic.SettingsPolicyError
+				if !errors.As(err, &settingsErr) || settingsErr.Kind != agentic.SettingsPolicyInvalid {
+					t.Fatalf("%s %s=%s: err = %v, want the invalid settings kind", name, member, value, err)
+				}
+			}
+			for _, value := range []string{`[]`, `["Read","Edit"]`} {
+				args := []string{"--settings", `{"permissions":{"` + member + `":` + value + `}}`}
+				if got := argvFor(t, yolo(args...), agentic.LaunchModeInteractive); !slices.Contains(got, bypassPermissionsFlag) {
+					t.Fatalf("%s %s=%s: Argv = %#v, want a yolo plan", name, member, value, got)
+				}
+			}
+		}
+	}
+}
