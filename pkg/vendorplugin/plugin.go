@@ -33,6 +33,12 @@ func CloneModels(models []Model) []Model {
 		copied := model
 		copied.Rank.Basis = append([]RankEvidence(nil), model.Rank.Basis...)
 		copied.Effort.Vocabulary = append([]string(nil), model.Effort.Vocabulary...)
+		if model.Effort.OperatorAccepts != nil {
+			copied.Effort.OperatorAccepts = append([]string(nil), model.Effort.OperatorAccepts...)
+		}
+		if model.Effort.Scale != nil {
+			copied.Effort.Scale = append([]string(nil), model.Effort.Scale...)
+		}
 		copied.Systems = append([]agentic.SystemID(nil), model.Systems...)
 		copied.Pricing = model.Pricing.Clone()
 		if model.CacheBudgetBytes != nil {

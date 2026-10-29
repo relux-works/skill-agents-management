@@ -266,8 +266,11 @@ func SortEfforts(efforts []string) []string {
 	return sorted
 }
 
-// EffortsUnderBound returns the efforts one model admits under a single shared
-// bound, in ascending order.
+// EffortsUnderBound returns the efforts one model's OWN declaration admits under
+// a single shared bound, in ascending order of the module's scale. It reads
+// Vocabulary only and ranks by EffortOrder, never by an operator catalog's
+// additions: it is what frozen policy (the v2 snapshot) expands, and a catalog
+// must not widen that. EffectiveEffortsUnderBound is the operator-aware form.
 //
 //   - A model with NO effort axis admits exactly [""], whatever the bound says.
 //     That is not the bound being ignored: such a model has one pair, and its
@@ -303,6 +306,65 @@ func EffortsUnderBound(model Model, bound string, criterion EffortCriterion) []s
 				continue
 			}
 		} else if rank > boundRank {
+			continue
+		}
+		admitted = append(admitted, effort)
+	}
+	return admitted
+}
+
+// EffectiveEffortsUnderBound is EffortsUnderBound over the row's effective
+// vocabulary (its own words plus Effort.OperatorAccepts), ranked on the row's
+// effective scale (Effort.Scale, or EffortOrder when nil). A bound word that
+// scale cannot place admits nothing; a vocabulary word it cannot place is
+// never admitted under a bound. It is for policy that is not frozen.
+func EffectiveEffortsUnderBound(model Model, bound string, criterion EffortCriterion) []string {
+	if model.Effort.Support != agentic.EffortSupportRequired {
+		return []string{""}
+	}
+	scale := model.Effort.Scale
+	if scale == nil {
+		scale = effortOrder
+	}
+	rank := func(word string) (int, bool) {
+		for i, candidate := range scale {
+			if candidate == word {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+	words := append(append([]string(nil), model.Effort.Vocabulary...), model.Effort.OperatorAccepts...)
+	sort.SliceStable(words, func(i, j int) bool {
+		left, leftKnown := rank(words[i])
+		right, rightKnown := rank(words[j])
+		if leftKnown && rightKnown {
+			return left < right
+		}
+		if leftKnown != rightKnown {
+			return leftKnown
+		}
+		return words[i] < words[j]
+	})
+	bound = strings.TrimSpace(bound)
+	if bound == "" {
+		return words
+	}
+	boundRank, known := rank(bound)
+	if !known {
+		return nil
+	}
+	admitted := make([]string, 0, len(words))
+	for _, effort := range words {
+		position, ok := rank(effort)
+		if !ok {
+			continue
+		}
+		if criterion == EffortCriterionGreaterOrEqual {
+			if position < boundRank {
+				continue
+			}
+		} else if position > boundRank {
 			continue
 		}
 		admitted = append(admitted, effort)

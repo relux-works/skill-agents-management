@@ -262,6 +262,60 @@ value absent is discoverable as unbound. A present value with the wrong TOML
 type is malformed. Profile spelling is preserved exactly for the Curator
 consumer. No implicit profile, runtime, credential, or launch mode is selected.
 
+## `~/.curator/catalog.toml` (model catalog, `model-catalog/1`)
+
+The model catalog declares what can be launched, as plain strings in a
+vendor > model > reasoning hierarchy, so a new model or reasoning word needs no
+code change. It is additive to the module's own declarations and never removes,
+renames or narrows them.
+
+```toml
+schema_version = 1
+
+[[effort_scale]]
+word  = "deepest"     # a new reasoning word
+after = "max"         # a word already on the scale (the module's or an earlier entry)
+
+[vendors.openai.models."gpt-6-9-example"]
+description = "What the model is best used for"   # optional
+systems     = ["codex"]                            # required for a new row
+aliases     = ["g69"]                              # optional
+lifecycle   = "current"                            # optional: current | preview | legacy
+effort      = { support = "required", accepts = ["low", "high", "deepest"], recommended = "low" }
+
+[vendors.openai.models."gpt-6-astra"]              # a module row
+effort      = { accepts = ["minimal"] }            # only accepts may extend it
+```
+
+- `vendors` keys are registered vendor ids. A vendor the module does not
+  register refuses as `unsupported`: a vendor also owns spawn and availability.
+- A new row needs `systems` and an `effort` table with `support`
+  (`required` or `none`). A `required` row also needs a non-empty `accepts` and
+  a `recommended` word from it; a `none` row carries neither. It is an operator-declared row: admitted when named
+  explicitly, never placed in a lineup or picked by a default.
+- A row naming a module model may only carry `effort = { accepts = [...] }`. The
+  words are added to that model and to every alias of it, as
+  `EffortDeclaration.OperatorAccepts`: launches admit them, but the module's own
+  `Vocabulary` is unchanged, so frozen policy (the v2 snapshot) never widens.
+  One explicit exception: a v2 `equal` ceiling names its model directly rather
+  than through the frozen tiers, so an `equal` ceiling naming a catalog-only id
+  becomes expandable once that id is catalogued. That is the ceiling author's
+  explicit choice, not a widening of ordered membership. Anything else
+  refuses as `conflicting`, as does extending a model with no effort axis or an
+  id or alias that collides with an existing row.
+- Every effort word must be on the effective scale (the module's order extended
+  by `[[effort_scale]]`). An unknown word refuses as `unsupported`. Each
+  effort-bearing row of a vendor with an extended scale carries it as
+  `EffortDeclaration.Scale`, and `vendorplugin.EffectiveEffortsUnderBound` ranks
+  bounds on it; `EffortsUnderBound` stays the module-only, frozen-policy form.
+- Diagnostics name only validated identifiers. An unknown key or an invalid id
+  is reported by a fixed label, never by its text. A scale
+  entry with an unknown `after`, a word already on the scale, or two entries
+  claiming one position refuse.
+- Unknown keys refuse as `malformed`; a newer `schema_version` refuses as
+  `unsupported`; a missing file is the empty catalog; an unreadable one is
+  `read_failed`.
+
 ## Discovery and typed refusal contract
 
 Preflight returns one row per requested role, including roles without a table.

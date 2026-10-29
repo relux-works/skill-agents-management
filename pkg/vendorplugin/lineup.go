@@ -49,7 +49,18 @@ type RankedModel struct {
 // The input is not modified and the models are deep-copied on the way out, so a
 // caller ranging over the answer cannot reach a plugin's own table through it —
 // the same rule Vendor.Models() answers under.
+//
+// Operator-declared rows (Model.OperatorDeclared) are left out: they carry no
+// observed score, so they are never ranked and never picked by a lineup
+// fallback. They stay admissible when a caller names them explicitly.
 func Lineup(models []Model) []RankedModel {
+	listed := make([]Model, 0, len(models))
+	for _, model := range models {
+		if !model.OperatorDeclared {
+			listed = append(listed, model)
+		}
+	}
+	models = listed
 	scores := make([]int, 0, len(models))
 	for _, model := range models {
 		scores = append(scores, model.Rank.Score)
