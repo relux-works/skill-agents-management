@@ -31,6 +31,7 @@
 --environment	scalar
 --exec	scalar
 --fallback-model	scalar
+--fast-mode	scalar
 --file	variadic
 --forward-home-settings	scalar
 --from-pr	optional
@@ -73,6 +74,7 @@
 --resume-session-at	scalar
 --rewind-files	scalar
 --routine	scalar
+--runner-declares	scalar
 --sdk-url	scalar
 --session-id	scalar
 --setting-sources	scalar

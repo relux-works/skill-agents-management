@@ -192,14 +192,17 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   version. Each plugin except `muse` holds its own environment's rows and
   `LookupReleaseCapability` is the single reader; there is no central map
   keyed by system id (the single-source guard forbids a second binding
-  table). Claude and Codex 0.153.2 use `permission-grammar-v2`, which adds the known
+  table). Claude 2.1.261 and Codex 0.153.2 use `permission-grammar-v2`, which adds the known
   conflict selectors above; Codex 0.164.0 uses `permission-grammar-v3`, adding
-  refusal of unqualified policy aliases and attached short policy forms; Muse and Pi use `permission-grammar-v1`. The token is
+  refusal of unqualified policy aliases and attached short policy forms; Claude
+  2.1.312 uses `permission-grammar-v3`, adding refusal of unqualified permission
+  selectors; Muse and Pi use `permission-grammar-v1`. The token is
   passed through the capability row for the launcher to cite:
 
   | environment | verified tool release | grammar | yolo |
   |---|---|---|---|
   | `claude-code` | 2.1.261 | `permission-grammar-v2` | `--dangerously-skip-permissions` |
+  | `claude-code` | 2.1.312 | `permission-grammar-v3` | `--dangerously-skip-permissions` |
   | `codex` | 0.153.2 | `permission-grammar-v2` | `--dangerously-bypass-approvals-and-sandbox` |
   | `codex` | 0.164.0 | `permission-grammar-v3` | `--dangerously-bypass-approvals-and-sandbox` |
   | `muse` | attested build, any release | `permission-grammar-v1` | `--yolo` (help evidence) |
@@ -216,6 +219,19 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   root options whose arity is not modeled remain indeterminate for command classification. An
   operator selection of unrestricted access maps to explicit `yolo`; `native`
   adds no permission flag and makes no access guarantee.
+
+  Claude 2.1.312 was qualified against its installed binary. Its help lists the
+  same six `--permission-mode` values and the bypass flag, and every visible
+  option keeps its pinned arity. The pinned comparison tests run the binary's
+  own Commander parser, disallowed-tools normalizer and eager `--settings`
+  scan. The anchors are release-keyed, so the tests run on 2.1.288 and 2.1.312
+  and skip on any other release. The release adds two hidden options with a
+  required value, `--fast-mode` and `--runner-declares`, and the option and
+  eager tables now own their value. Under yolo, V3 keeps the V2 refusals and
+  also refuses `--inherit-permission-mode`, `--plan-mode-required`,
+  `--permission-prompts` and `--enable-auto-mode`, because the qualification
+  did not prove how they interact with the bypass. Native forwards them
+  verbatim, and the 2.1.261 row is unchanged.
 
   The caller establishes the running release by probing the resolved binary
   (`ProbeToolRelease`: `<binary> --version` against the launch environment —
@@ -278,9 +294,9 @@ interactive result.
 
 | Launcher env-id | System | Verified release | Form | Tested placement |
 |---|---|---|---|---|
-| `claude_code` | `claude-code` | `2.1.261` | print | short flag `-p` |
-| `claude_code` | `claude-code` | `2.1.261` | print | equals value `--print=true` |
-| `claude_code` | `claude-code` | `2.1.261` | print | flag followed by a separate prompt |
+| `claude_code` | `claude-code` | `2.1.261`, `2.1.312` | print | short flag `-p` |
+| `claude_code` | `claude-code` | `2.1.261`, `2.1.312` | print | equals value `--print=true` |
+| `claude_code` | `claude-code` | `2.1.261`, `2.1.312` | print | flag followed by a separate prompt |
 | `codex_cli` | `codex` | `0.153.2`, `0.164.0` | exec (`exec` or `e`) | first command token |
 | `codex_cli` | `codex` | `0.153.2`, `0.164.0` | exec (`exec` or `e`) | after an equals-form root option |
 | `codex_cli` | `codex` | `0.153.2`, `0.164.0` | exec (`exec` or `e`) | after a separate-value root option |

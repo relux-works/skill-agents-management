@@ -228,7 +228,7 @@ func interactiveArgs(req agentic.LaunchRequest, context contextValues) ([]string
 		mapping = mappingValue
 	}
 	// The yolo scan shares the pinned option ownership parser.
-	if err := scanNativePolicy(req.NativeArgs); err != nil {
+	if err := scanNativePolicy(req.NativeArgs, mapping.Grammar); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
 	return append(append(args, mapping.Flag), rest...), nil

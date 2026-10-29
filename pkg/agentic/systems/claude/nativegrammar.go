@@ -6,10 +6,12 @@ import (
 	"strings"
 )
 
-// Pinned Claude 2.1.288 --help option arities. Required options own their next
-// token even when dash-leading (including the first variadic value). Optional
-// values and later variadic values stop at dash-leading tokens. An attached
-// long value ends that occurrence. The pinned Commander parseOptions method
+// Pinned Claude 2.1.288 --help option arities, plus the two hidden required
+// options 2.1.312 adds (--fast-mode, --runner-declares), which 2.1.288's own
+// tables do not carry. Required options own their next token even when
+// dash-leading (including the first variadic value). Optional values and later
+// variadic values stop at dash-leading tokens. An attached long value ends
+// that occurrence. The pinned Commander parseOptions method
 // also accepts attached short scalar values and combined short switches.
 type optionArity uint8
 
@@ -31,6 +33,7 @@ var claudeOptionTable string
 // The eager scanner sets are data for the same reason: the pinned native NI
 // skip sets name value-taking options (including --effort and
 // --append-system-prompt-file), and Go literals would trip the argv-site guard.
+// The table is 2.1.288's sets plus the two scalar members 2.1.312 adds.
 //
 //go:embed claude-2.1.288-eager.tsv
 var claudeEagerTable string

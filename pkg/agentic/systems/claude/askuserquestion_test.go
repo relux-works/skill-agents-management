@@ -607,8 +607,8 @@ func TestPinnedClaudeAcceptsDisallowedTools(t *testing.T) {
 	if versionErr != nil {
 		t.Fatalf("claude --version: %v", versionErr)
 	}
-	if strings.TrimSpace(string(version)) != "2.1.288 (Claude Code)" {
-		t.Skipf("installed version %q is not pinned 2.1.288", version)
+	if release, suffixed := strings.CutSuffix(strings.TrimSpace(string(version)), " (Claude Code)"); !suffixed || pinnedClaudeReleases[release].ListName == "" {
+		t.Skipf("installed version %q is not a pinned release", version)
 	}
 	help, err := exec.CommandContext(ctx, path, "--help").Output()
 	if err != nil {

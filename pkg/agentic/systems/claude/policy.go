@@ -12,14 +12,18 @@ import (
 // tool releases whose yolo mapping this plugin verified, each under the
 // grammar version it was verified against.
 //
-// There is exactly one row: claude 2.1.261, the release this plugin's
-// grammar comments were checked against. The mapping it verifies is the
-// bypass const in args.go; the grammar it names closes the
-// `--permission-mode` values below. A newer release — installed 2.1.274
-// included — has no row until it is re-verified, and yolo there fails
-// closed while native forwards verbatim.
+// The 2.1.261 row is the release this plugin's grammar comments were first
+// checked against. The 2.1.312 row was qualified against the installed
+// binary: its help, the Commander parser and the eager settings scan (the
+// pinned comparison tests run the native functions), the six
+// `--permission-mode` values and the bypass flag. Its V3 grammar retains V2
+// and refuses the permission selectors whose interaction with the mapped
+// bypass that qualification did not prove (v3UnqualifiedSelectors). Any other
+// release has no row, and yolo there fails closed while native forwards
+// verbatim.
 var verifiedReleases = []agentic.ReleaseCapability{
 	{Release: "2.1.261", Grammar: agentic.PermissionGrammarV2, YoloSupported: true},
+	{Release: "2.1.312", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 }
 
 // permissionModeFlag is the session policy selector whose VALUES are
@@ -32,7 +36,23 @@ const (
 	restrictedFlag                      = "--restricted"
 	printShortFlag                      = "-p"
 	printLongFlag                       = "--print"
+	inheritPermissionModeFlag           = "--inherit-permission-mode"
+	planModeRequiredFlag                = "--plan-mode-required"
+	permissionPromptsFlag               = "--permission-prompts"
+	enableAutoModeFlag                  = "--enable-auto-mode"
 )
+
+// v3UnqualifiedSelectors are 2.1.312 permission selectors that parse, but
+// whose interaction with the mapped bypass was not qualified: a mode carried
+// from a parent session, required plan mode, who answers prompts, and the
+// deprecated auto-mode opt-in. V3 refuses them under yolo; native forwards
+// them verbatim, and the V2 row keeps forwarding them as before.
+var v3UnqualifiedSelectors = map[string]bool{
+	inheritPermissionModeFlag: true,
+	planModeRequiredFlag:      true,
+	permissionPromptsFlag:     true,
+	enableAutoModeFlag:        true,
+}
 
 // ClassifyNonInteractiveArgs reports whether the caller suffix selects
 // Claude's print form. It uses the same exact release row and permission
@@ -117,13 +137,17 @@ var knownPermissionModes = map[string]bool{
 // name. The mapped bypass flag remains the duplicate refusal, in exact or
 // `=` form, because the plan would otherwise emit it twice.
 //
+// Under V3 the v3UnqualifiedSelectors are refused as unknown policy forms.
 // Everything else is forwarded verbatim with no claim, including unknown
 // top-level flags. Flag positions come only from claudeFlagIndexes, so
 // prompt text after `--` is not inspected.
-func scanNativePolicy(args []string) error {
+func scanNativePolicy(args []string, grammar agentic.PermissionGrammarVersion) error {
 	for _, i := range claudeFlagIndexes(args) {
 		el := args[i]
 		name, value, hasValue := nativeargs.SplitFlagValue(el)
+		if grammar == agentic.PermissionGrammarV3 && v3UnqualifiedSelectors[name] {
+			return fmt.Errorf("%w: claude policy selector %q is not qualified under %s", agentic.ErrNativePolicyUnknown, name, grammar)
+		}
 		if name == permissionModeFlag {
 			mode := value
 			placement := agentic.NativePolicyPlacementEquals
@@ -135,7 +159,7 @@ func scanNativePolicy(args []string) error {
 				placement = agentic.NativePolicyPlacementSeparateToken
 			}
 			if !knownPermissionModes[mode] {
-				return fmt.Errorf("%w: %s mode %q is not one of the six verified under %s", agentic.ErrNativePolicyUnknown, permissionModeFlag, mode, agentic.PermissionGrammarV2)
+				return fmt.Errorf("%w: %s mode %q is not one of the six verified under %s", agentic.ErrNativePolicyUnknown, permissionModeFlag, mode, grammar)
 			}
 			return &agentic.NativePolicyConflictError{Selector: name, Placement: placement}
 		}
