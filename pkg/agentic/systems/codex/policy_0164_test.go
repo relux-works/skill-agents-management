@@ -179,7 +179,9 @@ func TestCodex0164Classification(t *testing.T) {
 // no permission mapping or classification and cannot build a yolo plan.
 func TestCodex0164NeighboursRemainUnverified(t *testing.T) {
 	t.Parallel()
-	for _, release := range []string{"0.163.0", "0.164.1"} {
+	// 0.163.0 now has independent exact-build evidence; its patch neighbor
+	// remains unqualified. Keep the original drift test and its assertions.
+	for _, release := range []string{"0.163.1", "0.164.1"} {
 		for _, mode := range []agentic.PermissionMode{agentic.PermissionModeNative, agentic.PermissionModeYolo} {
 			if got, err := New().PermissionMapping(release, mode); !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) || got != (agentic.PermissionMapping{}) {
 				t.Fatalf("%s mapping=%#v err=%v", release, got, err)

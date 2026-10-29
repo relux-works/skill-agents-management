@@ -17,11 +17,15 @@ import (
 // help, config validation and generated schema; see
 // curator/docs/qualification/codex-0.164.0.md (record PR:
 // https://github.com/relux-works/curator/pull/200). The V3 row retains the V2
-// subset and refuses unqualified alias/attached forms. Unlisted releases still
-// fail closed for mapping and classification.
+// subset and refuses unqualified alias/attached forms. Independent exact Linux
+// 0.163.0 and 0.165.0 evidence is recorded in
+// testdata/permission-qualification.md. Unlisted releases still fail closed
+// for mapping and classification.
 var verifiedReleases = []agentic.ReleaseCapability{
 	{Release: "0.153.2", Grammar: agentic.PermissionGrammarV2, YoloSupported: true},
+	{Release: "0.163.0", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 	{Release: "0.164.0", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
+	{Release: "0.165.0", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 }
 
 // configFlag and configFlagLong are the two spellings of the config
@@ -139,9 +143,9 @@ func classifyCodexNonInteractiveForm(suffix []string, toolRelease string) (agent
 			return agentic.NonInteractiveFormNone, nil
 		}
 		name, _, hasValue := nativeargs.SplitFlagValue(el)
-		// 0.164.0 removed this old scalar option. Do not infer a command
-		// behind it; the existing unknown-option path must refuse instead.
-		if codexRootOptionTakesValue(name) && (toolRelease != "0.164.0" || name != "--remote-auth-token") {
+		// Only the historical 0.153.2 row qualified this old scalar option.
+		// Exact 0.163.0, 0.164.0 and 0.165.0 reject it; never infer a command behind it.
+		if codexRootOptionTakesValue(name) && (toolRelease == "0.153.2" || name != "--remote-auth-token") {
 			if !hasValue {
 				if i+1 >= len(suffix) || nativeargs.IsSeparator(suffix[i+1]) {
 					return agentic.NonInteractiveFormNone, nil
