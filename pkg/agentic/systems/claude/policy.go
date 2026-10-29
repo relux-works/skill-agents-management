@@ -1,7 +1,9 @@
 package claude
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/relux-works/skill-agents-management/internal/nativeargs"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
@@ -41,18 +43,78 @@ const (
 	planModeRequiredFlag                = "--plan-mode-required"
 	permissionPromptsFlag               = "--permission-prompts"
 	enableAutoModeFlag                  = "--enable-auto-mode"
+	managedSettingsFlag                 = "--managed-settings"
+	projectConfigRootFlag               = "--project-config-root"
 )
 
 // v3UnqualifiedSelectors are 2.1.312 permission selectors that parse, but
 // whose interaction with the mapped bypass was not qualified: a mode carried
-// from a parent session, required plan mode, who answers prompts, and the
-// deprecated auto-mode opt-in. V3 refuses them under yolo; native forwards
-// them verbatim, and the V2 row keeps forwarding them as before.
+// from a parent session, required plan mode, who answers prompts, the
+// deprecated auto-mode opt-in, and the two explicit configuration sources
+// this module does not inspect, policy-tier managed settings and an alternate
+// project configuration root. Either can carry permission settings that turn
+// the bypass off. V3 refuses them under yolo; native forwards them verbatim.
 var v3UnqualifiedSelectors = map[string]bool{
 	inheritPermissionModeFlag: true,
 	planModeRequiredFlag:      true,
 	permissionPromptsFlag:     true,
 	enableAutoModeFlag:        true,
+	managedSettingsFlag:       true,
+	projectConfigRootFlag:     true,
+}
+
+// v3QualifiedPermissionKeys are the members of an explicit settings
+// `permissions` object V3 admits beside the mapped bypass: the rule lists and
+// extra directories. Any other member is unqualified. 2.1.312's permission
+// resolver skips the bypass mode when `disableBypassPermissionsMode` is
+// "disable", and `defaultMode` selects another mode.
+var v3QualifiedPermissionKeys = map[string]bool{
+	"allow":                 true,
+	"deny":                  true,
+	"ask":                   true,
+	"additionalDirectories": true,
+}
+
+// scanYoloSettings inspects the effective explicit --settings source, inline
+// JSON or a file, under V3 yolo, and refuses an unqualified permissions
+// member before launch. It reads the same source checkSettingsPolicy selects,
+// rewrites nothing, and leaves implicit user, project and managed
+// configuration outside this argv policy.
+func scanYoloSettings(req agentic.LaunchRequest, grammar agentic.PermissionGrammarVersion) error {
+	if grammar != agentic.PermissionGrammarV3 {
+		return nil
+	}
+	var source string
+	if value, present, err := effectiveSettingsSource(req.NativeArgs); err != nil {
+		return err
+	} else if !present {
+		return nil
+	} else {
+		source = value
+	}
+	settings, kind := readSettingsObject(source, req.WorkDir)
+	if kind != "" {
+		return settingsPolicyRefusal(kind)
+	}
+	raw, present := settings["permissions"]
+	if !present {
+		return nil
+	}
+	var permissions map[string]json.RawMessage
+	if json.Unmarshal(raw, &permissions) != nil || permissions == nil {
+		return settingsPolicyRefusal(agentic.SettingsPolicyInvalid)
+	}
+	keys := make([]string, 0, len(permissions))
+	for key := range permissions {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if !v3QualifiedPermissionKeys[key] {
+			return fmt.Errorf("%w: claude settings permissions member %q is not qualified under %s", agentic.ErrNativePolicyUnknown, key, grammar)
+		}
+	}
+	return nil
 }
 
 // ClassifyNonInteractiveArgs reports whether the caller suffix selects

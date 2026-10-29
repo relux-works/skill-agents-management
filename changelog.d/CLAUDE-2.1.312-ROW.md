@@ -2,8 +2,11 @@
   `permission-grammar-v3` yolo row mapping to `--dangerously-skip-permissions`.
   V3 retains every V2 refusal and also refuses `--inherit-permission-mode`,
   `--plan-mode-required`, `--permission-prompts` and `--enable-auto-mode` under
-  yolo, since their interaction with the bypass is not qualified; native
-  forwards them. The option and eager tables gain the hidden required options
+  yolo, since their interaction with the bypass is not qualified. It also
+  refuses `--managed-settings`, `--project-config-root`, and an explicit
+  `--settings` source whose `permissions` object carries anything besides
+  `allow`, `deny`, `ask` and `additionalDirectories` (for example
+  `disableBypassPermissionsMode` or `defaultMode`). Native forwards them. The option and eager tables gain the hidden required options
   `--fast-mode` and `--runner-declares`, and the pinned native comparisons are
   keyed by release so they run against the installed 2.1.312.
 - Retire the Claude 2.1.261 yolo row under the owner's harness support window

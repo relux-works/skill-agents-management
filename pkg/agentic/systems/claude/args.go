@@ -231,6 +231,9 @@ func interactiveArgs(req agentic.LaunchRequest, context contextValues) ([]string
 	if err := scanNativePolicy(req.NativeArgs, mapping.Grammar); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
+	if err := scanYoloSettings(req, mapping.Grammar); err != nil {
+		return nil, fmt.Errorf("claude: %w", err)
+	}
 	return append(append(args, mapping.Flag), rest...), nil
 }
 

@@ -147,6 +147,9 @@ func buildContextValues(req agentic.LaunchRequest, mode agentic.LaunchMode) (con
 		if err := scanNativePolicy(req.NativeArgs, mapping.Grammar); err != nil {
 			return values, fmt.Errorf("claude: %w", err)
 		}
+		if err := scanYoloSettings(req, mapping.Grammar); err != nil {
+			return values, fmt.Errorf("claude: %w", err)
+		}
 	}
 	values.permission = effective
 	if err := rejectNativeContextConflicts(req.NativeArgs, values); err != nil {

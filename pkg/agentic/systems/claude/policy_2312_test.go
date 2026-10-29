@@ -2,6 +2,8 @@ package claude
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -180,6 +182,86 @@ func TestClaudeRetiredReleaseRefusesYolo(t *testing.T) {
 		req.PermissionMode = agentic.PermissionModeNative
 		if got, want := argvFor(t, req, agentic.LaunchModeInteractive), append(append([]string{}, base...), args...); !reflect.DeepEqual(got, want) {
 			t.Fatalf("native 2.1.261 %q: Argv = %#v, want %#v", args, got, want)
+		}
+	}
+}
+
+// Under V3 yolo an explicit settings source whose permissions object carries
+// any member other than the rule lists and extra directories refuses before
+// any plan: disableBypassPermissionsMode, which 2.1.312 reads to skip the
+// bypass mode, defaultMode, and an unknown member, inline in separate and
+// equals form, from a file, and as the last of repeated sources. The same
+// arguments forward at native. The positives keep harmless settings, the
+// qualified members and a refused source followed by a harmless last one
+// (native takes the last), so the guard does not refuse every settings use.
+// A source it cannot read, decode or select refuses with its settings kind.
+func TestClaude2312YoloRefusesUnqualifiedSettings(t *testing.T) {
+	t.Parallel()
+	disable := `{"permissions":{"disableBypassPermissionsMode":"disable"}}`
+	workDir := tempSlot(t)
+	if err := os.WriteFile(filepath.Join(workDir, "perm.json"), []byte(disable), 0600); err != nil {
+		t.Fatal(err)
+	}
+	request := func(mode agentic.PermissionMode, args ...string) agentic.LaunchRequest {
+		req := interactiveRequest(workDir)
+		req.PermissionMode = mode
+		req.ToolRelease = "2.1.312"
+		req.NativeArgs = args
+		return req
+	}
+	for _, c := range []struct {
+		member string
+		args   []string
+	}{
+		{"disableBypassPermissionsMode", []string{"--settings", disable}},
+		{"disableBypassPermissionsMode", []string{"--settings=" + disable}},
+		{"disableBypassPermissionsMode", []string{"--settings", "perm.json"}},
+		{"disableBypassPermissionsMode", []string{"--settings", `{"model":"x"}`, "--settings", disable}},
+		{"defaultMode", []string{"--settings", `{"permissions":{"defaultMode":"plan"}}`}},
+		{"futureKey", []string{"--settings", `{"permissions":{"allow":[],"futureKey":1}}`}},
+		{managedSettingsFlag, []string{"--managed-settings", disable}},
+		{managedSettingsFlag, []string{"--managed-settings=" + disable}},
+		{projectConfigRootFlag, []string{"--project-config-root", workDir}},
+	} {
+		t.Run(strings.Join(c.args, " "), func(t *testing.T) {
+			err := planErrorFor(t, request(agentic.PermissionModeYolo, c.args...), agentic.LaunchModeInteractive)
+			if !errors.Is(err, agentic.ErrNativePolicyUnknown) {
+				t.Fatalf("yolo: err = %v, want ErrNativePolicyUnknown", err)
+			}
+			for _, want := range []string{c.member, string(agentic.PermissionGrammarV3)} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("refusal %q does not name %q", err, want)
+				}
+			}
+			want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, c.args...)
+			if got := argvFor(t, request(agentic.PermissionModeNative, c.args...), agentic.LaunchModeInteractive); !reflect.DeepEqual(got, want) {
+				t.Fatalf("native: Argv = %#v, want %#v", got, want)
+			}
+		})
+	}
+	for _, c := range []struct {
+		kind agentic.SettingsPolicyFailureKind
+		args []string
+	}{
+		{agentic.SettingsPolicyInvalid, []string{"--settings", `{"permissions":[]}`}},
+		{agentic.SettingsPolicyUnreadable, []string{"--settings", "missing.json"}},
+		{agentic.SettingsPolicyAmbiguous, []string{"--settings", disable, "--settings"}},
+	} {
+		err := planErrorFor(t, request(agentic.PermissionModeYolo, c.args...), agentic.LaunchModeInteractive)
+		var settingsErr *agentic.SettingsPolicyError
+		if !errors.As(err, &settingsErr) || settingsErr.Kind != c.kind {
+			t.Fatalf("yolo %q: err = %v, want settings kind %s", c.args, err, c.kind)
+		}
+	}
+	for _, args := range [][]string{
+		nil,
+		{"--settings", `{"model":"claude-x"}`},
+		{"--settings", `{"permissions":{"allow":["Read"],"deny":["Bash(rm *)"],"ask":["Edit"],"additionalDirectories":["/tmp"]}}`},
+		{"--settings", disable, "--settings", `{"model":"x"}`},
+	} {
+		want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag}, args...)
+		if got := argvFor(t, request(agentic.PermissionModeYolo, args...), agentic.LaunchModeInteractive); !reflect.DeepEqual(got, want) {
+			t.Fatalf("yolo %q: Argv = %#v, want %#v", args, got, want)
 		}
 	}
 }

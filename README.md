@@ -229,8 +229,17 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   eager tables now own their value. Under yolo, V3 keeps the V2 refusals and
   also refuses `--inherit-permission-mode`, `--plan-mode-required`,
   `--permission-prompts` and `--enable-auto-mode`, because the qualification
-  did not prove how they interact with the bypass. Native forwards them
-  verbatim.
+  did not prove how they interact with the bypass. It also refuses the explicit
+  configuration it cannot vouch for:
+  - `--managed-settings` and `--project-config-root`;
+  - an effective `--settings` source, inline or a file, whose `permissions`
+    object carries any member besides `allow`, `deny`, `ask` and
+    `additionalDirectories`. 2.1.312 skips the bypass mode when
+    `disableBypassPermissionsMode` is `"disable"`, and `defaultMode` selects
+    another mode.
+
+  Native forwards all of these verbatim, and implicit user and project
+  configuration stays outside this argv policy.
 
   The Claude 2.1.261 row is retired under the owner's support window
   (2026-10-29: harness releases from about the last two weeks). The Claude
