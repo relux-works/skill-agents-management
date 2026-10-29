@@ -236,7 +236,12 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
     object carries any member besides `allow`, `deny`, `ask` and
     `additionalDirectories`. 2.1.312 skips the bypass mode when
     `disableBypassPermissionsMode` is `"disable"`, and `defaultMode` selects
-    another mode.
+    another mode;
+  - a non-empty top-level `env` object in that source. 2.1.312 applies a
+    flag-settings `env` to its own process before it resolves the permission
+    mode, and `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` forces mode `default` over
+    the bypass flag. No `env` member is qualified yet, and an `env` variable
+    can also redirect configuration roots.
 
   Native forwards all of these verbatim, and implicit user and project
   configuration stays outside this argv policy.

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -287,6 +288,87 @@ func TestClaudeOutOfWindowNativeScansUseInWindowTables(t *testing.T) {
 		req.NativeArgs = []string{"--allowedTools=AskUserQuestion"}
 		if err := planErrorFor(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrDeniedToolReEnabled) {
 			t.Fatalf("native %s bare re-enable: err = %v, want ErrDeniedToolReEnabled", release, err)
+		}
+	}
+}
+
+// Under V3 yolo a non-empty top-level `env` in the effective explicit settings
+// refuses before any plan, through both permission request channels (the
+// request's mode and the permission context descriptor). This covers the
+// scrub variable that makes 2.1.312 fall back to mode "default" over the
+// bypass, inline in separate and equals form, from a file, beside qualified
+// permissions, as the last of repeated sources, and any other env member.
+// Native forwards each form. Positives: an empty env, and a scrub source
+// followed by a harmless last source, which native takes instead. A non-object
+// env refuses as invalid settings.
+func TestClaude2312YoloRefusesSettingsEnv(t *testing.T) {
+	t.Parallel()
+	scrub := `{"env":{"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB":"1"}}`
+	workDir := tempSlot(t)
+	if err := os.WriteFile(filepath.Join(workDir, "scrub.json"), []byte(scrub), 0600); err != nil {
+		t.Fatal(err)
+	}
+	channels := map[string]func(args ...string) agentic.LaunchRequest{
+		"request-mode": func(args ...string) agentic.LaunchRequest {
+			req := interactiveRequest(workDir)
+			req.PermissionMode = agentic.PermissionModeYolo
+			req.ToolRelease = "2.1.312"
+			req.NativeArgs = args
+			return req
+		},
+		"context-descriptor": func(args ...string) agentic.LaunchRequest {
+			req := interactiveRequest(workDir)
+			req.ContextDescriptors = []agentic.ContextDescriptor{{Kind: agentic.ContextPermission, Permission: &agentic.PermissionContext{Mode: agentic.PermissionModeYolo}}}
+			req.ToolRelease = "2.1.312"
+			req.NativeArgs = args
+			return req
+		},
+	}
+	for name, yolo := range channels {
+		for _, c := range []struct {
+			member string
+			args   []string
+		}{
+			{"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", []string{"--settings", scrub}},
+			{"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", []string{"--settings=" + scrub}},
+			{"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", []string{"--settings", "scrub.json"}},
+			{"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", []string{"--settings", `{"model":"x"}`, "--settings", scrub}},
+			{"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", []string{"--settings", `{"permissions":{"deny":["Bash(rm *)"]},"env":{"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB":"1"}}`}},
+			{"CLAUDE_CONFIG_DIR", []string{"--settings", `{"env":{"CLAUDE_CONFIG_DIR":"/tmp/elsewhere"}}`}},
+		} {
+			t.Run(name+"/"+strings.Join(c.args, " "), func(t *testing.T) {
+				err := planErrorFor(t, yolo(c.args...), agentic.LaunchModeInteractive)
+				if !errors.Is(err, agentic.ErrNativePolicyUnknown) {
+					t.Fatalf("yolo: err = %v, want ErrNativePolicyUnknown", err)
+				}
+				for _, want := range []string{c.member, string(agentic.PermissionGrammarV3)} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("refusal %q does not name %q", err, want)
+					}
+				}
+			})
+		}
+		err := planErrorFor(t, yolo("--settings", `{"env":"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1"}`), agentic.LaunchModeInteractive)
+		var settingsErr *agentic.SettingsPolicyError
+		if !errors.As(err, &settingsErr) || settingsErr.Kind != agentic.SettingsPolicyInvalid {
+			t.Fatalf("%s non-object env: err = %v, want the invalid settings kind", name, err)
+		}
+		for _, args := range [][]string{
+			{"--settings", `{"env":{}}`},
+			{"--settings", scrub, "--settings", `{"model":"x"}`},
+		} {
+			if got := argvFor(t, yolo(args...), agentic.LaunchModeInteractive); !slices.Contains(got, bypassPermissionsFlag) || !slices.Equal(got[len(got)-len(args):], args) {
+				t.Fatalf("%s %q: Argv = %#v, want the bypass and the caller settings unchanged", name, args, got)
+			}
+		}
+	}
+	native := interactiveRequest(workDir)
+	native.ToolRelease = "2.1.312"
+	for _, args := range [][]string{{"--settings", scrub}, {"--settings", "scrub.json"}, {"--settings", `{"env":{"CLAUDE_CONFIG_DIR":"/tmp/elsewhere"}}`}} {
+		native.NativeArgs = args
+		want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, args...)
+		if got := argvFor(t, native, agentic.LaunchModeInteractive); !reflect.DeepEqual(got, want) {
+			t.Fatalf("native %q: Argv = %#v, want %#v", args, got, want)
 		}
 	}
 }

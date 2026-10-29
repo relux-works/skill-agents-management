@@ -6,7 +6,9 @@
   refuses `--managed-settings`, `--project-config-root`, and an explicit
   `--settings` source whose `permissions` object carries anything besides
   `allow`, `deny`, `ask` and `additionalDirectories` (for example
-  `disableBypassPermissionsMode` or `defaultMode`). Native forwards them.
+  `disableBypassPermissionsMode` or `defaultMode`), or a non-empty top-level
+  `env` (2.1.312 applies it before resolving the mode, and
+  `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` forces mode `default`). Native forwards them.
   The option and eager tables, renamed `claude-options.tsv` and
   `claude-eager.tsv`, gain the hidden required options `--fast-mode` and
   `--runner-declares`, and describe in-window releases only. The pinned native

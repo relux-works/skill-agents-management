@@ -76,10 +76,15 @@ var v3QualifiedPermissionKeys = map[string]bool{
 }
 
 // scanYoloSettings inspects the effective explicit --settings source, inline
-// JSON or a file, under V3 yolo, and refuses an unqualified permissions
-// member before launch. It reads the same source checkSettingsPolicy selects,
-// rewrites nothing, and leaves implicit user, project and managed
-// configuration outside this argv policy.
+// JSON or a file, under V3 yolo, and refuses before launch an unqualified
+// permissions member or any member of a non-empty top-level `env`. 2.1.312
+// applies a flag-settings `env` to its own process before it resolves the
+// permission mode, and CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1 there forces mode
+// "default" over the bypass flag; no env member is qualified yet, and an env
+// variable can also redirect configuration roots. It reads the same source
+// checkSettingsPolicy selects, rewrites nothing, and leaves implicit user,
+// project and managed configuration and the launch environment outside this
+// argv policy.
 func scanYoloSettings(req agentic.LaunchRequest, grammar agentic.PermissionGrammarVersion) error {
 	if grammar != agentic.PermissionGrammarV3 {
 		return nil
@@ -96,6 +101,15 @@ func scanYoloSettings(req agentic.LaunchRequest, grammar agentic.PermissionGramm
 	if kind != "" {
 		return settingsPolicyRefusal(kind)
 	}
+	if raw, present := settings["env"]; present {
+		var env map[string]json.RawMessage
+		if json.Unmarshal(raw, &env) != nil || env == nil {
+			return settingsPolicyRefusal(agentic.SettingsPolicyInvalid)
+		}
+		if keys := sortedKeys(env); len(keys) > 0 {
+			return fmt.Errorf("%w: claude settings env member %q is not qualified under %s", agentic.ErrNativePolicyUnknown, keys[0], grammar)
+		}
+	}
 	raw, present := settings["permissions"]
 	if !present {
 		return nil
@@ -104,17 +118,23 @@ func scanYoloSettings(req agentic.LaunchRequest, grammar agentic.PermissionGramm
 	if json.Unmarshal(raw, &permissions) != nil || permissions == nil {
 		return settingsPolicyRefusal(agentic.SettingsPolicyInvalid)
 	}
-	keys := make([]string, 0, len(permissions))
-	for key := range permissions {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
+	for _, key := range sortedKeys(permissions) {
 		if !v3QualifiedPermissionKeys[key] {
 			return fmt.Errorf("%w: claude settings permissions member %q is not qualified under %s", agentic.ErrNativePolicyUnknown, key, grammar)
 		}
 	}
 	return nil
+}
+
+// sortedKeys lists an object's member names in byte order, so a refusal names
+// the same member every run.
+func sortedKeys(object map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(object))
+	for key := range object {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // ClassifyNonInteractiveArgs reports whether the caller suffix selects
