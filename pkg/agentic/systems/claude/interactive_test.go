@@ -233,7 +233,7 @@ func TestTheYoloArgvAppendsTheBypassFlagOnce(t *testing.T) {
 	workDir := tempSlot(t)
 	req := interactiveRequest(workDir)
 	req.PermissionMode = agentic.PermissionModeYolo
-	req.ToolRelease = "2.1.261"
+	req.ToolRelease = "2.1.312"
 	binDir := tempSlot(t)
 	writeStubExecutable(t, binDir, executableName)
 	req.Env = append(req.Env, "PATH="+binDir)
@@ -338,7 +338,7 @@ func TestTheYoloRefusalsAreNamedAndTotal(t *testing.T) {
 		// plugin's.
 		req := interactiveRequest(workDir)
 		req.PermissionMode = agentic.PermissionModeYolo
-		req.ToolRelease = "2.1.261"
+		req.ToolRelease = "2.1.312"
 		req.Composition = agentic.Composition{Prefix: []string{mcpConfigFlag, "{}"}}
 		argv, err := New().Argv(req, agentic.LaunchModeInteractive)
 		if err != nil {

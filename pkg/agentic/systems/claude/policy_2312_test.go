@@ -37,9 +37,8 @@ func TestClaude2312RowMapsYoloUnderV3(t *testing.T) {
 }
 
 // Under V3 each selector whose interaction with the bypass was not qualified
-// refuses yolo, in flag and equals forms, before any plan. Native forwards it
-// verbatim at 2.1.312, and the V2 row keeps forwarding it under yolo: the
-// asymmetry is intentional, so the historical row does not change.
+// refuses yolo, in flag and equals forms, before any plan, and native forwards
+// it verbatim at 2.1.312.
 func TestClaude2312RefusesUnqualifiedSelectorsUnderYolo(t *testing.T) {
 	t.Parallel()
 	workDir := tempSlot(t)
@@ -79,12 +78,6 @@ func TestClaude2312RefusesUnqualifiedSelectorsUnderYolo(t *testing.T) {
 				t.Fatalf("native 2.1.312: Argv = %#v, want %#v", got, want)
 			}
 
-			req.PermissionMode = agentic.PermissionModeYolo
-			req.ToolRelease = "2.1.261"
-			want := append(append(append([]string{}, base...), bypassPermissionsFlag), c.args...)
-			if got := argvFor(t, req, agentic.LaunchModeInteractive); !reflect.DeepEqual(got, want) {
-				t.Fatalf("yolo 2.1.261 (V2): Argv = %#v, want %#v", got, want)
-			}
 		})
 	}
 }
@@ -158,5 +151,35 @@ func TestClaude2312ClassifiesPrint(t *testing.T) {
 	}
 	if _, err := New().ClassifyNonInteractiveArgs("2.1.313", []string{"-p", "hello"}); !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
 		t.Fatalf("Classify(2.1.313) err = %v, want ErrPermissionModeUnverifiedRelease", err)
+	}
+}
+
+// The 2.1.261 row is retired under the owner's support window: yolo there
+// fails closed as unverified before any plan, in every form including the
+// arguments a shared option table would misread on that release, while native
+// still forwards the same arguments verbatim.
+func TestClaudeRetiredReleaseRefusesYolo(t *testing.T) {
+	t.Parallel()
+	workDir := tempSlot(t)
+	base := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}
+	for _, args := range [][]string{
+		nil,
+		{"--fast-mode", "--permission-mode", "bypassPermissions"},
+		{"--runner-declares", bypassPermissionsFlag},
+	} {
+		req := interactiveRequest(workDir)
+		req.PermissionMode = agentic.PermissionModeYolo
+		req.ToolRelease = "2.1.261"
+		req.NativeArgs = args
+		if err := planErrorFor(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
+			t.Fatalf("yolo 2.1.261 %q: err = %v, want ErrPermissionModeUnverifiedRelease", args, err)
+		}
+		if _, err := New().PermissionMapping("2.1.261", agentic.PermissionModeYolo); !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
+			t.Fatalf("PermissionMapping(2.1.261, yolo) err = %v, want ErrPermissionModeUnverifiedRelease", err)
+		}
+		req.PermissionMode = agentic.PermissionModeNative
+		if got, want := argvFor(t, req, agentic.LaunchModeInteractive), append(append([]string{}, base...), args...); !reflect.DeepEqual(got, want) {
+			t.Fatalf("native 2.1.261 %q: Argv = %#v, want %#v", args, got, want)
+		}
 	}
 }

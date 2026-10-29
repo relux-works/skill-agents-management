@@ -12,17 +12,18 @@ import (
 // tool releases whose yolo mapping this plugin verified, each under the
 // grammar version it was verified against.
 //
-// The 2.1.261 row is the release this plugin's grammar comments were first
-// checked against. The 2.1.312 row was qualified against the installed
-// binary: its help, the Commander parser and the eager settings scan (the
-// pinned comparison tests run the native functions), the six
-// `--permission-mode` values and the bypass flag. Its V3 grammar retains V2
-// and refuses the permission selectors whose interaction with the mapped
-// bypass that qualification did not prove (v3UnqualifiedSelectors). Any other
-// release has no row, and yolo there fails closed while native forwards
-// verbatim.
+// The 2.1.312 row was qualified against the installed binary: its help, the
+// Commander parser and the eager settings scan (the pinned comparison tests
+// run the native functions), the six `--permission-mode` values and the
+// bypass flag. Its V3 grammar retains V2 and refuses the permission selectors
+// and explicit settings whose interaction with the mapped bypass that
+// qualification did not prove. The 2.1.261 row is retired under the owner's
+// support window (harness releases from about the last two weeks,
+// 2026-10-29): this module's option tables describe in-window releases only,
+// so a retired release fails closed under yolo like any other release without
+// a row, while native forwards verbatim. Stay on an older module release to
+// run an older harness.
 var verifiedReleases = []agentic.ReleaseCapability{
-	{Release: "2.1.261", Grammar: agentic.PermissionGrammarV2, YoloSupported: true},
 	{Release: "2.1.312", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 }
 

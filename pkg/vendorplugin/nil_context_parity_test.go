@@ -177,7 +177,7 @@ func nilContextParityRequest(f nilContextFixture, system agentic.SystemID, mode 
 		// Release pins are fixtures for permission grammar, not a model/mode
 		// case list. Pi's yolo remains a typed refusal at its verified release.
 		req.ToolRelease = map[agentic.SystemID]string{
-			"claude-code": "2.1.261", "codex": "0.153.2", "muse": "1.4.1", "pi-native": "0.84.2",
+			"claude-code": "2.1.312", "codex": "0.153.2", "muse": "1.4.1", "pi-native": "0.84.2",
 		}[system]
 	}
 	return req

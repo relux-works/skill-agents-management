@@ -192,16 +192,15 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   version. Each plugin except `muse` holds its own environment's rows and
   `LookupReleaseCapability` is the single reader; there is no central map
   keyed by system id (the single-source guard forbids a second binding
-  table). Claude 2.1.261 and Codex 0.153.2 use `permission-grammar-v2`, which adds the known
+  table). Codex 0.153.2 uses `permission-grammar-v2`, which adds the known
   conflict selectors above; Codex 0.164.0 uses `permission-grammar-v3`, adding
   refusal of unqualified policy aliases and attached short policy forms; Claude
   2.1.312 uses `permission-grammar-v3`, adding refusal of unqualified permission
-  selectors; Muse and Pi use `permission-grammar-v1`. The token is
+  selectors and explicit permission settings; Muse and Pi use `permission-grammar-v1`. The token is
   passed through the capability row for the launcher to cite:
 
   | environment | verified tool release | grammar | yolo |
   |---|---|---|---|
-  | `claude-code` | 2.1.261 | `permission-grammar-v2` | `--dangerously-skip-permissions` |
   | `claude-code` | 2.1.312 | `permission-grammar-v3` | `--dangerously-skip-permissions` |
   | `codex` | 0.153.2 | `permission-grammar-v2` | `--dangerously-bypass-approvals-and-sandbox` |
   | `codex` | 0.164.0 | `permission-grammar-v3` | `--dangerously-bypass-approvals-and-sandbox` |
@@ -231,7 +230,14 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   also refuses `--inherit-permission-mode`, `--plan-mode-required`,
   `--permission-prompts` and `--enable-auto-mode`, because the qualification
   did not prove how they interact with the bypass. Native forwards them
-  verbatim, and the 2.1.261 row is unchanged.
+  verbatim.
+
+  The Claude 2.1.261 row is retired under the owner's support window
+  (2026-10-29: harness releases from about the last two weeks). The Claude
+  option and eager tables describe in-window releases only. Yolo on a retired
+  or unlisted release fails closed with `ErrPermissionModeUnverifiedRelease`,
+  and native forwards verbatim. To run an older harness, stay on an older
+  module release.
 
   The caller establishes the running release by probing the resolved binary
   (`ProbeToolRelease`: `<binary> --version` against the launch environment —
@@ -294,9 +300,9 @@ interactive result.
 
 | Launcher env-id | System | Verified release | Form | Tested placement |
 |---|---|---|---|---|
-| `claude_code` | `claude-code` | `2.1.261`, `2.1.312` | print | short flag `-p` |
-| `claude_code` | `claude-code` | `2.1.261`, `2.1.312` | print | equals value `--print=true` |
-| `claude_code` | `claude-code` | `2.1.261`, `2.1.312` | print | flag followed by a separate prompt |
+| `claude_code` | `claude-code` | `2.1.312` | print | short flag `-p` |
+| `claude_code` | `claude-code` | `2.1.312` | print | equals value `--print=true` |
+| `claude_code` | `claude-code` | `2.1.312` | print | flag followed by a separate prompt |
 | `codex_cli` | `codex` | `0.153.2`, `0.164.0` | exec (`exec` or `e`) | first command token |
 | `codex_cli` | `codex` | `0.153.2`, `0.164.0` | exec (`exec` or `e`) | after an equals-form root option |
 | `codex_cli` | `codex` | `0.153.2`, `0.164.0` | exec (`exec` or `e`) | after a separate-value root option |
@@ -328,8 +334,8 @@ fails closed even for this reporting API.
 
 | System | Verified release | Mode | Result | Grammar |
 |---|---|---|---|---|
-| `claude-code` | `2.1.261` | `native` | no module-owned flag | `permission-grammar-v2` |
-| `claude-code` | `2.1.261` | `yolo` | plugin-owned mapping | `permission-grammar-v2` |
+| `claude-code` | `2.1.312` | `native` | no module-owned flag | `permission-grammar-v3` |
+| `claude-code` | `2.1.312` | `yolo` | plugin-owned mapping | `permission-grammar-v3` |
 | `codex` | `0.153.2` | `native` | no module-owned flag | `permission-grammar-v2` |
 | `codex` | `0.153.2` | `yolo` | plugin-owned mapping | `permission-grammar-v2` |
 | `codex` | `0.164.0` | `native` | no module-owned flag | `permission-grammar-v3` |

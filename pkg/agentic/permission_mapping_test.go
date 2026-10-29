@@ -19,7 +19,7 @@ func TestRegistryPermissionMappingMatrixByEnvironmentModeAndRelease(t *testing.T
 		grammar            agentic.PermissionGrammarVersion
 		yoloMappingSupport bool
 	}{
-		{"claude-code", "2.1.261", "2.1.262", agentic.PermissionGrammarV2, true},
+		{"claude-code", "2.1.312", "2.1.313", agentic.PermissionGrammarV3, true},
 		{"codex", "0.153.2", "0.153.3", agentic.PermissionGrammarV2, true},
 		{"codex", "0.164.0", "0.164.1", agentic.PermissionGrammarV3, true},
 		{"pi-native", "0.84.2", "0.84.3", agentic.PermissionGrammarV1, false},
@@ -81,7 +81,7 @@ func TestRegistryPermissionMappingRefusesUnknownSystemAndMode(t *testing.T) {
 		}
 	})
 	t.Run("unknown mode", func(t *testing.T) {
-		if _, err := agentic.Default.PermissionMapping("claude-code", "2.1.261", "automatic"); !errors.Is(err, agentic.ErrPermissionModeUnknown) {
+		if _, err := agentic.Default.PermissionMapping("claude-code", "2.1.312", "automatic"); !errors.Is(err, agentic.ErrPermissionModeUnknown) {
 			t.Fatalf("PermissionMapping error = %v, want ErrPermissionModeUnknown", err)
 		}
 	})

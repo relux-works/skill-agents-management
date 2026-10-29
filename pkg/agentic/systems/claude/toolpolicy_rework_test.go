@@ -100,7 +100,7 @@ func TestAskUserQuestionSettingsPolicy(t *testing.T) {
 					req := interactiveRequest(tempSlot(t))
 					if posture == "yolo" {
 						req.PermissionMode = agentic.PermissionModeYolo
-						req.ToolRelease = "2.1.261"
+						req.ToolRelease = "2.1.312"
 					}
 					value := row.body
 					if strings.HasSuffix(form, "file") {
@@ -156,7 +156,7 @@ func TestAskUserQuestionSettingsECMAScriptRules(t *testing.T) {
 				req := interactiveRequest(tempSlot(t))
 				if posture == "yolo" {
 					req.PermissionMode = agentic.PermissionModeYolo
-					req.ToolRelease = "2.1.261"
+					req.ToolRelease = "2.1.312"
 				}
 				req.NativeArgs = []string{"--settings", row.value}
 				err := planErrorFor(t, req, agentic.LaunchModeInteractive)
@@ -275,7 +275,7 @@ func TestAskUserQuestionEagerSettingsAmbiguity(t *testing.T) {
 				req := interactiveRequest(tempSlot(t))
 				if posture == "yolo" {
 					req.PermissionMode = agentic.PermissionModeYolo
-					req.ToolRelease = "2.1.261"
+					req.ToolRelease = "2.1.312"
 				}
 				req.NativeArgs = row.args
 				err := planErrorFor(t, req, agentic.LaunchModeInteractive)

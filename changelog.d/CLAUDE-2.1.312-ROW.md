@@ -3,7 +3,11 @@
   V3 retains every V2 refusal and also refuses `--inherit-permission-mode`,
   `--plan-mode-required`, `--permission-prompts` and `--enable-auto-mode` under
   yolo, since their interaction with the bypass is not qualified; native
-  forwards them and the 2.1.261 row is unchanged. The option and eager tables
-  gain the hidden required options `--fast-mode` and `--runner-declares`, and
-  the pinned native comparisons are release-keyed (2.1.288, 2.1.312) so they
-  run against the installed 2.1.312. Neighbouring releases still refuse.
+  forwards them. The option and eager tables gain the hidden required options
+  `--fast-mode` and `--runner-declares`, and the pinned native comparisons are
+  keyed by release so they run against the installed 2.1.312.
+- Retire the Claude 2.1.261 yolo row under the owner's harness support window
+  (releases from about the last two weeks, 2026-10-29). The Claude option
+  tables describe in-window releases only, so yolo on 2.1.261 and every other
+  unlisted release now fails closed as unverified; native forwards verbatim.
+  Stay on an older module release to run an older harness.

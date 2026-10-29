@@ -11,20 +11,20 @@ import (
 
 func TestPermissionMappingUsesTheClaudeArgvFlagOnlyForVerifiedYolo(t *testing.T) {
 	system := New()
-	got, err := system.PermissionMapping("2.1.261", agentic.PermissionModeYolo)
+	got, err := system.PermissionMapping("2.1.312", agentic.PermissionModeYolo)
 	if err != nil {
 		t.Fatalf("PermissionMapping(yolo): %v", err)
 	}
-	if got.Flag != bypassPermissionsFlag || got.Grammar != agentic.PermissionGrammarV2 {
-		t.Fatalf("yolo mapping = %#v, want plugin argv flag under %q", got, agentic.PermissionGrammarV2)
+	if got.Flag != bypassPermissionsFlag || got.Grammar != agentic.PermissionGrammarV3 {
+		t.Fatalf("yolo mapping = %#v, want plugin argv flag under %q", got, agentic.PermissionGrammarV3)
 	}
 
-	got, err = system.PermissionMapping("2.1.261", agentic.PermissionModeNative)
+	got, err = system.PermissionMapping("2.1.312", agentic.PermissionModeNative)
 	if err != nil {
 		t.Fatalf("PermissionMapping(native): %v", err)
 	}
-	if got.Flag != "" || got.Grammar != agentic.PermissionGrammarV2 {
-		t.Fatalf("native mapping = %#v, want no flag under %q", got, agentic.PermissionGrammarV2)
+	if got.Flag != "" || got.Grammar != agentic.PermissionGrammarV3 {
+		t.Fatalf("native mapping = %#v, want no flag under %q", got, agentic.PermissionGrammarV3)
 	}
 }
 
@@ -45,7 +45,7 @@ func TestYoloForwardsNativeArgsVerbatimAfterTheBypassFlag(t *testing.T) {
 	workDir := tempSlot(t)
 	req := interactiveRequest(workDir)
 	req.PermissionMode = agentic.PermissionModeYolo
-	req.ToolRelease = "2.1.261"
+	req.ToolRelease = "2.1.312"
 	req.NativeArgs = []string{"--verbose", "deploy the thing", "-d"}
 
 	got := argvFor(t, req, agentic.LaunchModeInteractive)
@@ -71,8 +71,8 @@ func TestNativeForwardsEverythingVerbatimWithoutInspection(t *testing.T) {
 		mode    agentic.PermissionMode
 		release string
 	}{
-		{"zero value at the pinned release", "", "2.1.261"},
-		{"explicit native at the pinned release", agentic.PermissionModeNative, "2.1.261"},
+		{"zero value at the pinned release", "", "2.1.312"},
+		{"explicit native at the pinned release", agentic.PermissionModeNative, "2.1.312"},
 		{"explicit native past the pin", agentic.PermissionModeNative, "2.1.274"},
 		{"explicit native with no release established", agentic.PermissionModeNative, ""},
 		{"zero value with no release established", "", ""},
@@ -119,7 +119,7 @@ func TestYoloRefusesDriftWithANamedDiagnostic(t *testing.T) {
 		if !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
 			t.Fatalf("err = %v, want ErrPermissionModeUnverifiedRelease", err)
 		}
-		for _, want := range []string{string(agentic.PermissionGrammarV2), "2.1.274", "2.1.261"} {
+		for _, want := range []string{string(agentic.PermissionGrammarV2), "2.1.274", "2.1.312"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("refusal %q does not name %q", err, want)
 			}
@@ -155,7 +155,7 @@ func TestYoloRefusesUnknownPermissionModes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			req := interactiveRequest(workDir)
 			req.PermissionMode = agentic.PermissionModeYolo
-			req.ToolRelease = "2.1.261"
+			req.ToolRelease = "2.1.312"
 			req.NativeArgs = c.args
 			err := planErrorFor(t, req, agentic.LaunchModeInteractive)
 			if !errors.Is(err, agentic.ErrNativePolicyUnknown) {
@@ -189,7 +189,7 @@ func TestPermissionModeConflictMatrix(t *testing.T) {
 			t.Run(value+"/"+form.name, func(t *testing.T) {
 				req := interactiveRequest(workDir)
 				req.PermissionMode = agentic.PermissionModeYolo
-				req.ToolRelease = "2.1.261"
+				req.ToolRelease = "2.1.312"
 				req.NativeArgs = form.args
 				err := planErrorFor(t, req, agentic.LaunchModeInteractive)
 				assertNativePolicyConflict(t, err, "--permission-mode", form.placement)
@@ -197,7 +197,7 @@ func TestPermissionModeConflictMatrix(t *testing.T) {
 			t.Run("native/"+value+"/"+form.name, func(t *testing.T) {
 				req := interactiveRequest(workDir)
 				req.PermissionMode = agentic.PermissionModeNative
-				req.ToolRelease = "2.1.261"
+				req.ToolRelease = "2.1.312"
 				req.NativeArgs = form.args
 				got := argvFor(t, req, agentic.LaunchModeInteractive)
 				want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, form.args...)
@@ -230,7 +230,7 @@ func TestOtherKnownClaudePolicyConflicts(t *testing.T) {
 		t.Run("yolo/"+row.name, func(t *testing.T) {
 			req := interactiveRequest(workDir)
 			req.PermissionMode = agentic.PermissionModeYolo
-			req.ToolRelease = "2.1.261"
+			req.ToolRelease = "2.1.312"
 			req.NativeArgs = row.args
 			err := planErrorFor(t, req, agentic.LaunchModeInteractive)
 			if row.duplicate {
@@ -244,7 +244,7 @@ func TestOtherKnownClaudePolicyConflicts(t *testing.T) {
 		t.Run("native/"+row.name, func(t *testing.T) {
 			req := interactiveRequest(workDir)
 			req.PermissionMode = agentic.PermissionModeNative
-			req.ToolRelease = "2.1.261"
+			req.ToolRelease = "2.1.312"
 			req.NativeArgs = row.args
 			got := argvFor(t, req, agentic.LaunchModeInteractive)
 			want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, row.args...)
@@ -260,7 +260,7 @@ func TestYoloForwardsKnownNonConflictingClaudeSelectors(t *testing.T) {
 	workDir := tempSlot(t)
 	req := interactiveRequest(workDir)
 	req.PermissionMode = agentic.PermissionModeYolo
-	req.ToolRelease = "2.1.261"
+	req.ToolRelease = "2.1.312"
 	req.NativeArgs = []string{"--debug", "--verbose", "-d"}
 	got := argvFor(t, req, agentic.LaunchModeInteractive)
 	want := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag, "--debug", "--verbose", "-d"}
@@ -293,7 +293,7 @@ func TestPromptTextIsNeverParsedAsAFlag(t *testing.T) {
 	yolo := func(args []string) agentic.LaunchRequest {
 		req := interactiveRequest(workDir)
 		req.PermissionMode = agentic.PermissionModeYolo
-		req.ToolRelease = "2.1.261"
+		req.ToolRelease = "2.1.312"
 		req.NativeArgs = args
 		return req
 	}
@@ -350,7 +350,7 @@ func TestYoloRefusesTheBypassFlagInNativeArgs(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			req := interactiveRequest(workDir)
 			req.PermissionMode = agentic.PermissionModeYolo
-			req.ToolRelease = "2.1.261"
+			req.ToolRelease = "2.1.312"
 			req.NativeArgs = c.args
 			if err := planErrorFor(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrPermissionModeDuplicate) {
 				t.Fatalf("BuildPlan err = %v, want ErrPermissionModeDuplicate", err)
@@ -369,7 +369,7 @@ func TestTheScanSeesExecPlacement(t *testing.T) {
 	workDir := tempSlot(t)
 	req := interactiveRequest(workDir)
 	req.PermissionMode = agentic.PermissionModeYolo
-	req.ToolRelease = "2.1.261"
+	req.ToolRelease = "2.1.312"
 	req.NativeArgs = []string{"exec", "--permission-mode", "ultrastrict"}
 	if err := planErrorFor(t, req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrNativePolicyUnknown) {
 		t.Fatalf("err = %v, want ErrNativePolicyUnknown", err)
