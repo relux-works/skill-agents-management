@@ -290,14 +290,22 @@ effort      = { accepts = ["minimal"] }            # only accepts may extend it
 - `vendors` keys are registered vendor ids. A vendor the module does not
   register refuses as `unsupported`: a vendor also owns spawn and availability.
 - A new row needs `systems` and an `effort` table with `support`
-  (`required` or `none`). It is an operator-declared row: admitted when named
+  (`required` or `none`). A `required` row also needs a non-empty `accepts` and
+  a `recommended` word from it; a `none` row carries neither. It is an operator-declared row: admitted when named
   explicitly, never placed in a lineup or picked by a default.
 - A row naming a module model may only carry `effort = { accepts = [...] }`. The
-  words are added to that model and to every alias of it. Anything else
+  words are added to that model and to every alias of it, as
+  `EffortDeclaration.OperatorAccepts`: launches admit them, but the module's own
+  `Vocabulary` is unchanged, so frozen policy (the v2 snapshot) never widens. Anything else
   refuses as `conflicting`, as does extending a model with no effort axis or an
   id or alias that collides with an existing row.
 - Every effort word must be on the effective scale (the module's order extended
-  by `[[effort_scale]]`). An unknown word refuses as `unsupported`. A scale
+  by `[[effort_scale]]`). An unknown word refuses as `unsupported`. Each
+  effort-bearing row of a vendor with an extended scale carries it as
+  `EffortDeclaration.Scale`, and `vendorplugin.EffectiveEffortsUnderBound` ranks
+  bounds on it; `EffortsUnderBound` stays the module-only, frozen-policy form.
+- Diagnostics name only validated identifiers. An unknown key or an invalid id
+  is reported by a fixed label, never by its text. A scale
   entry with an unknown `after`, a word already on the scale, or two entries
   claiming one position refuse.
 - Unknown keys refuse as `malformed`; a newer `schema_version` refuses as

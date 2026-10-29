@@ -299,3 +299,123 @@ func TestLoadModelCatalogAbsenceAndReadFailure(t *testing.T) {
 		t.Fatalf("unreadable catalog: %v, want read_failed", err)
 	}
 }
+
+// A catalog extension of a frozen-tier module row never widens the frozen v2
+// policy: the admitted pair set and its digest are identical with and without
+// the catalog, while the added word still launches outside that policy, and a
+// catalog-only model never enters an ordered v2 ceiling. (Review finding 1.)
+func TestModelCatalogNeverWidensTheFrozenV2Policy(t *testing.T) {
+	extension := `schema_version = 1
+[vendors.openai.models."gpt-5.6-sol"]
+effort = { accepts = ["minimal"] }
+
+[vendors.openai.models."gpt-6-9-test"]
+systems = ["codex"]
+effort  = { support = "required", accepts = ["low"], recommended = "low" }
+`
+	with := catalogRegistry(t, parse(t, extension))
+	without := catalogRegistry(t, runtimecatalog.ModelCatalog{})
+	for _, ceiling := range []vendorplugin.V2Ceiling{
+		{Runtime: "codex", Model: "gpt-5.6-sol", ModelCriterion: vendorplugin.ModelCriterionLessOrEqual, Effort: "low"},
+		{Runtime: "codex", Model: "gpt-5.6-sol", ModelCriterion: vendorplugin.ModelCriterionLessOrEqual, Effort: ""},
+		{Runtime: "codex", Model: "gpt-5.6-sol", ModelCriterion: vendorplugin.ModelCriterionGreaterOrEqual, Effort: ""},
+	} {
+		got, err := vendorplugin.ExpandV2Ceiling(with, ceiling)
+		if err != nil {
+			t.Fatalf("%+v with catalog: %v", ceiling, err)
+		}
+		want, err := vendorplugin.ExpandV2Ceiling(without, ceiling)
+		if err != nil {
+			t.Fatalf("%+v without catalog: %v", ceiling, err)
+		}
+		if got.Digest() != want.Digest() || strings.Join(got.PinnedPairs(), " ") != strings.Join(want.PinnedPairs(), " ") {
+			t.Fatalf("%+v: catalog changed the v2 pair set\nwith    %v\nwithout %v", ceiling, got.PinnedPairs(), want.PinnedPairs())
+		}
+		if got.Contains("gpt-5.6-sol", "minimal") || got.ContainsModel("gpt-6-9-test") {
+			t.Fatalf("%+v: v2 set admits a catalog fact: %v", ceiling, got.PinnedPairs())
+		}
+	}
+	plan, err := codexLaunch(t, with, "gpt-5.6-sol", "minimal")
+	if err != nil {
+		t.Fatalf("the added word does not launch outside frozen policy: %v", err)
+	}
+	if !argvPair(plan.Argv, "-c", `model_reasoning_effort="minimal"`) {
+		t.Fatalf("argv %q does not carry the added word", plan.Argv)
+	}
+}
+
+// Bounds over a catalog-extended scale order the added words by their declared
+// position, in both directions and through a chain of added words; an unknown
+// bound admits nothing, and the module-only helper is unchanged. (Review
+// finding 2.)
+func TestModelCatalogEffectiveScaleOrdersBounds(t *testing.T) {
+	catalog := parse(t, `schema_version = 1
+[[effort_scale]]
+word  = "deep"
+after = "high"
+[[effort_scale]]
+word  = "deeper"
+after = "deep"
+
+[vendors.openai.models."gpt-6-9-test"]
+systems = ["codex"]
+effort  = { support = "required", accepts = ["high", "deep", "deeper", "xhigh"], recommended = "high" }
+`)
+	applied, err := catalog.Apply(openai.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var model vendorplugin.Model
+	for _, candidate := range applied.Models() {
+		if candidate.ID == "gpt-6-9-test" {
+			model = candidate
+		}
+	}
+	cases := []struct {
+		bound     string
+		criterion vendorplugin.EffortCriterion
+		want      string
+	}{
+		{"xhigh", vendorplugin.EffortCriterionLessOrEqual, "high deep deeper xhigh"},
+		{"deep", vendorplugin.EffortCriterionLessOrEqual, "high deep"},
+		{"deep", vendorplugin.EffortCriterionGreaterOrEqual, "deep deeper xhigh"},
+		{"deeper", vendorplugin.EffortCriterionLessOrEqual, "high deep deeper"},
+		{"", vendorplugin.EffortCriterionLessOrEqual, "high deep deeper xhigh"},
+		{"nope", vendorplugin.EffortCriterionLessOrEqual, ""},
+	}
+	for _, c := range cases {
+		got := strings.Join(vendorplugin.EffectiveEffortsUnderBound(model, c.bound, c.criterion), " ")
+		if got != c.want {
+			t.Fatalf("bound %q %s: %q, want %q", c.bound, c.criterion, got, c.want)
+		}
+	}
+	if got := vendorplugin.EffortsUnderBound(model, "deep", vendorplugin.EffortCriterionLessOrEqual); got != nil {
+		t.Fatalf("the module-scale helper ordered a catalog word: %v", got)
+	}
+}
+
+// Diagnostics carry only validated identifiers: a key with a line break, a
+// path-like key, an invalid vendor id and an invalid model id never reach the
+// refusal text; a valid id is named as the control. (Review finding 3.)
+func TestModelCatalogDiagnosticsNeverEchoUntrustedText(t *testing.T) {
+	const marker = "confidential-marker"
+	for name, text := range map[string]string{
+		"newline key":      "schema_version = 1\n\"note:\\n" + marker + "\" = 1\n",
+		"path-like key":    "schema_version = 1\n\"/Users/x/" + marker + "\" = 1\n",
+		"nested key":       "schema_version = 1\n[vendors.openai.models.x]\n\"" + marker + "\\nx\" = 1\n",
+		"invalid vendor":   "schema_version = 1\n[vendors.\"bad\\n" + marker + "\".models.x]\nsystems = [\"codex\"]\n",
+		"invalid model id": "schema_version = 1\n[vendors.openai.models.\"bad\\u001b" + marker + "\"]\nsystems = [\"codex\"]\n",
+	} {
+		_, err := runtimecatalog.ParseModelCatalog([]byte(text))
+		if err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+		if strings.Contains(err.Error(), marker) || strings.ContainsAny(err.Error(), "\n\x1b") {
+			t.Fatalf("%s: diagnostic echoes untrusted text: %q", name, err.Error())
+		}
+	}
+	_, err := runtimecatalog.ParseModelCatalog([]byte("schema_version = 1\n[vendors.openai.models.\"gpt-6-9-test\"]\nprice = 1\n"))
+	if err == nil || !strings.Contains(err.Error(), "openai/gpt-6-9-test") {
+		t.Fatalf("valid-id control: %v", err)
+	}
+}

@@ -470,6 +470,17 @@ type EffortDeclaration struct {
 	Support     agentic.EffortSupport
 	Vocabulary  []string
 	Recommended string
+
+	// OperatorAccepts are effort words the operator's model catalog
+	// (runtimecatalog, catalog.toml) added to this row. Accepts admits them
+	// like Vocabulary words, but they are not the module's declaration:
+	// frozen policy (the v2 snapshot, through EffortsUnderBound) reads
+	// Vocabulary only, so a catalog never widens it.
+	OperatorAccepts []string
+	// Scale is the effective effort ordering when an operator catalog
+	// extended it; nil means EffortOrder. EffectiveEffortsUnderBound ranks
+	// by it. It never changes what the module's own EffortRank answers.
+	Scale []string
 }
 
 // Validate refuses a declaration that could not be honoured: a required axis
@@ -491,11 +502,27 @@ func (e EffortDeclaration) Validate() error {
 			}
 			seen[word] = true
 		}
+		for _, word := range e.OperatorAccepts {
+			if strings.TrimSpace(word) == "" {
+				return fmt.Errorf("%w: the operator vocabulary carries a blank word", ErrEffortDeclaration)
+			}
+			if seen[word] {
+				return fmt.Errorf("%w: the operator vocabulary repeats %q", ErrEffortDeclaration, word)
+			}
+			seen[word] = true
+		}
+		placed := map[string]bool{}
+		for _, word := range e.Scale {
+			if strings.TrimSpace(word) == "" || placed[word] {
+				return fmt.Errorf("%w: the effort scale carries a blank or repeated word %q", ErrEffortDeclaration, word)
+			}
+			placed[word] = true
+		}
 		if !e.Accepts(e.Recommended) {
 			return fmt.Errorf("%w: the recommended effort %q is not one of %v", ErrEffortDeclaration, e.Recommended, e.Vocabulary)
 		}
 	case agentic.EffortSupportNone:
-		if len(e.Vocabulary) > 0 || strings.TrimSpace(e.Recommended) != "" {
+		if len(e.Vocabulary) > 0 || len(e.OperatorAccepts) > 0 || len(e.Scale) > 0 || strings.TrimSpace(e.Recommended) != "" {
 			return fmt.Errorf("%w: the model declares no effort axis but carries a vocabulary %v and a recommendation %q", ErrEffortDeclaration, e.Vocabulary, e.Recommended)
 		}
 	default:
@@ -518,6 +545,11 @@ func (e EffortDeclaration) Accepts(word string) bool {
 			return true
 		}
 	}
+	for _, declared := range e.OperatorAccepts {
+		if declared == trimmed {
+			return true
+		}
+	}
 	return false
 }
 
@@ -534,11 +566,17 @@ func (e EffortDeclaration) SameAxis(other EffortDeclaration) bool {
 	if e.Support != other.Support || e.Recommended != other.Recommended {
 		return false
 	}
-	if len(e.Vocabulary) != len(other.Vocabulary) {
+	return sameWords(e.Vocabulary, other.Vocabulary) &&
+		sameWords(e.OperatorAccepts, other.OperatorAccepts) &&
+		sameWords(e.Scale, other.Scale)
+}
+
+func sameWords(left, right []string) bool {
+	if len(left) != len(right) {
 		return false
 	}
-	for i, word := range e.Vocabulary {
-		if other.Vocabulary[i] != word {
+	for i, word := range left {
+		if right[i] != word {
 			return false
 		}
 	}

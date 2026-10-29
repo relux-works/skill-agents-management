@@ -107,7 +107,7 @@ func ParseModelCatalog(data []byte) (ModelCatalog, error) {
 	}
 	for key := range document {
 		if key != "schema_version" && key != "effort_scale" && key != "vendors" {
-			return ModelCatalog{}, refuse(RefusalMalformed, CatalogFile, key)
+			return ModelCatalog{}, refuse(RefusalMalformed, CatalogFile, unknownKey)
 		}
 	}
 	var catalog ModelCatalog
@@ -148,7 +148,7 @@ func parseEffortScale(raw any) ([]ScaleEntry, error) {
 		}
 		word, wordOK := fields["word"].(string)
 		after, afterOK := fields["after"].(string)
-		if !wordOK || !afterOK || !effortWord(word) || !effortWord(after) {
+		if !wordOK || !afterOK || !effortWord(word) || !effortWord(after) || len(fields) != 2 {
 			return nil, refuse(RefusalMalformed, CatalogFile, "effort_scale")
 		}
 		entries = append(entries, ScaleEntry{Word: word, After: after})
@@ -158,8 +158,8 @@ func parseEffortScale(raw any) ([]ScaleEntry, error) {
 
 func parseCatalogVendor(rawID string, raw any) (CatalogVendor, error) {
 	id, err := vendorplugin.NormalizeVendorID(rawID)
-	if err != nil || string(id) != rawID {
-		return CatalogVendor{}, refuse(RefusalMalformed, CatalogFile, "vendors."+rawID)
+	if err != nil || string(id) != rawID || safe(rawID) != rawID {
+		return CatalogVendor{}, refuse(RefusalMalformed, CatalogFile, "vendors."+invalidID)
 	}
 	fields, ok := table(raw)
 	if !ok {
@@ -167,7 +167,7 @@ func parseCatalogVendor(rawID string, raw any) (CatalogVendor, error) {
 	}
 	for key := range fields {
 		if key != "models" {
-			return CatalogVendor{}, refuse(RefusalMalformed, CatalogFile, "vendors."+rawID+"."+key)
+			return CatalogVendor{}, refuse(RefusalMalformed, CatalogFile, "vendors."+rawID+"."+unknownKey)
 		}
 	}
 	models, ok := table(fields["models"])
@@ -186,9 +186,12 @@ func parseCatalogVendor(rawID string, raw any) (CatalogVendor, error) {
 }
 
 func parseCatalogModel(vendorID, rawID string, raw any) (CatalogModel, error) {
+	if vendorplugin.ValidateModelID(vendorplugin.ModelID(rawID)) != nil || safe(rawID) != rawID {
+		return CatalogModel{}, refuse(RefusalMalformed, CatalogFile, vendorID+"/"+invalidID)
+	}
 	subject := vendorID + "/" + rawID
 	fields, ok := table(raw)
-	if !ok || vendorplugin.ValidateModelID(vendorplugin.ModelID(rawID)) != nil {
+	if !ok {
 		return CatalogModel{}, refuse(RefusalMalformed, CatalogFile, subject)
 	}
 	model := CatalogModel{ID: vendorplugin.ModelID(rawID)}
@@ -222,7 +225,7 @@ func parseCatalogModel(vendorID, rawID string, raw any) (CatalogModel, error) {
 				return CatalogModel{}, refuse(RefusalMalformed, CatalogFile, subject+".aliases")
 			}
 			for _, word := range words {
-				if vendorplugin.ValidateModelID(vendorplugin.ModelID(word)) != nil {
+				if vendorplugin.ValidateModelID(vendorplugin.ModelID(word)) != nil || safe(word) != word {
 					return CatalogModel{}, refuse(RefusalMalformed, CatalogFile, subject+".aliases")
 				}
 				model.Aliases = append(model.Aliases, vendorplugin.ModelID(word))
@@ -234,7 +237,7 @@ func parseCatalogModel(vendorID, rawID string, raw any) (CatalogModel, error) {
 			}
 			model.Effort = effort
 		default:
-			return CatalogModel{}, refuse(RefusalMalformed, CatalogFile, subject+"."+key)
+			return CatalogModel{}, refuse(RefusalMalformed, CatalogFile, subject+"."+unknownKey)
 		}
 	}
 	return model, nil
@@ -277,7 +280,7 @@ func parseCatalogEffort(subject string, raw any) (*CatalogEffort, error) {
 			}
 			effort.Recommended = text
 		default:
-			return nil, refuse(RefusalMalformed, CatalogFile, subject+".effort."+key)
+			return nil, refuse(RefusalMalformed, CatalogFile, subject+".effort."+unknownKey)
 		}
 	}
 	return effort, nil
@@ -369,7 +372,17 @@ func (c ModelCatalog) Apply(vendor vendorplugin.Vendor) (vendorplugin.Vendor, er
 			added = append(added, declared)
 		}
 	}
-	return &catalogVendor{Vendor: vendor, models: append(models, added...)}, nil
+	merged := append(models, added...)
+	if len(c.EffortScale) > 0 {
+		// Every effort-bearing row of this vendor ranks on the same effective
+		// scale, so an alias and its target stay one contract.
+		for i := range merged {
+			if merged[i].Effort.Support == agentic.EffortSupportRequired {
+				merged[i].Effort.Scale = append([]string(nil), scale...)
+			}
+		}
+	}
+	return &catalogVendor{Vendor: vendor, models: merged}, nil
 }
 
 // ApplyAll applies the catalog to every vendor and refuses a catalog vendor
@@ -406,16 +419,18 @@ func extendModel(model *vendorplugin.Model, row CatalogModel, scale []string, su
 	if model.Effort.Support != agentic.EffortSupportRequired {
 		return refuse(RefusalConflicting, CatalogFile, subject+".effort")
 	}
-	vocabulary := append([]string(nil), model.Effort.Vocabulary...)
+	// Added words stay apart from the module's Vocabulary: frozen policy reads
+	// Vocabulary only, and a catalog must never widen it.
+	added := append([]string(nil), model.Effort.OperatorAccepts...)
 	for _, word := range row.Effort.Accepts {
 		if indexOf(scale, word) < 0 {
 			return refuse(RefusalUnsupported, CatalogFile, subject+".effort."+word)
 		}
-		if indexOf(vocabulary, word) < 0 {
-			vocabulary = append(vocabulary, word)
+		if indexOf(model.Effort.Vocabulary, word) < 0 && indexOf(added, word) < 0 {
+			added = append(added, word)
 		}
 	}
-	model.Effort.Vocabulary = vocabulary
+	model.Effort.OperatorAccepts = added
 	return nil
 }
 
@@ -497,7 +512,33 @@ func indexOf(values []string, expected string) int {
 }
 
 func effortWord(word string) bool {
-	return word != "" && strings.TrimSpace(word) == word && !strings.ContainsAny(word, " \t\r\n")
+	return word != "" && safe(word) == word
+}
+
+// unknownKey and invalidID are the fixed diagnostic labels for a key the
+// schema does not know and an identifier that failed validation. Refusal
+// subjects carry only validated identifiers: a malformed file must not be able
+// to put arbitrary text, a path or a line break into a diagnostic.
+const (
+	unknownKey = "<unknown key>"
+	invalidID  = "<invalid id>"
+)
+
+// safe returns an identifier unchanged when it is a plain id (letters, digits
+// and ._:@+/- , at most 128 bytes) and the invalid label otherwise.
+func safe(id string) string {
+	if id == "" || len(id) > 128 {
+		return invalidID
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case strings.ContainsRune("._:@+/-", r):
+		default:
+			return invalidID
+		}
+	}
+	return id
 }
 
 func stringList(raw any) ([]string, bool) {
