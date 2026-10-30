@@ -9,22 +9,28 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
+// Both in-window rows map yolo to the bypass flag under V3 and native to no
+// flag; the release between them (2.1.313) stays unverified and refuses yolo.
 func TestPermissionMappingUsesTheClaudeArgvFlagOnlyForVerifiedYolo(t *testing.T) {
 	system := New()
-	got, err := system.PermissionMapping("2.1.312", agentic.PermissionModeYolo)
-	if err != nil {
-		t.Fatalf("PermissionMapping(yolo): %v", err)
+	for _, release := range []string{"2.1.312", "2.1.314"} {
+		got, err := system.PermissionMapping(release, agentic.PermissionModeYolo)
+		if err != nil {
+			t.Fatalf("%s PermissionMapping(yolo): %v", release, err)
+		}
+		if got.Flag != bypassPermissionsFlag || got.Grammar != agentic.PermissionGrammarV3 {
+			t.Fatalf("%s yolo mapping = %#v, want plugin argv flag under %q", release, got, agentic.PermissionGrammarV3)
+		}
+		got, err = system.PermissionMapping(release, agentic.PermissionModeNative)
+		if err != nil {
+			t.Fatalf("%s PermissionMapping(native): %v", release, err)
+		}
+		if got.Flag != "" || got.Grammar != agentic.PermissionGrammarV3 {
+			t.Fatalf("%s native mapping = %#v, want no flag under %q", release, got, agentic.PermissionGrammarV3)
+		}
 	}
-	if got.Flag != bypassPermissionsFlag || got.Grammar != agentic.PermissionGrammarV3 {
-		t.Fatalf("yolo mapping = %#v, want plugin argv flag under %q", got, agentic.PermissionGrammarV3)
-	}
-
-	got, err = system.PermissionMapping("2.1.312", agentic.PermissionModeNative)
-	if err != nil {
-		t.Fatalf("PermissionMapping(native): %v", err)
-	}
-	if got.Flag != "" || got.Grammar != agentic.PermissionGrammarV3 {
-		t.Fatalf("native mapping = %#v, want no flag under %q", got, agentic.PermissionGrammarV3)
+	if _, err := system.PermissionMapping("2.1.313", agentic.PermissionModeYolo); !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
+		t.Fatalf("2.1.313 yolo err = %v, want ErrPermissionModeUnverifiedRelease", err)
 	}
 }
 

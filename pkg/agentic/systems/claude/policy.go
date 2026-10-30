@@ -25,8 +25,16 @@ import (
 // so a retired release fails closed under yolo like any other release without
 // a row, while native forwards verbatim. Stay on an older module release to
 // run an older harness.
+//
+// The 2.1.314 row rests on a comparison with 2.1.312 on the same host: the
+// pinned native comparisons pass against the installed 2.1.314, its help
+// options are identical, its eager settings scan and disallowed-tools
+// normalizer are byte-identical after renaming minified identifiers, and
+// so are the native startup mode resolver, the hook decision path and the
+// settings-source selector that the 2.1.312 qualification executed.
 var verifiedReleases = []agentic.ReleaseCapability{
 	{Release: "2.1.312", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
+	{Release: "2.1.314", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 }
 
 // permissionModeFlag is the session policy selector whose VALUES are

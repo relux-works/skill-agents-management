@@ -20,6 +20,7 @@ func TestRegistryPermissionMappingMatrixByEnvironmentModeAndRelease(t *testing.T
 		yoloMappingSupport bool
 	}{
 		{"claude-code", "2.1.312", "2.1.313", agentic.PermissionGrammarV3, true},
+		{"claude-code", "2.1.314", "2.1.315", agentic.PermissionGrammarV3, true},
 		{"codex", "0.153.2", "0.153.3", agentic.PermissionGrammarV2, true},
 		{"codex", "0.164.0", "0.164.1", agentic.PermissionGrammarV3, true},
 		{"pi-native", "0.84.2", "0.84.3", agentic.PermissionGrammarV1, false},

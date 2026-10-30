@@ -26,6 +26,8 @@ type pinnedClaudeRelease struct {
 var pinnedClaudeReleases = map[string]pinnedClaudeRelease{
 	"2.1.312": {ListStart: "function Hu(", ListEnd: "function R(", ListName: "Hu",
 		EagerStart: `var a=new Set(["--prefill"`, EagerEnd: "function Lb(", EagerReturn: "{NI:hS,sets:{i:[...a],xar:[...rto],a:[...d]}}"},
+	"2.1.314": {ListStart: "function Yu(", ListEnd: "function R(", ListName: "Yu",
+		EagerStart: `var a=new Set(["--prefill"`, EagerEnd: "function lw(", EagerReturn: "{NI:LS,sets:{i:[...a],xar:[...llo],a:[...d]}}"},
 }
 
 // pinnedClaudeVersion returns the installed pinned release or skips.
