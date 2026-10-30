@@ -12,6 +12,10 @@ import (
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
+// v3Releases are the in-window Claude Code rows under permission-grammar-v3;
+// every V3 refusal and its positive controls run against each of them.
+var v3Releases = []string{"2.1.312", "2.1.314"}
+
 // The 2.1.312 row maps yolo to the bypass flag under V3, with the exact argv
 // order of the V2 row; neighbouring and near-miss releases stay unverified.
 func TestClaude2312RowMapsYoloUnderV3(t *testing.T) {
@@ -43,6 +47,12 @@ func TestClaude2312RowMapsYoloUnderV3(t *testing.T) {
 // refuses yolo, in flag and equals forms, before any plan, and native forwards
 // it verbatim at 2.1.312.
 func TestClaude2312RefusesUnqualifiedSelectorsUnderYolo(t *testing.T) {
+	for _, release := range v3Releases {
+		t.Run(release, func(t *testing.T) { v3RefusesUnqualifiedSelectorsUnderYolo(t, release) })
+	}
+}
+
+func v3RefusesUnqualifiedSelectorsUnderYolo(t *testing.T, release string) {
 	t.Parallel()
 	workDir := tempSlot(t)
 	base := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}
@@ -61,7 +71,7 @@ func TestClaude2312RefusesUnqualifiedSelectorsUnderYolo(t *testing.T) {
 		t.Run(strings.Join(c.args, " "), func(t *testing.T) {
 			req := interactiveRequest(workDir)
 			req.PermissionMode = agentic.PermissionModeYolo
-			req.ToolRelease = "2.1.312"
+			req.ToolRelease = release
 			req.NativeArgs = c.args
 			err := planErrorFor(t, req, agentic.LaunchModeInteractive)
 			if !errors.Is(err, agentic.ErrNativePolicyUnknown) {
@@ -88,12 +98,18 @@ func TestClaude2312RefusesUnqualifiedSelectorsUnderYolo(t *testing.T) {
 // V3 retains every V2 refusal at 2.1.312, and an unrelated flag beside the
 // bypass still forwards, so the row does not refuse everything.
 func TestClaude2312RetainsV2Refusals(t *testing.T) {
+	for _, release := range v3Releases {
+		t.Run(release, func(t *testing.T) { v3RetainsV2Refusals(t, release) })
+	}
+}
+
+func v3RetainsV2Refusals(t *testing.T, release string) {
 	t.Parallel()
 	workDir := tempSlot(t)
 	yolo := func(args ...string) agentic.LaunchRequest {
 		req := interactiveRequest(workDir)
 		req.PermissionMode = agentic.PermissionModeYolo
-		req.ToolRelease = "2.1.312"
+		req.ToolRelease = release
 		req.NativeArgs = args
 		return req
 	}
@@ -118,6 +134,12 @@ func TestClaude2312RetainsV2Refusals(t *testing.T) {
 // does: a --permission-mode taken as their value is not a selector, while a
 // real one after the value still conflicts.
 func TestClaude2312HiddenScalarsOwnTheirValue(t *testing.T) {
+	for _, release := range v3Releases {
+		t.Run(release, func(t *testing.T) { v3HiddenScalarsOwnTheirValue(t, release) })
+	}
+}
+
+func v3HiddenScalarsOwnTheirValue(t *testing.T, release string) {
 	t.Parallel()
 	workDir := tempSlot(t)
 	base := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial, bypassPermissionsFlag}
@@ -127,7 +149,7 @@ func TestClaude2312HiddenScalarsOwnTheirValue(t *testing.T) {
 	} {
 		req := interactiveRequest(workDir)
 		req.PermissionMode = agentic.PermissionModeYolo
-		req.ToolRelease = "2.1.312"
+		req.ToolRelease = release
 		req.NativeArgs = args
 		if got, want := argvFor(t, req, agentic.LaunchModeInteractive), append(append([]string{}, base...), args...); !reflect.DeepEqual(got, want) {
 			t.Fatalf("%q: Argv = %#v, want %#v", args, got, want)
@@ -135,7 +157,7 @@ func TestClaude2312HiddenScalarsOwnTheirValue(t *testing.T) {
 	}
 	req := interactiveRequest(workDir)
 	req.PermissionMode = agentic.PermissionModeYolo
-	req.ToolRelease = "2.1.312"
+	req.ToolRelease = release
 	req.NativeArgs = []string{"--fast-mode", "on", "--permission-mode", "plan"}
 	assertNativePolicyConflict(t, planErrorFor(t, req, agentic.LaunchModeInteractive), permissionModeFlag, agentic.NativePolicyPlacementSeparateToken)
 }
@@ -151,6 +173,9 @@ func TestClaude2312ClassifiesPrint(t *testing.T) {
 	got, err = New().ClassifyNonInteractiveArgs("2.1.312", []string{"--verbose", "hello"})
 	if err != nil || got.Form != agentic.NonInteractiveFormNone {
 		t.Fatalf("Classify(2.1.312, interactive) = %#v, %v; want no print form", got, err)
+	}
+	if got, err := New().ClassifyNonInteractiveArgs("2.1.314", []string{"--fast-mode", "on", "-p", "hello"}); err != nil || got.Form != agentic.NonInteractiveFormPrint || got.Grammar != agentic.PermissionGrammarV3 {
+		t.Fatalf("Classify(2.1.314) = %#v, %v; want print under %s", got, err, agentic.PermissionGrammarV3)
 	}
 	if _, err := New().ClassifyNonInteractiveArgs("2.1.313", []string{"-p", "hello"}); !errors.Is(err, agentic.ErrPermissionModeUnverifiedRelease) {
 		t.Fatalf("Classify(2.1.313) err = %v, want ErrPermissionModeUnverifiedRelease", err)
@@ -197,6 +222,12 @@ func TestClaudeRetiredReleaseRefusesYolo(t *testing.T) {
 // (native takes the last), so the guard does not refuse every settings use.
 // A source it cannot read, decode or select refuses with its settings kind.
 func TestClaude2312YoloRefusesUnqualifiedSettings(t *testing.T) {
+	for _, release := range v3Releases {
+		t.Run(release, func(t *testing.T) { v3YoloRefusesUnqualifiedSettings(t, release) })
+	}
+}
+
+func v3YoloRefusesUnqualifiedSettings(t *testing.T, release string) {
 	t.Parallel()
 	disable := `{"permissions":{"disableBypassPermissionsMode":"disable"}}`
 	workDir := tempSlot(t)
@@ -206,7 +237,7 @@ func TestClaude2312YoloRefusesUnqualifiedSettings(t *testing.T) {
 	request := func(mode agentic.PermissionMode, args ...string) agentic.LaunchRequest {
 		req := interactiveRequest(workDir)
 		req.PermissionMode = mode
-		req.ToolRelease = "2.1.312"
+		req.ToolRelease = release
 		req.NativeArgs = args
 		return req
 	}
@@ -302,6 +333,12 @@ func TestClaudeOutOfWindowNativeScansUseInWindowTables(t *testing.T) {
 // followed by a harmless last source, which native takes instead. A non-object
 // env refuses as invalid settings.
 func TestClaude2312YoloRefusesSettingsEnv(t *testing.T) {
+	for _, release := range v3Releases {
+		t.Run(release, func(t *testing.T) { v3YoloRefusesSettingsEnv(t, release) })
+	}
+}
+
+func v3YoloRefusesSettingsEnv(t *testing.T, release string) {
 	t.Parallel()
 	scrub := `{"env":{"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB":"1"}}`
 	workDir := tempSlot(t)
@@ -312,14 +349,14 @@ func TestClaude2312YoloRefusesSettingsEnv(t *testing.T) {
 		"request-mode": func(args ...string) agentic.LaunchRequest {
 			req := interactiveRequest(workDir)
 			req.PermissionMode = agentic.PermissionModeYolo
-			req.ToolRelease = "2.1.312"
+			req.ToolRelease = release
 			req.NativeArgs = args
 			return req
 		},
 		"context-descriptor": func(args ...string) agentic.LaunchRequest {
 			req := interactiveRequest(workDir)
 			req.ContextDescriptors = []agentic.ContextDescriptor{{Kind: agentic.ContextPermission, Permission: &agentic.PermissionContext{Mode: agentic.PermissionModeYolo}}}
-			req.ToolRelease = "2.1.312"
+			req.ToolRelease = release
 			req.NativeArgs = args
 			return req
 		},
@@ -363,7 +400,7 @@ func TestClaude2312YoloRefusesSettingsEnv(t *testing.T) {
 		}
 	}
 	native := interactiveRequest(workDir)
-	native.ToolRelease = "2.1.312"
+	native.ToolRelease = release
 	for _, args := range [][]string{{"--settings", scrub}, {"--settings", "scrub.json"}, {"--settings", `{"env":{"CLAUDE_CONFIG_DIR":"/tmp/elsewhere"}}`}} {
 		native.NativeArgs = args
 		want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, args...)
@@ -384,6 +421,12 @@ func TestClaude2312YoloRefusesSettingsEnv(t *testing.T) {
 // refused form. Positives: every qualified key together, and a hook source
 // followed by a harmless last source, which native takes instead.
 func TestClaude2312YoloSettingsTopLevelAllowlist(t *testing.T) {
+	for _, release := range v3Releases {
+		t.Run(release, func(t *testing.T) { v3YoloSettingsTopLevelAllowlist(t, release) })
+	}
+}
+
+func v3YoloSettingsTopLevelAllowlist(t *testing.T, release string) {
 	t.Parallel()
 	hook := `{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"printf '{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"}}'"}]}]}}`
 	workDir := tempSlot(t)
@@ -394,14 +437,14 @@ func TestClaude2312YoloSettingsTopLevelAllowlist(t *testing.T) {
 		"request-mode": func(args ...string) agentic.LaunchRequest {
 			req := interactiveRequest(workDir)
 			req.PermissionMode = agentic.PermissionModeYolo
-			req.ToolRelease = "2.1.312"
+			req.ToolRelease = release
 			req.NativeArgs = args
 			return req
 		},
 		"context-descriptor": func(args ...string) agentic.LaunchRequest {
 			req := interactiveRequest(workDir)
 			req.ContextDescriptors = []agentic.ContextDescriptor{{Kind: agentic.ContextPermission, Permission: &agentic.PermissionContext{Mode: agentic.PermissionModeYolo}}}
-			req.ToolRelease = "2.1.312"
+			req.ToolRelease = release
 			req.NativeArgs = args
 			return req
 		},
@@ -454,7 +497,7 @@ func TestClaude2312YoloSettingsTopLevelAllowlist(t *testing.T) {
 		}
 	}
 	native := interactiveRequest(workDir)
-	native.ToolRelease = "2.1.312"
+	native.ToolRelease = release
 	for _, c := range refused {
 		native.NativeArgs = c.args
 		want := append([]string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}, c.args...)
@@ -470,20 +513,26 @@ func TestClaude2312YoloSettingsTopLevelAllowlist(t *testing.T) {
 // invalid settings before any plan, through both permission request
 // channels. Empty and non-empty string arrays stay admitted.
 func TestClaude2312YoloPermissionMemberShapes(t *testing.T) {
+	for _, release := range v3Releases {
+		t.Run(release, func(t *testing.T) { v3YoloPermissionMemberShapes(t, release) })
+	}
+}
+
+func v3YoloPermissionMemberShapes(t *testing.T, release string) {
 	t.Parallel()
 	workDir := tempSlot(t)
 	channels := map[string]func(args ...string) agentic.LaunchRequest{
 		"request-mode": func(args ...string) agentic.LaunchRequest {
 			req := interactiveRequest(workDir)
 			req.PermissionMode = agentic.PermissionModeYolo
-			req.ToolRelease = "2.1.312"
+			req.ToolRelease = release
 			req.NativeArgs = args
 			return req
 		},
 		"context-descriptor": func(args ...string) agentic.LaunchRequest {
 			req := interactiveRequest(workDir)
 			req.ContextDescriptors = []agentic.ContextDescriptor{{Kind: agentic.ContextPermission, Permission: &agentic.PermissionContext{Mode: agentic.PermissionModeYolo}}}
-			req.ToolRelease = "2.1.312"
+			req.ToolRelease = release
 			req.NativeArgs = args
 			return req
 		},

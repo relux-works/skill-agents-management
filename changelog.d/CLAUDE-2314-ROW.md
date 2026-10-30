@@ -4,4 +4,6 @@
   2.1.314 (new comparison anchors), its help options are identical, and its
   eager settings scan, disallowed-tools normalizer, startup mode resolver,
   hook decision path and settings-source selector are byte-identical to
-  2.1.312's after renaming minified identifiers. 2.1.313 stays unverified.
+  2.1.312's after renaming minified identifiers; those 2.1.314 paths were
+  compared, not executed again. Every V3 refusal test and its positive
+  controls run at both 2.1.312 and 2.1.314. 2.1.313 stays unverified.

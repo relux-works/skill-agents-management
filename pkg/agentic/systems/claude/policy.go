@@ -28,10 +28,12 @@ import (
 //
 // The 2.1.314 row rests on a comparison with 2.1.312 on the same host: the
 // pinned native comparisons pass against the installed 2.1.314, its help
-// options are identical, its eager settings scan and disallowed-tools
-// normalizer are byte-identical after renaming minified identifiers, and
-// so are the native startup mode resolver, the hook decision path and the
-// settings-source selector that the 2.1.312 qualification executed.
+// options are identical, its eager settings scan (101 distinct flags plus
+// the "-" sentinel) and disallowed-tools normalizer are byte-identical after
+// renaming minified identifiers, and so are the native startup mode
+// resolver, the hook decision path and the settings-source selector that
+// the 2.1.312 qualification executed. Those 2.1.314 paths were compared,
+// not executed again.
 var verifiedReleases = []agentic.ReleaseCapability{
 	{Release: "2.1.312", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 	{Release: "2.1.314", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
