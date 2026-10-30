@@ -45,7 +45,7 @@ func TestClaude2312RowMapsYoloUnderV3(t *testing.T) {
 
 // Under V3 each selector whose interaction with the bypass was not qualified
 // refuses yolo, in flag and equals forms, before any plan, and native forwards
-// it verbatim at 2.1.312.
+// it verbatim, at each V3 release (v3Releases).
 func TestClaude2312RefusesUnqualifiedSelectorsUnderYolo(t *testing.T) {
 	for _, release := range v3Releases {
 		t.Run(release, func(t *testing.T) { v3RefusesUnqualifiedSelectorsUnderYolo(t, release) })
@@ -75,7 +75,7 @@ func v3RefusesUnqualifiedSelectorsUnderYolo(t *testing.T, release string) {
 			req.NativeArgs = c.args
 			err := planErrorFor(t, req, agentic.LaunchModeInteractive)
 			if !errors.Is(err, agentic.ErrNativePolicyUnknown) {
-				t.Fatalf("yolo 2.1.312: BuildPlan err = %v, want ErrNativePolicyUnknown", err)
+				t.Fatalf("yolo %s: BuildPlan err = %v, want ErrNativePolicyUnknown", release, err)
 			}
 			for _, want := range []string{c.selector, string(agentic.PermissionGrammarV3)} {
 				if !strings.Contains(err.Error(), want) {
@@ -83,19 +83,19 @@ func v3RefusesUnqualifiedSelectorsUnderYolo(t *testing.T, release string) {
 				}
 			}
 			if _, err := New().Argv(req, agentic.LaunchModeInteractive); !errors.Is(err, agentic.ErrNativePolicyUnknown) {
-				t.Fatalf("yolo 2.1.312: Argv err = %v, want ErrNativePolicyUnknown", err)
+				t.Fatalf("yolo %s: Argv err = %v, want ErrNativePolicyUnknown", release, err)
 			}
 
 			req.PermissionMode = agentic.PermissionModeNative
 			if got, want := argvFor(t, req, agentic.LaunchModeInteractive), append(append([]string{}, base...), c.args...); !reflect.DeepEqual(got, want) {
-				t.Fatalf("native 2.1.312: Argv = %#v, want %#v", got, want)
+				t.Fatalf("native %s: Argv = %#v, want %#v", release, got, want)
 			}
 
 		})
 	}
 }
 
-// V3 retains every V2 refusal at 2.1.312, and an unrelated flag beside the
+// V3 retains every V2 refusal at each V3 release, and an unrelated flag beside the
 // bypass still forwards, so the row does not refuse everything.
 func TestClaude2312RetainsV2Refusals(t *testing.T) {
 	for _, release := range v3Releases {
@@ -130,7 +130,7 @@ func v3RetainsV2Refusals(t *testing.T, release string) {
 	}
 }
 
-// The hidden scalars 2.1.312 adds own their next token, as the native parser
+// The hidden scalars 2.1.312 added (still in 2.1.314) own their next token, as the native parser
 // does: a --permission-mode taken as their value is not a selector, while a
 // real one after the value still conflicts.
 func TestClaude2312HiddenScalarsOwnTheirValue(t *testing.T) {
@@ -552,6 +552,22 @@ func v3YoloPermissionMemberShapes(t *testing.T, release string) {
 				if got := argvFor(t, yolo(args...), agentic.LaunchModeInteractive); !slices.Contains(got, bypassPermissionsFlag) {
 					t.Fatalf("%s %s=%s: Argv = %#v, want a yolo plan", name, member, value, got)
 				}
+			}
+		}
+	}
+	// The shape validation is a yolo guard only: native forwards the same
+	// malformed deny, ask and additionalDirectories members verbatim and adds
+	// no bypass. A malformed allow keeps the refusal every mode shares
+	// (toolpolicy), so it is not a native control here.
+	native := interactiveRequest(workDir)
+	native.ToolRelease = release
+	base := []string{"--model", parityModel, "--effort", parityEffort, disallowedToolsDenial}
+	for _, member := range []string{"deny", "ask", "additionalDirectories"} {
+		for _, value := range []string{`"Bash(rm *)"`, `{"defaultMode":"plan"}`, `null`, `[null]`, `["Read",7]`, `[{"defaultMode":"plan"}]`} {
+			native.NativeArgs = []string{"--settings", `{"permissions":{"` + member + `":` + value + `}}`}
+			got := argvFor(t, native, agentic.LaunchModeInteractive)
+			if want := append(append([]string{}, base...), native.NativeArgs...); !reflect.DeepEqual(got, want) || slices.Contains(got, bypassPermissionsFlag) {
+				t.Fatalf("native %s=%s: Argv = %#v, want %#v and no bypass", member, value, got, want)
 			}
 		}
 	}
