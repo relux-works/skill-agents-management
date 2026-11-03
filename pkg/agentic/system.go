@@ -578,6 +578,11 @@ type LaunchRequest struct {
 	// system cannot prove the selected provider is bound in its private home.
 	LocalProvider *LocalProviderBinding
 
+	// CodexGateway is a nonsecret typed renderer input. A rendered plan alone
+	// grants no gateway authority: execution requires the policy-issued basis
+	// and final admission receipt from the gateway admission API.
+	CodexGateway *RuntimeGatewayBindingV1
+
 	// Env is the parent environment the child inherits from, before the
 	// system's own filtering. It is passed in rather than read from the
 	// process so a launch is reproducible and testable without mutating the

@@ -2270,3 +2270,27 @@ Worker/spawn plans still require an explicit model.
 The existing `tools/launchcontext-mutants` runner exercises the managed-plan
 narrowing mutants; its exact command and `.temp/` evidence locations are listed
 in that document's validation tools section.
+
+### Interactive Codex gateway admission
+
+`gatewayadmission.Build` builds one interactive vendor request and reads one
+current provider-limits verdict. Only a serviceable verdict issues the opaque
+`GatewayAdmissionBasisV1`; a generic plan or `SnapshotGatewayCandidate` is data,
+not authority. `LimitsRefusalError` preserves a nonserviceable verdict for the
+caller's existing diagnostics.
+
+`AdmitCodexGateway` binds that original plan to copied fragment/prompt environment,
+native arguments and MCP lookup names. `Finalize` accepts the nonsecret runtime
+binding once successfully, preserving original verifiers and executable digests.
+The Codex `Args` constructor renders the provider table and selection. The child
+launcher alone supplies the private token value and verifies the actual final
+binary, argv and environment immediately before execution.
+
+The supported tuple is Codex 0.164.0 interactive fresh or exact thread resume,
+with an optional single `--no-alt-screen`. The binding uses a loopback HTTP
+`/chatgpt/backend-api/codex` Responses endpoint, OpenAI authentication enabled,
+WebSockets disabled, and an environment-backed registration header. Native
+provider overrides and reserved environment/MCP aliases refuse. This API does
+not qualify an adapter, authenticate an account, or establish OS containment.
+Run its policy and projection tests with
+`go test ./pkg/agentic ./pkg/agentic/systems/codex -run TestGateway -count=1`.

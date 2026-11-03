@@ -80,9 +80,12 @@ type Plan struct {
 
 	curatorContextProvenance *CuratorContextProvenance
 
-	networkProvenance *binding.Record
-	execVerifier      ExecPlanVerifier
-	baseProcess       *processSnapshot
+	networkProvenance    *binding.Record
+	execVerifier         ExecPlanVerifier
+	baseProcess          *processSnapshot
+	codexGatewayPolicy   CodexGatewayPolicy
+	codexGatewayVerifier *codexGatewayVerifier
+	codexGatewayIdentity gatewayPlanIdentity
 
 	// Nodes is empty for the source-compatible single-process plan. A
 	// consumer that needs an inference engine or sidecar calls
@@ -368,6 +371,9 @@ type PlanWithEnvironment struct {
 	// parent environment. Consumers must not diff it against a parent. The slice
 	// is independently owned by the result; an empty snapshot is nil.
 	OwnedEnv []string
+	// GatewayBasis is present only after the separate current-policy admission
+	// entrypoint. BuildPlan and BuildLaunch never issue one.
+	GatewayBasis *GatewayAdmissionBasisV1
 }
 
 // BuildPlanWithEnvironment builds once and captures the owned environment of
@@ -775,6 +781,13 @@ func buildPlan(r *Registry, req LaunchRequest, mode LaunchMode, owned *[]string)
 	}
 	if plan.execVerifier != nil {
 		plan.baseProcess = snapshotProcess(plan)
+	}
+	if gateway, ok := sys.(CodexGatewayPlanner); ok && mode == LaunchModeInteractive {
+		plan.codexGatewayPolicy = gateway.CodexGatewayBasis(cloneCodexGatewayRequest(req), mode)
+		plan.codexGatewayIdentity = gatewayIdentityOf(plan)
+		if plan.baseProcess == nil {
+			plan.baseProcess = snapshotProcess(plan)
+		}
 	}
 	return plan, nil
 }
