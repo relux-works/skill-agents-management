@@ -55,6 +55,7 @@ func TestSpawnRequestLaunchContextASTInventory(t *testing.T) {
 	// These have explicit resolution or primary-plan owners, not SpawnRequest payloads. The AST still
 	// discovers every field; a new unmapped field fails closed.
 	owned := map[string]string{
+		"CodexGateway":            "gateway policy-owned final binding; direct canonical Args input after opaque admission",
 		"CodexRemoteClient":       "manager-owned visible client; direct agentic.BuildPlan input",
 		"ManagerToolDir":          "manager-owned primary/client executable directory; direct agentic.BuildPlan input",
 		"AdditionalWritableRoots": "manager-owned primary sandbox scope; direct agentic.BuildPlan input",
