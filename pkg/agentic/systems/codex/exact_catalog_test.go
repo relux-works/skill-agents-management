@@ -187,9 +187,9 @@ func TestLocalCatalogDuplicateRecognizedFieldRefuses(t *testing.T) {
 func TestLocalCatalogCaseAliasKeysCannotOverride(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name    string
-		kind    agentic.LocalProviderRefusalKind
-		want    error
+		name string
+		kind agentic.LocalProviderRefusalKind
+		want error
 		// snapshotWant is the constructor outcome: nil when the constructor
 		// must succeed (it never checks effort) with snapshotVocab carried.
 		snapshotWant  error
