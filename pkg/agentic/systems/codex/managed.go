@@ -160,6 +160,11 @@ type managedExecSeal struct {
 }
 
 func (*System) SealManagedLaunch(req agentic.LaunchRequest, p agentic.Plan, base agentic.ExecPlanVerifier) (agentic.ExecPlanVerifier, error) {
+	// Managed admission already owns a process basis. Keep its existing wire
+	// form when there are no catalog/TMPDIR/report obligations underneath it.
+	if ordinary, ok := base.(*noArtifactSeal); ok && ordinary.carriedSettings == nil {
+		base = nil
+	}
 	seal := &managedExecSeal{base: base, binary: p.Binary, argv: slices.Clone(p.Argv), env: map[string]string{}}
 	if req.ManagerToolDir != nil {
 		seal.env["PATH"] = codexPolicyEnvValue(p.Env, "PATH")
@@ -255,7 +260,7 @@ func (s *System) importManagedSeal(data agentic.SealedData) (agentic.ExecPlanVer
 				return nil, managedRefusal("malformed managed selector")
 			}
 			held[name] = value
-		case TempDirEnv, carriedSettingsSealSelector:
+		case TempDirEnv, carriedSettingsSealSelector, noArtifactSealSelector:
 			selectors[name] = value
 		default:
 			return nil, managedRefusal("unknown managed selector")
