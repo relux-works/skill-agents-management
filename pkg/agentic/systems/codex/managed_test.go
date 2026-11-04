@@ -246,7 +246,8 @@ func TestManagedWritableRootsExact(t *testing.T) {
 	}
 }
 
-// Zero inputs preserve the old plan, including no PATH rewrite or new seal.
+// Zero managed inputs preserve argv/environment while ordinary planning now
+// retains an explicit no-artifact finalization basis.
 func TestManagedAbsentUnchanged(t *testing.T) {
 	req := managedPrimaryRequest(t)
 	p := requireManagedPlan(t, req)
@@ -258,8 +259,9 @@ func TestManagedAbsentUnchanged(t *testing.T) {
 	if !reflect.DeepEqual(p.Argv, q.Argv) || !reflect.DeepEqual(p.Env, q.Env) {
 		t.Fatal("empty roots change plan")
 	}
-	if _, err := p.ExportSeal(); !errors.Is(err, agentic.ErrSealNotExportable) {
-		t.Fatalf("absent seal changed: %v", err)
+	seal, err := p.ExportSeal()
+	if err != nil || seal.Data.Sealed == nil || seal.Data.Sealed.Selectors[noArtifactSealSelector] != "v1" {
+		t.Fatalf("ordinary no-artifact basis missing: %v", err)
 	}
 }
 

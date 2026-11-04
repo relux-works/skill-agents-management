@@ -462,6 +462,14 @@ JSON. `ImportSeal(system, seal)` rebuilds the verifier. Call
 - Sealed/local-provider guards preserve the original artifact digests,
   binary and ordered argv; import checks the artifact on disk without
   resealing it. They are local-only until closed hosted schemas land.
+- Codex plans with no materialized catalog or TMPDIR obligation now carry an
+  explicit provider-owned `codex-no-artifact=v1` basis. Optional TMPDIR stays
+  absent; carried-report checks and managed guards remain active. Owning
+  finalization retains the original admission and process snapshot and binds
+  the exact composed process. Only finalized no-artifact projections import:
+  a base export, missing/unknown basis, foreign process binding or a marker
+  combined with artifact/TMPDIR obligations refuses. This local guard does not
+  extend hosted admission or permit callers to install a basis on a new plan.
 - `FinalizePlan(base, overlays, bindings)` first refuses a base binary or argv
   that cannot survive guard JSON, then checks the BuildPlan process snapshot,
   rejecting a prechanged binary, argv or env. It validates fragment env,

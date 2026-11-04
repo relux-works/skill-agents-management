@@ -111,6 +111,9 @@ func (system *System) ImportSealedData(data agentic.SealedData) (agentic.ExecPla
 	if _, ok := data.Selectors[managedSealSelector]; ok {
 		return system.importManagedSeal(data)
 	}
+	if _, ok := data.Selectors[noArtifactSealSelector]; ok {
+		return importNoArtifactSeal(data)
+	}
 	reportDigest, reportPresent := data.Selectors[carriedSettingsSealSelector]
 	if reportPresent {
 		if _, valid := parseSealedDigest(reportDigest); !valid {

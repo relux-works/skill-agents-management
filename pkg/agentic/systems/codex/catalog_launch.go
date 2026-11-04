@@ -179,8 +179,8 @@ func (seal *catalogExecSeal) VerifyFinalizedPlan(plan agentic.Plan) error {
 
 // SealExecPlan binds the binary, exact argv and catalog digest to the plan,
 // plus report presence/contents and the plan's TMPDIR selection when it carries
-// exactly one TMPDIR entry. A plan with neither a local catalog nor a TMPDIR
-// selection seals to nothing, exactly as before.
+// exactly one TMPDIR entry. Without either artifact, an explicit provider basis
+// retains the admitted process and any carried-report obligation for finalization.
 // The consumer invokes Plan.VerifyBeforeExec immediately before its own Start.
 func (*System) SealExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error) {
 	tmpdir, tmpdirBound := sealedTempDirSelection(plan.Env)
@@ -204,7 +204,7 @@ func (*System) SealExecPlan(plan agentic.Plan) (agentic.ExecPlanVerifier, error)
 		return &catalogExecSeal{path: path, digest: digest, binary: plan.Binary, argv: append([]string(nil), plan.Argv...), tmpdir: tmpdir, tmpdirBound: tmpdirBound, carriedSettings: cloneCarriedSettingsReport(plan.CarriedSettings)}, nil
 	}
 	if !tmpdirBound {
-		return nil, nil
+		return newNoArtifactSeal(plan), nil
 	}
 	return &catalogExecSeal{binary: plan.Binary, argv: append([]string(nil), plan.Argv...), tmpdir: tmpdir, tmpdirBound: true, carriedSettings: cloneCarriedSettingsReport(plan.CarriedSettings)}, nil
 }

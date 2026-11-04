@@ -31,6 +31,14 @@ type localRefusalCoverageRow struct {
 // collapsing whitespace, so reformatting alone never breaks the mapping;
 // occurrence disambiguates identical guards in one function in source order.
 var localRefusalCoverageTable = []localRefusalCoverageRow{
+	// Explicit provider no-artifact basis keeps every refusal mapped to its control.
+	{file: "pkg/agentic/systems/codex/seal.go", function: "System.ImportSealedData", guard: "if ok", returned: "return importNoArtifactSeal(data)", occurrence: 0, testName: "TestNoArtifactClosedImport"},
+	{file: "pkg/agentic/systems/codex/no_artifact_seal.go", function: "noArtifactSeal.VerifyBeforeExec", guard: "unconditional", returned: "return s.verifyCarriedSettings(plan.CarriedSettings)", occurrence: 0, testName: "TestNoArtifactReportPresenceGuard"},
+	{file: "pkg/agentic/systems/codex/no_artifact_seal.go", function: "importNoArtifactSeal", guard: "if data.Selectors[noArtifactSealSelector] != \"v1\" || len(data.Artifacts) != 0 || data.Binding == nil", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestNoArtifactClosedImport"},
+	{file: "pkg/agentic/systems/codex/no_artifact_seal.go", function: "importNoArtifactSeal", guard: "if !valid", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestNoArtifactClosedImport"},
+	{file: "pkg/agentic/systems/codex/no_artifact_seal.go", function: "importNoArtifactSeal", guard: "switch name case default", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestNoArtifactClosedImport"},
+	{file: "pkg/agentic/systems/codex/no_artifact_seal.go", function: "importNoArtifactSeal", guard: "if data.Binary != data.Binding.Binary || !slices.Equal(data.Argv, data.Binding.Argv)", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestNoArtifactClosedImport"},
+	{file: "pkg/agentic/systems/codex/no_artifact_seal.go", function: "importNoArtifactSeal", guard: "if slices.Contains(data.Binding.EnvNames, TempDirEnv)", returned: "return nil, localCatalogRefusal(agentic.LocalProviderMalformed, sealedCatalogName, \"\")", occurrence: 0, testName: "TestNoArtifactClosedImport"},
 	{file: "pkg/agentic/systems/codex/args.go", function: "Args", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestBuildPlanRefusesLocalProviderBindingAndTransportFailures"},
 	// G23-R1 report-integrity refusals retain executable public-entry witnesses.
 	{file: "pkg/agentic/systems/codex/catalog_launch.go", function: "catalogExecSeal.VerifyBeforeExec", guard: "if err != nil", returned: "return err", occurrence: 0, testName: "TestCarriedSettingsSealRejectsReportTampering"},
@@ -307,16 +315,50 @@ func TestLocalRefusalGuardSeesEveryCodexSource(t *testing.T) {
 	}
 }
 
-// TestLocalRefusalGuardFiresOnAnUnmappedSite narrows the gate: the same
-// discovery with one mapping removed must report that site as unmapped.
+// Original and reversed tables are positive controls. Removing their first,
+// middle or last row must expose exactly that discovered site, regardless of
+// table order, while leaving every other refusal mapped.
 func TestLocalRefusalGuardFiresOnAnUnmappedSite(t *testing.T) {
 	sites := discoverLocalRefusalSites(t)
-	if missing := unmappedLocalSites(sites, localRefusalCoverageTable); len(missing) != 0 {
-		t.Fatalf("baseline uncovered: %v", missing)
+	reversed := append([]localRefusalCoverageRow(nil), localRefusalCoverageTable...)
+	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
+		reversed[i], reversed[j] = reversed[j], reversed[i]
 	}
-	missing := unmappedLocalSites(sites, localRefusalCoverageTable[1:])
-	if len(missing) != 1 || missing[0].function != sites[0].function || missing[0].line != sites[0].line {
-		t.Fatalf("dropped mapping was not refused: %v", missing)
+	for _, table := range []struct {
+		name string
+		rows []localRefusalCoverageRow
+	}{{"original", localRefusalCoverageTable}, {"reversed", reversed}} {
+		t.Run(table.name, func(t *testing.T) {
+			if missing := unmappedLocalSites(sites, table.rows); len(missing) != 0 {
+				t.Fatalf("baseline uncovered: %v", missing)
+			}
+			for _, index := range []int{0, len(table.rows) / 2, len(table.rows) - 1} {
+				t.Run(fmt.Sprintf("row-%d", index), func(t *testing.T) {
+					removed := table.rows[index]
+					var want localRefusalSite
+					found, occurrence := false, 0
+					for _, site := range sites {
+						if site.file != removed.file || site.function != removed.function || site.guard != removed.guard || site.returned != removed.returned {
+							continue
+						}
+						if occurrence == removed.occurrence {
+							want, found = site, true
+							break
+						}
+						occurrence++
+					}
+					if !found {
+						t.Fatalf("control mapping has no discovered site: %v", removed)
+					}
+					rows := append([]localRefusalCoverageRow(nil), table.rows[:index]...)
+					rows = append(rows, table.rows[index+1:]...)
+					missing := unmappedLocalSites(sites, rows)
+					if len(missing) != 1 || missing[0] != want {
+						t.Fatalf("dropped mapping was not refused: got %v, want %v", missing, want)
+					}
+				})
+			}
+		})
 	}
 }
 
