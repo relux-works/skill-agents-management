@@ -222,14 +222,17 @@ resolved against `agents-infra` on PATH) and attaches the assignment on stdin
 using this module's existing precedented fallback, rather than inventing an
 unpinned grammar.
 
-**M2 (separately scheduled, not in this task's scope):** the persisted
-restart/quarantine ledger and its status-JSON surfacing, log rotation, and this
-module's later status-consumer widening are tracked outside this task. The
-`skill-project-management` migration named above is part of end-to-end M1,
-not M2. Until the M2 pieces land,
-`local-models.Availability()` can report `Healthy`/`Unreachable`/`Unknown`
-from a LIVE broker read, but never `Backoff`/`Quarantined` — those wire fields
-do not exist yet, so no `(BrokerState, BrokerSource)` pair can produce them.
+**Module-side M2 status-consumer candidate:** relux-agents-infra PR #10
+publishes the persisted `restart_not_before`, `quarantined_until`, restart and
+readiness facts. `pkg/localruntime` consumes that additive shape with explicit
+presence/type checks and refuses partial lifecycle cohorts, while preserving
+the complete legacy and pre-deadline fixtures. `local-models` maps a
+future quarantine or restart-backoff deadline to validator-safe `Limited` via
+the real `CheckAvailability` entry point. It never derives a limit from
+`restart_count` or `half_open`; a legacy response missing
+`restart_not_before` is `Unknown`, while an explicit `null` or elapsed deadline
+continues through the live broker mapping above. Log rotation and the
+coordinated `skill-project-management` consumer remain separately owned work.
 
 ## Boundaries with task-board
 

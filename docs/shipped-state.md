@@ -260,14 +260,16 @@ What is still open, and owned elsewhere:
   `TASK-260828-3hultd`, in development. Acceptance requires an immutable
   coordinated consumer candidate and tests through the real production call
   chain; helper-only component tests do not satisfy that gate.
-- **The persisted restart/quarantine ledger, its status-JSON surfacing, and
-  log rotation** — `relux-agents-infra`, two new tasks named in the
-  architecture decision (`TASK-260829-3jlxed`, §7.1.3) but not yet created on
-  that repository's own board.
-- **Consuming the widened ledger fields once they exist** — this repository's
-  own `TASK-260829-1kpj01`, deliberately NOT part of this story, so
-  `local-models.Availability()` reports `Healthy`/`Unreachable`/`Unknown` from
-  a live broker read today but never `Backoff`/`Quarantined`.
+- **Shared-runtime log rotation** — separately owned by relux-agents-infra.
+  Its restart/quarantine ledger and the additive public deadline/status facts
+  have landed, but bounded logs remain outside this module.
+- **The coordinated task-board M2 consumer** — separately owned by
+  `skill-project-management`. This module-side candidate now decodes the
+  landed restart/quarantine fields and maps a future quarantine or backoff
+  deadline to validator-safe `Limited` through `CheckAvailability`; it reports
+  `Unknown` for a legacy response missing `restart_not_before` and never
+  infers a current limit from `restart_count` or `half_open`. Partial
+  restart-status cohorts are read failures, never legacy absence.
 - **Pi's own turn-argument/stdin wire protocol for a real turn** — blocked on
   a pinned `earendil-works/pi` binary/docs fixture nothing supplies yet
   (adversarial plan case 17); `pkg/agentic/systems/pi` builds only the pinned
