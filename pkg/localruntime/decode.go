@@ -142,18 +142,49 @@ func decodeStatus(raw []byte, runtime RuntimeID, model ModelID, now time.Time) (
 		return Status{}, err
 	}
 
+	restartCount, restartCountPresent, err := optionalNonNegativeInt(fields, "restart_count")
+	if err != nil {
+		return Status{}, err
+	}
+	restartNotBefore, restartNotBeforePresent, err := optionalNullableTimestamp(fields, "restart_not_before")
+	if err != nil {
+		return Status{}, err
+	}
+	quarantinedUntil, quarantinedUntilPresent, err := optionalNullableTimestamp(fields, "quarantined_until")
+	if err != nil {
+		return Status{}, err
+	}
+	lastReadinessMatch, lastReadinessMatchPresent, err := optionalNullableTimestamp(fields, "last_readiness_match")
+	if err != nil {
+		return Status{}, err
+	}
+	halfOpen, halfOpenPresent, err := optionalBool(fields, "half_open")
+	if err != nil {
+		return Status{}, err
+	}
+
 	return Status{
-		Contract:      StatusContract,
-		SchemaVersion: StatusSchemaVersion,
-		Runtime:       runtime,
-		Model:         model,
-		BrokerState:   broker.State,
-		BrokerSource:  BrokerObservationSource(broker.Source),
-		PID:           pid,
-		StartedAt:     startedAt,
-		ActiveLeases:  leaseCount,
-		MaxLeases:     sharing.Configured.MaxLeases,
-		AsOf:          now,
+		Contract:                  StatusContract,
+		SchemaVersion:             StatusSchemaVersion,
+		Runtime:                   runtime,
+		Model:                     model,
+		BrokerState:               broker.State,
+		BrokerSource:              BrokerObservationSource(broker.Source),
+		PID:                       pid,
+		StartedAt:                 startedAt,
+		ActiveLeases:              leaseCount,
+		MaxLeases:                 sharing.Configured.MaxLeases,
+		RestartCount:              restartCount,
+		RestartCountPresent:       restartCountPresent,
+		RestartNotBefore:          restartNotBefore,
+		RestartNotBeforePresent:   restartNotBeforePresent,
+		QuarantinedUntil:          quarantinedUntil,
+		QuarantinedUntilPresent:   quarantinedUntilPresent,
+		LastReadinessMatch:        lastReadinessMatch,
+		LastReadinessMatchPresent: lastReadinessMatchPresent,
+		HalfOpen:                  halfOpen,
+		HalfOpenPresent:           halfOpenPresent,
+		AsOf:                      now,
 	}, nil
 }
 
@@ -219,4 +250,61 @@ func requiredNonEmptyString(fields map[string]json.RawMessage, key string) (stri
 		return "", fmt.Errorf("%w: field %q is empty", ErrDecodeFailure, key)
 	}
 	return value, nil
+}
+
+// optionalNonNegativeInt decodes an additive integer field. Absence is
+// accepted for compatibility with an older status producer; a present field
+// must have the extension's exact type and range.
+func optionalNonNegativeInt(fields map[string]json.RawMessage, key string) (value int, present bool, err error) {
+	raw, present := fields[key]
+	if !present {
+		return 0, false, nil
+	}
+	if strings.TrimSpace(string(raw)) == "null" {
+		return 0, true, fmt.Errorf("%w: field %q is null, not an integer", ErrDecodeFailure, key)
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return 0, true, fmt.Errorf("%w: field %q is not an integer: %v", ErrDecodeFailure, key, err)
+	}
+	if value < 0 {
+		return 0, true, fmt.Errorf("%w: field %q is negative", ErrDecodeFailure, key)
+	}
+	return value, true, nil
+}
+
+// optionalNullableTimestamp preserves all three wire states: absent (legacy
+// producer), null (current producer with no deadline/observation), and a
+// strict RFC3339 timestamp. Present malformed input is a failed read, never
+// laundered into absence.
+func optionalNullableTimestamp(fields map[string]json.RawMessage, key string) (value *time.Time, present bool, err error) {
+	raw, present := fields[key]
+	if !present {
+		return nil, false, nil
+	}
+	if strings.TrimSpace(string(raw)) == "null" {
+		return nil, true, nil
+	}
+	var encoded string
+	if err := json.Unmarshal(raw, &encoded); err != nil {
+		return nil, true, fmt.Errorf("%w: field %q is not null or an RFC3339 string: %v", ErrDecodeFailure, key, err)
+	}
+	parsed, err := time.Parse(time.RFC3339, encoded)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w: field %q is not an RFC3339 timestamp: %v", ErrDecodeFailure, key, err)
+	}
+	return &parsed, true, nil
+}
+
+func optionalBool(fields map[string]json.RawMessage, key string) (value bool, present bool, err error) {
+	raw, present := fields[key]
+	if !present {
+		return false, false, nil
+	}
+	if strings.TrimSpace(string(raw)) == "null" {
+		return false, true, fmt.Errorf("%w: field %q is null, not a boolean", ErrDecodeFailure, key)
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return false, true, fmt.Errorf("%w: field %q is not a boolean: %v", ErrDecodeFailure, key, err)
+	}
+	return value, true, nil
 }
