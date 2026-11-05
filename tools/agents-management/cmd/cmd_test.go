@@ -28,6 +28,8 @@ func runRoot(t *testing.T, args ...string) (stdout, stderr string, err error) {
 		_ = vendorsCmd.Flags().Set("json", "false")
 		runtimesJSON = false
 		_ = runtimesCmd.Flags().Set("json", "false")
+		localRuntimeJSON = false
+		_ = localRuntimeStatusCmd.Flags().Set("json", "false")
 	})
 
 	err = rootCmd.Execute()

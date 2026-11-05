@@ -65,6 +65,7 @@ func PassthroughLaunch(sc SpawnContext) agentic.LaunchRequest {
 		WorkDir:     sc.Request.WorkDir,
 		Home:        sc.Request.Home,
 		Env:         sc.Request.Env,
+		Profile:     sc.Request.Profile,
 		Goal:        sc.Request.Goal,
 		Budget:      sc.Request.Budget,
 		ServiceTier: sc.Request.ServiceTier,

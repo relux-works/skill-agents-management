@@ -355,12 +355,23 @@ The vendor plugin contract, its registry, and the runtime declarations.
   limited-until(time, evidence), unreachable(evidence), or unknown — with
   "checked and found nothing" distinguishable from "nobody looked" and from "the
   read failed". The zero value is unknown, and only an observed healthy verdict
-  is serviceable. The local-model resource plane sketched in
-  `docs/architecture.md` is DESIGN ONLY and none of it is built; what this
-  layer owes it is a seam it can report through without an interface change,
-  and a test demonstrates five such answers fitting the existing fields. That
-  test exercises the verdict type, not a resource plane — there is no
-  local-models package anywhere in this module.
+  is serviceable. `AvailabilityQuery` carries a `Runtime` field so a vendor
+  serving more than one `RuntimeID` (`local-models` today, `google` for
+  `gemini`/`agy` already) can disambiguate which declared pair a caller means.
+  The local-model resource plane described in `docs/architecture.md` ("The
+  local-model plugin: M1 shipped, M2 still design-only") IS built as of this
+  story: `pkg/vendorplugin/vendors/local-models` is a real vendor plugin,
+  `pkg/agentic/systems/pi` is Process A's harness plugin, and `pkg/localruntime`
+  is the machine-local `StatusReader` contract. `local-models`, unlike every
+  other vendor plugin, does NOT self-register in `init()` — its catalog depends
+  on a machine-local `~/.agents/.configs/local-models.toml` that may not exist,
+  so a caller building the shared registry decides whether to register it at
+  all via `localmodels.Peek()`'s three-way absent/malformed/valid result (see
+  `docs/architecture.md`). What is still open — the `local-qwen`
+  `RuntimeDeclaration` and `skill-project-management`'s own migration onto
+  `vendorplugin.BuildLaunch(ctx, ...)` — is a different Go module's task
+  (`TASK-260828-3hultd`), not built here; see
+  [docs/shipped-state.md](docs/shipped-state.md).
 - **Runtimes are declared pairs.** `RuntimeDeclaration` binds a stable id to
   one agentic system and one vendor, and the six historical ids (`claude`,
   `codex`, `qwen`, `gemini`, `agy`, `muse`) are seeded from the extraction
@@ -643,24 +654,28 @@ time and require `make regress` to go red naming the right test:
 
 ### Current CLI surface
 
-Four commands of its own, because this stage is about seams rather than
+Five commands of its own, because this stage is about seams rather than
 features (cobra contributes `help` and `completion`):
 
 ```
-agents-management version           # build version, commit and build date
-agents-management plugins [--json]  # the agentic system plugins compiled in
-agents-management vendors [--json]  # the vendor plugins compiled in
-agents-management runtimes [--json] # the declared (system x vendor) pairs
+agents-management version                    # build version, commit and build date
+agents-management plugins [--json]            # the agentic system plugins compiled in
+agents-management vendors [--json]            # the vendor plugins compiled in
+agents-management runtimes [--json]           # the declared (system x vendor) pairs
+agents-management local-runtime status [--json]  # local-models.toml's registration state and live pair status
 ```
 
 `plugins` and `vendors` read the `pkg/agentic` and `pkg/vendorplugin` default
 registries — the same ones a plugin package registers into from its `init` —
 and print the registered ids. **Both print an empty list and exit 0 in the
-shipped binary.** That is the answer, not a stub: all ten plugins exist and
-none is compiled into `tools/agents-management`, which imports no plugin
-package, and "nothing registered" is a different fact from a failure to look.
-`--json` renders the empty case as `[]`, never `null`. A consumer links the
-packages it needs directly — see
+shipped binary.** That is the answer, not a stub: every plugin package exists
+and none is compiled into `tools/agents-management`, which imports no plugin
+package (`local-models` is the one deliberate exception the binary links
+directly, for `local-runtime status` below, and it still does not self-register
+— see the conditional-registration contract in `docs/architecture.md`), and
+"nothing registered" is a different fact from a failure to look. `--json`
+renders the empty case as `[]`, never `null`. A consumer links the packages it
+needs directly — see
 [docs/consuming-the-module.md](docs/consuming-the-module.md) — and gets a
 populated registry in its own binary.
 
@@ -671,6 +686,16 @@ launch: every id appears whether or not its plugins are compiled in, and
 form carries the broker provenance — which source was checked, and that nothing
 established a vendor — because "unresolved" is only honest when the search
 behind it is visible.
+
+`local-runtime status` reads `localmodels.Peek()`'s memoized-forever result —
+the SAME loader a launch's conditional registration decision reads — and
+reports whether `~/.agents/.configs/local-models.toml` was found and parsed,
+distinctly for absence versus a malformed file
+(`{"registered": false, "reason": "absent"}` vs
+`{"registered": false, "reason": "malformed", "error": "<msg>"}`), and when
+valid, each declared `(runtime, model)` pair's live broker status via
+`pkg/localruntime`'s `StatusReader`. It never registers, declares, or launches
+anything itself.
 
 None of these commands keeps a list of its own. A private one would be a
 second binding for the same fact, which is exactly what the single-source

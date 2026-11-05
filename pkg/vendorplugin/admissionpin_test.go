@@ -1,6 +1,7 @@
 package vendorplugin_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -560,7 +561,7 @@ func TestDeclaredCrossRuntimeResolvesAndLaunches(t *testing.T) {
 		t.Fatalf("writing the assignment prompt: %v", err)
 	}
 
-	plan, err := vendorplugin.BuildLaunch(registry, vendorplugin.SpawnRequest{
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, vendorplugin.SpawnRequest{
 		Runtime:    "qwen-codex",
 		Model:      "qwen3.7-plus-via-codex",
 		Effort:     "ultra",

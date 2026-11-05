@@ -27,6 +27,7 @@ plugin per system:
 | `gemini-cli` | Gemini CLI |
 | `antigravity` | Antigravity CLI |
 | `muse` | Muse CLI |
+| `pi` | Process A: `agents-infra pi --profile <name> -- <turn args>`, the short-lived wrapper that holds a shared local-runtime lease and execs the real `pi` binary as its own child |
 
 An agentic-system plugin declares (this mirrors the adapter table the
 extraction source already proved out):
@@ -43,7 +44,9 @@ extraction source already proved out):
 ### Layer 2 — vendor plugins
 
 A **vendor** owns models, authentication and quota: anthropic, openai,
-alibaba, google. A vendor plugin **depends on agentic-system plugins** and
+alibaba, google, and `local-models` — the generic resource plane for
+locally-running models (§ below, "The local-model plugin"). A vendor plugin
+**depends on agentic-system plugins** and
 declares which systems can drive its models. That dependency direction is the
 load-bearing decision: a runtime is the *pair* (agentic system × vendor), so
 cross-runtime combinations — Qwen models under the Codex harness — are just a
@@ -98,6 +101,29 @@ Declaration collisions follow the extraction source's F2 policy: a declaration
 matching an existing binding is legal and idempotent, a conflicting one is
 refused and the first declaration stands.
 
+## `BuildLaunch` — the one production launch dispatch
+
+`vendorplugin.BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest,
+mode agentic.LaunchMode) (agentic.Plan, error)` is the single dispatch site
+for the Vendor contract, for every `RuntimeID` a registry declares — resolve,
+select the model, resolve effort, `Vendor.Spawn`, a fidelity check, set
+`LaunchRequest.Runtime` uniformly, then the optional Preflight step below,
+then `agentic.BuildPlan`. A consumer never hand-builds a `LaunchRequest` and
+calls `BuildPlan` directly for a registry-declared runtime; every launch goes
+through this one function.
+
+## `Preflightable` — the second generic extension point
+
+`agentic.Preflightable` (`Preflight(ctx context.Context, req LaunchRequest)
+(PreflightEvidence, error)`) is an OPTIONAL interface a `System` plugin may
+implement: a fail-fast, advisory readiness check `BuildLaunch` runs once per
+launch, after resolution and before `BuildPlan`, skipped entirely in
+`LaunchModeDryRun`. `BuildLaunch` type-asserts the resolved runtime's `System`
+against it — a plugin that does not implement it launches exactly as it did
+before this interface existed, with no per-system-identifier branch anywhere
+in the dispatcher. A non-nil error refuses the launch before `BuildPlan` is
+ever called. `pi` (below) is this module's one implementation today.
+
 ## Invariants carried from the extraction source
 
 These were established empirically in `skill-project-management` and are
@@ -125,35 +151,47 @@ contracts here, not suggestions:
    shadow tables and duplicate charsets; the plugin registry is the only
    place a binding may live, and guards should make a second one fail a test.
 
-## Planned: the local-model plugin (design only, not in current scope)
+## The local-model plugin: M1 shipped, M2 still design-only
 
-**Nothing in this section is built.** There is no local-models package, no
-sub-plugin contract, no resource plane and no admission queue anywhere in this
-module. What exists is the SEAM it has to fit through — availability as a
-structured verdict rather than a boolean, admission as a decision that can be
-deferred — and a test in `pkg/vendorplugin` demonstrating five such answers
-fitting the existing fields with no interface change. That test exercises the
-verdict type. Read the rest as a design note.
+**M1 (this repository, shipped):** `pkg/vendorplugin/vendors/local-models` is
+a real vendor plugin — unlike every other vendor plugin, it does NOT
+self-register in `init()`, because its catalog depends on a machine-local
+`~/.agents/.configs/local-models.toml` that may not exist, and
+`Registry.Register`'s unconditional `ErrNoModels` refusal would otherwise
+poison registry construction for every unrelated runtime the moment that file
+is absent. `localmodels.Peek()` exposes the lazy, memoized-forever load result
+so a caller building the shared registry (`launchRegistry`, on the consumer's
+side) can decide whether to register it at all — absent and malformed are
+two DISTINCT, typed outcomes (`ConfigResult{Absent: true}` vs
+`ConfigResult{Err: ...}`), and a malformed file's diagnostic reaches the real
+launch path via `Registry.NoteUnregistered`/`ErrRuntimeConfigMalformed` on
+`ResolveRuntime`, not only a separate status CLI. `pkg/agentic/systems/pi` is
+Process A's harness plugin (see the Layer-1 table above) and implements
+`Preflightable`: a context-bounded, fail-closed admit/refuse check against
+`pkg/localruntime`'s machine-local `StatusReader` — `("absent", "determined")`
+is the sole non-attested admit; every other unattested/indeterminate broker
+read refuses. Neither this vendor nor `pi` nor `pkg/localruntime` ever starts,
+stops or signals the local model server itself (Process B); that authority
+belongs entirely to `relux-agents-infra`'s own shared-runtime broker,
+`pkg/localruntime`'s read-only status subprocess call is the one exception to
+"no `os/exec` in this vendor's import graph", and a static test enforces it.
 
-Local models (muse today; local qwen and others next) need what remote
-vendors do not: **resource awareness**. A local vendor cannot answer
-"available?" without knowing:
+Pi's own turn-argument/stdin wire protocol for a real turn is a NAMED OPEN
+ITEM, not an oversight: it depends on a pinned `earendil-works/pi` binary/docs
+fixture nothing in this repository supplies yet, so `pkg/agentic/systems/pi`
+builds only the pinned argv prefix (`["pi", "--profile", <profile>, "--"]`,
+resolved against `agents-infra` on PATH) and attaches the assignment on stdin
+using this module's existing precedented fallback, rather than inventing an
+unpinned grammar.
 
-- is the model currently loaded,
-- is inference running on it right now, or is it idle,
-- is there memory to load another model, or must one be evicted first,
-- if eviction is needed — has the running model finished, or must we wait for
-  its current work before unloading.
-
-The design direction: one **local-models plugin** owning the shared resource
-plane (memory accounting, load/unload sequencing, busy/idle observation), with
-per-vendor **sub-plugins** beneath it for model-specific facts. The
-availability answer for a local runtime then composes the vendor's own state
-with the resource plane's verdict, and spawn admission can *queue on* an
-eviction rather than failing. This layer is documented now so the plugin
-interfaces leave room for it (availability as a structured verdict rather
-than a boolean; admission as an async decision), but nothing of it is built
-in the current extraction scope.
+**M2 (cross-repo, not in this repository's scope):** the persisted
+restart/quarantine ledger and its status-JSON surfacing, log rotation, and
+`skill-project-management`'s own generic migration onto
+`vendorplugin.BuildLaunch(ctx, ...)` for every `AgentType` are all tracked
+elsewhere and unscheduled as of this writing. Until they land,
+`local-models.Availability()` can report `Healthy`/`Unreachable`/`Unknown`
+from a LIVE broker read, but never `Backoff`/`Quarantined` — those wire fields
+do not exist yet, so no `(BrokerState, BrokerSource)` pair can produce them.
 
 ## Boundaries with task-board
 

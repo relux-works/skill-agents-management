@@ -1,13 +1,22 @@
 package vendorplugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
+
+// preflightTimeout bounds every Preflightable.Preflight call BuildLaunch
+// makes, regardless of what ctx the caller supplied. It mirrors the shape
+// skill-project-management's own launch-composition and agy-preflight
+// timeouts already use: a named constant, never an inline literal, so a
+// test can shrink the effective bound without editing this file.
+const preflightTimeout = 10 * time.Second
 
 var (
 	// ErrUnknownModel is returned when a spawn names a model the resolved
@@ -69,6 +78,13 @@ type SpawnRequest struct {
 	WorkDir string
 	Home    string
 
+	// Profile is the harness-side named configuration profile a launch runs
+	// under, carried straight onto agentic.LaunchRequest.Profile by the
+	// vendors that use it. It is transport for a fact a vendor may need to
+	// fill in (local-models fills it from its own pointer when the caller
+	// left it empty) rather than a value this layer interprets itself.
+	Profile string
+
 	// Env is the parent environment the child inherits from, before the
 	// system's filtering and the vendor's additions.
 	Env []string
@@ -99,8 +115,12 @@ type SpawnRequest struct {
 // What it does NOT do is ask whether the launch is allowed RIGHT NOW.
 // Availability, limit state and admission are a separate question with a
 // separate entry point (CheckAvailability), and folding them in here would
-// make an expressibility check depend on a network read.
-func BuildLaunch(r *Registry, req SpawnRequest, mode agentic.LaunchMode) (agentic.Plan, error) {
+// make an expressibility check depend on a network read — with ONE
+// exception: the optional, generic Preflightable step below, which exists
+// precisely because a cold-start-safe, fail-closed advisory check on THIS
+// launch attempt is a different question from either of those and belongs at
+// the one place every launch already passes through.
+func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agentic.LaunchMode) (agentic.Plan, error) {
 	if r == nil {
 		return agentic.Plan{}, errors.New("vendorplugin: cannot build a launch without a registry")
 	}
@@ -134,6 +154,22 @@ func BuildLaunch(r *Registry, req SpawnRequest, mode agentic.LaunchMode) (agenti
 	}
 	if err := checkLaunchFidelity(runtime, model, effort, req, launch); err != nil {
 		return agentic.Plan{}, err
+	}
+
+	// Runtime is set HERE, uniformly, for every runtime — never by an
+	// individual vendor's Spawn. A vendor double that set it itself (buggy or
+	// not) is overwritten: this is the one place the fact is authoritative,
+	// sourced from the SAME req.Runtime every resolution above already used.
+	launch.Runtime = string(req.Runtime)
+
+	if mode != agentic.LaunchModeDryRun {
+		if p, ok := runtime.System.(agentic.Preflightable); ok {
+			preflightCtx, cancel := context.WithTimeout(ctx, preflightTimeout)
+			defer cancel()
+			if _, err := p.Preflight(preflightCtx, launch); err != nil {
+				return agentic.Plan{}, fmt.Errorf("vendorplugin: preflight refused runtime %s: %w", runtime.ID, err)
+			}
+		}
 	}
 
 	return agentic.BuildPlan(r.systems, launch, mode)

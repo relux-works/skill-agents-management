@@ -1,6 +1,7 @@
 package vendorplugin
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -99,7 +100,7 @@ func TestResolvingAnUnresolvedVendorRuntimeIsRefusedOnItsOwnTerms(t *testing.T) 
 	requireErrorIs(t, err, ErrRuntimeVendorUnresolved, "ResolveRuntime(runtime with an unresolved broker)")
 	requireMentions(t, err, "unbrokered", "the source's frozen table")
 
-	if _, err := BuildLaunch(registry, SpawnRequest{Runtime: "unbrokered", Model: "anything"}, agentic.LaunchModeExec); err == nil {
+	if _, err := BuildLaunch(context.Background(), registry, SpawnRequest{Runtime: "unbrokered", Model: "anything"}, agentic.LaunchModeExec); err == nil {
 		t.Fatal("a launch through an unresolved-vendor runtime was built; there is no vendor to pick a model from")
 	}
 }

@@ -1,6 +1,7 @@
 package vendorplugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -313,7 +314,7 @@ func TestRegisteringOneVendorDrivesEveryDispatchSurface(t *testing.T) {
 		t.Fatalf("ResolveRuntime(tusk): %v", err)
 	}
 	for _, mode := range []agentic.LaunchMode{agentic.LaunchModeExec, agentic.LaunchModeDryRun, agentic.LaunchModeManagedSession} {
-		if _, err := BuildLaunch(registry, narwhalRequest(), mode); err != nil {
+		if _, err := BuildLaunch(context.Background(), registry, narwhalRequest(), mode); err != nil {
 			t.Fatalf("BuildLaunch(tusk, %s): %v", mode, err)
 		}
 	}
