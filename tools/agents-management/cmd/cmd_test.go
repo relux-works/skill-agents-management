@@ -24,6 +24,10 @@ func runRoot(t *testing.T, args ...string) (stdout, stderr string, err error) {
 		rootCmd.SetArgs(nil)
 		pluginsJSON = false
 		_ = pluginsCmd.Flags().Set("json", "false")
+		vendorsJSON = false
+		_ = vendorsCmd.Flags().Set("json", "false")
+		runtimesJSON = false
+		_ = runtimesCmd.Flags().Set("json", "false")
 	})
 
 	err = rootCmd.Execute()

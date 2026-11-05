@@ -64,6 +64,26 @@ forever — they feed admitted-pair digests, limit-state filenames and free-text
 records downstream, and renaming any of them orphans state silently. New
 runtimes are declarations, not code.
 
+A declaration is a naming fact, not a dependency check: neither the system nor
+the vendor plugin has to be compiled in for one to exist, and the six frozen
+ids are seeded into every binary before any plugin registers. Resolution is
+where the pair is materialized, and it names precisely what is missing — the
+runtime was never declared, the system plugin is absent, the vendor plugin is
+absent, or the vendor was **looked for and never established**.
+
+That last case is `muse`, whose broker the extraction source records as UNKNOWN
+with a checked-and-empty evidence list. It is carried as an unresolved vendor
+with the search that failed to establish one, which makes the declaration
+complete and the runtime unlaunchable through the vendor layer. Nothing guesses
+a vendor for it: the binding keys limit state, and a plausible guess there is a
+fabrication with consequences. This does not weaken the vendor interface for
+anyone else — an unresolved vendor is not a degraded vendor with empty models,
+it is the absence of one, and every other runtime resolves to a full plugin.
+
+Declaration collisions follow the extraction source's F2 policy: a declaration
+matching an existing binding is legal and idempotent, a conflicting one is
+refused and the first declaration stands.
+
 ## Invariants carried from the extraction source
 
 These were established empirically in `skill-project-management` and are

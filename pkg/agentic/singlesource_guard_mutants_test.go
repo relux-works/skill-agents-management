@@ -57,6 +57,28 @@ type Registry struct {
 func NewRegistry() *Registry { return &Registry{systems: bindings{}} }
 `
 
+// mutantVendorRegistrySource stands in for the real vendor registry: the
+// Layer-2 home, so a vendor or runtime binding planted anywhere else has to be
+// found on its own merits rather than because the corpus declares no
+// legitimate vendor table at all.
+const mutantVendorRegistrySource = `package vendorplugin
+
+type VendorID string
+
+type RuntimeID string
+
+type Vendor interface{ ID() VendorID }
+
+type RuntimeDeclaration struct{ ID RuntimeID }
+
+type vendorBindings map[VendorID]Vendor
+
+type Registry struct {
+	vendors  vendorBindings
+	runtimes map[RuntimeID]RuntimeDeclaration
+}
+`
+
 func scanMutant(t *testing.T, filename, src string) []bindingViolation {
 	t.Helper()
 	return scanMutantFiles(t, map[string]string{filename: src})
@@ -67,14 +89,17 @@ func scanMutant(t *testing.T, filename, src string) []bindingViolation {
 // table gets in without any single file looking wrong.
 func scanMutantFiles(t *testing.T, files map[string]string) []bindingViolation {
 	t.Helper()
-	corpus := map[string]string{"pkg/agentic/registry.go": mutantRegistrySource}
+	corpus := map[string]string{
+		"pkg/agentic/registry.go":      mutantRegistrySource,
+		"pkg/vendorplugin/registry.go": mutantVendorRegistrySource,
+	}
 	for name, src := range files {
-		if name == "pkg/agentic/registry.go" {
-			t.Fatalf("a mutant must not overwrite the allowed file")
+		if _, home := corpus[name]; home {
+			t.Fatalf("a mutant must not overwrite the home file %s", name)
 		}
 		corpus[name] = src
 	}
-	violations, err := scanSingleSource(corpus, registryAllowlist)
+	violations, err := scanSingleSource(corpus, bindingHomes)
 	if err != nil {
 		t.Fatalf("scanSingleSource: %v", err)
 	}
@@ -461,7 +486,7 @@ func argv(sys agentic.System) []string {
 `,
 		},
 		{
-			// NARROWING. The ids are outside knownSystemIDs on purpose, so the
+			// NARROWING. The ids are outside knownPluginIDs on purpose, so the
 			// vocabulary net cannot fire and only the local resolution can
 			// catch this. Binding the call to a name before switching on it is
 			// at least as idiomatic as switching on the call, so a guard that
@@ -629,7 +654,7 @@ func argv(id string) []string {
 		},
 		// The four below are the if/switch asymmetry a review found, and they
 		// are written the way that review's probes were: with ids OUTSIDE
-		// knownSystemIDs. Every earlier if-chain mutant here used a known id,
+		// knownPluginIDs. Every earlier if-chain mutant here used a known id,
 		// so the vocabulary net answered for all of them and the structural
 		// net was never asked — which is exactly how a matrix can be full and
 		// still miss a hole. If the BinaryExpr rule stops consulting isIDExpr,
@@ -1164,6 +1189,182 @@ func boot() map[string]builder {
 	for _, mutant := range mutants {
 		t.Run(mutant.name, func(t *testing.T) {
 			requireClass(t, mutant.name, scanMutantFiles(t, mutant.files), mutant.class)
+		})
+	}
+}
+
+// TestSingleSourceGuardCatchesVendorLayerBindings is the extension's own
+// mutant set. The guard's key-type list gained VendorID and RuntimeID when
+// Layer 2 arrived, and a list that is never exercised on the types it gained
+// is a list that claims coverage it has not got.
+//
+// Every spelling here is one that walked through SOME revision of the Layer-1
+// rules and is reused verbatim in shape, because the rules are shared: if the
+// vendor key types were bolted on by name in one rule and not the others,
+// exactly one of these goes red.
+func TestSingleSourceGuardCatchesVendorLayerBindings(t *testing.T) {
+	mutants := []struct {
+		name string
+		file string
+		src  string
+	}{
+		{
+			name: "a second map keyed by VendorID",
+			file: "pkg/quota/shadow.go",
+			src: `package quota
+
+import "github.com/relux-works/skill-agents-management/pkg/vendorplugin"
+
+type limiter func() bool
+
+var shadow = map[vendorplugin.VendorID]limiter{}
+`,
+		},
+		{
+			name: "a second map keyed by RuntimeID",
+			file: "pkg/quota/runtimes.go",
+			src: `package quota
+
+import "github.com/relux-works/skill-agents-management/pkg/vendorplugin"
+
+type limiter func() bool
+
+var shadow = map[vendorplugin.RuntimeID]limiter{}
+`,
+		},
+		{
+			name: "a struct field typed map[VendorID]T, never a literal anywhere",
+			file: "pkg/quota/field.go",
+			src: `package quota
+
+import "github.com/relux-works/skill-agents-management/pkg/vendorplugin"
+
+type limiter func() bool
+
+type cache struct {
+	byVendor map[vendorplugin.VendorID]limiter
+}
+`,
+		},
+		{
+			name: "a value of a vendor binding-table type the vendor registry legitimately declares",
+			file: "pkg/quota/holdbindings.go",
+			src: `package vendorplugin
+
+var shadow vendorBindings
+
+func boot() vendorBindings { return make(vendorBindings) }
+`,
+		},
+		{
+			name: "runtime ids as literal keys, avoiding the RuntimeID type entirely",
+			file: "pkg/quota/stringkeys.go",
+			src: `package quota
+
+type limiter func() bool
+
+var shadow = map[string]limiter{
+	"agy":  nil,
+	"muse": nil,
+}
+`,
+		},
+		{
+			name: "vendor ids as literal keys, assembled key by key from an init()",
+			file: "pkg/quota/initassign.go",
+			src: `package quota
+
+type limiter func() bool
+
+var shadow map[string]limiter
+
+func init() {
+	shadow = make(map[string]limiter, 2)
+	shadow["anthropic"] = nil
+	shadow["alibaba"] = nil
+}
+`,
+		},
+	}
+
+	for _, mutant := range mutants {
+		t.Run(mutant.name, func(t *testing.T) {
+			requireClass(t, mutant.name, scanMutant(t, mutant.file, mutant.src), bindingClassTable)
+		})
+	}
+}
+
+// TestSingleSourceGuardCatchesCrossLayerBindings is the narrowing that the
+// per-key-type list exists for, and the ONLY test that separates it from a
+// flat allowlist of permitted files.
+//
+// Each mutant plants a binding for one layer's key type inside the OTHER
+// layer's home — a file that legitimately holds a binding map, so every "is
+// this file allowed to bind" rule answers yes. Under a flat allowlist both are
+// admitted. Under bindingHomes both are violations, because the home is
+// declared per fact and "which plugin implements vendor Y" is not the fact
+// pkg/agentic/registry.go is the home of.
+func TestSingleSourceGuardCatchesCrossLayerBindings(t *testing.T) {
+	// The planted binding is APPENDED to the home file's real content, exactly
+	// as a colleague adding a second table to an existing registry would write
+	// it — which is why each snippet is a fragment rather than a whole file,
+	// and why the qualified spelling carries no import line: the scan is
+	// syntactic and the placement of an import is not what is under test.
+	mutants := []struct {
+		name    string
+		home    string
+		snippet string
+	}{
+		{
+			name: "a vendor binding inside the agentic registry",
+			home: "pkg/agentic/registry.go",
+			snippet: `
+type quota func() bool
+
+var vendors = map[vendorplugin.VendorID]quota{}
+`,
+		},
+		{
+			name: "a runtime binding inside the agentic registry",
+			home: "pkg/agentic/registry.go",
+			snippet: `
+type pair struct{}
+
+var runtimes = map[vendorplugin.RuntimeID]pair{}
+`,
+		},
+		{
+			name: "a system binding inside the vendor registry",
+			home: "pkg/vendorplugin/registry.go",
+			snippet: `
+type builder func() []string
+
+var systems = map[agentic.SystemID]builder{}
+`,
+		},
+	}
+
+	for _, mutant := range mutants {
+		t.Run(mutant.name, func(t *testing.T) {
+			corpus := map[string]string{
+				"pkg/agentic/registry.go":      mutantRegistrySource,
+				"pkg/vendorplugin/registry.go": mutantVendorRegistrySource,
+			}
+			corpus[mutant.home] += mutant.snippet
+			violations, err := scanSingleSource(corpus, bindingHomes)
+			if err != nil {
+				t.Fatalf("scanSingleSource: %v", err)
+			}
+			found := false
+			for _, v := range violations {
+				if v.File == mutant.home && v.Class == bindingClassTable {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("%s: a binding for the other layer's key type inside %s was admitted; the home list is behaving like a flat allowlist. violations=%v",
+					mutant.name, mutant.home, violations)
+			}
 		})
 	}
 }

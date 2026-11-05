@@ -24,7 +24,8 @@ package agentic
 
 import (
 	"fmt"
-	"strings"
+
+	"github.com/relux-works/skill-agents-management/internal/ident"
 )
 
 // SystemID is the stable identifier of an agentic system plugin, normalized
@@ -46,7 +47,7 @@ type InvalidSystemIDError struct {
 }
 
 func (e *InvalidSystemIDError) Error() string {
-	return fmt.Sprintf("invalid agentic system id %q: %s; ids are lowercase ASCII segments of letters and digits joined by single hyphens, for example \"claude-code\"", e.Raw, e.Reason)
+	return fmt.Sprintf("invalid agentic system id %q: %s; %s, for example %q", e.Raw, e.Reason, ident.Rule, "claude-code")
 }
 
 // NormalizeSystemID is the single normalization for agentic system
@@ -57,29 +58,18 @@ func (e *InvalidSystemIDError) Error() string {
 // Normalizing before validating is what makes "Codex" and "codex" the same
 // registration rather than two — the registry reports the second as a
 // duplicate instead of admitting a shadow binding under a different spelling.
+//
+// The fold itself lives in internal/ident, shared with the vendor layer's own
+// identifier kinds. Invariant 5 names "one normalization for identifiers", and
+// a second copy of this loop one package over is that invariant broken in the
+// least visible way available: two charsets that agree until the day one of
+// them is widened.
 func NormalizeSystemID(raw string) (SystemID, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return "", &InvalidSystemIDError{Raw: raw, Reason: "it is empty"}
+	normalized, reason, ok := ident.Normalize(raw)
+	if !ok {
+		return "", &InvalidSystemIDError{Raw: raw, Reason: reason}
 	}
-	lowered := strings.Map(func(r rune) rune {
-		if r >= 'A' && r <= 'Z' {
-			return r + ('a' - 'A')
-		}
-		return r
-	}, trimmed)
-	for _, segment := range strings.Split(lowered, "-") {
-		if segment == "" {
-			return "", &InvalidSystemIDError{Raw: raw, Reason: "it has an empty hyphen-separated segment"}
-		}
-		for _, r := range segment {
-			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-				continue
-			}
-			return "", &InvalidSystemIDError{Raw: raw, Reason: fmt.Sprintf("it contains %q, which is not a lowercase ASCII letter, a digit or a hyphen", string(r))}
-		}
-	}
-	return SystemID(lowered), nil
+	return SystemID(normalized), nil
 }
 
 // LaunchMode selects which argv grammar a system builds. A harness does not

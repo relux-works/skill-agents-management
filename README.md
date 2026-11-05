@@ -71,17 +71,84 @@ The agentic-system plugin contract and its registry.
   `pkg/agentic/singlesource_guard_test.go` fails the build if one appears: a
   go/ast scan of the whole module for a second binding table or an id switch,
   with its threat model and its declared-open residuals documented in the file.
-  Its rules are held to 49 mutants in `singlesource_guard_mutants_test.go`,
-  split into the set its author wrote and the set two reviews wrote against it.
+  Its rules are held to 58 mutants in `singlesource_guard_mutants_test.go`,
+  split into the set its author wrote, the set two reviews wrote against it,
+  and the set the vendor layer added when the guard's key-type list grew.
   Four of the first review's walked through, and the rules they forced are
   marked in the file; the second review found the guard catching `switch id`
   over an id nobody has declared yet while admitting `if id == "opencode"`, and
   four mutants now hold both rules to the same question. Seven further cases
   demonstrate the residual classes staying OPEN, so the threat model's list and
-  the test can be read against each other.
+  the test can be read against each other. Its SCAN SCOPE is the code this
+  module's Go build compiles and nothing else — dot-directories,
+  underscore-directories, `testdata`, `vendor`, `node_modules` and any subtree
+  carrying its own `go.mod` are excluded, mirroring `go/build`'s own rules —
+  because a denylist of directory names let a bootstrapped checkout's
+  machine-local `.agents/` redden `go test ./...` on main while every worktree
+  stayed green. `pkg/agentic/singlesource_scanscope_test.go` plants one
+  violating source in every excluded location AND in ordinary packages, and
+  proves that source violating before trusting any silence, so the scope can
+  neither miss the machine-local case nor quietly widen into ignoring real
+  code.
 
-No concrete system plugin ships yet — that is the next story. The contract is
-proven by one test double registered through the public API.
+No concrete system plugin ships yet. The contract is proven by one test double
+registered through the public API.
+
+### Layer 2: `pkg/vendorplugin`
+
+The vendor plugin contract, its registry, and the runtime declarations.
+
+- `Vendor` is the plugin interface: identity, `Models()`, `Availability()` and
+  `Spawn()`. A model row carries its capability rank WITH the evidence behind
+  it (a rank with no observation is refused at registration — ranking is never
+  policy), a usage description that cannot be silently empty, its
+  reasoning-effort vocabulary and the vendor's recommended word, and the
+  agentic systems that can drive it. Effort TRANSPORT is not repeated here: it
+  belongs to the system plugin, and a launch needs both halves from their own
+  owners.
+- **The dependency direction is enforced at registration.** A vendor naming an
+  agentic system that is not registered is refused, with both ids in the error.
+  A registry built without an agentic registry refuses every vendor rather than
+  admitting one whose declared systems nobody checked.
+- `Availability` is a structured verdict, not a boolean: healthy,
+  limited-until(time, evidence), unreachable(evidence), or unknown — with
+  "checked and found nothing" distinguishable from "nobody looked" and from "the
+  read failed". The zero value is unknown, and only an observed healthy verdict
+  is serviceable. The local-model resource plane described in
+  `docs/architecture.md` reports through these same fields; a test demonstrates
+  each of its five answers fitting with no interface change.
+- **Runtimes are declared pairs.** `RuntimeDeclaration` binds a stable id to
+  one agentic system and one vendor, and the six historical ids (`claude`,
+  `codex`, `qwen`, `gemini`, `agy`, `muse`) are seeded from the extraction
+  source's frozen `runtimeid` table into every binary's default registry.
+  `muse`'s broker is recorded UNKNOWN with a checked-and-empty evidence list,
+  exactly as the source records it — an unresolved-vendor runtime is a complete
+  declaration and an unlaunchable one, refused on its own terms rather than
+  guessed at. The F2 collision policy applies: a matching redeclaration is
+  idempotent, a conflicting one is refused and the first declaration stands.
+- `BuildLaunch` is the single Layer-2 dispatch site. It resolves the pair,
+  selects the model, validates the effort word against the model's own
+  vocabulary (never substituting the recommendation — no default is injected
+  anywhere), asks the vendor to build an `agentic.LaunchRequest`, refuses one
+  that REDIRECTS the launch (a vendor may add authentication environment; it
+  may not change the harness, the model, the effort, the goal, the budget, the
+  tier or the composition), and hands it to `agentic.BuildPlan`. Spawn
+  EXECUTION is not here — that is a port story.
+
+The single-source guard now covers both layers from ONE list of dispatch key
+types (`SystemID`, `VendorID`, `RuntimeID`), each mapped to the single file
+permitted to bind it. That is stricter than a flat allowlist: a
+`map[VendorID]T` inside the agentic registry is a violation even though that
+file legitimately holds a binding map, and a mutant plants exactly that.
+
+No concrete vendor plugin ships yet — that is the next story. The contract is
+proven by one test double, registered through the public API, that exists
+nowhere else in the module.
+
+Identifier normalization for all three id kinds lives once, in
+`internal/ident`. Two folds that agree today and drift tomorrow is the
+duplicate-charset failure the extraction source paid for, and a test holds both
+layers to the same rule.
 
 ## Status
 
@@ -129,21 +196,32 @@ land, so its evidence is bound to the tree being integrated.
 
 ### Current CLI surface
 
-Deliberately two commands of its own, because this stage is about seams
-rather than features (cobra contributes `help` and `completion`):
+Four commands of its own, because this stage is about seams rather than
+features (cobra contributes `help` and `completion`):
 
 ```
-agents-management version          # build version, commit and build date
-agents-management plugins [--json] # the plugins compiled into this binary
+agents-management version           # build version, commit and build date
+agents-management plugins [--json]  # the agentic system plugins compiled in
+agents-management vendors [--json]  # the vendor plugins compiled in
+agents-management runtimes [--json] # the declared (system x vendor) pairs
 ```
 
-`plugins` reads the `pkg/agentic` default registry — the same registry a
-plugin package registers into from its `init` — and prints the registered
-system ids. It prints an empty list and exits 0 today. That is the answer, not
-a stub: no plugin has been compiled in yet, which is a different fact from a
-failure to look. `--json` renders the empty case as `[]`, never `null`.
+`plugins` and `vendors` read the `pkg/agentic` and `pkg/vendorplugin` default
+registries — the same ones a plugin package registers into from its `init` —
+and print the registered ids. Both print an empty list and exit 0 today. That
+is the answer, not a stub: no plugin has been compiled in yet, which is a
+different fact from a failure to look. `--json` renders the empty case as `[]`,
+never `null`.
 
-The command keeps no list of its own on purpose. A private one would be a
+`runtimes` prints the six frozen declarations as `id⇥system⇥vendor`. A runtime
+is a DECLARATION, so it lists what is declared rather than what can currently
+launch: every id appears whether or not its plugins are compiled in, and
+`muse` reads as `vendor unresolved` rather than as a blank column. The JSON
+form carries the broker provenance — which source was checked, and that nothing
+established a vendor — because "unresolved" is only honest when the search
+behind it is visible.
+
+None of these commands keeps a list of its own. A private one would be a
 second binding for the same fact, which is exactly what the single-source
 guard exists to prevent.
 

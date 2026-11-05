@@ -1,10 +1,12 @@
 package agentic
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -114,7 +116,7 @@ import (
 // carry the weight and the id vocabulary is a second net rather than the only
 // one, and the claim is worth exactly what its mutants show: every undeclared-id
 // spelling in singlesource_guard_mutants_test.go uses ids outside
-// knownSystemIDs, so only the structural rules can be catching them.
+// knownPluginIDs, so only the structural rules can be catching them.
 //
 // The LAST THREE — the rewritten variable, the multi-hop variable, the helper —
 // defeat the STRUCTURAL net itself, and all three at the same place: the value
@@ -130,23 +132,91 @@ import (
 // is what the System contract declares, and widening to arbitrary
 // identity-shaped accessors is false-positive surface on code that has nothing
 // to do with this invariant.
+//
+// # Scan scope
+//
+// The guard reports on the code THIS module's Go build compiles, and on nothing
+// else. That scope is not a convenience; it is what makes a report actionable.
+// A violation the toolchain never compiles is not a second binding in this
+// module, and reporting one makes the suite's colour depend on what happens to
+// be sitting on the developer's disk.
+//
+// It cost a red trunk to learn. The walk used to carry a denylist of specific
+// directory names — .git, .temp, .task-board, .claude, .codex — which is a list
+// of the machine-local trees somebody had thought of by then. A bootstrapped
+// checkout has agents-infra installed at .agents/, gitignored and absent from
+// every worktree, and its own
+// tools/agents-infra/internal/infra/child_launch_composition.go dispatches on
+// "codex" and "claude". The guard reported it, `go test ./...` went red on main
+// and stayed green everywhere else, and the difference was whose machine ran it.
+//
+// skipModuleDir therefore mirrors go/build's own rules rather than naming
+// directories:
+//
+//   - A directory whose name begins with "." or "_" is skipped, which is the
+//     toolchain's rule verbatim. This is what excludes .agents, and it excludes
+//     the next machine-local runtime nobody has installed yet without anyone
+//     editing a list.
+//   - A directory carrying its own go.mod is skipped with its whole subtree. A
+//     nested module is a different module; this module's build compiles none of
+//     it, and its bindings are its own registry's business.
+//   - vendor and node_modules are skipped by name. Neither begins with a dot,
+//     and both are dependency trees rather than this module's source.
+//   - testdata is skipped by name. This is a DECISION, not an inheritance: go
+//     build ignores testdata, so a binding planted there is not code this
+//     module runs, and a guard fixture that wants a violating source is better
+//     off writing it into a temp tree whose root it also controls — which is
+//     exactly what TestSingleSourceGuardScanScope does. The cost is that a
+//     genuine binding parked in testdata goes unreported; the benefit is that
+//     the scan set and the build set are the same set, with no third rule.
+//   - The module root is never skipped on its own name. A worktree under .temp/
+//     is an ordinary place for this checkout to live, and testing the root's
+//     name would scan zero files while reporting clean.
+//
+// TestSingleSourceGuardScanScope holds all of it in both directions over a
+// fixture tree: the SAME violating source planted inside a dot-directory, an
+// underscore-directory, a nested module, testdata and vendor is not reported,
+// the identical source in an ordinary package IS, and every planted copy is
+// first proven violating by scanning it directly — otherwise "not reported"
+// would be equally consistent with a fixture that violates nothing.
 
 const (
 	bindingClassTable    = "binding-table"
 	bindingClassIDSwitch = "id-switch"
 )
 
-// knownSystemIDs is the identifier vocabulary a reintroduced binding would
-// spell. It holds the agentic system ids docs/architecture.md names and the
+// bindingHomes is THE list of dispatch key types this module registers by,
+// each mapped to the ONE file permitted to bind it.
+//
+// It is one list rather than one guard per layer. The vendor layer
+// (pkg/vendorplugin) has the same invariant for the same reason — its registry
+// is the only place a vendor or runtime binding may live — and a second guard
+// file would be two implementations of one rule, drifting the moment either is
+// extended. That is the failure this whole file exists to prevent, and
+// reproducing it in the guard would be a poor joke.
+//
+// The mapping is per KEY TYPE, not per file, and that is stricter than a flat
+// allowlist: the file that binds systems is not thereby allowed to bind
+// vendors. A map[VendorID]T inside pkg/agentic/registry.go is a shadow table
+// even though that file legitimately holds a binding map, and
+// TestSingleSourceGuardCatchesCrossLayerBindings plants exactly that.
+var bindingHomes = map[string]string{
+	"SystemID":  "pkg/agentic/registry.go",
+	"VendorID":  "pkg/vendorplugin/registry.go",
+	"RuntimeID": "pkg/vendorplugin/registry.go",
+}
+
+// knownPluginIDs is the identifier vocabulary a reintroduced binding would
+// spell. It holds the agentic system ids docs/architecture.md names, the
 // frozen runtime ids that feed admitted-pair digests and limit-state
-// filenames.
+// filenames, and the vendor ids those runtimes are bound to.
 //
 // Matching is EXACT on the trimmed, lowercased value rather than by substring.
 // Substring matching would flag ordinary prose that happens to contain "codex"
 // or "muse" — a guard with that many false positives is a guard somebody
 // deletes — while an accidental reintroduction spells the id exactly, because
 // it has to for the lookup to work.
-var knownSystemIDs = map[string]bool{
+var knownPluginIDs = map[string]bool{
 	"claude-code": true,
 	"codex":       true,
 	"qwen-code":   true,
@@ -158,6 +228,10 @@ var knownSystemIDs = map[string]bool{
 	"gemini":      true,
 	"agy":         true,
 	"qwen-codex":  true,
+	"anthropic":   true,
+	"openai":      true,
+	"alibaba":     true,
+	"google":      true,
 }
 
 // bindingViolation is one place a second binding was found.
@@ -177,10 +251,13 @@ func (v bindingViolation) String() string {
 // finds. sources maps a display filename to Go source text, so the same
 // scanner runs over the real tree and over synthetic mutant corpora.
 //
-// allowFiles names the display filenames permitted to hold a binding table —
-// the registry, and nothing else. It does not exempt a file from the id-switch
-// rules: the registry has no business dispatching on identifiers either.
-func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]bindingViolation, error) {
+// homes is the key-type-to-file mapping described on bindingHomes: each
+// dispatch key type, and the one display filename permitted to bind it. A file
+// that is the home of ANY key type may also spell plugin ids in a literal,
+// because that is what a registry and its seed declarations do. Nothing
+// exempts a file from the id-switch rules: a registry has no business
+// dispatching on identifiers either.
+func scanSingleSource(sources map[string]string, homes map[string]string) ([]bindingViolation, error) {
 	fset := token.NewFileSet()
 	names := make([]string, 0, len(sources))
 	parsed := make(map[string]*ast.File, len(sources))
@@ -200,8 +277,22 @@ func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]
 	}
 	consts := resolveConstStrings(all)
 	vars := resolveVarStrings(all, consts)
-	systemIDTypes := resolveSystemIDTypeNames(all)
-	bindingTypes := resolveBindingTableTypeNames(all, systemIDTypes)
+	keyTypes := resolveKeyTypeNames(all, homes)
+	bindingTypes := resolveBindingTableTypeNames(all, keyTypes)
+
+	// A binding is a violation unless it is in the home declared for ITS key
+	// type. spellsIDs is the weaker permission a home file also carries: the
+	// right to write a plugin id as a literal, which the seed declarations of
+	// the frozen runtime table need and no other file does.
+	misplaced := func(key, file string) bool { return homes[key] != file }
+	spellsIDs := func(file string) bool {
+		for _, home := range homes {
+			if home == file {
+				return true
+			}
+		}
+		return false
+	}
 
 	var violations []bindingViolation
 	seen := map[string]bool{}
@@ -217,7 +308,7 @@ func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]
 
 	for _, name := range names {
 		file := parsed[name]
-		tableAllowed := allowFiles[name]
+		literalsAllowed := spellsIDs(name)
 		idIdents := resolveIDCallIdents(file)
 		// dispatchesOnID is the structural half of the id-switch rules, shared
 		// by the switch tag and the comparison operands so that the same fact —
@@ -230,16 +321,18 @@ func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]
 			ast.Inspect(decl, func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.MapType:
-					if !tableAllowed && isSystemIDRef(node.Key, systemIDTypes) {
+					if key, ok := bindingKeyRef(node.Key, keyTypes); ok && misplaced(key, name) {
 						record(name, where, node.Pos(), bindingClassTable,
-							"a map keyed by SystemID; the registry is the only place a system binding may live")
+							fmt.Sprintf("a map keyed by %s; %s is the only place a %s binding may live", key, homeLabel(homes, key), key))
 					}
 				case *ast.CompositeLit:
-					if !tableAllowed && node.Type != nil && isBindingTableRef(node.Type, bindingTypes) {
-						record(name, where, node.Pos(), bindingClassTable,
-							"a composite literal of a named type whose underlying type maps SystemID to behaviour")
+					if node.Type != nil {
+						if key, ok := bindingTableKeyRef(node.Type, bindingTypes); ok && misplaced(key, name) {
+							record(name, where, node.Pos(), bindingClassTable,
+								fmt.Sprintf("a composite literal of a named type whose underlying type maps %s to behaviour", key))
+						}
 					}
-					if tableAllowed {
+					if literalsAllowed {
 						return true
 					}
 					for _, elt := range node.Elts {
@@ -247,9 +340,9 @@ func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]
 						if kv, ok := elt.(*ast.KeyValueExpr); ok {
 							target, position = kv.Key, "key"
 						}
-						if id, ok := knownSystemIDOf(target, consts, vars); ok {
+						if id, ok := knownPluginIDOf(target, consts, vars); ok {
 							record(name, where, node.Pos(), bindingClassTable,
-								fmt.Sprintf("a composite literal with the system id %q as a %s; the registry is the only place the set of systems may be spelled", id, position))
+								fmt.Sprintf("a composite literal with the plugin id %q as a %s; a registry is the only place the set of plugins may be spelled", id, position))
 						}
 					}
 				case *ast.SwitchStmt:
@@ -266,9 +359,9 @@ func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]
 							continue
 						}
 						for _, value := range clause.List {
-							if id, ok := knownSystemIDOf(value, consts, vars); ok {
+							if id, ok := knownPluginIDOf(value, consts, vars); ok {
 								record(name, where, node.Pos(), bindingClassIDSwitch,
-									fmt.Sprintf("a switch case on the system id %q", id))
+									fmt.Sprintf("a switch case on the plugin id %q", id))
 							}
 						}
 					}
@@ -278,26 +371,32 @@ func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]
 					// because the type it instantiates is legitimately
 					// declared in the registry. Found by a review mutant that
 					// walked through the composite-literal rule.
-					if tableAllowed || len(node.Args) == 0 {
+					if len(node.Args) == 0 {
 						return true
 					}
-					if fn, ok := unparenExpr(node.Fun).(*ast.Ident); ok && fn.Name == "make" && isBindingTableRef(node.Args[0], bindingTypes) {
-						record(name, where, node.Pos(), bindingClassTable,
-							"make() of a named type whose underlying type maps SystemID to behaviour")
+					if fn, ok := unparenExpr(node.Fun).(*ast.Ident); ok && fn.Name == "make" {
+						if key, ok := bindingTableKeyRef(node.Args[0], bindingTypes); ok && misplaced(key, name) {
+							record(name, where, node.Pos(), bindingClassTable,
+								fmt.Sprintf("make() of a named type whose underlying type maps %s to behaviour", key))
+						}
 					}
 				case *ast.ValueSpec:
 					// var shadow bindings — declared, never initialized, so
 					// there is nothing for a literal rule to see.
-					if !tableAllowed && node.Type != nil && isBindingTableRef(node.Type, bindingTypes) {
-						record(name, where, node.Pos(), bindingClassTable,
-							"a variable of a named type whose underlying type maps SystemID to behaviour")
+					if node.Type != nil {
+						if key, ok := bindingTableKeyRef(node.Type, bindingTypes); ok && misplaced(key, name) {
+							record(name, where, node.Pos(), bindingClassTable,
+								fmt.Sprintf("a variable of a named type whose underlying type maps %s to behaviour", key))
+						}
 					}
 				case *ast.Field:
 					// The same type held as a struct field or returned from a
 					// signature. A binding reachable from a type is a binding.
-					if !tableAllowed && node.Type != nil && isBindingTableRef(node.Type, bindingTypes) {
-						record(name, where, node.Pos(), bindingClassTable,
-							"a field or signature of a named type whose underlying type maps SystemID to behaviour")
+					if node.Type != nil {
+						if key, ok := bindingTableKeyRef(node.Type, bindingTypes); ok && misplaced(key, name) {
+							record(name, where, node.Pos(), bindingClassTable,
+								fmt.Sprintf("a field or signature of a named type whose underlying type maps %s to behaviour", key))
+						}
 					}
 				case *ast.AssignStmt:
 					// A table assembled key by key rather than written as a
@@ -308,7 +407,7 @@ func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]
 					// initialization cycle. A colleague reintroducing a
 					// binding in this module has a live precedent for exactly
 					// the shape a composite-literal rule cannot see.
-					if tableAllowed {
+					if literalsAllowed {
 						return true
 					}
 					for _, lhs := range node.Lhs {
@@ -316,9 +415,9 @@ func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]
 						if !ok {
 							continue
 						}
-						if id, ok := knownSystemIDOf(index.Index, consts, vars); ok {
+						if id, ok := knownPluginIDOf(index.Index, consts, vars); ok {
 							record(name, where, node.Pos(), bindingClassTable,
-								fmt.Sprintf("an assignment into a table at the system id %q; a table filled in key by key is a binding table spelled without a literal", id))
+								fmt.Sprintf("an assignment into a table at the plugin id %q; a table filled in key by key is a binding table spelled without a literal", id))
 						}
 					}
 				case *ast.BinaryExpr:
@@ -326,9 +425,9 @@ func scanSingleSource(sources map[string]string, allowFiles map[string]bool) ([]
 						return true
 					}
 					for _, side := range []ast.Expr{node.X, node.Y} {
-						if id, ok := knownSystemIDOf(side, consts, vars); ok {
+						if id, ok := knownPluginIDOf(side, consts, vars); ok {
 							record(name, where, node.Pos(), bindingClassIDSwitch,
-								fmt.Sprintf("a comparison against the system id %q; an if-else chain over ids is a switch spelled differently", id))
+								fmt.Sprintf("a comparison against the plugin id %q; an if-else chain over ids is a switch spelled differently", id))
 						}
 					}
 					// The structural half. Without it this rule resolved only through
@@ -402,37 +501,55 @@ func declName(decl ast.Decl) string {
 	}
 }
 
-// isSystemIDRef reports whether a type expression denotes SystemID, directly
-// or through a name declared to be it. The qualified spelling is accepted on
-// the selector name alone: only this module declares SystemID, and a scan that
-// insisted on resolving the qualifier would miss `agentic.SystemID` in every
-// file that imports the package under any name.
-func isSystemIDRef(expr ast.Expr, systemIDTypes map[string]bool) bool {
+// bindingKeyRef reports whether a type expression denotes one of the dispatch
+// key types in bindingHomes — directly, through a qualified selector, or
+// through a name declared to be one — and which key type it is.
+//
+// The qualified spelling is accepted on the selector name alone: only this
+// module declares SystemID, VendorID and RuntimeID, and a scan that insisted
+// on resolving the qualifier would miss `agentic.SystemID` in every file that
+// imports the package under any name.
+func bindingKeyRef(expr ast.Expr, keyTypes map[string]string) (string, bool) {
 	switch typed := expr.(type) {
 	case *ast.Ident:
-		return typed.Name == "SystemID" || systemIDTypes[typed.Name]
+		key, ok := keyTypes[typed.Name]
+		return key, ok
 	case *ast.SelectorExpr:
-		return typed.Sel != nil && typed.Sel.Name == "SystemID"
+		if typed.Sel == nil {
+			return "", false
+		}
+		key, ok := keyTypes[typed.Sel.Name]
+		return key, ok
 	case *ast.ParenExpr:
-		return isSystemIDRef(typed.X, systemIDTypes)
+		return bindingKeyRef(typed.X, keyTypes)
 	default:
-		return false
+		return "", false
 	}
 }
 
-// isBindingTableRef reports whether a type expression names a type whose
-// underlying type maps SystemID to something — the alias spelling of a shadow
-// table, where the map type itself is declared once (possibly in the allowed
-// file) and instantiated elsewhere.
-func isBindingTableRef(expr ast.Expr, bindingTypes map[string]bool) bool {
+// bindingTableKeyRef reports whether a type expression names a type whose
+// underlying type maps a dispatch key type to something — the alias spelling
+// of a shadow table, where the map type itself is declared once (possibly in
+// the home file) and instantiated elsewhere.
+func bindingTableKeyRef(expr ast.Expr, bindingTypes map[string]string) (string, bool) {
 	switch typed := expr.(type) {
 	case *ast.Ident:
-		return bindingTypes[typed.Name]
+		key, ok := bindingTypes[typed.Name]
+		return key, ok
 	case *ast.ParenExpr:
-		return isBindingTableRef(typed.X, bindingTypes)
+		return bindingTableKeyRef(typed.X, bindingTypes)
 	default:
-		return false
+		return "", false
 	}
+}
+
+// homeLabel renders the file a key type may be bound in, so a violation says
+// where the binding belongs rather than only where it must not be.
+func homeLabel(homes map[string]string, key string) string {
+	if home, ok := homes[key]; ok && home != "" {
+		return home
+	}
+	return "no file in this scan"
 }
 
 // isIDExpr reports whether an expression delivers a system's ID() at the point
@@ -668,11 +785,16 @@ func idCallLocals(body *ast.BlockStmt, inherited map[string]bool) map[string]boo
 	return locals
 }
 
-// resolveSystemIDTypeNames collects the package-level type names that ARE
-// SystemID, whether defined (`type sid SystemID`) or aliased
+// resolveKeyTypeNames collects every type name that IS one of the dispatch key
+// types, whether spelled canonically, defined (`type sid SystemID`) or aliased
 // (`type sid = SystemID`), as a bounded fixpoint so a chain of them resolves
-// regardless of declaration order.
-func resolveSystemIDTypeNames(files []*ast.File) map[string]bool {
+// regardless of declaration order. The canonical names seed the set, so a key
+// type resolves even in a corpus that never declares it.
+func resolveKeyTypeNames(files []*ast.File, homes map[string]string) map[string]string {
+	names := map[string]string{}
+	for key := range homes {
+		names[key] = key
+	}
 	type pending struct {
 		name string
 		expr ast.Expr
@@ -693,15 +815,14 @@ func resolveSystemIDTypeNames(files []*ast.File) map[string]bool {
 			}
 		}
 	}
-	names := map[string]bool{}
 	for pass := 0; pass <= len(queue); pass++ {
 		changed := false
 		for _, item := range queue {
-			if names[item.name] {
+			if _, done := names[item.name]; done {
 				continue
 			}
-			if isSystemIDRef(item.expr, names) {
-				names[item.name] = true
+			if key, ok := bindingKeyRef(item.expr, names); ok {
+				names[item.name] = key
 				changed = true
 			}
 		}
@@ -712,10 +833,10 @@ func resolveSystemIDTypeNames(files []*ast.File) map[string]bool {
 	return names
 }
 
-// resolveBindingTableTypeNames collects the package-level type names whose
-// underlying type maps SystemID to something, following named types to their
-// declarations as a bounded fixpoint.
-func resolveBindingTableTypeNames(files []*ast.File, systemIDTypes map[string]bool) map[string]bool {
+// resolveBindingTableTypeNames collects the type names whose underlying type
+// maps a dispatch key type to something, following named types to their
+// declarations as a bounded fixpoint, and reports which key type each binds.
+func resolveBindingTableTypeNames(files []*ast.File, keyTypes map[string]string) map[string]string {
 	type pending struct {
 		name string
 		expr ast.Expr
@@ -736,22 +857,22 @@ func resolveBindingTableTypeNames(files []*ast.File, systemIDTypes map[string]bo
 			}
 		}
 	}
-	names := map[string]bool{}
+	names := map[string]string{}
 	for pass := 0; pass <= len(queue); pass++ {
 		changed := false
 		for _, item := range queue {
-			if names[item.name] {
+			if _, done := names[item.name]; done {
 				continue
 			}
 			switch typed := item.expr.(type) {
 			case *ast.MapType:
-				if isSystemIDRef(typed.Key, systemIDTypes) {
-					names[item.name] = true
+				if key, ok := bindingKeyRef(typed.Key, keyTypes); ok {
+					names[item.name] = key
 					changed = true
 				}
 			case *ast.Ident:
-				if names[typed.Name] {
-					names[item.name] = true
+				if key, ok := names[typed.Name]; ok {
+					names[item.name] = key
 					changed = true
 				}
 			}
@@ -763,13 +884,13 @@ func resolveBindingTableTypeNames(files []*ast.File, systemIDTypes map[string]bo
 	return names
 }
 
-// knownSystemIDOf resolves an expression to a system id from the vocabulary,
+// knownPluginIDOf resolves an expression to a plugin id from the vocabulary,
 // through a string literal, a package-level const, a package-level var, or a
 // concatenation of those. It is the indirection layer four review rounds in
 // the source repository were spent adding.
-func knownSystemIDOf(expr ast.Expr, consts map[string]string, vars map[string][]string) (string, bool) {
+func knownPluginIDOf(expr ast.Expr, consts map[string]string, vars map[string][]string) (string, bool) {
 	if value, ok := foldStringConst(expr, consts); ok {
-		if id := normalizeCandidate(value); knownSystemIDs[id] {
+		if id := normalizeCandidate(value); knownPluginIDs[id] {
 			return id, true
 		}
 	}
@@ -785,13 +906,13 @@ func knownSystemIDOf(expr ast.Expr, consts map[string]string, vars map[string][]
 			name = base.Name
 		}
 	case *ast.ParenExpr:
-		return knownSystemIDOf(typed.X, consts, vars)
+		return knownPluginIDOf(typed.X, consts, vars)
 	}
 	if name == "" {
 		return "", false
 	}
 	for _, value := range vars[name] {
-		if id := normalizeCandidate(value); knownSystemIDs[id] {
+		if id := normalizeCandidate(value); knownPluginIDs[id] {
 			return id, true
 		}
 	}
@@ -986,17 +1107,81 @@ func moduleRoot(t *testing.T) string {
 func moduleSources(t *testing.T) map[string]string {
 	t.Helper()
 	root := moduleRoot(t)
-	skipDirs := map[string]bool{
-		".git": true, ".temp": true, ".task-board": true, ".claude": true,
-		".codex": true, "vendor": true, "node_modules": true, "testdata": true,
+	sources, err := walkModuleSources(root)
+	if err != nil {
+		t.Fatalf("walking %s: %v", root, err)
 	}
+	return sources
+}
+
+// moduleSkipDirs are the directory names excluded on top of the toolchain's own
+// dot/underscore rule. Each is a tree of code that is not this module's:
+// vendor and node_modules hold dependencies, and testdata is what go build
+// itself ignores. See the scan-scope section of this file's threat model.
+var moduleSkipDirs = map[string]bool{
+	"vendor":       true,
+	"node_modules": true,
+	"testdata":     true,
+}
+
+// skipModuleDir answers whether the walk refuses to descend into dir, which is
+// the one question that decides what "the whole module" means.
+//
+// It mirrors go/build's own exclusion rules rather than naming directories: a
+// denylist of specific dot-directories is what let .agents through, because a
+// list can only exclude the machine-local trees somebody thought of. A leading
+// "." or "_" is the toolchain's rule, and a directory carrying its own go.mod
+// is a different module — the Go build of THIS module compiles none of it, so
+// the guard has no standing to report it.
+//
+// root itself is never skipped. The module root is routinely a dot-nested path
+// (a worktree under .temp/, a checkout under .cache/), and testing its own name
+// would silently scan zero files while reporting clean.
+//
+// A stat that fails for a reason other than "not there" is propagated, not read
+// as absence: a directory the walk cannot inspect is an unknown, and answering
+// "no go.mod" for it would turn an unreadable tree into a silently unscanned
+// one. The guard fails loudly instead.
+func skipModuleDir(root, path, name string) (bool, error) {
+	if path == root {
+		return false, nil
+	}
+	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+		return true, nil
+	}
+	if moduleSkipDirs[name] {
+		return true, nil
+	}
+	switch _, err := os.Stat(filepath.Join(path, "go.mod")); {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	default:
+		return false, fmt.Errorf("deciding whether %s is a nested module: %w", path, err)
+	}
+}
+
+// walkModuleSources collects every non-test Go source under root that the Go
+// build of the module rooted there would compile, keyed by slash-separated path
+// relative to root.
+//
+// It takes root as an argument rather than finding it, so the exclusion rules
+// can be driven over a fixture tree with planted violations instead of only
+// over the real checkout, where a dot-directory may or may not exist depending
+// on whose machine is running the suite.
+func walkModuleSources(root string) (map[string]string, error) {
 	sources := map[string]string{}
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if path != root && skipDirs[entry.Name()] {
+			skip, err := skipModuleDir(root, path, entry.Name())
+			if err != nil {
+				return err
+			}
+			if skip {
 				return filepath.SkipDir
 			}
 			return nil
@@ -1017,16 +1202,23 @@ func moduleSources(t *testing.T) map[string]string {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("walking %s: %v", root, err)
+		return nil, err
 	}
-	return sources
+	return sources, nil
 }
 
-// registryAllowlist names the one file permitted to hold a system binding.
-// It is a single entry on purpose; the moment it needs a second, the
-// invariant it enforces has changed and the change should be argued in a
-// review, not absorbed here.
-var registryAllowlist = map[string]bool{"pkg/agentic/registry.go": true}
+// The allowlist that used to live here — one file, permitted to hold a system
+// binding — is now bindingHomes at the top of this file, one entry per
+// dispatch key type.
+//
+// It gained entries, and that was the change this comment demanded be argued
+// rather than absorbed. The argument: the invariant is one home per FACT, and
+// "which plugin implements system X", "which plugin implements vendor Y" and
+// "which pair is runtime Z" are three facts, not one. A single flat allowlist
+// would have been the weaker rule — it would let the systems registry bind
+// vendors — so the list is keyed by the fact, and each fact still has exactly
+// one home. What did NOT change is that a file is never allowed to dispatch on
+// an identifier, in any layer.
 
 // TestSingleSourceGuardScansTheWholeModule proves the scan reaches what it
 // claims to, so a clean result means "nothing found" rather than "nothing
@@ -1037,6 +1229,10 @@ func TestSingleSourceGuardScansTheWholeModule(t *testing.T) {
 		"pkg/agentic/registry.go",
 		"pkg/agentic/plan.go",
 		"pkg/agentic/system.go",
+		"pkg/vendorplugin/registry.go",
+		"pkg/vendorplugin/runtime.go",
+		"pkg/vendorplugin/spawn.go",
+		"pkg/vendorplugin/vendor.go",
 		"tools/agents-management/cmd/plugins.go",
 		"tools/agents-management/cmd/root.go",
 		"tools/agents-management/main.go",
@@ -1052,7 +1248,7 @@ func TestSingleSourceGuardScansTheWholeModule(t *testing.T) {
 
 // TestSingleSourceGuardFindsNoSecondBinding is the guard itself.
 func TestSingleSourceGuardFindsNoSecondBinding(t *testing.T) {
-	violations, err := scanSingleSource(moduleSources(t), registryAllowlist)
+	violations, err := scanSingleSource(moduleSources(t), bindingHomes)
 	if err != nil {
 		t.Fatalf("scanSingleSource: %v", err)
 	}
@@ -1067,22 +1263,59 @@ func TestSingleSourceGuardFindsNoSecondBinding(t *testing.T) {
 }
 
 // TestSingleSourceGuardRulesFireOnRealCode narrows the gate instead of
-// deleting it: the same real sources are rescanned with the allowlist empty,
-// and the registry's own map must then be reported. Without this, a green
-// result above is equally consistent with "the rule never matches anything",
-// and the guard would be worth nothing while looking healthy.
+// deleting it: the same real sources are rescanned with every key type's home
+// moved to a file that does not exist, and the real registries must then be
+// reported. Without this, a green result above is equally consistent with "the
+// rule never matches anything", and the guard would be worth nothing while
+// looking healthy.
+//
+// Displacing the homes rather than emptying the list is the load-bearing
+// detail. An empty list resolves NO key types at all, so an empty result would
+// mean "the scanner had nothing to look for" — which is precisely the
+// vacuously-green failure this test exists to rule out.
 func TestSingleSourceGuardRulesFireOnRealCode(t *testing.T) {
-	violations, err := scanSingleSource(moduleSources(t), map[string]bool{})
+	displaced := map[string]string{}
+	for key := range bindingHomes {
+		displaced[key] = "no/such/file.go"
+	}
+	violations, err := scanSingleSource(moduleSources(t), displaced)
 	if err != nil {
 		t.Fatalf("scanSingleSource: %v", err)
 	}
-	found := false
-	for _, v := range violations {
-		if v.File == "pkg/agentic/registry.go" && v.Class == bindingClassTable {
-			found = true
+	// Every layer's real registry, so the extension to the vendor key types is
+	// held to the same standard as the original: a rule that fires only on
+	// pkg/agentic would leave the vendor bindings unguarded while this test
+	// stayed green.
+	for _, required := range []string{"pkg/agentic/registry.go", "pkg/vendorplugin/registry.go"} {
+		found := false
+		for _, v := range violations {
+			if v.File == required && v.Class == bindingClassTable {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("with the homes displaced, %s's own binding map was not reported; the binding-table rule does not fire on that file's real code, so its silence elsewhere proves nothing. violations=%v", required, violations)
 		}
 	}
-	if !found {
-		t.Fatalf("with an empty allowlist the registry's own binding map was not reported; the binding-table rule does not fire on real code, so its silence on everything else proves nothing. violations=%v", violations)
+}
+
+// TestSingleSourceGuardHomesAreDistinctFacts holds the shape of bindingHomes
+// itself: every key type has exactly one home, and a home named there is a
+// file that actually exists in the module scan.
+//
+// A home pointing at a path nobody writes to would silently turn its key type
+// into "bindable nowhere", which reads as a stricter guard and is in fact an
+// unguarded one the day the file is renamed.
+func TestSingleSourceGuardHomesAreDistinctFacts(t *testing.T) {
+	sources := moduleSources(t)
+	for key, home := range bindingHomes {
+		if _, ok := sources[home]; !ok {
+			t.Errorf("bindingHomes[%q] = %q, which the module scan never reached", key, home)
+		}
+	}
+	for _, key := range []string{"SystemID", "VendorID", "RuntimeID"} {
+		if _, ok := bindingHomes[key]; !ok {
+			t.Errorf("%s is a dispatch key type of this module and has no home in bindingHomes; it is bindable anywhere", key)
+		}
 	}
 }
