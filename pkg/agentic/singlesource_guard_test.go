@@ -1156,12 +1156,23 @@ func TestSingleSourceGuardScansTheWholeModule(t *testing.T) {
 		"pkg/agentic/registry.go",
 		"pkg/agentic/plan.go",
 		"pkg/agentic/system.go",
-		// The system plugins. They are the files most likely to grow a second
-		// binding — a plugin is where somebody reaches for "switch on the id"
-		// — so a scan that did not reach them would leave the guard's whole
-		// subject unguarded while every other assertion here stayed green.
+		// The system plugins, ONE BINDING FILE EACH. They are the files most
+		// likely to grow a second binding — a plugin is where somebody reaches
+		// for "switch on the id" — so a scan that did not reach them would
+		// leave the guard's whole subject unguarded while every other assertion
+		// here stayed green.
+		//
+		// Every plugin in this module is listed, and the list is what makes the
+		// claim checkable: a seventh plugin added without a line here would be
+		// a package the guard walks but nothing insists it walks, and the day
+		// the scan scope narrows for some other reason, that plugin would go
+		// unguarded silently.
 		"pkg/agentic/systems/codex/codex.go",
 		"pkg/agentic/systems/claude/claude.go",
+		"pkg/agentic/systems/qwen/qwen.go",
+		"pkg/agentic/systems/gemini/gemini.go",
+		"pkg/agentic/systems/muse/muse.go",
+		"pkg/agentic/systems/agy/agy.go",
 		"pkg/vendorplugin/registry.go",
 		"pkg/vendorplugin/runtime.go",
 		"pkg/vendorplugin/spawn.go",

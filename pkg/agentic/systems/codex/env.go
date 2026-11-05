@@ -1,10 +1,7 @@
 package codex
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
-
+	"github.com/relux-works/skill-agents-management/internal/runtimeenv"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -51,152 +48,81 @@ import (
 // time: every filter names the OTHER runtimes it knew about when it was
 // written, so a seventh runtime opens a leak in both directions by existing.
 
-// The parent-runtime keys a codex child must not inherit. Each is spelled as
-// its own constant so the blocked set below reads as a list of facts rather
-// than a wall of strings.
+// # Where the list itself lives
+//
+// The eleven keys, the whole-key filter, the pointer resolution and the PATH
+// sanitizer are internal/runtimeenv, shared with the qwen plugin. The source
+// shares them too — filterQwenRuntimeEnv is filterCodexRuntimeEnv plus
+// CLAUDECODE, and the comment on it says the sharing is deliberate — so a copy
+// of the list in each plugin would be the drift the source already closed. The
+// names below are this package's own spellings of that shared vocabulary, kept
+// so a reader of this file sees the contract without following an import.
+
+// The parent-runtime keys a codex child must not inherit, in the source's
+// order. Each is spelled as its own constant so the blocked set reads as a list
+// of facts rather than a wall of strings.
 const (
 	// threadIDEnv, sessionEnv and ciEnv are the parent codex process's own
 	// session identity. A child inheriting them attaches to the parent's
 	// thread instead of starting its own.
-	threadIDEnv = "CODEX_THREAD_ID"
-	sessionEnv  = "CODEX_SESSION"
-	ciEnv       = "CODEX_CI"
+	threadIDEnv = runtimeenv.ThreadIDEnv
+	sessionEnv  = runtimeenv.SessionEnv
+	ciEnv       = runtimeenv.CIEnv
 	// managedByNPMEnv and managedByBunEnv record how the PARENT was installed.
 	// They are install provenance, and a child resolves its own.
-	managedByNPMEnv = "CODEX_MANAGED_BY_NPM"
-	managedByBunEnv = "CODEX_MANAGED_BY_BUN"
+	managedByNPMEnv = runtimeenv.ManagedByNPMEnv
+	managedByBunEnv = runtimeenv.ManagedByBunEnv
 	// appServerURLEnv and sessionManagerURLEnv point at the in-process
 	// services the parent is attached to.
-	appServerURLEnv      = "TASK_BOARD_CODEX_APP_SERVER_URL"
-	sessionManagerURLEnv = "TASK_BOARD_SESSION_MANAGER_URL"
+	appServerURLEnv      = runtimeenv.AppServerURLEnv
+	sessionManagerURLEnv = runtimeenv.SessionManagerURLEnv
 	// appServerTokenNameEnv and sessionManagerTokenNameEnv do not hold
 	// credentials — they hold the NAME of the variable that does. Stripping
 	// only the pointer would leave the token itself in the child, which is why
 	// filterRuntimeEnv reads each pointer and blocks what it names.
-	appServerTokenNameEnv      = "TASK_BOARD_CODEX_APP_SERVER_AUTH_TOKEN_ENV"
-	sessionManagerTokenNameEnv = "TASK_BOARD_SESSION_MANAGER_AUTH_TOKEN_ENV"
+	appServerTokenNameEnv      = runtimeenv.AppServerTokenNameEnv
+	sessionManagerTokenNameEnv = runtimeenv.SessionManagerTokenNameEnv
 	// sessionIDEnv is the parent's manager-side session.
-	sessionIDEnv = "TASK_BOARD_SESSION_ID"
+	sessionIDEnv = runtimeenv.SessionIDEnv
 )
 
 // ServiceTierEnv is the variable a codex child reads to learn which service
 // tier its launch resolved to. It is exported because a caller that displays
 // the resolved tier reads the same name.
+//
+// It is NOT in internal/runtimeenv: that package holds what a codex-family
+// child must not INHERIT, and this is the one variable this plugin INJECTS.
+// A shared helper carrying it would make one system's contract read as the
+// family's.
 const ServiceTierEnv = "TASK_BOARD_CODEX_SERVICE_TIER"
 
 // runtimeEnvKeys is the fixed part of the blocked set, in the source's order.
 //
-// It is a package-level var rather than an inline literal so a test can narrow
-// it — TestEveryStrippedKeyIsCarriedByTheGolden removes one key at a time and
-// shows which golden entry each is responsible for. A list nothing can narrow
-// is a list whose entries nobody can tell apart.
-var runtimeEnvKeys = []string{
-	threadIDEnv,
-	sessionEnv,
-	ciEnv,
-	managedByNPMEnv,
-	managedByBunEnv,
-	managedPackageRootEnv,
-	appServerURLEnv,
-	appServerTokenNameEnv,
-	sessionManagerURLEnv,
-	sessionManagerTokenNameEnv,
-	sessionIDEnv,
-}
+// It is a package-level var holding a COPY of the shared list rather than an
+// inline literal so a test can range over it —
+// TestEveryStrippedKeyIsCarriedByTheGolden removes one key at a time and shows
+// which golden entry each is responsible for. A list nothing can narrow is a
+// list whose entries nobody can tell apart.
+var runtimeEnvKeys = runtimeenv.Keys()
 
 // filterRuntimeEnv strips the parent codex runtime state from an environment
-// and sanitizes PATH.
-//
-// The two token-NAME pointers are resolved against the environment being
-// filtered, and whatever they name is blocked too. Reading them from the
-// INPUT rather than from the process is what makes this function total: the
-// same environment decides both which keys are blocked and which entries
-// survive, so the answer does not depend on when it is called.
-func filterRuntimeEnv(environ []string) []string {
-	keys := append([]string(nil), runtimeEnvKeys...)
-	if tokenEnvName := envValue(environ, appServerTokenNameEnv); tokenEnvName != "" {
-		keys = append(keys, tokenEnvName)
-	}
-	if tokenEnvName := envValue(environ, sessionManagerTokenNameEnv); tokenEnvName != "" {
-		keys = append(keys, tokenEnvName)
-	}
-	return sanitizePath(filterEnvKeys(environ, keys...))
-}
+// and sanitizes PATH. It is internal/runtimeenv's Filter, which is the source's
+// filterCodexRuntimeEnv.
+func filterRuntimeEnv(environ []string) []string { return runtimeenv.Filter(environ) }
 
-// filterEnvKeys returns a copy of environ with the named keys removed.
-//
-// Matching is on the WHOLE key, via a blocked-key map. An entry with no `=`
-// is treated as a bare key, which is what the source does and what keeps a
-// malformed entry from being silently reinterpreted as a value.
+// filterEnvKeys returns a copy of environ with the named keys removed, matching
+// on the WHOLE key.
 func filterEnvKeys(environ []string, keys ...string) []string {
-	blocked := make(map[string]struct{}, len(keys))
-	for _, key := range keys {
-		key = strings.TrimSpace(key)
-		if key != "" {
-			blocked[key] = struct{}{}
-		}
-	}
-
-	var result []string
-	for _, entry := range environ {
-		key, _, ok := strings.Cut(entry, "=")
-		if !ok {
-			key = entry
-		}
-		if _, drop := blocked[key]; !drop {
-			result = append(result, entry)
-		}
-	}
-	return result
+	return runtimeenv.FilterKeys(environ, keys...)
 }
 
-// sanitizePath rewrites the PATH entry, dropping the directories a parent
-// codex runtime injected into it.
-//
-// This is the one strip the parity goldens CANNOT see: the harness that
-// captured them excludes PATH from its environment diff, because the capture
-// seeds PATH with a temp directory and its value differs run to run. The
-// goldens' own README names the consequence — "a port that changes what it
-// strips from PATH is outside what these goldens prove. That needs its own
-// test." TestSanitizePathDropsOnlyTheCodexRuntimeEntries is that test, and it
-// is the only evidence this function has.
-func sanitizePath(environ []string) []string {
-	result := make([]string, 0, len(environ))
-	for _, entry := range environ {
-		key, value, ok := strings.Cut(entry, "=")
-		if !ok || key != "PATH" {
-			result = append(result, entry)
-			continue
-		}
-
-		parts := filepath.SplitList(value)
-		clean := parts[:0]
-		for _, part := range parts {
-			if isRuntimePathEntry(part) {
-				continue
-			}
-			clean = append(clean, part)
-		}
-		result = append(result, "PATH="+strings.Join(clean, string(os.PathListSeparator)))
-	}
-	return result
-}
+// sanitizePath rewrites the PATH entry, dropping the directories a parent codex
+// runtime injected into it.
+func sanitizePath(environ []string) []string { return runtimeenv.SanitizePath(environ) }
 
 // isRuntimePathEntry reports whether a PATH element was injected by a parent
-// codex runtime: the per-invocation arg0 shim directory it creates under its
-// own home, or a directory named codex-path.
-//
-// Both shapes point at the PARENT's install. A child that keeps them resolves
-// the parent's binary through a wrapper that no longer has a live parent
-// behind it.
-func isRuntimePathEntry(path string) bool {
-	path = filepath.Clean(path)
-	sep := string(filepath.Separator)
-	if strings.Contains(path, sep+".codex"+sep+"tmp"+sep+"arg0"+sep) {
-		return true
-	}
-	return filepath.Base(path) == "codex-path"
-}
+// codex runtime.
+func isRuntimePathEntry(path string) bool { return runtimeenv.IsRuntimePathEntry(path) }
 
 // childEnv is the whole environment contract in one expression: strip what the
 // harness must not inherit, then write the caller's run context and this

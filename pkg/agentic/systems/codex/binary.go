@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/relux-works/skill-agents-management/internal/launchenv"
+	"github.com/relux-works/skill-agents-management/internal/runtimeenv"
 )
 
 // Codex has THREE binary-resolution paths and they are tried in this order:
@@ -32,7 +33,13 @@ import (
 // records. It is also stripped from every child environment (see env.go): a
 // child that inherited the parent's package root would resolve the parent's
 // install rather than its own.
-const managedPackageRootEnv = "CODEX_MANAGED_PACKAGE_ROOT"
+//
+// The literal is internal/runtimeenv's, because that package is where the
+// strip list lives and this is the one key BOTH halves of the plugin read.
+// Spelling it here as well would be two spellings of one variable name, and
+// the day one of them changed the filter and the resolver would disagree about
+// which install a child is pointed at.
+const managedPackageRootEnv = runtimeenv.ManagedPackageRootEnv
 
 // executableName is the codex program name, spelled once. On Windows the
 // managed layouts carry the .exe suffix; PATH lookup uses the bare name
