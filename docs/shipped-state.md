@@ -20,9 +20,11 @@ projection carries system=`pi`, broker=`local-models`, publisher=`alibaba`,
 family=`qwen`, engine=`mlx`, runtime/profile=`local-qwen`, and leaves the
 concrete model id as data. Its mandatory `engine_binding=none|required`
 distinguishes genuine system-only legacy absence from removed evidence. The
-validator refuses `none` with any engine-bound identity axis, absent or partial
-required refs, non-normalized or wrong-kind graph identities, and
-configured/resolved mismatch after persistence.
+registry-backed validator refuses `none` with any engine-bound identity axis,
+absent or partial required refs, non-normalized or wrong-kind graph identities,
+and any configured/resolved mismatch after persistence. It reconstructs the
+configured identity from registry declarations and resolves it through the
+plugin graph, so equal self-minted refs do not validate an unconfigured engine.
 
 This is registration and metadata only. It does not discover, contact, start,
 supervise, attest, or execute an MLX model runtime. The candidate becomes a

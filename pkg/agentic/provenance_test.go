@@ -53,6 +53,7 @@ func TestConsumerProvenanceRefusesConfiguredResolvedMismatch(t *testing.T) {
 }
 
 func TestLaunchProvenanceV1RefusesMismatchFixture(t *testing.T) {
+	engine := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
 	var projection agentic.LaunchProvenanceV1
 	body, err := os.ReadFile("testdata/local-qwen-engine-mismatch-v1.json")
 	if err != nil {
@@ -61,8 +62,8 @@ func TestLaunchProvenanceV1RefusesMismatchFixture(t *testing.T) {
 	if err := json.Unmarshal(body, &projection); err != nil {
 		t.Fatalf("Unmarshal mismatch fixture: %v", err)
 	}
-	if err := projection.Validate(); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
-		t.Fatalf("Validate mismatch fixture = %v, want ErrLaunchProvenanceMismatch", err)
+	if err := projection.ValidateAgainst(engine, engine); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
+		t.Fatalf("ValidateAgainst mismatch fixture = %v, want ErrLaunchProvenanceMismatch", err)
 	}
 }
 
@@ -75,6 +76,7 @@ func TestLaunchProvenanceV1RefusesPartialAndUnknownEvidence(t *testing.T) {
 		ConfiguredEngine: engine, ResolvedEngine: engine,
 		Runtime: "local-qwen", Profile: "local-qwen", Model: "qwen-data-row",
 	}
+	authority := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
 	for _, test := range []struct {
 		name   string
 		mutate func(*agentic.LaunchProvenanceV1)
@@ -102,8 +104,8 @@ func TestLaunchProvenanceV1RefusesPartialAndUnknownEvidence(t *testing.T) {
 			projection.ConfiguredEngine = &configuredEngine
 			projection.ResolvedEngine = &resolvedEngine
 			test.mutate(&projection)
-			if err := projection.Validate(); !errors.Is(err, test.want) {
-				t.Fatalf("Validate = %v, want %v", err, test.want)
+			if err := projection.ValidateAgainst(authority, authority); !errors.Is(err, test.want) {
+				t.Fatalf("ValidateAgainst = %v, want %v", err, test.want)
 			}
 		})
 	}
@@ -128,7 +130,21 @@ func TestLaunchProvenanceV1RefusesNoEngineRecordWithoutSystemIdentity(t *testing
 		SchemaVersion: agentic.LaunchProvenanceSchemaVersion,
 		EngineBinding: agentic.EngineBindingNoneV1,
 	}
-	if err := projection.Validate(); !errors.Is(err, agentic.ErrLaunchProvenanceInvalid) {
-		t.Fatalf("Validate(no-engine record without system) = %v, want ErrLaunchProvenanceInvalid", err)
+	if err := projection.ValidateAgainst(plugin.Ref{}, plugin.Ref{}); !errors.Is(err, agentic.ErrLaunchProvenanceInvalid) {
+		t.Fatalf("ValidateAgainst(no-engine record without system) = %v, want ErrLaunchProvenanceInvalid", err)
+	}
+}
+
+func TestLaunchProvenanceV1RefusesPersistedPairThatContradictsIndependentAuthority(t *testing.T) {
+	forged := &agentic.PluginRefV1{ID: "attacker-engine", Kind: inferenceengine.Kind}
+	projection := agentic.LaunchProvenanceV1{
+		Contract: agentic.LaunchProvenanceContract, SchemaVersion: agentic.LaunchProvenanceSchemaVersion,
+		System: "pi", Broker: "local-models", Publisher: "alibaba", Family: "qwen",
+		EngineBinding: agentic.EngineBindingRequiredV1, ConfiguredEngine: forged, ResolvedEngine: forged,
+		Runtime: "local-qwen", Profile: "local-qwen", Model: "qwen-data-row",
+	}
+	trusted := plugin.Ref{ID: "mlx", Kind: inferenceengine.Kind}
+	if err := projection.ValidateAgainst(trusted, trusted); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
+		t.Fatalf("ValidateAgainst(equal forged pair, trusted mlx) = %v, want ErrLaunchProvenanceMismatch", err)
 	}
 }

@@ -211,14 +211,19 @@ runtime/model engine reference through the shared graph and checks an optional
 records system, broker, runtime, resolved profile, model, publisher, family,
 and both requested and resolved engine refs. `Plan.ConsumerProvenance()` maps
 that internal snapshot to `agents-management.launch-provenance` schema v1 with
-separate `configured_engine` and `resolved_engine` refs. Its public `Validate`
-gate requires the independent `engine_binding` discriminator (`none` for a
-genuine system-only legacy launch, `required` for an engine-bound launch). It
-refuses a `none` record carrying broker, publisher, family, runtime, profile,
+separate `configured_engine` and `resolved_engine` refs. After persistence,
+`Registry.ValidateLaunchProvenance` is the public consumer gate: it derives the
+configured ref from registry-owned runtime/model declarations, resolves the ref
+through the registry's plugin graph, and supplies both independent values to
+`LaunchProvenanceV1.ValidateAgainst`. The gate requires the mandatory
+`engine_binding` discriminator (`none` for a genuine system-only legacy launch,
+`required` for an engine-bound launch). It refuses a `none` record carrying
+broker, publisher, family, runtime, profile,
 model, or engine refs, as well as unknown schema/contract, absent or partial
-required evidence, non-normalized or wrong-kind graph refs, and mismatched refs
-after a consumer reads persisted metadata. Those provenance values never
-select dispatch.
+required evidence, non-normalized or wrong-kind graph refs, refs that disagree
+with either trusted authority, and configured/resolved authority mismatch after
+a consumer reads persisted metadata. Two equal refs from the persisted record
+do not corroborate each other. Those provenance values never select dispatch.
 Production-entry metamorphic tests injectively rename system, vendor, runtime,
 profile, publisher, family, model, and engine identities while requiring the
 same graph shape, non-identity plan output, side-effect counts, and

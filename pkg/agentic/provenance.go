@@ -41,7 +41,8 @@ type EngineBindingV1 string
 
 // LaunchProvenanceV1 is the versioned consumer projection for a built plan.
 // Concrete model IDs remain data. ConfiguredEngine and ResolvedEngine are both
-// absent for legacy/no-engine launches and otherwise must be equal.
+// absent for legacy/no-engine launches and otherwise must equal independently
+// supplied configured and graph-resolved authority.
 type LaunchProvenanceV1 struct {
 	Contract      string `json:"contract"`
 	SchemaVersion int    `json:"schema_version"`
@@ -60,10 +61,12 @@ type LaunchProvenanceV1 struct {
 	Model   string `json:"model,omitempty"`
 }
 
-// Validate fails closed on unknown contract/schema, partial engine evidence,
-// or a configured-versus-resolved mismatch. Consumers should call it after
-// unmarshalling persisted metadata.
-func (p LaunchProvenanceV1) Validate() error {
+// ValidateAgainst fails closed on unknown contract/schema, partial engine
+// evidence, or a mismatch against independently trusted configured and graph-
+// resolved engine references. Consumers must not derive either authority
+// argument from p: both persisted references belong to the same untrusted
+// record and equality between them is not corroboration.
+func (p LaunchProvenanceV1) ValidateAgainst(configuredAuthority, resolvedAuthority plugin.Ref) error {
 	if p.Contract != LaunchProvenanceContract {
 		return fmt.Errorf("%w: contract %q, want %q", ErrLaunchProvenanceInvalid, p.Contract, LaunchProvenanceContract)
 	}
@@ -72,6 +75,9 @@ func (p LaunchProvenanceV1) Validate() error {
 	}
 	switch p.EngineBinding {
 	case EngineBindingNoneV1:
+		if configuredAuthority != (plugin.Ref{}) || resolvedAuthority != (plugin.Ref{}) {
+			return fmt.Errorf("%w: no-engine provenance contradicts configured %#v and resolved %#v authority", ErrLaunchProvenanceMismatch, configuredAuthority, resolvedAuthority)
+		}
 		if p.ConfiguredEngine != nil || p.ResolvedEngine != nil {
 			return fmt.Errorf("%w: no-engine provenance carries an engine reference", ErrLaunchProvenanceMismatch)
 		}
@@ -95,22 +101,36 @@ func (p LaunchProvenanceV1) Validate() error {
 		}
 		return nil
 	case EngineBindingRequiredV1:
+		if configuredAuthority == (plugin.Ref{}) || resolvedAuthority == (plugin.Ref{}) {
+			return fmt.Errorf("%w: required engine authority is absent", ErrLaunchProvenanceMismatch)
+		}
 		if p.ConfiguredEngine == nil || p.ResolvedEngine == nil {
 			return fmt.Errorf("%w: required engine reference is absent", ErrLaunchProvenanceMismatch)
 		}
 	default:
 		return fmt.Errorf("%w: engine binding %q is unknown", ErrLaunchProvenanceInvalid, p.EngineBinding)
 	}
-	for label, ref := range map[string]*PluginRefV1{
-		"configured_engine": p.ConfiguredEngine,
-		"resolved_engine":   p.ResolvedEngine,
+	for _, candidate := range []struct {
+		label string
+		ref   PluginRefV1
+	}{
+		{label: "configured_engine", ref: *p.ConfiguredEngine},
+		{label: "resolved_engine", ref: *p.ResolvedEngine},
+		{label: "configured_authority", ref: PluginRefV1{ID: configuredAuthority.ID, Kind: configuredAuthority.Kind}},
+		{label: "resolved_authority", ref: PluginRefV1{ID: resolvedAuthority.ID, Kind: resolvedAuthority.Kind}},
 	} {
-		if err := validateInferenceEnginePluginRefV1(label, *ref); err != nil {
+		if err := validateInferenceEnginePluginRefV1(candidate.label, candidate.ref); err != nil {
 			return err
 		}
 	}
-	if *p.ConfiguredEngine != *p.ResolvedEngine {
-		return fmt.Errorf("%w: configured %#v resolved %#v", ErrLaunchProvenanceMismatch, *p.ConfiguredEngine, *p.ResolvedEngine)
+	configured := PluginRefV1{ID: configuredAuthority.ID, Kind: configuredAuthority.Kind}
+	resolved := PluginRefV1{ID: resolvedAuthority.ID, Kind: resolvedAuthority.Kind}
+	if configured != resolved {
+		return fmt.Errorf("%w: configured authority %#v resolved authority %#v", ErrLaunchProvenanceMismatch, configured, resolved)
+	}
+	if *p.ConfiguredEngine != configured || *p.ResolvedEngine != resolved {
+		return fmt.Errorf("%w: persisted configured %#v resolved %#v; authority configured %#v resolved %#v",
+			ErrLaunchProvenanceMismatch, *p.ConfiguredEngine, *p.ResolvedEngine, configured, resolved)
 	}
 	for label, value := range map[string]string{
 		"system": string(p.System), "broker": p.Broker, "publisher": p.Publisher,
@@ -147,7 +167,8 @@ func validateInferenceEnginePluginRefV1(label string, ref PluginRefV1) error {
 
 // ConsumerProvenance publishes the plan's identity axes without changing the
 // observable launch surface. BuildLaunch remains the producer of the internal
-// requested/resolved refs; this method is the consumer-facing validation gate.
+// requested/resolved refs; persisted consumers validate the returned record
+// against independent registry/graph authority.
 func (p Plan) ConsumerProvenance() (LaunchProvenanceV1, error) {
 	projection := LaunchProvenanceV1{
 		Contract: LaunchProvenanceContract, SchemaVersion: LaunchProvenanceSchemaVersion,
@@ -166,7 +187,7 @@ func (p Plan) ConsumerProvenance() (LaunchProvenanceV1, error) {
 	if resolved != (plugin.Ref{}) {
 		projection.ResolvedEngine = &PluginRefV1{ID: resolved.ID, Kind: resolved.Kind}
 	}
-	if err := projection.Validate(); err != nil {
+	if err := projection.ValidateAgainst(configured, resolved); err != nil {
 		return LaunchProvenanceV1{}, err
 	}
 	return projection, nil

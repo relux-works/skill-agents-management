@@ -11,6 +11,7 @@ import (
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 	"github.com/relux-works/skill-agents-management/pkg/agentic/systems/pi"
+	"github.com/relux-works/skill-agents-management/pkg/inferenceengine"
 	"github.com/relux-works/skill-agents-management/pkg/inferenceengine/engines/mlx"
 	"github.com/relux-works/skill-agents-management/pkg/localruntime"
 	"github.com/relux-works/skill-agents-management/pkg/plugin"
@@ -151,18 +152,18 @@ func TestBuildLaunchAdmitsLocalQwenThroughTheRealPiPreflight(t *testing.T) {
 	}
 }
 
-// ConsumerProvenance and LaunchProvenanceV1.Validate are the production
+// ConsumerProvenance and Registry.ValidateLaunchProvenance are the production
 // publication/read gates. This probe starts with the real BuildLaunch
 // projection, crosses JSON persistence, removes both refs, and requires the
 // independent engine_binding fact to prevent absent evidence from passing.
 func TestBuildLaunchLocalQwenPersistedProvenanceRefusesBothEngineRefsRemoved(t *testing.T) {
-	projection := buildLocalQwenConsumerProvenance(t)
+	registry, projection := buildLocalQwenConsumerProvenance(t)
 	persisted := mutatePersistedProvenance(t, projection, func(record map[string]any) {
 		delete(record, "configured_engine")
 		delete(record, "resolved_engine")
 	})
-	if err := persisted.Validate(); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
-		t.Fatalf("Validate(both engine refs removed) = %v, want ErrLaunchProvenanceMismatch", err)
+	if err := registry.ValidateLaunchProvenance(persisted); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
+		t.Fatalf("ValidateLaunchProvenance(both engine refs removed) = %v, want ErrLaunchProvenanceMismatch", err)
 	}
 }
 
@@ -171,14 +172,14 @@ func TestBuildLaunchLocalQwenPersistedProvenanceRefusesBothEngineRefsRemoved(t *
 // axes while downgrading the binding and deleting the pair; Validate must
 // recognize that this cannot be a genuine legacy/no-engine record.
 func TestBuildLaunchLocalQwenPersistedProvenanceRefusesBindingDowngradeWithBothRefsRemoved(t *testing.T) {
-	projection := buildLocalQwenConsumerProvenance(t)
+	registry, projection := buildLocalQwenConsumerProvenance(t)
 	persisted := mutatePersistedProvenance(t, projection, func(record map[string]any) {
 		record["engine_binding"] = string(agentic.EngineBindingNoneV1)
 		delete(record, "configured_engine")
 		delete(record, "resolved_engine")
 	})
-	if err := persisted.Validate(); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
-		t.Fatalf("Validate(binding downgrade plus refs removed) = %v, want ErrLaunchProvenanceMismatch", err)
+	if err := registry.ValidateLaunchProvenance(persisted); !errors.Is(err, agentic.ErrLaunchProvenanceMismatch) {
+		t.Fatalf("ValidateLaunchProvenance(binding downgrade plus refs removed) = %v, want ErrLaunchProvenanceMismatch", err)
 	}
 }
 
@@ -189,13 +190,15 @@ func TestBuildLaunchLocalQwenPersistedProvenanceRefusesEqualForgedEngineRefs(t *
 		name string
 		id   string
 		kind string
+		want error
 	}{
-		{name: "wrong kind", id: "mlx", kind: "vendor"},
-		{name: "unnormalized id", id: "MLX", kind: "inference-engine"},
-		{name: "unnormalized kind", id: "mlx", kind: "Inference-Engine"},
+		{name: "normalized correct-kind unconfigured identity", id: "attacker-engine", kind: "inference-engine", want: agentic.ErrLaunchProvenanceMismatch},
+		{name: "wrong kind", id: "mlx", kind: "vendor", want: agentic.ErrLaunchProvenanceInvalid},
+		{name: "unnormalized id", id: "MLX", kind: "inference-engine", want: agentic.ErrLaunchProvenanceInvalid},
+		{name: "unnormalized kind", id: "mlx", kind: "Inference-Engine", want: agentic.ErrLaunchProvenanceInvalid},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			projection := buildLocalQwenConsumerProvenance(t)
+			registry, projection := buildLocalQwenConsumerProvenance(t)
 			persisted := mutatePersistedProvenance(t, projection, func(record map[string]any) {
 				for _, field := range []string{"configured_engine", "resolved_engine"} {
 					ref := record[field].(map[string]any)
@@ -203,14 +206,14 @@ func TestBuildLaunchLocalQwenPersistedProvenanceRefusesEqualForgedEngineRefs(t *
 					ref["kind"] = test.kind
 				}
 			})
-			if err := persisted.Validate(); !errors.Is(err, agentic.ErrLaunchProvenanceInvalid) {
-				t.Fatalf("Validate(equal forged refs) = %v, want ErrLaunchProvenanceInvalid", err)
+			if err := registry.ValidateLaunchProvenance(persisted); !errors.Is(err, test.want) {
+				t.Fatalf("ValidateLaunchProvenance(equal forged refs) = %v, want %v", err, test.want)
 			}
 		})
 	}
 }
 
-func buildLocalQwenConsumerProvenance(t *testing.T) agentic.LaunchProvenanceV1 {
+func buildLocalQwenConsumerProvenance(t *testing.T) (*vendorplugin.Registry, agentic.LaunchProvenanceV1) {
 	t.Helper()
 	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
 	registry := isolatedLocalQwenRegistry(t, reader, validConfig(), mlx.New())
@@ -222,7 +225,7 @@ func buildLocalQwenConsumerProvenance(t *testing.T) agentic.LaunchProvenanceV1 {
 	if err != nil {
 		t.Fatalf("ConsumerProvenance(BuildLaunch(local-qwen)): %v", err)
 	}
-	return projection
+	return registry, projection
 }
 
 func mutatePersistedProvenance(t *testing.T, projection agentic.LaunchProvenanceV1, mutate func(map[string]any)) agentic.LaunchProvenanceV1 {
@@ -308,10 +311,31 @@ func cfgEngineRef(cfg Config) plugin.Ref { return cfg.Runtimes[0].Engine }
 // stops BuildLaunch before agentic.BuildPlan.
 func TestBuildLaunchRefusesLocalQwenWhenPreflightRefuses(t *testing.T) {
 	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "draining", BrokerSource: localruntime.SourceAttested}}
+	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
+
+	_, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
+	if !errors.Is(err, pi.ErrPreflightRefused) {
+		t.Fatalf("BuildLaunch draining preflight = %v, want pi.ErrPreflightRefused", err)
+	}
+	if reader.calls != 1 {
+		t.Fatalf("StatusReader called %d times, want exactly 1", reader.calls)
+	}
+}
+
+// TestBuildLaunchConfiguredMLXRefusesBeforePiPreflight proves the independent
+// production MLX observation seam. Until agents-infra supplies its observation
+// adapter, configured local-qwen must refuse as unsupported before Pi reads
+// broker status; this refusal is not evidence about Pi Preflight.
+func TestBuildLaunchConfiguredMLXRefusesBeforePiPreflight(t *testing.T) {
+	reader := &countingStatusReader{status: localruntime.Status{BrokerState: "absent", BrokerSource: localruntime.SourceDetermined}}
 	registry := isolatedLocalQwenRegistry(t, reader, validConfig())
 
-	if _, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec); err == nil {
-		t.Fatal("BuildLaunch admitted a draining/attested broker")
+	_, err := vendorplugin.BuildLaunch(context.Background(), registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
+	if !errors.Is(err, inferenceengine.ErrObservationUnsupported) {
+		t.Fatalf("BuildLaunch configured MLX = %v, want ErrObservationUnsupported", err)
+	}
+	if reader.calls != 0 {
+		t.Fatalf("StatusReader called %d times before MLX observation refusal, want 0", reader.calls)
 	}
 }
 
@@ -337,15 +361,19 @@ func TestBuildLaunchSkipsPreflightOnDryRun(t *testing.T) {
 // context.WithTimeout BuildLaunch applies is real for this seam: a
 // StatusReader that never returns must not hang BuildLaunch forever.
 func TestBuildLaunchPreflightTimeoutRefusesLocalQwen(t *testing.T) {
-	registry := isolatedLocalQwenRegistry(t, &countingStatusReader{hang: true}, validConfig())
+	reader := &countingStatusReader{hang: true}
+	registry := isolatedLocalQwenRegistry(t, reader, configWithoutEngine())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
 	_, err := vendorplugin.BuildLaunch(ctx, registry, localQwenSpawnRequest(t), agentic.LaunchModeExec)
 	elapsed := time.Since(start)
-	if err == nil {
-		t.Fatal("BuildLaunch admitted despite a StatusReader that never returns")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("BuildLaunch hanging StatusReader = %v, want context.DeadlineExceeded", err)
+	}
+	if reader.calls != 1 {
+		t.Fatalf("StatusReader called %d times, want exactly 1", reader.calls)
 	}
 	if elapsed > 5*time.Second {
 		t.Fatalf("BuildLaunch took %v to return", elapsed)

@@ -370,14 +370,19 @@ The vendor plugin contract, its registry, and the runtime declarations.
   vendor registration publishes the model-to-engine edge, and `BuildLaunch`
   resolves it before returning a plan. `Plan.Provenance` records requested and
   resolved engine refs together with system/broker/runtime/profile/model/
-  publisher/family. `Plan.ConsumerProvenance()` publishes those axes as the
-  validated `agents-management.launch-provenance` schema v1, spelling the
+  publisher/family. `Plan.ConsumerProvenance()` publishes those axes as
+  `agents-management.launch-provenance` schema v1, spelling the
   engine pair `configured_engine` and `resolved_engine`. Its mandatory
   `engine_binding` discriminator separates genuine `none` legacy launches from
   `required` engine-bound records. A `none` record must carry only its system
   identity; broker, publisher, family, runtime, profile, model, or either
   engine ref makes it inconsistent. Missing, downgraded, malformed,
   wrong-kind, or mismatched graph evidence therefore refuses after persistence.
+  Persisted consumers call `Registry.ValidateLaunchProvenance`, which derives
+  the configured ref from trusted runtime/model declarations, resolves it
+  through that registry's plugin graph, and then calls
+  `LaunchProvenanceV1.ValidateAgainst`; equality between the two persisted refs
+  alone is never authority.
   No concrete engine, runtime, profile, publisher, family or model name is a
   core dispatch case, and declarations with no engine retain legacy behavior.
   Genericity is bounded by production-entry identity-renaming tests plus an

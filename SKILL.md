@@ -128,7 +128,7 @@ became `.Score`; the total order is derived by `vendorplugin.Lineup`):
 | What exactly would this launch run? | `agentic.BuildPlan(registry, req, mode)` → `Plan{Binary, Argv, Env, Stdin, …}` |
 | Add engine/sidecar nodes | `agentic.BuildMultiNodePlan(primary, dependencies, nodes...)` |
 | The same, through a runtime and its vendor | `vendorplugin.BuildLaunch(registry, req, mode)` |
-| Publish validated launch identity metadata | `plan.ConsumerProvenance()` → versioned `engine_binding` plus configured/resolved engine projection; `none` is valid only for a system-only legacy shape |
+| Publish and validate launch identity metadata | `plan.ConsumerProvenance()` → versioned `engine_binding` plus configured/resolved engine projection; after persistence call `registry.ValidateLaunchProvenance(record)` so registry declarations and graph resolution, not the record itself, supply authority; `none` is valid only for a system-only legacy shape |
 | Validate observed engine facts before launch | `vendorplugin.BuildLaunch(ctx, registry, request, mode)` invokes the package-owned engine source before `Spawn`/`Preflight`; `inferenceengine.ValidateReadings` is schema-only and cannot install evidence |
 | May it launch right now? | `providerlimits.Store.AvailabilityFor(VerdictQuery{…})` → `vendorplugin.Availability` |
 
