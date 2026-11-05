@@ -355,29 +355,53 @@ The vendor plugin contract, its registry, and the runtime declarations.
   limited-until(time, evidence), unreachable(evidence), or unknown — with
   "checked and found nothing" distinguishable from "nobody looked" and from "the
   read failed". The zero value is unknown, and only an observed healthy verdict
-  is serviceable. The local-model resource plane sketched in
-  `docs/architecture.md` is DESIGN ONLY and none of it is built; what this
-  layer owes it is a seam it can report through without an interface change,
-  and a test demonstrates five such answers fitting the existing fields. That
-  test exercises the verdict type, not a resource plane — there is no
-  local-models package anywhere in this module.
+  is serviceable. `AvailabilityQuery` carries a `Runtime` field so a vendor
+  serving more than one `RuntimeID` (`local-models` today, `google` for
+  `gemini`/`agy` already) can disambiguate which declared pair a caller means.
+  The local-model resource plane described in `docs/architecture.md` is
+  implemented in this branch as the module-side M1 candidate:
+  `pkg/vendorplugin/vendors/local-models` is a real vendor plugin,
+  `pkg/agentic/systems/pi` is Process A's harness plugin, and `pkg/localruntime`
+  is the machine-local `StatusReader` contract. `local-models`, unlike every
+  other vendor plugin, does NOT self-register in `init()` — its catalog depends
+  on a machine-local `~/.agents/.configs/local-models.toml` that may not exist,
+  so a caller building the shared registry decides whether to register it at
+  all via `localmodels.Peek()`'s three-way absent/malformed/valid result (see
+  `docs/architecture.md`). End-to-end M1 is not shipped by this module alone.
+  The `local-qwen` `RuntimeDeclaration` and `skill-project-management`'s
+  production migration onto `vendorplugin.BuildLaunch(ctx, ...)` belong to the
+  coordinated consumer task (`TASK-260828-3hultd`) and remain pending review;
+  see
+  [docs/shipped-state.md](docs/shipped-state.md).
 - **Runtimes are declared pairs.** `RuntimeDeclaration` binds a stable id to
   one agentic system and one vendor, and the six historical ids (`claude`,
   `codex`, `qwen`, `gemini`, `agy`, `muse`) are seeded from the extraction
   source's frozen `runtimeid` table into every binary's default registry.
   `muse`'s broker is recorded UNKNOWN with a checked-and-empty evidence list,
-  exactly as the source records it — an unresolved-vendor runtime is a complete
-  declaration and an unlaunchable one, refused on its own terms rather than
-  guessed at. The F2 collision policy applies: a matching redeclaration is
-  idempotent, a conflicting one is refused and the first declaration stands.
-- `BuildLaunch` is the single Layer-2 dispatch site. It resolves the pair,
-  selects the model, validates the effort word against the model's own
-  vocabulary (never substituting the recommendation — no default is injected
-  anywhere), asks the vendor to build an `agentic.LaunchRequest`, refuses one
+  exactly as the source records it. `ResolveRuntime` remains strict and reports
+  that unresolved broker on its own terms. `BuildLaunch` additionally supports
+  the explicit system-only declaration shape: when such a declaration carries
+  validated model rows, those rows own model/effort facts and launch directly
+  through the declared system, with no fabricated vendor and no runtime-ID
+  special case. An unresolved declaration with no rows still refuses. The F2
+  collision policy applies: an established-vendor redeclaration matches on its
+  binding as before; a system-only redeclaration must also carry semantically
+  equal model/effort authority. Model row order is presentation-only and may
+  differ, but changing any model field is a typed conflict; the first complete
+  authority stands unchanged.
+- `BuildLaunch` is the module's single Layer-2 dispatch API. It resolves an
+  explicit launch binding, selects the model, validates the effort word against
+  the model's own vocabulary (never substituting the recommendation — no
+  default is injected anywhere), asks a resolved vendor to build an
+  `agentic.LaunchRequest` or projects an explicit system-only declaration
+  losslessly, refuses a vendor answer
   that REDIRECTS the launch (a vendor may add authentication environment; it
-  may not change the harness, the model, the effort, the goal, the budget, the
-  tier or the composition), and hands it to `agentic.BuildPlan`. Spawn
-  EXECUTION is not here — that is a port story.
+  may not change the harness, the model, the effort, the tracked `RunContext`,
+  the goal, the budget, the tier or the composition), and hands it to
+  `agentic.BuildPlan`. Spawn
+  EXECUTION is not here — that is a consumer responsibility. This branch does
+  not claim production reachability until the coordinated consumer candidate
+  calls this API from its real `buildLaunchPlan` path.
 
 The single-source guard covers both layers from ONE list, keyed by the FACT
 being bound. Three entries are dispatch key types (`SystemID`, `VendorID`,
@@ -633,7 +657,7 @@ the negative that makes it mean something:
 | Class | Driven through | The negative |
 | --- | --- | --- |
 | A vendor naming an unregistered agentic system is refused, with BOTH ids | the four real vendor plugins into a registry built on an EMPTY agentic registry | the same vendors are ADMITTED once their systems are registered, so "refuses everything" cannot pass; and a message naming only the vendor fails |
-| Runtime declaration and the F2 collision, both directions | `SeedFrozenRuntimes` plus `DeclareRuntime` on a fresh registry | a conflicting redeclaration must be refused AND the stored binding must be unchanged afterwards — refuse-and-write-anyway is caught; a redeclaration differing only in broker provenance must still be idempotent |
+| Runtime declaration and the F2 collision, both directions | `SeedFrozenRuntimes` plus `DeclareRuntime` on a fresh registry | a conflicting redeclaration must be refused AND the stored binding must be unchanged afterwards — refuse-and-write-anyway is caught; a redeclaration differing only in broker provenance must still be idempotent; system-only model/effort authority conflicts and concurrent contenders must leave exactly one complete winner |
 | An availability verdict derived from a real state file | `providerlimits.Store.AvailabilityFor` over `testdata/source-written/`, written by a binary compiled against the SOURCE module | the same bytes filed one hex digit away read HEALTHY — the fail-open disaster, asserted; an elapsed window is not serviceable; an unreadable file is Unknown, never Healthy |
 | A `BuildPlan` parity smoke, one golden per Layer-1 system | the real `Registry` and `agentic.BuildPlan`, six systems | a wrong resolved binary and a truncated argv must each be reported in the field they were planted in, for all six; and a seventh registered plugin with no smoke case fails the suite |
 
@@ -643,24 +667,28 @@ time and require `make regress` to go red naming the right test:
 
 ### Current CLI surface
 
-Four commands of its own, because this stage is about seams rather than
+Five commands of its own, because this stage is about seams rather than
 features (cobra contributes `help` and `completion`):
 
 ```
-agents-management version           # build version, commit and build date
-agents-management plugins [--json]  # the agentic system plugins compiled in
-agents-management vendors [--json]  # the vendor plugins compiled in
-agents-management runtimes [--json] # the declared (system x vendor) pairs
+agents-management version                    # build version, commit and build date
+agents-management plugins [--json]            # the agentic system plugins compiled in
+agents-management vendors [--json]            # the vendor plugins compiled in
+agents-management runtimes [--json]           # the declared (system x vendor) pairs
+agents-management local-runtime status [--json]  # local-models.toml's registration state and live pair status
 ```
 
 `plugins` and `vendors` read the `pkg/agentic` and `pkg/vendorplugin` default
 registries — the same ones a plugin package registers into from its `init` —
 and print the registered ids. **Both print an empty list and exit 0 in the
-shipped binary.** That is the answer, not a stub: all ten plugins exist and
-none is compiled into `tools/agents-management`, which imports no plugin
-package, and "nothing registered" is a different fact from a failure to look.
-`--json` renders the empty case as `[]`, never `null`. A consumer links the
-packages it needs directly — see
+shipped binary.** That is the answer, not a stub: every plugin package exists
+and none is compiled into `tools/agents-management`, which imports no plugin
+package (`local-models` is the one deliberate exception the binary links
+directly, for `local-runtime status` below, and it still does not self-register
+— see the conditional-registration contract in `docs/architecture.md`), and
+"nothing registered" is a different fact from a failure to look. `--json`
+renders the empty case as `[]`, never `null`. A consumer links the packages it
+needs directly — see
 [docs/consuming-the-module.md](docs/consuming-the-module.md) — and gets a
 populated registry in its own binary.
 
@@ -671,6 +699,16 @@ launch: every id appears whether or not its plugins are compiled in, and
 form carries the broker provenance — which source was checked, and that nothing
 established a vendor — because "unresolved" is only honest when the search
 behind it is visible.
+
+`local-runtime status` reads `localmodels.Peek()`'s memoized-forever result —
+the SAME loader a launch's conditional registration decision reads — and
+reports whether `~/.agents/.configs/local-models.toml` was found and parsed,
+distinctly for absence versus a malformed file
+(`{"registered": false, "reason": "absent"}` vs
+`{"registered": false, "reason": "malformed", "error": "<msg>"}`), and when
+valid, each declared `(runtime, model)` pair's live broker status via
+`pkg/localruntime`'s `StatusReader`. It never registers, declares, or launches
+anything itself.
 
 None of these commands keeps a list of its own. A private one would be a
 second binding for the same fact, which is exactly what the single-source

@@ -380,6 +380,20 @@ type LaunchRequest struct {
 	Budget      *Budget
 	ServiceTier string
 	Composition Composition
+
+	// Runtime is the vendorplugin.RuntimeID string that resolved to this
+	// launch. It is opaque to this package (a plain string, exactly like
+	// Model.ID) to avoid an import cycle — pkg/vendorplugin already imports
+	// pkg/agentic for BuildPlan, so pkg/agentic cannot import pkg/vendorplugin
+	// back.
+	//
+	// It is populated uniformly by vendorplugin.BuildLaunch for every launch,
+	// never by an individual system or vendor plugin, so no Vendor.Spawn
+	// implementation may set it and expect the value to stick — BuildLaunch
+	// overwrites it unconditionally after Spawn returns. A system that does
+	// not need it (every one except pi today) simply never reads it, the same
+	// pattern Profile already established.
+	Runtime string
 }
 
 // RunContext is the caller's identity for one tracked run, carried to the

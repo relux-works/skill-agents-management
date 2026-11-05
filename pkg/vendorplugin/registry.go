@@ -27,10 +27,11 @@ import (
 // layer it depends on, and Register consults that registry to refuse a vendor
 // naming a system nobody has registered.
 type Registry struct {
-	mu       sync.RWMutex
-	systems  *agentic.Registry
-	vendors  map[VendorID]Vendor
-	runtimes map[RuntimeID]RuntimeDeclaration
+	mu          sync.RWMutex
+	systems     *agentic.Registry
+	vendors     map[VendorID]Vendor
+	runtimes    map[RuntimeID]RuntimeDeclaration
+	diagnostics map[RuntimeID]RegistrationDiagnostic
 }
 
 // NewRegistry returns an empty registry bound to the agentic registry its
@@ -41,9 +42,10 @@ type Registry struct {
 // rather than admitting vendors whose declared systems nobody could check.
 func NewRegistry(systems *agentic.Registry) *Registry {
 	return &Registry{
-		systems:  systems,
-		vendors:  map[VendorID]Vendor{},
-		runtimes: map[RuntimeID]RuntimeDeclaration{},
+		systems:     systems,
+		vendors:     map[VendorID]Vendor{},
+		runtimes:    map[RuntimeID]RuntimeDeclaration{},
+		diagnostics: map[RuntimeID]RegistrationDiagnostic{},
 	}
 }
 
@@ -160,7 +162,38 @@ var (
 	// ErrVendorNotRegistered is returned when a lookup names no registered
 	// vendor.
 	ErrVendorNotRegistered = errors.New("vendorplugin: no vendor registered")
+
+	// ErrRuntimeConfigMalformed is returned by ResolveRuntime for a RuntimeID
+	// whose local configuration was FOUND but failed to parse or validate —
+	// distinct from ErrUnknownRuntime, which continues to cover every
+	// never-declared case, including genuinely absent local configuration.
+	ErrRuntimeConfigMalformed = errors.New("vendorplugin: runtime's local configuration is malformed")
+	// ErrRuntimeDiagnosticConflict is returned by DeclareRuntime when id
+	// already carries a noted RegistrationDiagnostic — the mirror of
+	// NoteUnregistered's own refuse-if-already-declared check. Without this
+	// guard, DeclareRuntime could silently install a live declaration over an
+	// existing diagnostic, after which ResolveRuntime would take the declared
+	// branch and never read the diagnostic again.
+	ErrRuntimeDiagnosticConflict = errors.New("vendorplugin: runtime already has a noted registration diagnostic")
 )
+
+// RegistrationDiagnostic records a typed, non-fatal reason a specific
+// RuntimeID was deliberately left undeclared this process.
+//
+// Only "malformed" is defined in v1 — there is no diagnostic for "absent",
+// because absent config must produce the SAME generic refusal every other
+// never-configured RuntimeID already produces (a stale spawn.ceilings entry,
+// a leftover CLI flag, a removed profile). Noting a diagnostic for "absent"
+// would give it a distinct refusal shape it must NOT have.
+type RegistrationDiagnostic struct {
+	// Reason names why the id was left undeclared. "malformed" is the only
+	// value this registry currently acts on.
+	Reason string
+	// Err is the underlying parse/validation error for a "malformed"
+	// diagnostic. It is wrapped, not discarded, so ResolveRuntime's refusal
+	// names the exact failure an operator's config hit.
+	Err error
+}
 
 // Register adds a vendor to the registry, refusing anything that could not be
 // launched, could not be chosen by an operator, or would create a second
@@ -298,11 +331,22 @@ func (r *Registry) DeclareRuntime(declaration RuntimeDeclaration) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Checked FIRST, under the same lock NoteUnregistered acquires: a
+	// diagnostic and a live declaration must never coexist for one id,
+	// regardless of which is recorded first. NoteUnregistered refuses when id
+	// is already declared; this is its mirror image.
+	if diag, noted := r.diagnostics[declaration.ID]; noted {
+		return fmt.Errorf("%w: %s: already noted unregistered (%s)", ErrRuntimeDiagnosticConflict, declaration.ID, diag.Reason)
+	}
 	if r.runtimes == nil {
 		r.runtimes = map[RuntimeID]RuntimeDeclaration{}
 	}
 	if existing, declared := r.runtimes[declaration.ID]; declared {
 		if existing.SameBinding(declaration) {
+			if !existing.VendorResolved() && !existing.sameSystemOnlyAuthority(declaration) {
+				return fmt.Errorf("%w: %s has the same system-only binding (%s × %s) but different declaration-owned model/effort authority; the first complete authority stands",
+					ErrRuntimeConflict, declaration.ID, existing.System, existing.VendorLabel())
+			}
 			return nil
 		}
 		return fmt.Errorf("%w: %s is declared as (%s × %s) and was redeclared as (%s × %s); the id feeds admitted-pair digests and limit-state filenames, so the first declaration stands",
@@ -312,6 +356,66 @@ func (r *Registry) DeclareRuntime(declaration RuntimeDeclaration) error {
 	}
 	r.runtimes[declaration.ID] = declaration.clone()
 	return nil
+}
+
+// NoteUnregistered records why id was deliberately left undeclared this
+// process, so a LATER ResolveRuntime(id) call can surface a distinct, typed
+// refusal instead of the generic "never declared" one.
+//
+// It does not itself register or declare anything, and it refuses if id IS
+// already declared — a diagnostic and a live declaration would contradict
+// each other. It costs a caller zero signature changes: the diagnostic lives
+// on the registry object every caller already holds and passes to
+// BuildLaunch, not in a second return value threaded through every call
+// site.
+//
+// This method and DeclareRuntime's own diagnostic-conflict check acquire the
+// SAME internal mutex that already guards the declared-runtime map, so two
+// concurrent contenders calling NoteUnregistered and DeclareRuntime for the
+// same id resolve deterministically to "first writer wins, second writer
+// refused" — never a silent last-writer-wins race.
+func (r *Registry) NoteUnregistered(id RuntimeID, diag RegistrationDiagnostic) error {
+	if r == nil {
+		return errors.New("vendorplugin: cannot note an unregistered runtime in a nil registry")
+	}
+	normalized, err := NormalizeRuntimeID(string(id))
+	if err != nil {
+		return err
+	}
+	// v1 defines exactly one diagnostic shape: Reason == "malformed" carrying
+	// the non-nil underlying parse/validation error. Anything else — an
+	// unrecognized reason, or "malformed" with no Err — is rejected rather
+	// than silently accepted, because a caller-forged or self-minted
+	// diagnostic would poison ResolveRuntime's typed refusal for id with
+	// evidence nobody validated: an unknown reason would collapse to the
+	// generic ErrUnknownRuntime while still blocking DeclareRuntime, and a nil
+	// Err would manufacture ErrRuntimeConfigMalformed with nothing behind it.
+	if diag.Reason != "malformed" {
+		return fmt.Errorf("vendorplugin: noting %s unregistered: unsupported diagnostic reason %q; only \"malformed\" is defined in v1", normalized, diag.Reason)
+	}
+	if diag.Err == nil {
+		return fmt.Errorf("vendorplugin: noting %s unregistered as malformed with no underlying error", normalized)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, declared := r.runtimes[normalized]; declared {
+		return fmt.Errorf("%w: %s is already declared; a diagnostic and a live declaration cannot coexist for one id",
+			ErrRuntimeConflict, normalized)
+	}
+	if r.diagnostics == nil {
+		r.diagnostics = map[RuntimeID]RegistrationDiagnostic{}
+	}
+	r.diagnostics[normalized] = diag
+	return nil
+}
+
+// diagnosticFor returns the noted diagnostic for id, if any, under the
+// registry's own lock.
+func (r *Registry) diagnosticFor(id RuntimeID) (RegistrationDiagnostic, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	diag, ok := r.diagnostics[id]
+	return diag, ok
 }
 
 // RuntimeDeclarationOf returns the declaration for an id without resolving it.
@@ -381,6 +485,9 @@ func (r *Registry) ResolveRuntime(id RuntimeID) (Runtime, error) {
 	}
 	declaration, declared := r.RuntimeDeclarationOf(normalized)
 	if !declared {
+		if diag, noted := r.diagnosticFor(normalized); noted && diag.Reason == "malformed" {
+			return Runtime{}, fmt.Errorf("%w: %s: %v", ErrRuntimeConfigMalformed, normalized, diag.Err)
+		}
 		return Runtime{}, fmt.Errorf("%w: %s", ErrUnknownRuntime, normalized)
 	}
 	if r.systems == nil {

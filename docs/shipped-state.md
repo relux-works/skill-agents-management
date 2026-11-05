@@ -226,31 +226,69 @@ repository's CI depended on any of it — see
 [consuming-the-module.md](consuming-the-module.md) for what a consumer writes
 today.
 
-### 5. The local-model plugin is design only
+### 5. The local-model plugin — module-side M1 candidate, coordinated M1 pending
 
-[architecture.md](architecture.md) describes a local-models plugin owning a
-shared resource plane — load/unload awareness, inference-busy observation,
-memory-pressure sequencing, eviction ordering. **None of it is built.**
+`pkg/vendorplugin/vendors/local-models` (the generic resource-plane vendor),
+`pkg/agentic/systems/pi` (Process A's harness plugin, implementing
+`Preflightable`), and `pkg/localruntime` (the machine-local `StatusReader`
+contract and its CLI-subprocess adapter) are implemented and tested in this
+branch — see [architecture.md](architecture.md)'s local-model section for the
+contract. `vendorplugin.BuildLaunch`
+gained a leading `ctx`, `SpawnRequest.Profile`, typed `SpawnRequest.Run`,
+`AvailabilityQuery.Runtime`
+and the `agentic.Preflightable` step; `Registry` gained
+`NoteUnregistered`/`ErrRuntimeConfigMalformed`/`ErrRuntimeDiagnosticConflict`
+for the conditional-registration contract. The component's coordinated
+revision-4 API also carries typed `SpawnRequest.Run` losslessly and gives
+`BuildLaunch` one generic system-only binding for declarations whose broker is
+unresolved but whose validated model rows are declaration-owned. This keeps
+shipped Muse launchable through the same entry point without fabricating a
+vendor or adding a consumer-side Muse fallback; `ResolveRuntime` remains the
+strict full-pair API and still reports `ErrRuntimeVendorUnresolved`.
+Because those rows are launch authority, a same-binding system-only
+redeclaration is idempotent only when all model fields are semantically equal.
+Top-level row order is presentation-only; any field change refuses with
+`ErrRuntimeConflict`, preserving the first complete declaration under
+concurrent registration.
 
-What exists is the SEAM it has to fit through, and only that: `Availability` is
-a structured verdict rather than a boolean, so a local runtime's answer
-composes without an interface change. `pkg/vendorplugin/availability_test.go`
-demonstrates five such answers fitting — it exercises the verdict type, not a
-resource plane, and there is no local-models package, no sub-plugin contract
-and no admission queue anywhere in this module.
+This is a module-side candidate, not a claim that end-to-end M1 is shipped.
+What is still open, and owned elsewhere:
 
-**Owner: this repository**, after the extraction proves the seams. The section
-in `architecture.md` is titled *design only, not in current scope* and should
-keep saying so until something is built.
+- **`local-qwen`'s actual `RuntimeDeclaration` and the generic migration of
+  `skill-project-management`'s own `buildLaunchPlan`/`launchRegistry` onto
+  `vendorplugin.BuildLaunch(ctx, ...)`** — a different Go module,
+  `TASK-260828-3hultd`, in development. Acceptance requires an immutable
+  coordinated consumer candidate and tests through the real production call
+  chain; helper-only component tests do not satisfy that gate.
+- **The persisted restart/quarantine ledger, its status-JSON surfacing, and
+  log rotation** — `relux-agents-infra`, two new tasks named in the
+  architecture decision (`TASK-260829-3jlxed`, §7.1.3) but not yet created on
+  that repository's own board.
+- **Consuming the widened ledger fields once they exist** — this repository's
+  own `TASK-260829-1kpj01`, deliberately NOT part of this story, so
+  `local-models.Availability()` reports `Healthy`/`Unreachable`/`Unknown` from
+  a live broker read today but never `Backoff`/`Quarantined`.
+- **Pi's own turn-argument/stdin wire protocol for a real turn** — blocked on
+  a pinned `earendil-works/pi` binary/docs fixture nothing supplies yet
+  (adversarial plan case 17); `pkg/agentic/systems/pi` builds only the pinned
+  argv prefix and stdin fallback until that fixture exists.
+
+**Owner: this repository** for the three packages above; the four bullets
+just above are each owned by the repository named next to them.
 
 ### 6. What the CLI answers today, and what that answer means
 
 `agents-management plugins` and `agents-management vendors` print an empty list
 and exit 0 in the shipped binary. That is the truthful answer, not a stub: the
 command tree reads `agentic.Default` and `vendorplugin.Default`, and
-`tools/agents-management` imports no plugin package, so none is compiled in.
-An empty list and a failure to look are different facts, and only the first is
-being reported.
+`tools/agents-management` imports no SELF-REGISTERING plugin package, so none
+is compiled into either default registry. `local-models` is the one exception
+to "imports no plugin package" — `local-runtime status` (§5 above) imports it
+directly to call `localmodels.Peek()` — but, being the one vendor that
+deliberately does not self-register in `init()` (§2.2.2's conditional
+registration), that import populates neither `vendorplugin.Default` nor
+`agents-management vendors`' output. An empty list and a failure to look are
+different facts, and only the first is being reported.
 
 `agents-management runtimes` prints all six frozen declarations regardless,
 because a runtime is a DECLARATION and does not need its plugins present.
