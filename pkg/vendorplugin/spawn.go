@@ -1,13 +1,22 @@
 package vendorplugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
+
+// preflightTimeout bounds every Preflightable.Preflight call BuildLaunch
+// makes, regardless of what ctx the caller supplied. It mirrors the shape
+// skill-project-management's own launch-composition and agy-preflight
+// timeouts already use: a named constant, never an inline literal, so a
+// test can shrink the effective bound without editing this file.
+const preflightTimeout = 10 * time.Second
 
 var (
 	// ErrUnknownModel is returned when a spawn names a model the resolved
@@ -69,9 +78,21 @@ type SpawnRequest struct {
 	WorkDir string
 	Home    string
 
+	// Profile is the harness-side named configuration profile a launch runs
+	// under, carried straight onto agentic.LaunchRequest.Profile by the
+	// vendors that use it. It is transport for a fact a vendor may need to
+	// fill in (local-models fills it from its own pointer when the caller
+	// left it empty) rather than a value this layer interprets itself.
+	Profile string
+
 	// Env is the parent environment the child inherits from, before the
 	// system's filtering and the vendor's additions.
 	Env []string
+
+	// Run is the tracked-run identity the agentic system exports to the
+	// child. It stays on the typed request surface so a vendor cannot force a
+	// consumer to duplicate agentic.WithRunContext through ad-hoc Env entries.
+	Run agentic.RunContext
 
 	Goal        *agentic.Goal
 	Budget      *agentic.Budget
@@ -99,72 +120,165 @@ type SpawnRequest struct {
 // What it does NOT do is ask whether the launch is allowed RIGHT NOW.
 // Availability, limit state and admission are a separate question with a
 // separate entry point (CheckAvailability), and folding them in here would
-// make an expressibility check depend on a network read.
-func BuildLaunch(r *Registry, req SpawnRequest, mode agentic.LaunchMode) (agentic.Plan, error) {
+// make an expressibility check depend on a network read — with ONE
+// exception: the optional, generic Preflightable step below, which exists
+// precisely because a cold-start-safe, fail-closed advisory check on THIS
+// launch attempt is a different question from either of those and belongs at
+// the one place every launch already passes through.
+func BuildLaunch(ctx context.Context, r *Registry, req SpawnRequest, mode agentic.LaunchMode) (agentic.Plan, error) {
 	if r == nil {
 		return agentic.Plan{}, errors.New("vendorplugin: cannot build a launch without a registry")
 	}
-	runtime, err := r.ResolveRuntime(req.Runtime)
+	binding, err := resolveLaunchBinding(r, req.Runtime)
 	if err != nil {
 		return agentic.Plan{}, err
 	}
 
-	model, err := selectModel(runtime, req.Model)
+	model, err := selectModel(binding, req.Model)
 	if err != nil {
 		return agentic.Plan{}, err
 	}
-	if !model.DrivenBy(runtime.SystemID) {
+	if !model.DrivenBy(binding.SystemID) {
 		return agentic.Plan{}, fmt.Errorf("%w: runtime %s runs on %q and model %q declares %v",
-			ErrModelNotDrivenBySystem, runtime.ID, runtime.SystemID, model.ID, model.Systems)
+			ErrModelNotDrivenBySystem, binding.ID, binding.SystemID, model.ID, model.Systems)
 	}
 
-	effort, err := resolveEffort(runtime, model, req.Effort)
+	effort, err := resolveEffort(binding.ID, model, req.Effort)
 	if err != nil {
 		return agentic.Plan{}, err
 	}
 
-	launch, err := runtime.Vendor.Spawn(SpawnContext{
-		Runtime: runtime,
-		Model:   model,
-		Effort:  effort,
-		Request: req,
-	})
-	if err != nil {
-		return agentic.Plan{}, fmt.Errorf("vendorplugin: vendor %s could not build the launch request for model %q: %w", runtime.VendorID, model.ID, err)
+	var launch agentic.LaunchRequest
+	if binding.SystemOnly() {
+		// A system-only binding has declaration-owned model facts and no vendor
+		// contribution by definition. This is an explicit generic branch on the
+		// binding shape, never on a runtime id: no broker is fabricated and no
+		// consumer needs a muse-specific fallback.
+		launch = passthroughLaunchRequest(binding.SystemID, model, effort, req)
+	} else {
+		runtime := binding.Runtime()
+		launch, err = binding.Vendor.Spawn(SpawnContext{
+			Runtime: runtime,
+			Model:   model,
+			Effort:  effort,
+			Request: req,
+		})
+		if err != nil {
+			return agentic.Plan{}, fmt.Errorf("vendorplugin: vendor %s could not build the launch request for model %q: %w", binding.VendorID, model.ID, err)
+		}
+		if err := checkLaunchFidelity(runtime, model, effort, req, launch); err != nil {
+			return agentic.Plan{}, err
+		}
 	}
-	if err := checkLaunchFidelity(runtime, model, effort, req, launch); err != nil {
-		return agentic.Plan{}, err
+
+	// Runtime is set HERE, uniformly, for every runtime — never by an
+	// individual vendor's Spawn. A vendor double that set it itself (buggy or
+	// not) is overwritten: this is the one place the fact is authoritative,
+	// sourced from the SAME req.Runtime every resolution above already used.
+	launch.Runtime = string(req.Runtime)
+
+	if mode != agentic.LaunchModeDryRun {
+		if p, ok := binding.System.(agentic.Preflightable); ok {
+			preflightCtx, cancel := context.WithTimeout(ctx, preflightTimeout)
+			defer cancel()
+			if _, err := p.Preflight(preflightCtx, launch); err != nil {
+				return agentic.Plan{}, fmt.Errorf("vendorplugin: preflight refused runtime %s: %w", binding.ID, err)
+			}
+		}
 	}
 
 	return agentic.BuildPlan(r.systems, launch, mode)
+}
+
+// launchBinding is the one internal shape BuildLaunch dispatches through.
+// Most bindings resolve a registered Vendor. A declaration whose broker was
+// positively looked for but never established may instead own validated model
+// rows itself and launch directly through its registered agentic System. The
+// two shapes are disjoint: RuntimeDeclaration.Validate refuses declaration
+// rows when a vendor is named.
+type launchBinding struct {
+	ID       RuntimeID
+	SystemID agentic.SystemID
+	System   agentic.System
+	VendorID VendorID
+	Vendor   Vendor
+	Models   []Model
+}
+
+func (b launchBinding) SystemOnly() bool { return b.Vendor == nil }
+
+func (b launchBinding) Runtime() Runtime {
+	return Runtime{ID: b.ID, SystemID: b.SystemID, System: b.System, VendorID: b.VendorID, Vendor: b.Vendor}
+}
+
+// resolveLaunchBinding preserves ResolveRuntime's public strictness while
+// adding the one explicit launch-only shape it cannot return: a declaration
+// with no established vendor but with declaration-owned model facts. An
+// unresolved declaration with no rows remains ErrRuntimeVendorUnresolved.
+func resolveLaunchBinding(r *Registry, id RuntimeID) (launchBinding, error) {
+	runtime, err := r.ResolveRuntime(id)
+	if err == nil {
+		return launchBinding{
+			ID: runtime.ID, SystemID: runtime.SystemID, System: runtime.System,
+			VendorID: runtime.VendorID, Vendor: runtime.Vendor, Models: runtime.Vendor.Models(),
+		}, nil
+	}
+	if !errors.Is(err, ErrRuntimeVendorUnresolved) {
+		return launchBinding{}, err
+	}
+
+	normalized, normalizeErr := NormalizeRuntimeID(string(id))
+	if normalizeErr != nil {
+		return launchBinding{}, normalizeErr
+	}
+	declaration, declared := r.RuntimeDeclarationOf(normalized)
+	if !declared || declaration.VendorResolved() || len(declaration.Models) == 0 {
+		return launchBinding{}, err
+	}
+	// ResolveRuntime reached ErrRuntimeVendorUnresolved only after proving the
+	// agentic registry and system plugin exist. Look it up again to materialize
+	// the system without weakening ResolveRuntime's public non-nil-Vendor
+	// invariant.
+	system, ok := r.systems.Lookup(declaration.System)
+	if !ok {
+		return launchBinding{}, fmt.Errorf("%w: runtime %s names agentic system %q, which no plugin in this binary registers",
+			ErrRuntimeSystemUnregistered, normalized, declaration.System)
+	}
+	return launchBinding{
+		ID: normalized, SystemID: declaration.System, System: system,
+		Models: CloneModels(declaration.Models),
+	}, nil
 }
 
 // selectModel finds the requested row in the vendor's own list, naming what it
 // does declare when it cannot. Models() is read ONCE here and the row is
 // carried by value: a plugin whose list changed between two reads cannot make
 // the validated row and the launched row differ.
-func selectModel(runtime Runtime, id ModelID) (Model, error) {
-	models := runtime.Vendor.Models()
-	declared := make([]string, 0, len(models))
-	for _, model := range models {
+func selectModel(binding launchBinding, id ModelID) (Model, error) {
+	declared := make([]string, 0, len(binding.Models))
+	for _, model := range binding.Models {
 		if model.ID == id {
 			return model, nil
 		}
 		declared = append(declared, string(model.ID))
 	}
-	return Model{}, fmt.Errorf("%w: vendor %s has no model %q; it declares %v",
-		ErrUnknownModel, runtime.VendorID, id, declared)
+	owner := "runtime " + binding.ID.String()
+	if !binding.SystemOnly() {
+		owner = "vendor " + binding.VendorID.String()
+	}
+	return Model{}, fmt.Errorf("%w: %s has no model %q; it declares %v",
+		ErrUnknownModel, owner, id, declared)
 }
 
 // resolveEffort validates the caller's effort word against the MODEL's
 // vocabulary. It never supplies one.
-func resolveEffort(runtime Runtime, model Model, raw string) (string, error) {
+func resolveEffort(runtimeID RuntimeID, model Model, raw string) (string, error) {
 	effort := strings.TrimSpace(raw)
 	switch model.Effort.Support {
 	case agentic.EffortSupportRequired:
 		if effort == "" {
 			return "", fmt.Errorf("%w: model %q under runtime %s accepts %v and the vendor recommends %q; supply one of them",
-				ErrEffortMissing, model.ID, runtime.ID, model.Effort.Vocabulary, model.Effort.Recommended)
+				ErrEffortMissing, model.ID, runtimeID, model.Effort.Vocabulary, model.Effort.Recommended)
 		}
 		if !model.Effort.Accepts(effort) {
 			return "", fmt.Errorf("%w: model %q was given %q, which is not one of %v",
@@ -205,6 +319,9 @@ func checkLaunchFidelity(runtime Runtime, model Model, effort string, req SpawnR
 	if strings.TrimSpace(launch.Effort) != effort {
 		return fmt.Errorf("%w: vendor %s returned effort %q after %q was admitted for model %q",
 			ErrVendorContract, runtime.VendorID, launch.Effort, effort, model.ID)
+	}
+	if !reflect.DeepEqual(launch.Run, req.Run) {
+		return fmt.Errorf("%w: vendor %s changed the tracked run context; run, task, board and writable-context identity are the caller's", ErrVendorContract, runtime.VendorID)
 	}
 	if !reflect.DeepEqual(launch.Goal, req.Goal) {
 		return fmt.Errorf("%w: vendor %s changed the launch goal; the objective a run is bound to is the caller's, not the vendor's", ErrVendorContract, runtime.VendorID)

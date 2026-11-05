@@ -1,6 +1,7 @@
 package vendorplugin_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -560,7 +561,7 @@ func TestDeclaredCrossRuntimeResolvesAndLaunches(t *testing.T) {
 		t.Fatalf("writing the assignment prompt: %v", err)
 	}
 
-	plan, err := vendorplugin.BuildLaunch(registry, vendorplugin.SpawnRequest{
+	plan, err := vendorplugin.BuildLaunch(context.Background(), registry, vendorplugin.SpawnRequest{
 		Runtime:    "qwen-codex",
 		Model:      "qwen3.7-plus-via-codex",
 		Effort:     "ultra",
@@ -617,6 +618,74 @@ func TestEveryFrozenRuntimeWithAVendorResolvesThroughTheDefaultRegistry(t *testi
 		if len(vendorplugin.RuntimeModels(runtime)) == 0 {
 			t.Errorf("runtime %s resolves and its vendor declares no model that names the %s harness; the runtime is declared and unlaunchable", declaration.ID, runtime.SystemID)
 		}
+	}
+}
+
+// TestEveryFrozenRuntimeBuildsThroughTheOneLaunchEntryPoint is the revision-4
+// compatibility matrix. Five rows take the established-vendor branch and Muse
+// takes the explicit declaration-owned system-only branch; all six must reach
+// the same BuildLaunch call with no runtime-id switch in either caller or core.
+func TestEveryFrozenRuntimeBuildsThroughTheOneLaunchEntryPoint(t *testing.T) {
+	registry := isolatedRegistry(t, nil)
+	binDir := t.TempDir()
+	for _, name := range []string{"agy", "claude", "codex", "gemini", "muse", "qwen"} {
+		writeStubBinary(t, binDir, name)
+	}
+	workDir := t.TempDir()
+	promptPath := filepath.Join(workDir, "assignment.md")
+	if err := os.WriteFile(promptPath, []byte("do the thing\n"), 0o644); err != nil {
+		t.Fatalf("writing prompt: %v", err)
+	}
+
+	for _, declaration := range vendorplugin.FrozenRuntimes() {
+		t.Run(string(declaration.ID), func(t *testing.T) {
+			models := declaration.Models
+			if declaration.VendorResolved() {
+				resolved, err := registry.ResolveRuntime(declaration.ID)
+				if err != nil {
+					t.Fatalf("ResolveRuntime(%s): %v", declaration.ID, err)
+				}
+				models = make([]vendorplugin.Model, 0)
+				for _, model := range vendorplugin.RuntimeModels(resolved) {
+					models = append(models, model)
+				}
+			}
+			sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
+			if len(models) == 0 {
+				t.Fatalf("runtime %s has no launchable model facts", declaration.ID)
+			}
+			model := models[0]
+			for _, candidate := range models {
+				if candidate.Recommended {
+					model = candidate
+					break
+				}
+			}
+			effort := ""
+			if model.Effort.Support == agentic.EffortSupportRequired {
+				effort = model.Effort.Recommended
+			}
+
+			plan, err := vendorplugin.BuildLaunch(context.Background(), registry, vendorplugin.SpawnRequest{
+				Runtime:    declaration.ID,
+				Model:      model.ID,
+				Effort:     effort,
+				PromptPath: promptPath,
+				Prompt:     []byte("do the thing\n"),
+				WorkDir:    workDir,
+				Env:        []string{"PATH=" + binDir},
+				Run: agentic.RunContext{
+					RunID: "RUN-" + strings.ToUpper(string(declaration.ID)), TaskID: "TASK-COMPAT",
+					BoardDir: filepath.Join(workDir, ".task-board"), ContextID: "CTX-COMPAT",
+				},
+			}, agentic.LaunchModeDryRun)
+			if err != nil {
+				t.Fatalf("BuildLaunch(%s): %v", declaration.ID, err)
+			}
+			if plan.System != declaration.System {
+				t.Fatalf("plan.System = %q, want declaration system %q", plan.System, declaration.System)
+			}
+		})
 	}
 }
 

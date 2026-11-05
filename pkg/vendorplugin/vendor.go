@@ -557,6 +557,15 @@ type Model struct {
 	// Pricing is the vendor billing contract, or nil when none was registered.
 	Pricing *Pricing
 
+	// Publisher and Family are provenance, display and audit fields only —
+	// never an admission input. Neither is read by Registry.Register, by
+	// BuildLaunch's resolution, or by Vendor.Spawn/Availability: naming stays
+	// orthogonal by construction, so a model's publisher or family can never
+	// gate a launch. Empty is legal for both and means the fact was not
+	// recorded, not that the model has none.
+	Publisher string
+	Family    string
+
 	// Systems are the agentic systems that can drive this model. It must be
 	// non-empty — a model no harness can run is not a launchable declaration —
 	// and every id must be registered in the agentic registry the vendor
@@ -733,6 +742,15 @@ func (m Model) Launchable() agentic.Model {
 type AvailabilityQuery struct {
 	Model ModelID
 	Home  string
+
+	// Runtime says which declared RuntimeID is asking, for a vendor serving
+	// more than one RuntimeID under one VendorID — google already serves both
+	// gemini and agy this way. A vendor with only one runtime may ignore it;
+	// a vendor with more than one uses it to disambiguate which of its own
+	// declared runtimes' facts a caller wants, the same way Spawn's own
+	// per-runtime lookup does. Empty is legal and means the caller did not
+	// disambiguate.
+	Runtime RuntimeID
 }
 
 // SpawnContext is everything a vendor gets for one launch: the resolved

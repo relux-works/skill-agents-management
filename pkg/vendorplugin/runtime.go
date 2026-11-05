@@ -44,12 +44,14 @@ func NormalizeRuntimeID(raw string) (RuntimeID, error) {
 //
 // It is not a vendor. Nothing implements it, nothing can be registered under
 // it, and no code path treats an unresolved vendor as a degraded vendor with
-// empty models. A declaration carrying it is a complete, legal RUNTIME
-// declaration and an UNLAUNCHABLE one: Registry.ResolveRuntime refuses it with
+// empty models. Registry.ResolveRuntime refuses it with
 // ErrRuntimeVendorUnresolved, naming the runtime and saying the broker was
-// never established, so a caller learns the fact rather than receiving a
-// half-vendor it has to null-check. Every other runtime resolves to a real
-// Vendor with the full interface behind it, unchanged.
+// never established, so a caller never receives a half-vendor it has to
+// null-check. BuildLaunch has one narrower, explicit system-only binding for
+// such a declaration when it carries validated declaration-owned model rows;
+// it launches through the system without pretending those rows came from a
+// vendor. Every other runtime resolves to a real Vendor with the full
+// interface behind it, unchanged.
 //
 // The escape is a declaration, not a code change: the day muse's broker is
 // established, the declaration names it and the runtime becomes launchable.
@@ -104,11 +106,11 @@ type RuntimeDeclaration struct {
 	// BrokerProvenance exists to prevent one field earlier.
 	//
 	// So the unresolved-vendor shape carries them. That is the shape being
-	// used as designed rather than extended for a special case: an unresolved
-	// declaration is already a COMPLETE and UNLAUNCHABLE declaration, and
-	// these rows make it complete about its models too without making it any
-	// more launchable. ResolveRuntime still refuses it with
-	// ErrRuntimeVendorUnresolved, unchanged.
+	// used as designed rather than extended for a special case: these rows make
+	// the declaration complete about its models and form BuildLaunch's explicit
+	// system-only binding. ResolveRuntime still refuses it with
+	// ErrRuntimeVendorUnresolved, unchanged, because that public API promises a
+	// fully materialized vendor pair.
 	//
 	// # Why a resolved runtime may not carry them
 	//
