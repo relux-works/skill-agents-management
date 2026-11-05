@@ -12,6 +12,12 @@ import (
 var ErrInvalid = errors.New("gateway admission basis is missing or consumed")
 
 type Basis struct {
+	state *basisState
+}
+
+// Copies of the public handle retain the same issuance and consumption state.
+// A zero handle has no authority; only Issue constructs the shared state.
+type basisState struct {
 	mu    sync.Mutex
 	id    string
 	value any
@@ -23,41 +29,43 @@ func Issue(value any) (*Basis, error) {
 	if _, err := rand.Read(id[:]); err != nil {
 		return nil, err
 	}
-	return &Basis{id: hex.EncodeToString(id[:]), value: value}, nil
+	return &Basis{state: &basisState{id: hex.EncodeToString(id[:]), value: value}}, nil
 }
 
 // ID is nonsecret registration association; it carries no admission authority.
 func (b *Basis) ID() string {
-	if b == nil {
+	if b == nil || b.state == nil {
 		return ""
 	}
-	return b.id
+	return b.state.id
 }
 
 func Inspect(b *Basis, f func(any) error) error {
-	if b == nil {
+	if b == nil || b.state == nil {
 		return ErrInvalid
 	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.id == "" || b.used {
+	s := b.state
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.id == "" || s.used {
 		return ErrInvalid
 	}
-	return f(b.value)
+	return f(s.value)
 }
 
 func Use(b *Basis, f func(any) error) error {
-	if b == nil {
+	if b == nil || b.state == nil {
 		return ErrInvalid
 	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.id == "" || b.used {
+	s := b.state
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.id == "" || s.used {
 		return ErrInvalid
 	}
-	if err := f(b.value); err != nil {
+	if err := f(s.value); err != nil {
 		return err
 	}
-	b.used = true
+	s.used = true
 	return nil
 }
