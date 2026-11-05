@@ -25,6 +25,7 @@ func buildModels(cfg Config) []vendorplugin.Model {
 				ContextWindowTokens: entry.ContextWindowTokens,
 				Publisher:           entry.Publisher,
 				Family:              entry.Family,
+				Engine:              entry.Engine,
 				Systems:             []agentic.SystemID{runtime.System},
 			})
 		}

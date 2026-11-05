@@ -4,7 +4,23 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
+
+// LaunchProvenance is the resolved identity snapshot attached by the generic
+// runtime boundary. Publisher and family remain observation-only; engine refs
+// are graph identities and therefore carry both id and kind.
+type LaunchProvenance struct {
+	Broker          string
+	Runtime         string
+	Profile         string
+	Model           string
+	Publisher       string
+	Family          string
+	RequestedEngine plugin.Ref
+	ResolvedEngine  plugin.Ref
+}
 
 // Plan is the observable launch surface: the binary, the argv, the child
 // environment and the stdin bytes, plus where the child runs and which
@@ -23,6 +39,8 @@ type Plan struct {
 	Stdin   StdinPayload
 	WorkDir string
 	Home    string
+
+	Provenance LaunchProvenance
 
 	// Nodes is empty for the source-compatible single-process plan. A
 	// consumer that needs an inference engine or sidecar calls

@@ -36,6 +36,7 @@ import (
 
 	"github.com/relux-works/skill-agents-management/internal/ident"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
+	"github.com/relux-works/skill-agents-management/pkg/plugin"
 )
 
 // VendorID is the stable identifier of a vendor plugin, normalized to one
@@ -576,6 +577,11 @@ type Model struct {
 	Publisher string
 	Family    string
 
+	// Engine is the concrete inference-engine graph dependency required by
+	// this model. The zero value preserves models with no engine requirement.
+	// Publisher/family/model spelling never infer or replace this reference.
+	Engine plugin.Ref
+
 	// Systems are the agentic systems that can drive this model. It must be
 	// non-empty — a model no harness can run is not a launchable declaration —
 	// and every id must be registered in the agentic registry the vendor
@@ -590,6 +596,9 @@ type Model struct {
 // Registry.Register, which names both ids when it refuses.
 func (m Model) Validate() error {
 	if err := ValidateModelID(m.ID); err != nil {
+		return err
+	}
+	if err := validateInferenceEngineRef("model "+m.ID.String(), m.Engine); err != nil {
 		return err
 	}
 	if err := m.Description.Validate(); err != nil {

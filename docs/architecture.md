@@ -123,6 +123,15 @@ plugin identity and plan contributor, not process-lifecycle authority.
 `agentic.ProcessPlan` into a typed launch node; the consumer still starts,
 supervises, stops and attests the process.
 
+Operator-defined engines use `inferenceengine.NewConfigured(id)`. The value is
+identity-only and enters `vendorplugin.Registry.RegisterPlugin`, which writes
+it into the same `pkg/plugin.Registry` as systems and vendors. Model and
+runtime declarations carry the same normalized `plugin.Ref`; vendor
+registration publishes the model-to-engine dependency, and `BuildLaunch`
+refuses missing, wrong-kind, malformed, mismatched or caller-substituted
+references before producing a plan. A zero reference means no engine
+requirement and preserves the pre-extension launch surface.
+
 Both `pi` and `local-models` can depend on the same engine node while retaining
 the existing vendor→system edge: engine → system → vendor in dependency-first
 order, with an optional direct vendor→engine edge. No cycle or third registry
@@ -195,6 +204,40 @@ environment strings. `PassthroughLaunch` and contributing vendors preserve it,
 and the fidelity check refuses a vendor that changes or drops any of `RunID`,
 `TaskID`, `BoardDir`, or `ContextID`; the resolved system remains the one owner
 that exports those values through `agentic.WithRunContext`.
+
+After model selection and before vendor dispatch, `BuildLaunch` resolves the
+runtime/model engine reference through the shared graph and checks an optional
+`SpawnRequest.Engine` expectation exactly. The returned `Plan.Provenance`
+records system, broker, runtime, resolved profile, model, publisher, family,
+and both requested and resolved engine refs. `Plan.ConsumerProvenance()` maps
+that internal snapshot to `agents-management.launch-provenance` schema v1 with
+separate `configured_engine` and `resolved_engine` refs. After persistence,
+`Registry.ValidateLaunchProvenance` is the public consumer gate: it derives the
+configured ref from registry-owned runtime/model declarations, resolves the ref
+through the registry's plugin graph, and supplies both independent values to
+`LaunchProvenanceV1.ValidateAgainst`. The gate requires the mandatory
+`engine_binding` discriminator (`none` for a genuine system-only legacy launch,
+`required` for an engine-bound launch). It refuses a `none` record carrying
+broker, publisher, family, runtime, profile,
+model, or engine refs, as well as unknown schema/contract, absent or partial
+required evidence, non-normalized or wrong-kind graph refs, refs that disagree
+with either trusted authority, and configured/resolved authority mismatch after
+a consumer reads persisted metadata. Two equal refs from the persisted record
+do not corroborate each other. Those provenance values never select dispatch.
+Production-entry metamorphic tests injectively rename system, vendor, runtime,
+profile, publisher, family, model, and engine identities while requiring the
+same graph shape, non-identity plan output, side-effect counts, and
+success/refusal classes. A separate declaration-scoped source check forbids the
+exact shipped local-stack identity literals in generic core except for the
+frozen compatibility declarations that own them. This is deliberately bounded:
+runtime assembly, imported or decoded values, reflection, and obfuscation are
+review concerns, not something a partial Go semantic interpreter can prove.
+
+The concrete MLX implementation is intentionally only a graph declaration in
+`pkg/inferenceengine/engines/mlx`. Registering `mlx.New()` uses the same opaque
+`plugin.Registry` path as every other kind. It performs no process discovery,
+socket access, model loading, inference, or supervision; those remain outside
+this module's plan/provenance boundary.
 
 ## Typed multi-node launch plans
 
@@ -306,6 +349,31 @@ continues through the live broker mapping above. Log rotation and the
 coordinated `skill-project-management` consumer remain separately owned work.
 
 ## Boundaries with task-board
+
+### Inference-engine observation boundary
+
+The observation plane has one production owner. `vendorplugin.NewRegistry`
+installs a package-private `engineFactSource`; no public constructor, option,
+registry method, or `BuildLaunch` parameter can replace it. For a non-dry-run
+engine launch, `BuildLaunch` resolves the configured graph ID, maps the shipped
+`mlx` ID to its trusted `native-transformer` implementation kind, validates the
+source's reads, and refuses before `Vendor.Spawn`, system `Preflight`, or plan
+materialization. Configured plugin ID and implementation kind are separate.
+
+`inferenceengine.ValidateReadings` is a schema boundary, not an authorization
+entry. Its inputs are explicitly untrusted; constructing them cannot alter the
+Registry's production source or reach launch effects. Package-internal tests
+replace the private source to exercise every result class without contacting a
+live runtime. The shipped MLX source reports unsupported until agents-infra
+provides the concrete adapter rather than manufacturing positive evidence.
+
+`pkg/inferenceengine` owns validation, not execution. Its v2 contract closes
+the 17 measured facts independently and preserves observed value, observed
+absence, and not-observed as different types. Read failure, malformed data,
+and unsupported data always refuse. Cross-fact validation admits exactly two
+model-harness expansions: local executable+argv with SSH absent, or SSH
+forwarding with both local fields absent. No process, socket, SSH session,
+signal, pressure action, or supervisor is started by this module.
 
 | Stays in task-board | Moves here |
 | --- | --- |

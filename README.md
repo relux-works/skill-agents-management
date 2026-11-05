@@ -362,6 +362,32 @@ The vendor plugin contract, its registry, and the runtime declarations.
   agentic system that is not registered is refused, with both ids in the error.
   A registry built without an agentic registry refuses every vendor rather than
   admitting one whose declared systems nobody checked.
+- **Inference engines are graph identities, not provenance strings.**
+  `inferenceengine.NewConfigured(id)` creates a generic identity-only plugin;
+  `inferenceengine/engines/mlx.New()` supplies the concrete configured `mlx`
+  plugin without adding an id switch to the registry;
+  `RuntimeDeclaration.Engine` and `Model.Engine` carry the same typed ref,
+  vendor registration publishes the model-to-engine edge, and `BuildLaunch`
+  resolves it before returning a plan. `Plan.Provenance` records requested and
+  resolved engine refs together with system/broker/runtime/profile/model/
+  publisher/family. `Plan.ConsumerProvenance()` publishes those axes as
+  `agents-management.launch-provenance` schema v1, spelling the
+  engine pair `configured_engine` and `resolved_engine`. Its mandatory
+  `engine_binding` discriminator separates genuine `none` legacy launches from
+  `required` engine-bound records. A `none` record must carry only its system
+  identity; broker, publisher, family, runtime, profile, model, or either
+  engine ref makes it inconsistent. Missing, downgraded, malformed,
+  wrong-kind, or mismatched graph evidence therefore refuses after persistence.
+  Persisted consumers call `Registry.ValidateLaunchProvenance`, which derives
+  the configured ref from trusted runtime/model declarations, resolves it
+  through that registry's plugin graph, and then calls
+  `LaunchProvenanceV1.ValidateAgainst`; equality between the two persisted refs
+  alone is never authority.
+  No concrete engine, runtime, profile, publisher, family or model name is a
+  core dispatch case, and declarations with no engine retain legacy behavior.
+  Genericity is bounded by production-entry identity-renaming tests plus an
+  exact shipped-literal placement boundary; it does not claim whole-program Go
+  semantic detection.
 - `Availability` is a structured verdict, not a boolean: healthy,
   limited-until(time, evidence), unreachable(evidence), or unknown — with
   "checked and found nothing" distinguishable from "nobody looked" and from "the
@@ -409,7 +435,7 @@ The vendor plugin contract, its registry, and the runtime declarations.
   that REDIRECTS the launch (a vendor may add authentication environment; it
   may not change the harness, the model, the effort, the tracked `RunContext`,
   the goal, the budget, the tier or the composition), and hands it to
-  `agentic.BuildPlan`. Spawn
+  `agentic.BuildPlan`, then attaches the resolved provenance snapshot. Spawn
   EXECUTION is not here — that is a consumer responsibility. This branch does
   not claim production reachability until the coordinated consumer candidate
   calls this API from its real `buildLaunchPlan` path.
@@ -698,6 +724,37 @@ None of these commands keeps a list of its own. A private one would be a
 second binding for the same fact, which is exactly what the single-source
 guard exists to prevent.
 
+### Observed inference-engine contract
+
+`pkg/inferenceengine` exposes the static, no-runtime-contact schemas used to
+validate engine reads. Production authorization lives at
+`vendorplugin.BuildLaunch`: every non-dry-run engine launch asks the Registry's
+package-private `engineFactSource` before `Vendor.Spawn`, system `Preflight`, or
+plan materialization. `NewRegistry` installs that source itself and accepts no
+reader, observer, callback, origin label, or caller value. The shipped graph ID
+`mlx` maps to the trusted `native-transformer` implementation kind; configured
+IDs and implementation kinds remain separate identities.
+
+`inferenceengine.ValidateReadings` is only the closed schema validator used by
+that gate. Callers may construct its untrusted `Reading` inputs, but doing so
+does not install an engine source or authorize a launch. The built-in MLX
+source currently returns a typed unsupported refusal until agents-infra ships
+the concrete observation adapter; it never invents positive runtime facts.
+
+Every measured fact has a closed value grammar. Readiness requires resident
+weights, inference-busy is boolean, lifecycle transitions carry matching
+resident state, memory pressure records the ordered load/unload/busy
+consultation, and artifact/memory/speculation/stress/restart/SSH facts have
+their own schemas. Results preserve three typed outcomes: observed value,
+positively observed absence, and not observed. Read failure, malformed input,
+and unsupported input are distinct refusing causes. Profile expansion is
+either local executable plus argv with observed SSH absence, or SSH forwarding
+with both local facts observed absent; simultaneous and partial shapes refuse.
+
+The module validates observations and orders the pre-launch refusal only.
+Process launch, SSH, polling, signals, memory-pressure action, and restart
+supervision remain owned and executed by agents-infra.
+
 ### Launch-surface parity goldens
 
 `pkg/agentic/parity` holds the contract every agentic-system plugin port proves
@@ -748,6 +805,7 @@ concluding that a missing golden is permission.
 | qwen/gemini/muse/agy mutation harness | narrow every gate the four remaining ports wrote, plus the two shared internals, and confirm the suite goes red | `python3 .temp/TASK-260822-xz8rj5/mutants.py` | `.temp/TASK-260822-xz8rj5/mutants-*.log` |
 | limit-state capture | capture the operator's live limit state, a suppression written by the SOURCE module, and the source's own report over bytes this repo wrote | `.scripts/capture-limit-state.sh [SOURCE_REPO=/path/to/skill-project-management]` | `pkg/providerlimits/testdata/{real-state,source-written,source-read,source-tables.json}`, scratch in `.temp/TASK-260822-2jouz3/xrt/` |
 | limit-plane mutation harness | narrow every identity, schema, verdict, ladder and guard gate the limit-plane port wrote and confirm the suite goes red | `python3 .temp/TASK-260822-2jouz3/mutants.py` | `.temp/TASK-260822-2jouz3/mutants-*.log` |
+| inference-engine contract tests | validate concrete composition, fact schemas, typed outcomes, and local/SSH refusal before runtime contact | `go test ./pkg/inferenceengine -count=1` | terminal output; task evidence under `.temp/TASK-260830-q4vvvn/` |
 | vendor-layer mutation harness | narrow every gate the vendor port wrote — the admission expansion, the digest serialization, the ported rows and the per-vendor guard homes — and confirm the suite goes red | `python3 .temp/TASK-260822-3cknas/mutants.py` | `.temp/TASK-260822-3cknas/mutants-*.log` |
 | board-facts mutation harness | narrow every gate the board-facts port added — lifecycle, score, supersession, recommendation, context window, pricing, the vendor-unresolved runtime's rows, the derived lineup and the digest serialization — and confirm the suite goes red naming the right test. Every mutant is a compile-clean NARROWING rather than a deletion, so a kill proves the class is covered rather than the line is present | `python3 .temp/TASK-260824-y7gyco/mutants.py` | `.temp/TASK-260824-y7gyco/mutants-01.log` |
 | regress mutation harness | narrow every gate `make regress` claims to hold, one at a time, and confirm the net goes red naming the right test | `python3 .temp/TASK-260823-4f5t1m/mutants.py` | `.temp/TASK-260823-4f5t1m/mutants-*.log` |

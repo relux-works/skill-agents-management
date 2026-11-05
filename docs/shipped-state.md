@@ -11,7 +11,28 @@ An outcome with no owner is a rumour.
 Written at the close of `EPIC-260821-1qvnz2`. Every claim below was read off
 the two boards and the two checkouts rather than remembered.
 
-## Current release: v0.4.3
+## Current published release: v0.4.3; v0.5.0 candidate
+
+The `v0.5.0` candidate adds the concrete configured `mlx` inference-engine
+plugin, binds the shipped local-Qwen fixture through ordinary graph refs, and
+publishes `agents-management.launch-provenance` schema v1 for task-board. The
+projection carries system=`pi`, broker=`local-models`, publisher=`alibaba`,
+family=`qwen`, engine=`mlx`, runtime/profile=`local-qwen`, and leaves the
+concrete model id as data. Its mandatory `engine_binding=none|required`
+distinguishes genuine system-only legacy absence from removed evidence. The
+registry-backed validator refuses `none` with any engine-bound identity axis,
+absent or partial required refs, non-normalized or wrong-kind graph identities,
+and any configured/resolved mismatch after persistence. It reconstructs the
+configured identity from registry declarations and resolves it through the
+plugin graph, so equal self-minted refs do not validate an unconfigured engine.
+
+This is registration and metadata only. It does not discover, contact, start,
+supervise, attest, or execute an MLX model runtime. The candidate becomes a
+published dependency only after independent review, Story integration, and an
+immutable signed tag; this document does not treat the candidate branch as a
+release.
+
+## General graph baseline: v0.4.3
 
 The historical extraction ledger below remains intact. v0.4.3 re-derives the
 raw plugin inventory from both exported error-producing surfaces: nine
@@ -19,8 +40,8 @@ registration paths and three resolution paths. Together with typed multi-node
 planning and the complete vendor registration path, the exhaustive matrix now
 contains 37 rows. Every row has a named production-entry negative and a
 compile-clean narrowing mutant that makes that test exit `1`; typed-nil vendors
-are refused instead of panicking. The release otherwise
-adds the general `pkg/plugin` graph, the first new kind in
+are refused instead of panicking. The release otherwise adds the general
+`pkg/plugin` graph, the first new kind in
 `pkg/inferenceengine`, compatibility adapters for the existing System/Vendor
 registries, and `agentic.BuildMultiNodePlan` for engine/sidecar process nodes.
 
@@ -302,6 +323,26 @@ What is still open, and owned elsewhere:
 
 **Owner: this repository** for the three packages above; the four bullets
 just above are each owned by the repository named next to them.
+
+### 5.1 Observed inference-engine contract candidate
+
+The module now carries `observed-process/v2`: 17 measured facts, closed
+fact-specific schemas, three typed outcomes, and distinct refusing causes for
+read failure, malformed data, and unsupported observations. The production
+entry is the non-dry-run `vendorplugin.BuildLaunch` path. Its Registry-owned,
+package-private source maps the configured `mlx` ID to the concrete
+`native-transformer` kind and validates readings before `Spawn`, `Preflight`,
+or plan materialization. No public constructor or launch parameter accepts a
+caller observation implementation. `inferenceengine.ValidateReadings` remains
+an untrusted schema helper, not an authorization surface. Until agents-infra
+ships the concrete MLX adapter, the built-in source refuses as unsupported
+instead of inventing runtime evidence.
+
+Model-harness expansion is a validated sum type in behavior: local executable
+and argv require positive SSH absence, while SSH forwarding requires both local
+facts positively absent. Partial or simultaneous variants refuse. This is a
+static contract candidate only; agents-infra still owns and executes every
+process, SSH, polling, pressure, and supervision operation.
 
 ### 6. What the CLI answers today, and what that answer means
 
