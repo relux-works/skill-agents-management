@@ -138,6 +138,46 @@ func TestGatewayBasisCannotBeReusedThroughAnotherHandle(t *testing.T) {
 	}
 }
 
+// Copying the public basis value cannot mint a second receipt for the same
+// attempt, in either finalization order. The real policy/store are exercised;
+// the inert executable is never launched and no registration is performed.
+func TestGatewayBasisValueCopyCannotMintSecondReceipt(t *testing.T) {
+	for _, copyFirst := range []bool{false, true} {
+		t.Run(map[bool]string{false: "original-first", true: "copy-first"}[copyFirst], func(t *testing.T) {
+			req, store, _ := gatewayPolicyFixture(t)
+			p := gatewayPolicyBuild(t, req, store)
+			copied := *p.GatewayBasis
+			copyPlan := p
+			copyPlan.GatewayBasis = &copied
+			originalAdmission, err := agentic.AdmitCodexGateway(p.GatewayBasis, p, agentic.CodexGatewayInputs{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			copyAdmission, err := agentic.AdmitCodexGateway(&copied, copyPlan, agentic.CodexGatewayInputs{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			first, second := originalAdmission, copyAdmission
+			if copyFirst {
+				first, second = second, first
+			}
+			binding := gatewayPolicyBinding(t, p)
+			out, receipt, err := first.Finalize(binding)
+			if err != nil || receipt == nil || out.Plan.Binary == "" {
+				t.Fatalf("valid first finalization: receipt=%v error=%v", receipt != nil, err)
+			}
+			if out, receipt, err := second.Finalize(binding); !errors.Is(err, agentic.ErrCodexGatewayRefused) || receipt != nil || out.Plan.Binary != "" {
+				t.Fatalf("copied consumed basis minted output: binary=%q receipt=%v error=%v", out.Plan.Binary, receipt != nil, err)
+			}
+			for _, plan := range []agentic.PlanWithEnvironment{p, copyPlan} {
+				if a, err := agentic.AdmitCodexGateway(plan.GatewayBasis, plan, agentic.CodexGatewayInputs{}); !errors.Is(err, agentic.ErrCodexGatewayRefused) || a != nil {
+					t.Fatalf("consumed copy readmitted: %v", err)
+				}
+			}
+		})
+	}
+}
+
 // A late executable change invalidates the original basis; a failed store read
 // cannot issue one. Both failures leave no newly executable plan or receipt.
 func TestGatewayDriftAndUnknownLimitsRefuse(t *testing.T) {
