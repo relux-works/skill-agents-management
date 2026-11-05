@@ -1,4 +1,4 @@
-.PHONY: all build test vet install clean
+.PHONY: all build test vet regress install clean
 
 ROOT_DIR := $(shell pwd)
 CLI_DIR  := $(ROOT_DIR)/tools/agents-management
@@ -36,6 +36,18 @@ test:
 
 vet:
 	@go vet $(GOFLAGS_MOD) ./...
+
+# The landing gate's regression net: one fast, cross-cutting check per class of
+# failure this repository has already paid for, each with the negative that
+# shows it bites. It is deliberately a SEPARATE target from `test` rather than
+# a subset of it — `test` is the deep per-package acceptance and takes as long
+# as that deserves, while this one sits in front of every landing and has to
+# stay cheap enough that nobody is tempted to skip it. See internal/regress.
+#
+# env -u TASK_BOARD_DIR: an inherited board directory reaches the test process
+# and is not this module's to read (the extraction source's BUG-260823-1tkumz).
+regress:
+	@env -u TASK_BOARD_DIR go test $(GOFLAGS_MOD) ./internal/regress/... -count=1
 
 install: build
 	@mkdir -p $(BIN_DIR)

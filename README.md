@@ -3,6 +3,13 @@
 A skill plus one CLI — **`agents-management`** — for spawning and managing
 heterogeneous agentic systems and the model vendors behind them.
 
+Start at [SKILL.md](SKILL.md) if you are an agent wiring this in;
+[docs/architecture.md](docs/architecture.md) for the plugin contract,
+[docs/consuming-the-module.md](docs/consuming-the-module.md) for depending on
+the module, and [docs/shipped-state.md](docs/shipped-state.md) for what has
+actually landed and what is deliberately still open. This file is the long
+description of the parts.
+
 ## Why this repository exists
 
 `skill-project-management`'s `task-board` grew a complete spawn plane: launch
@@ -343,9 +350,12 @@ The vendor plugin contract, its registry, and the runtime declarations.
   limited-until(time, evidence), unreachable(evidence), or unknown — with
   "checked and found nothing" distinguishable from "nobody looked" and from "the
   read failed". The zero value is unknown, and only an observed healthy verdict
-  is serviceable. The local-model resource plane described in
-  `docs/architecture.md` reports through these same fields; a test demonstrates
-  each of its five answers fitting with no interface change.
+  is serviceable. The local-model resource plane sketched in
+  `docs/architecture.md` is DESIGN ONLY and none of it is built; what this
+  layer owes it is a seam it can report through without an interface change,
+  and a test demonstrates five such answers fitting the existing fields. That
+  test exercises the verdict type, not a resource plane — there is no
+  local-models package anywhere in this module.
 - **Runtimes are declared pairs.** `RuntimeDeclaration` binds a stable id to
   one agentic system and one vendor, and the six historical ids (`claude`,
   `codex`, `qwen`, `gemini`, `agy`, `muse`) are seeded from the extraction
@@ -466,16 +476,44 @@ that reports all of it as a `vendorplugin.Availability`.
 
 Not ported: the dev-only fault injector (launch-plane behaviour, and its
 captured payload trips the codex argv guard on a field it did not construct),
-and the source's home table. Nothing is wired into a live vendor yet — consuming
-the verdict belongs to the switch story.
+and the source's home table. Nothing is wired into a live vendor: the switch
+landed without wiring it, so `AvailabilityFor` has no production caller in
+either repository today. The seam is proven and unconsumed, and saying so is
+cheaper than discovering it.
 
 ## Status
 
-Extraction in progress. The current scope is moving the vendors and agentic
-systems that already exist in `task-board` into this tool without behaviour
-change: same observable launch surface (argv, environment, stdin bytes, side
-effects), same admitted-pair digests, same on-disk limit-state identity. New
-plugins come after the extraction proves the seams.
+Extraction all but complete: **five of the epic's six stories are landed.**
+Four are on this repository's `main` — the core module and both plugin
+contracts, the six agentic-system plugins, the vendor layer with its registries
+and digests, and the limit plane with its availability seam. `main` is tagged
+**`v0.1.0`**, which is what a consumer requires.
+
+The fifth is the switch — making `task-board` consume the tool. It is consumer-
+side work, so it landed on the consumer's trunk rather than this one, as
+`skill-project-management`'s `STORY-260823-1sxcmg` at **`b34aa20`**: all four
+tasks done, including the CI arrangement (the tag required with no `replace`,
+`GOPRIVATE` and the credential rewrite, a gitignored `go.work` for local
+sibling work, and the pinned-`actionlint`/`ciguard` pair that keeps it that
+way). One human step remains and no agent can take it: the `RELUX_MODULES_TOKEN`
+repository secret.
+
+The sixth is this documentation and the regression harness.
+
+The scope has not moved: the vendors and agentic systems that already exist in
+`task-board`, ported without behaviour change — same observable launch surface
+(argv, environment, stdin bytes, side effects), same admitted-pair digests,
+same on-disk limit-state identity. New plugins come after the extraction proves
+the seams.
+
+**[docs/shipped-state.md](docs/shipped-state.md) is the honest ledger**: what
+each story landed, the model-description divergence between the two
+repositories and who owns collapsing it, the spawn-plane code deliberately kept
+in `task-board` (exec ownership, the process-starting preflights, the
+composition validators with no cross-repository agreement check), the open
+child-environment leak pins and the qwen-codex auth-hint gap, and the exact
+state of the tag/`GOPRIVATE`/`go.work` CI arrangement and the one secret it
+still waits on.
 
 ## Development
 
@@ -494,6 +532,7 @@ as the extraction moves plugin contracts across.
 make build     # build tools/agents-management/agents-management
 make test      # go test ./... -count=1
 make vet       # go vet ./...
+make regress   # the landing-gate regression net (internal/regress), ~1s
 make install   # copy the binary to ~/.local/bin/agents-management
 make clean     # remove the built binary
 ```
@@ -508,10 +547,38 @@ Every Go invocation passes `-mod=mod` explicitly. Go silently switches to
 tree then fails every build — the extraction source dropped vendoring for
 that reason.
 
-`make vet`, `make build` and the test command are also this repository's
-landing gate: `spawn.worktree_isolation.validation.commands` in
+`make vet`, `make build`, the test command and `make regress` are also this
+repository's landing gate: `spawn.worktree_isolation.validation.commands` in
 `task-board.config.json` runs exactly that list before a Change Request may
 land, so its evidence is bound to the tree being integrated.
+
+The gate list is resolved from the MAIN checkout, not from the candidate, so a
+change that adds a command to it only starts gating the NEXT landing. That is
+the same bootstrapping shape the original gate installation had, and it is
+stated here rather than discovered by a reviewer wondering why the new command
+does not appear in a publication transcript.
+
+### The regression net
+
+`make regress` runs `internal/regress`, which is not more unit tests. Each
+per-package suite proves one port against its own fixtures, mutant by mutant,
+and takes as long as that deserves. This one crosses the layers and stays under
+a second, because it sits in front of every landing and a slow gate taxes every
+future Change Request.
+
+Four classes, one per failure this repository has already paid for, each with
+the negative that makes it mean something:
+
+| Class | Driven through | The negative |
+| --- | --- | --- |
+| A vendor naming an unregistered agentic system is refused, with BOTH ids | the four real vendor plugins into a registry built on an EMPTY agentic registry | the same vendors are ADMITTED once their systems are registered, so "refuses everything" cannot pass; and a message naming only the vendor fails |
+| Runtime declaration and the F2 collision, both directions | `SeedFrozenRuntimes` plus `DeclareRuntime` on a fresh registry | a conflicting redeclaration must be refused AND the stored binding must be unchanged afterwards — refuse-and-write-anyway is caught; a redeclaration differing only in broker provenance must still be idempotent |
+| An availability verdict derived from a real state file | `providerlimits.Store.AvailabilityFor` over `testdata/source-written/`, written by a binary compiled against the SOURCE module | the same bytes filed one hex digit away read HEALTHY — the fail-open disaster, asserted; an elapsed window is not serviceable; an unreadable file is Unknown, never Healthy |
+| A `BuildPlan` parity smoke, one golden per Layer-1 system | the real `Registry` and `agentic.BuildPlan`, six systems | a wrong resolved binary and a truncated argv must each be reported in the field they were planted in, for all six; and a seventh registered plugin with no smoke case fails the suite |
+
+The whole net is held to ten mutants that narrow the production gates one at a
+time and require `make regress` to go red naming the right test:
+`python3 .temp/TASK-260823-4f5t1m/mutants.py`.
 
 ### Current CLI surface
 
@@ -527,10 +594,14 @@ agents-management runtimes [--json] # the declared (system x vendor) pairs
 
 `plugins` and `vendors` read the `pkg/agentic` and `pkg/vendorplugin` default
 registries — the same ones a plugin package registers into from its `init` —
-and print the registered ids. Both print an empty list and exit 0 today. That
-is the answer, not a stub: no plugin has been compiled in yet, which is a
-different fact from a failure to look. `--json` renders the empty case as `[]`,
-never `null`.
+and print the registered ids. **Both print an empty list and exit 0 in the
+shipped binary.** That is the answer, not a stub: all ten plugins exist and
+none is compiled into `tools/agents-management`, which imports no plugin
+package, and "nothing registered" is a different fact from a failure to look.
+`--json` renders the empty case as `[]`, never `null`. A consumer links the
+packages it needs directly — see
+[docs/consuming-the-module.md](docs/consuming-the-module.md) — and gets a
+populated registry in its own binary.
 
 `runtimes` prints the six frozen declarations as `id⇥system⇥vendor`. A runtime
 is a DECLARATION, so it lists what is declared rather than what can currently
@@ -584,7 +655,7 @@ concluding that a missing golden is permission.
 | Tool | Purpose | Entry point | Artifacts |
 | --- | --- | --- | --- |
 | `task-board` | board tracking for this repo's work | `task-board q/m/spawn ...` | `.task-board/` |
-| `make` | build, test, vet and install the CLI | `make build` / `test` / `vet` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
+| `make` | build, test, vet, regress and install the CLI | `make build` / `test` / `vet` / `regress` / `install` / `clean` | binary at `tools/agents-management/agents-management` |
 | `agents-management` | the CLI this repo builds (extraction target) | `tools/agents-management` (Go `main` package) | installed copy at `~/.local/bin/agents-management`, `.temp/` logs |
 | parity capture | regenerate the launch-surface goldens from the extraction source | `.scripts/capture-parity-goldens.sh` | `pkg/agentic/parity/testdata/goldens/*.json`, scratch in `.temp/parity-capture/` |
 | model registry capture | regenerate the vendor fixtures: the source's model rows and frozen v2 tiers (read from its Go sources) and the admitted-pair digests (read from its own binary) | `.scripts/capture-model-registry.sh` | `pkg/vendorplugin/testdata/source-model-registry.json`, `pkg/vendorplugin/testdata/source-admitted-pairs.json`, scratch in `.temp/capture-model-registry/` |
@@ -594,3 +665,4 @@ concluding that a missing golden is permission.
 | limit-state capture | capture the operator's live limit state, a suppression written by the SOURCE module, and the source's own report over bytes this repo wrote | `.scripts/capture-limit-state.sh [SOURCE_REPO=/path/to/skill-project-management]` | `pkg/providerlimits/testdata/{real-state,source-written,source-read,source-tables.json}`, scratch in `.temp/TASK-260822-2jouz3/xrt/` |
 | limit-plane mutation harness | narrow every identity, schema, verdict, ladder and guard gate the limit-plane port wrote and confirm the suite goes red | `python3 .temp/TASK-260822-2jouz3/mutants.py` | `.temp/TASK-260822-2jouz3/mutants-*.log` |
 | vendor-layer mutation harness | narrow every gate the vendor port wrote — the admission expansion, the digest serialization, the ported rows and the per-vendor guard homes — and confirm the suite goes red | `python3 .temp/TASK-260822-3cknas/mutants.py` | `.temp/TASK-260822-3cknas/mutants-*.log` |
+| regress mutation harness | narrow every gate `make regress` claims to hold, one at a time, and confirm the net goes red naming the right test | `python3 .temp/TASK-260823-4f5t1m/mutants.py` | `.temp/TASK-260823-4f5t1m/mutants-*.log` |

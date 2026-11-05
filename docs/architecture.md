@@ -4,6 +4,12 @@
 narrow core. The core owns registration, admission and observation; every
 fact about a concrete harness or a concrete vendor lives in a plugin.
 
+This document is the CONTRACT. What is built against it, what is deliberately
+still open and who owns each residual is [shipped-state.md](shipped-state.md);
+how a program depends on the module is
+[consuming-the-module.md](consuming-the-module.md). Where the two disagree with
+this file, they are describing reality and this file is describing the rule.
+
 ## The two layers
 
 ### Layer 1 — agentic-system plugins
@@ -100,14 +106,26 @@ contracts here, not suggestions:
    hashed over the admitted set; downstream snapshots pin them. A silent
    digest change is a compatibility break.
 4. **Effort is per-model and required.** Vocabularies live with the model
-   row. Refusals name the exact dotted config key and the accepted values, so
-   an agent hitting one mid-run can fix the config from the error text alone.
+   row. A refusal names the model, the runtime, the accepted vocabulary and
+   the vendor's recommendation, so an agent hitting one mid-run can pick a
+   valid effort from the error text alone. It does NOT name a dotted config
+   key: this module has no config file, and the key that has to change lives
+   in whichever consumer supplied the effort. Naming it is the consumer's
+   half of the same error.
 5. **Single source per fact.** One adapter table, one runtime registry, one
    normalization for identifiers. The extraction source paid repeatedly for
    shadow tables and duplicate charsets; the plugin registry is the only
    place a binding may live, and guards should make a second one fail a test.
 
 ## Planned: the local-model plugin (design only, not in current scope)
+
+**Nothing in this section is built.** There is no local-models package, no
+sub-plugin contract, no resource plane and no admission queue anywhere in this
+module. What exists is the SEAM it has to fit through — availability as a
+structured verdict rather than a boolean, admission as a decision that can be
+deferred — and a test in `pkg/vendorplugin` demonstrating five such answers
+fitting the existing fields with no interface change. That test exercises the
+verdict type. Read the rest as a design note.
 
 Local models (muse today; local qwen and others next) need what remote
 vendors do not: **resource awareness**. A local vendor cannot answer
@@ -138,20 +156,46 @@ in the current extraction scope.
 | Change Requests, review routing | limit detection, classification, suppression, backoff |
 | worktree isolation, integration | health/availability checks |
 | goals, handoff, progress records | launch: argv/env/stdin/composition, spawn parameters |
+| exec mechanics, preflights that start processes, fault injection | the launch PLAN and the availability verdict |
 
 `task-board` calls this tool for spawn decisions and launches; it never
 reaches into plugin internals. This tool never reads a board.
+
+The last row is the boundary that is easiest to get wrong, because both halves
+are called "launch". This module ends at a VALUE — a binary, an argv, an
+environment, stdin bytes — and a consumer turns it into a process. That is why
+the Antigravity binary probe and Claude goal preparation stay on the consumer's
+side: both START PROCESSES, and `BuildPlan` calls every plugin method to build
+a DRY RUN, so a probe behind any of them would make a dry run execute the
+harness. Their RESULTS cross the boundary instead — `agy.NewWithRuntime` takes
+the preflighted executable at construction. `agy/runtime.go` and
+`claude/goal.go` state the whole of what stays behind and where it has to land
+if it ever moves.
 
 ## Extraction plan (current scope)
 
 Move the already-existing vendors and agentic systems out of
 `skill-project-management` behind the plugin seams, proving at each step:
 
-1. parity of the observable launch surface per (system, mode),
-2. byte-stable admitted-pair digests over real configs,
-3. unchanged on-disk limit-state identity, demonstrated on real state files,
+1. parity of the observable launch surface per (system, mode) — **done**, one
+   golden set per system, captured by the source's own harness and only
+   compared here;
+2. byte-stable admitted-pair digests over real configs — **done**, pinned
+   against values the SOURCE BINARY produced over the source repository's own
+   config;
+3. unchanged on-disk limit-state identity, demonstrated on real state files —
+   **done**, against the operator's live pre-extraction state, a suppression
+   written by a program compiled against the source module, and the source's
+   own projection of a file this code wrote;
 4. task-board consuming the tool with its own spawn surface observably
-   unchanged.
+   unchanged — **done**, on the consumer's trunk rather than this one, since
+   the work is consumer-side: `STORY-260823-1sxcmg`, integrated at `b34aa20`.
+   All three swaps and the CI arrangement landed together; the only step left
+   is the `RELUX_MODULES_TOKEN` secret, which is the repository owner's to
+   provision.
 
 Everything beyond that — new vendors, new agentic systems (opencode and
 others), the local-model resource plane — is deliberately after.
+
+[shipped-state.md](shipped-state.md) carries the per-story detail and the
+outcomes that are true but easy to lose.
