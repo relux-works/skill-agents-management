@@ -102,7 +102,9 @@ harness — are still one vendor declaration with no core change.
 A vendor plugin's interface, at minimum:
 
 - **Models** — the model list, each with:
-  - a capability SCORE (evidence-based; ranking is never policy; ties are legal
+  - a capability SCORE (a Bug Hunt Bench point, comparable across vendors only
+    through that cited benchmark; every row's evidence says whether the count
+    was measured or interpolated; ranking is never policy; ties are legal
     because two models really can be equal, and the total order some callers
     need is derived from the list rather than declared per row),
   - a description of what the model is best used for,

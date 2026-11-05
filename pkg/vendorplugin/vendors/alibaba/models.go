@@ -25,21 +25,26 @@ import (
 // of them against a fixture captured from that repository's own sources, so a
 // dropped or drifted row fails rather than passes quietly.
 //
-// PORTED VERBATIM as well, since v0.2.0: the capability SCORE, the lineup
-// state, the supersession, the display recommendation, the context window and
-// the billing contract. Until v0.2.0 this file DERIVED a tie-free position from
-// the score, and that reshape asserted an ordering nobody had observed wherever
-// the source's scores tied. The score is now carried as it stands, ties and
-// all, and the total order some callers need is derived by vendorplugin.Lineup
-// from the list rather than declared per row — see lineup.go on why a position
-// is presentation and a score is evidence.
-//
+// PORTED VERBATIM as well, since v0.2.0: the lineup state, the supersession,
+// the display recommendation, the context window and the billing contract.
 // The board-owned fields are pinned row by row against a frozen capture of the
 // board's own table (pkg/vendorplugin/testdata/board-model-facts.json, read by
 // pkg/vendorplugin/boardfacts_test.go), so a slipped digit in a price or a
 // swapped lifecycle fails rather than passing quietly.
 //
-// THE TIE. qwen3.7-plus and qwen3.7-plus-via-codex both score 30, because the
+// NOT PORTED ANY MORE: the capability SCORE. Until the Bug Hunt Bench re-rank
+// the score was the source registry's own PolicyRank — hand-ordered 50..10
+// with nothing behind it but the author's placing. Every score below is now a
+// bench point (planted bugs fixed out of 105, vendorplugin.bench.go): the one
+// row the leaderboard measured, qwen3.8-max-preview as `qwen3.8-max` at max
+// (28), carries the exact count, and every other row carries a value
+// explicitly marked interpolated between two named anchors, keeping the
+// registry's order. The registry's PolicyRank is still quoted on every row,
+// because it is still true of the registry, but as the registry's number on
+// its own scale and never as the score. pkg/vendorplugin/bughunt_test.go holds
+// each score against an independent transcription of the leaderboard.
+//
+// THE TIE. qwen3.7-plus and qwen3.7-plus-via-codex both score 18, because the
 // second deliberately mirrors the first's profile under another harness. The
 // tie is carried rather than broken in the declaration; Lineup breaks it by
 // declaration order for callers that need a total order, and marks it tied so
@@ -55,11 +60,11 @@ import (
 // They are the ONLY field in this file that is not a source fact, and they must
 // never be cited as one.
 
-// sourceRegistry is the table every capability score in this file was read
-// from. It names the exact commit so a reader chasing a score has a revision to
-// open rather than a moving target.
+// sourceRegistry is the table the rows' PolicyRank was read from — the order
+// the interpolated rows keep. It names the exact commit so a reader chasing a
+// number has a revision to open rather than a moving target.
 //
-// The board-owned facts the rows gained in v0.2.0 — the score again, the
+// The board-owned facts the rows gained in v0.2.0 — the PolicyRank again, the
 // lifecycle, the supersession, the recommendation, the context window and the
 // billing contract — were re-read from that same table at a LATER commit and
 // pinned against a capture of it; testdata/board-model-facts.json records which.
@@ -69,29 +74,33 @@ const sourceRegistry = "skill-project-management tools/board-cli/internal/spawn/
 
 // lineup is the vendor-side evidence every rank in this file also rests on.
 //
-// It is a second entry rather than a replacement for the score, because the two
-// answer different objections: the score says what this repository's own
-// registry recorded, and this says why that ordering is not merely an internal
-// convention.
+// It is a third entry beside the bench claim and the registry number rather
+// than a replacement for either: the bench says how many bugs the row fixed or
+// which two rows it was interpolated between, the registry says where the
+// board's own table ordered it, and this says why that ordering is not merely
+// an internal convention.
 var lineup = vendorplugin.RankEvidence{
 	Source:      "the Qwen Cloud Token Plan Team allowlist of 2026-07-21, as the source registry records it",
 	Observation: "the allowlist carries exactly the five qwen-code rows below, with 3.8-max on preview terms above the 3.7 production pair and the 3.6 rows beneath them; the source's own Token Plan pricing block is attached to those five and to no other row",
 }
 
-// rank builds a capability rank that carries the source's own evidence.
+// rank builds a capability rank: a bench-anchored score, the bench claim
+// behind it, and the source registry's own PolicyRank for the row.
 //
-// The contract refuses a rank with no observation behind it, and the
-// observation here is not a restatement of the position: it is the source's
-// PolicyRank score, the fact the position was derived FROM. A reader who
-// distrusts a position can check it against a number in another repository
-// rather than against this file's own opinion of itself.
-func rank(score int, note string, evidence vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
+// The score and the bench claim are typed separately on purpose — a
+// constructor that derived the observation from the score would agree with
+// any score at all — and pkg/vendorplugin/bughunt_test.go holds the two
+// against each other. policyRank is the registry's number and is quoted as
+// such: still true of the registry, the order the interpolated rows keep, and
+// never the score, which is why the sentence says whose scale it is on.
+func rank(score int, bench vendorplugin.RankEvidence, policyRank int, note string, evidence vendorplugin.RankEvidence) vendorplugin.CapabilityRank {
 	return vendorplugin.CapabilityRank{
 		Score: score,
 		Basis: []vendorplugin.RankEvidence{
+			bench,
 			{
 				Source:      sourceRegistry,
-				Observation: fmt.Sprintf("the row carries PolicyRank %d, %s", score, note),
+				Observation: fmt.Sprintf("the row carries PolicyRank %d on the source registry's own per-vendor scale (the score is the bench value, not that number), %s", policyRank, note),
 			},
 			evidence,
 		},
@@ -168,7 +177,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:                  "qwen3.8-max-preview",
 		Description:         "The most capable Qwen row, on preview terms rather than production ones",
-		Rank:                rank(50, "the highest of the six alibaba rows", lineup),
+		Rank:                rank(28, vendorplugin.BughuntMeasuredAs("qwen3.8-max", "max", 28), 50, "the highest of the six alibaba rows", lineup),
 		Lifecycle:           vendorplugin.LifecyclePreview,
 		Effort:              effortRequired("xhigh", []string{"low", "medium", "high", "xhigh", "max"}),
 		ContextWindowTokens: 1_000_000,
@@ -178,7 +187,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:                  "qwen3.7-max",
 		Description:         "Production flagship for the hardest Qwen work",
-		Rank:                rank(40, "below the preview flagship and above qwen3.7-plus", lineup),
+		Rank:                rank(22, vendorplugin.BughuntInterpolated("qwen3.8-max-preview", "qwen3.7-plus", "unmeasured; the registry order is kept"), 40, "below the preview flagship and above qwen3.7-plus", lineup),
 		Lifecycle:           vendorplugin.LifecycleCurrent,
 		Effort:              effortRequired("xhigh", []string{"low", "medium", "high", "xhigh", "max"}),
 		ContextWindowTokens: 1_000_000,
@@ -188,7 +197,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:                  "qwen3.7-plus",
 		Description:         "The balanced default: reasoning and vision over a one-million-token context",
-		Rank:                rank(30, "tied with qwen3.7-plus-via-codex, which mirrors its profile under another harness", lineup),
+		Rank:                rank(18, vendorplugin.BughuntInterpolated("qwen3.7-max", "qwen3.6-plus", "unmeasured; the registry order is kept, tied with qwen3.7-plus-via-codex"), 30, "tied with qwen3.7-plus-via-codex, which mirrors its profile under another harness", lineup),
 		Lifecycle:           vendorplugin.LifecycleCurrent,
 		Effort:              effortRequired("xhigh", []string{"low", "medium", "high", "xhigh", "max"}),
 		Recommended:         true,
@@ -199,7 +208,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:                  "qwen3.7-plus-via-codex",
 		Description:         "Evidence that a cross-runtime pair wires up, not a model to choose for real work: it mirrors qwen3.7-plus's profile under the codex harness and no vendor-captured Alibaba-via-codex model id has ever been observed",
-		Rank:                rank(30, "tied with qwen3.7-plus, whose profile it mirrors under the codex harness", lineup),
+		Rank:                rank(18, vendorplugin.BughuntInterpolated("qwen3.7-max", "qwen3.6-plus", "unmeasured; tied with qwen3.7-plus, whose profile it mirrors"), 30, "tied with qwen3.7-plus, whose profile it mirrors under the codex harness", lineup),
 		Lifecycle:           vendorplugin.LifecyclePreview,
 		Effort:              effortRequired("xhigh", []string{"low", "medium", "high", "xhigh", "max", "ultra"}),
 		ContextWindowTokens: 1_000_000,
@@ -208,7 +217,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:                  "qwen3.6-plus",
 		Description:         "Previous-generation balanced reasoning and vision, for invocations pinned to it",
-		Rank:                rank(20, "below the qwen3.7-plus pair and above qwen3.6-flash", lineup),
+		Rank:                rank(12, vendorplugin.BughuntInterpolated("qwen3.7-plus", "qwen3.6-flash", "legacy and unmeasured; the registry order is kept"), 20, "below the qwen3.7-plus pair and above qwen3.6-flash", lineup),
 		Lifecycle:           vendorplugin.LifecycleLegacy,
 		SupersededBy:        "qwen3.7-plus",
 		Effort:              effortRequired("xhigh", []string{"low", "medium", "high", "xhigh", "max"}),
@@ -219,7 +228,7 @@ var models = []vendorplugin.Model{
 	{
 		ID:                  "qwen3.6-flash",
 		Description:         "The cheapest Qwen row: fast, high-volume turns",
-		Rank:                rank(10, "the lowest of the six alibaba rows", lineup),
+		Rank:                rank(8, vendorplugin.BughuntInterpolated("qwen3.6-plus", vendorplugin.BugHuntBenchFloor, "legacy and unmeasured; the lowest row of the registry order"), 10, "the lowest of the six alibaba rows", lineup),
 		Lifecycle:           vendorplugin.LifecycleLegacy,
 		Effort:              effortRequired("xhigh", []string{"low", "medium", "high", "xhigh", "max"}),
 		ContextWindowTokens: 1_000_000,

@@ -40,13 +40,16 @@ func buildModels(cfg Config) []vendorplugin.Model {
 
 // localCapabilityRank is the one rank every local-models row carries.
 //
-// A capability score is comparable only within one vendor's own lineup
-// (CapabilityRank's own doc), and this vendor's whole catalog is
-// operator-populated from a single machine-local file with no published
-// benchmark to score rows against each other — there is exactly one thing to
+// A capability score is comparable across vendors only through the cited
+// benchmark (CapabilityRank's own doc), and no benchmark measures this
+// vendor: its whole catalog is operator-populated from a single machine-local
+// file, and the Bug Hunt Bench leaderboard every other lineup is anchored on
+// has no row for a locally-configured model. There is exactly one thing to
 // rank most local catalogs against: whether the operator bothered to point a
-// runtime at it at all. Every row therefore carries the SAME score, which
-// states a tie rather than inventing an ordering nobody observed.
+// runtime at it at all. Every row therefore carries the SAME score, the
+// lowest legal one, which states a tie and nothing else — it is not a bench
+// point and its evidence does not cite the bench, so bughunt_test.go leaves
+// this vendor outside its scope by name.
 func localCapabilityRank() vendorplugin.CapabilityRank {
 	return vendorplugin.CapabilityRank{
 		Score: 1,

@@ -57,6 +57,16 @@ total order (score descending, ties broken by declaration order, positions
 1..n) and marks every tied row `Tied`, which is the fact the old field could
 not carry.
 
+**`v0.5.12` re-anchors every score.** `CapabilityRank.Score` is now a Bug Hunt
+Bench point (planted bugs fixed out of 105; `vendorplugin.BugHuntBenchSource`)
+rather than the source registry's hand-ordered `PolicyRank`, and scores are
+comparable across vendors only through that cited benchmark. Ties survive,
+`Lineup` is unchanged, and a consumer that compared scores across brokers
+through its own rank type now reads a common scale rather than two private
+ones. A consumer that pinned the old numbers (openai 130..10, anthropic 85..10)
+must re-read them from the plugins; nothing in the consuming repository's
+policy — ceilings, workload classes — moves with the score.
+
 `v0.2.0` also moves six facts INTO the module that a consumer may have been
 declaring itself: `Model.Lifecycle`, `Model.SupersededBy`, `Model.Recommended`,
 `Model.ContextWindowTokens`, `Model.Pricing`, and the model rows of a

@@ -557,13 +557,19 @@ port accounts for them explicitly rather than dropping them. Two further rows �
   per-model effort vocabularies and the recommended efforts. A full-set pin
   compares both directions against a fixture captured from the source's own
   sources, and six drift mutants prove the pin fires.
-- **Ported verbatim, since v0.2.0**: the capability SCORE, the lifecycle, the
-  supersession, the display recommendation, the context window and the vendor
-  billing contract. Until v0.2.0 the score was reshaped here into a tie-free
-  rank POSITION, which asserted an ordering nobody had observed wherever the
-  source's scores tied. The score is now carried as it stands and the total
-  order some callers need is DERIVED by `vendorplugin.Lineup` — see *Rank: a
-  score, and a position derived from it* below.
+- **Ported verbatim, since v0.2.0**: the lifecycle, the supersession, the
+  display recommendation, the context window and the vendor billing contract.
+- **No longer ported: the capability SCORE.** Until `v0.5.12` the score was
+  the source registry's own `PolicyRank`, hand-ordered decades per vendor with
+  nothing behind them but the author's placing. Every score is now a Bug Hunt
+  Bench point (`pkg/vendorplugin/bench.go`): a row the leaderboard measured
+  carries the exact fixed/105 count at its best effort setting, an unmeasured
+  row carries a value explicitly marked *interpolated* between two named
+  anchors, and every row cites the bench as a `RankEvidence` source. The
+  registry's `PolicyRank` is still quoted on every ported row — it is still
+  true of the registry and it is the ORDER interpolated rows keep — but as the
+  registry's number on its own scale, never as the score. See *Rank: a
+  bench-anchored score, and a position derived from it* below.
 - **Authored here**: the usage descriptions. The source has no
   what-is-this-model-best-for field and the contract refuses a blank one, so
   these were written for this repository — marked as such in every binding file,
@@ -585,8 +591,9 @@ port accounts for them explicitly rather than dropping them. Two further rows �
   harness and one under `codex`. A cross-runtime pair is one vendor declaring
   one more system, and a test builds a real launch through it.
 - `google` is one vendor over two harnesses (`gemini-cli` and `antigravity`),
-  which is why a rank is comparable within a broker rather than within a
-  harness.
+  which is why the broker, not the harness, is the unit that declares one
+  lineup. None of its fifteen rows is on the leaderboard; the whole lineup is
+  interpolated below the one measured google model, `gemini-3.8-flash`.
 
 ### Rows declared ahead of the board's registry
 
@@ -708,14 +715,33 @@ must produce a byte-identical canonical serialization. Two more mutants move the
 model id and the effort vocabulary and MUST change the digest, so the stability
 claim cannot be satisfied by a serializer that covers nothing.
 
-### Rank: a score, and a position derived from it
+### Rank: a bench-anchored score, and a position derived from it
 
-A `CapabilityRank` declares a SCORE. Higher is more capable, comparison is only
-ever within one vendor, and **ties are legal** — they are the vendor stating
-that two models are equal. Three real ties exist in the ported table: an alias
-and its dated snapshot under `anthropic`, a cross-runtime mirror under
-`alibaba`, and five gemini-cli/antigravity pairs under `google`, whose two
-harnesses were ranked from two catalogues against one broker.
+A `CapabilityRank` declares a SCORE in Bug Hunt Bench points — planted bugs
+fixed out of 105 on the leaderboard at <https://bughunt.productcompass.pm/>
+(updated 2026-09-13), verified blind. Higher is more capable, and scores are
+**comparable across vendors only through that cited benchmark**: a measured
+row carries the leaderboard's exact count at its best effort setting, an
+unmeasured row carries a value its own evidence marks *interpolated* between
+two named anchors (a row of the same lineup, a leaderboard model, or the bench
+floor), and a comparison that touches an interpolated row inherits that
+interpolation. Two measured rows compare through the leaderboard's own numbers
+— `gpt-6-astra` (48) above `claude-fable-5-1` (43) is the bench's finding, not
+this module's. **Ties are legal** — they are the vendor stating that two models
+are equal. The real ties: an alias and its dated snapshot under `anthropic`,
+`astra` and `gpt-6-astra` under `openai`, a cross-runtime mirror under
+`alibaba`, `muse-spark` and its contributor identity, and five
+gemini-cli/antigravity pairs under `google`, whose two harnesses were ranked
+from two catalogues against one broker.
+
+Scores are NOT policy. Ceilings, workload classes and admission stay in the
+consuming repository and the frozen snapshot; nothing admission-related reads a
+score. `pkg/vendorplugin/bughunt_test.go` holds every score in scope against
+an independent transcription of the leaderboard: a measured row whose score
+differs from its cited count, an interpolated row naming an anchor nothing
+declares or measured, a measured row without the bench source, and a
+hand-typed observation that only looks like a claim all fail, with a narrowing
+mutant per class.
 
 The total order some callers need — printing a picker, numbering a listing — is
 DERIVED: `vendorplugin.Lineup` orders by score descending, breaks ties by
@@ -779,6 +805,14 @@ either repository today. The seam is proven and unconsumed, and saying so is
 cheaper than discovering it.
 
 ## Status
+
+`v0.5.12` (tag pending) re-anchors every capability score on the Bug Hunt
+Bench leaderboard: measured rows carry the exact fixed/105 count, unmeasured
+rows an explicitly interpolated value between two named anchors, every row
+cites the bench, and scores are now comparable across vendors only through
+that benchmark. The registry's `PolicyRank` is still quoted as the order
+evidence, ties survive, and nothing admission-related reads a score. See
+`docs/shipped-state.md` §8 and *Rank: a bench-anchored score* above.
 
 `v0.5.9` is the signed re-cut of the `v0.5.8` head. `v0.5.8` added the
 `gpt-6-astra` openai row (declared here ahead of the board's registry, with a

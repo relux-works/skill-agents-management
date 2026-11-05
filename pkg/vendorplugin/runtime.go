@@ -406,10 +406,18 @@ const boardRegistry = "skill-project-management tools/board-cli/internal/spawn/m
 // # Provenance, field by field
 //
 // PORTED from skill-project-management's board table: the model ids, the
-// capability scores, the lineup states, the display recommendation, the context
-// windows and the effort axis. pkg/vendorplugin/boardfacts_test.go pins every
-// one of them against a frozen capture of that table, so a slipped digit fails
-// rather than passes quietly.
+// lineup states, the display recommendation, the context windows and the
+// effort axis. pkg/vendorplugin/boardfacts_test.go pins every one of them
+// against a frozen capture of that table, so a slipped digit fails rather than
+// passes quietly.
+//
+// NOT PORTED ANY MORE: the capability SCORE. The board's PolicyRank 10 for
+// every muse row is still quoted, because it is still true of the board, but
+// the score is a Bug Hunt Bench point (bench.go): muse-spark-1.3-contributor
+// is MEASURED at 33/105 at max, its alias carries the identity's number, and
+// the legacy 1.2 row keeps its 10 as an interpolated value below the measured
+// 1.3 and above the bench floor. bughunt_test.go holds each score against an
+// independent transcription of the leaderboard.
 //
 // AUTHORED HERE, not ported: every Description, exactly as in the four vendor
 // binding files. The board's rows carry a short display string and no
@@ -418,17 +426,20 @@ const boardRegistry = "skill-project-management tools/board-cli/internal/spawn/m
 // They are the ONLY field here that is not a source fact, and they must never
 // be cited as one.
 //
-// # The tie
+// # The tie, and the row that left it
 //
-// All three rows score 10 and that is not a transcription accident: muse-spark
-// is an ALIAS of muse-spark-1.3-contributor, so those two are the same model
-// reached by two names and no observation could separate them. The legacy 1.2
-// row keeps the 10 it was ported with for the reason claude-fable-5 kept its
-// 80 — a demotion is a LIFECYCLE change, not a capability correction, and
-// re-scoring it here would assert a capability observation nobody made. The
-// score says all of that; the presentation position that Lineup derives is
-// declaration order and carries no claim, which is what RankedModel.Tied
-// reports.
+// muse-spark-1.3-contributor and muse-spark both score 33 and that is not a
+// transcription accident: muse-spark is an ALIAS of the contributor row, so
+// those two are the same model reached by two names and no observation could
+// separate them. The bench measured that model at 33/105 at max (its high
+// setting fixed 19, which is why the measured claim names max). The legacy 1.2
+// row no longer ties them: the leaderboard measured no 1.2 run, so it keeps
+// the 10 it was ported with as an INTERPOLATED value between the measured 1.3
+// and the bench floor — a demotion is a lifecycle change, not a capability
+// correction, and inventing a fresh number for a deprecated build nobody
+// measured would be a capability observation nobody made. The presentation
+// position that Lineup derives is declaration order for the tied pair and
+// carries no claim, which is what RankedModel.Tied reports.
 //
 // # The 1.3 effort axis, and the one place it outruns the installed CLI
 //
@@ -452,8 +463,16 @@ const boardRegistry = "skill-project-management tools/board-cli/internal/spawn/m
 func museModels() []Model {
 	source := RankEvidence{
 		Source:      boardRegistry,
-		Observation: "every muse row carries PolicyRank 10, the only score the table gives this runtime, and the set is a contributor model, its alias and the contributor release it superseded",
+		Observation: "every muse row carries PolicyRank 10 on the board's own per-vendor scale (the score is the bench value, not that number), the only number the table gives this runtime, and the set is a contributor model, its alias and the contributor release it superseded",
 	}
+	// The bench claims, typed separately from the scores below so that
+	// bughunt_test.go can hold the two against each other.
+	// The leaderboard spells the model `muse-spark-1.3`, without the
+	// harness suffix, and both rows say so: the contributor row because that
+	// is the spelling its count was recorded under, the alias because it is
+	// that same model.
+	measured13 := BughuntMeasuredAs("muse-spark-1.3", "max", 33)
+	interpolated12 := BughuntInterpolated("muse-spark-1.3-contributor", BugHuntBenchFloor, "the leaderboard measured no 1.2 run; the ported 10 is kept below the measured 1.3")
 	alias := RankEvidence{
 		Source:      "the rows' own ids and the board's descriptions of them",
 		Observation: "muse-spark is recorded as an alias of muse-spark-1.3-contributor rather than as a second model, so the equal scores are an identity rather than a judgement nobody could defend",
@@ -482,7 +501,7 @@ func museModels() []Model {
 		{
 			ID:                  "muse-spark-1.3-contributor",
 			Description:         "The Muse Spark 1.3 contributor harness: a local-first runtime whose broker this module has looked for and never established; pick it only where that unresolved binding is acceptable",
-			Rank:                CapabilityRank{Score: 10, Basis: []RankEvidence{source, alias}},
+			Rank:                CapabilityRank{Score: 33, Basis: []RankEvidence{measured13, source, alias}},
 			Lifecycle:           LifecycleCurrent,
 			Effort:              spark13Effort(),
 			Recommended:         true,
@@ -500,7 +519,7 @@ func museModels() []Model {
 			// agentic.BuildPlan substitutes the target before argv; this row
 			// stays admissible, rankable and auditable under its own id.
 			AliasOf:             "muse-spark-1.3-contributor",
-			Rank:                CapabilityRank{Score: 10, Basis: []RankEvidence{source, alias}},
+			Rank:                CapabilityRank{Score: 33, Basis: []RankEvidence{measured13, source, alias}},
 			Lifecycle:           LifecycleCurrent,
 			Effort:              spark13Effort(),
 			ContextWindowTokens: contextWindow,
@@ -509,7 +528,7 @@ func museModels() []Model {
 		{
 			ID:           "muse-spark-1.2-contributor",
 			Description:  "Previous-generation Muse Spark contributor harness, for a run pinned to it; prefer muse-spark-1.3-contributor for new work",
-			Rank:         CapabilityRank{Score: 10, Basis: []RankEvidence{source, alias}},
+			Rank:         CapabilityRank{Score: 10, Basis: []RankEvidence{interpolated12, source, alias}},
 			Lifecycle:    LifecycleLegacy,
 			SupersededBy: "muse-spark-1.3-contributor",
 			// EffortSupportNone, kept exactly as ported. 1.2 has no

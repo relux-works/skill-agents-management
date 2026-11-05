@@ -130,19 +130,33 @@ func (d UsageDescription) Validate() error {
 // it first" — is not a ranking argument, and a rank with no observation behind
 // it is that argument with the reasoning left out.
 type RankEvidence struct {
-	// Source names where the observation came from: an eval, a published
-	// card, a measured run in this repository's own history.
+	// Source names where the observation came from: the cited benchmark
+	// (BugHuntBenchSource), a published card, the source registry a row was
+	// ported from, a measured run in this repository's own history.
 	Source string
 	// Observation is what that source actually showed.
 	Observation string
 }
 
-// CapabilityRank is a model's standing in its OWN vendor's lineup, with the
+// CapabilityRank is a model's standing in its vendor's lineup, with the
 // evidence for it.
 //
-// Scores are per-vendor and never comparable across vendors: nothing in this
-// module can honestly say a vendor's top model beats another vendor's, and a
-// type that invited the comparison would get one made.
+// Scores are comparable across vendors ONLY through the cited benchmark. Every
+// row is anchored on one leaderboard (BugHuntBenchSource, bench.go): a measured
+// row carries the exact fixed/105 count at its best effort setting, an
+// unmeasured row carries a value explicitly marked "interpolated" between two
+// named anchors, and the common scale is what makes "openai's gpt-6-astra at
+// 48 stands above anthropic's claude-fable-5-1 at 43" a finding of the bench
+// rather than this module's opinion. The comparison is only as good as the
+// evidence under it: two measured rows compare through the leaderboard's own
+// numbers, and a comparison that touches an interpolated row inherits the
+// interpolation its evidence names. Until the bench, scores were hand-ordered
+// per vendor with no cross-vendor meaning at all; that restriction is gone
+// because the evidence that made it true is gone.
+//
+// Scores are NOT policy. Ceilings, workload classes and every admission
+// decision stay in the consuming repository and the frozen snapshot; nothing
+// admission-related reads a score.
 //
 // # Why a score and not a position
 //
@@ -165,10 +179,10 @@ type CapabilityRank struct {
 	// statement that the two are equal, which is why it is legal here and
 	// refused nowhere.
 	//
-	// Zero and below are refused. The scale's own units are the vendor's
-	// business — the ported rows run 10..120 — but a model with no score at
-	// all has not been placed in the lineup, and the zero value must not be
-	// able to pass for the bottom of it.
+	// Zero and below are refused. The scale's units are bench points — planted
+	// bugs fixed out of 105, so every row runs 1..105 — but a model with no
+	// score at all has not been placed in the lineup, and the zero value must
+	// not be able to pass for the bottom of it.
 	Score int
 	// Basis is the evidence for the score. At least one entry is required: a
 	// score is a claim about capability, and a claim with no observation

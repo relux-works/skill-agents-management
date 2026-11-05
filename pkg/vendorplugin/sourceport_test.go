@@ -597,7 +597,17 @@ func mutateSourceRow(models []sourceModel, id string, apply func(*sourceModel)) 
 // the one the reshape used to make impossible, and it is the reason this story
 // exists: the board's ranking consumers read ties, and a port that flattened
 // them was lying about equality in the quietest possible way.
-func TestPortedScoresAreTheSourceScoresAndTheDerivedOrderFollowsThem(t *testing.T) {
+// TestTheRegistryOrderSurvivesWhereTheBenchIsSilent is what is left of the
+// score pin after the Bug Hunt Bench re-rank.
+//
+// The source's PolicyRank is no longer the score — bughunt_test.go holds every
+// score against the leaderboard — but it is still the ORDER an interpolated
+// row keeps, and this pin holds that claim to the source's own numbers: two
+// rows the bench did not measure must order (and tie) exactly as the source
+// ordered them, a measured row may disagree with the source (the bench is the
+// evidence, and anthropic's opus-4-8 does), and every source tie must still be
+// a tie.
+func TestTheRegistryOrderSurvivesWhereTheBenchIsSilent(t *testing.T) {
 	fixture := loadSourceRegistry(t)
 	for vendor := range portedVendors {
 		plugin, registered := vendorplugin.Default.Lookup(vendor)
@@ -615,9 +625,12 @@ func TestPortedScoresAreTheSourceScoresAndTheDerivedOrderFollowsThem(t *testing.
 //
 // The whole lineup's POSITIONS are checked, rows declared ahead of the board's
 // registry included: 1..n with no gaps is a property of Lineup itself and a
-// declared row must not put a hole in it. Everything the SOURCE has an opinion
-// about — the order, the scores, the ties — is then checked over the ported
-// subsequence, because the source has no opinion about a row it does not carry.
+// declared row must not put a hole in it. What the SOURCE still has an opinion
+// about is then checked over the ported subsequence: the row set, the ties,
+// and the relative order of every pair of rows the bench did NOT measure. The
+// source has no opinion about a row it does not carry, and since the re-rank
+// it has no opinion about a measured row's place either — the leaderboard
+// does, and bughunt_test.go holds that.
 //
 // Tied is read off the derived lineup and compared against a tie computed from
 // the SOURCE's scores. That is what makes a declared row landing on a ported
@@ -630,13 +643,12 @@ func comparePortedLineup(fixture sourceRegistry, vendor vendorplugin.VendorID, p
 	var problems []string
 	report := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
 
-	want := make([]sourceModel, 0)
+	want := map[string]sourceModel{}
 	for _, model := range fixture.Models {
 		if model.Broker == string(vendor) {
-			want = append(want, model)
+			want[model.ID] = model
 		}
 	}
-	sort.SliceStable(want, func(i, j int) bool { return want[i].PolicyRank > want[j].PolicyRank })
 
 	// The position half restates a LineupOf invariant over the real production
 	// rows, and it has NO mutant below, because a Vendor cannot produce one:
@@ -660,30 +672,71 @@ func comparePortedLineup(fixture sourceRegistry, vendor vendorplugin.VendorID, p
 		report("vendor %s declares %d models the source table should carry and the source table gives it %d", vendor, len(got), len(want))
 		return problems
 	}
-	for i := range want {
-		if string(got[i].Model.ID) != want[i].ID {
-			report("vendor %s's derived lineup puts %q at ported position %d; the source's scores in descending declaration order put %q there",
-				vendor, got[i].Model.ID, i+1, want[i].ID)
-		}
-		if got[i].Model.Rank.Score != want[i].PolicyRank {
-			report("vendor %s's model %q carries score %d and the source scores it %d",
-				vendor, got[i].Model.ID, got[i].Model.Rank.Score, want[i].PolicyRank)
+	for _, entry := range got {
+		source, carried := want[string(entry.Model.ID)]
+		if !carried {
+			report("vendor %s's derived lineup carries %q, which the source table does not", vendor, entry.Model.ID)
+			continue
 		}
 		// Tied is checked against the SOURCE's scores rather than against
 		// the ported ones, so a port that dropped a tie by nudging one
 		// score is reported here rather than agreeing with itself.
 		shared := 0
 		for _, other := range want {
-			if other.PolicyRank == want[i].PolicyRank {
+			if other.PolicyRank == source.PolicyRank {
 				shared++
 			}
 		}
-		if wantTied := shared > 1; got[i].Tied != wantTied {
+		if wantTied := shared > 1; entry.Tied != wantTied {
 			report("vendor %s's model %q reports Tied=%v and the source's score %d is carried by %d of its rows",
-				vendor, got[i].Model.ID, got[i].Tied, want[i].PolicyRank, shared)
+				vendor, entry.Model.ID, entry.Tied, source.PolicyRank, shared)
+		}
+	}
+
+	// The order half, over UNMEASURED pairs only. An interpolated row's
+	// evidence says it keeps the registry order; two interpolated rows that
+	// order or tie differently from the source have broken that claim. A pair
+	// with a measured row in it is the bench's to order, not the source's.
+	for i := range got {
+		if benchMeasuredRow(got[i].Model) {
+			continue
+		}
+		for j := i + 1; j < len(got); j++ {
+			if benchMeasuredRow(got[j].Model) {
+				continue
+			}
+			a, b := got[i], got[j]
+			sourceA, sourceB := want[string(a.Model.ID)].PolicyRank, want[string(b.Model.ID)].PolicyRank
+			if sign(a.Model.Rank.Score-b.Model.Rank.Score) != sign(sourceA-sourceB) {
+				report("vendor %s scores the unmeasured rows %q at %d and %q at %d, and the source orders them %d and %d; an interpolated row keeps the registry order and these two do not",
+					vendor, a.Model.ID, a.Model.Rank.Score, b.Model.ID, b.Model.Rank.Score, sourceA, sourceB)
+			}
 		}
 	}
 	return problems
+}
+
+// benchMeasuredRow reports whether a row's bench claim is a measurement rather
+// than an interpolation. A row with NO bench claim is treated as unmeasured
+// here and is reported by bughunt_test.go, which owns that rule.
+func benchMeasuredRow(model vendorplugin.Model) bool {
+	for _, evidence := range model.Rank.Basis {
+		claim, err := vendorplugin.ParseBughuntEvidence(evidence)
+		if err == nil && claim.Kind == vendorplugin.BughuntMeasuredClaim {
+			return true
+		}
+	}
+	return false
+}
+
+func sign(n int) int {
+	switch {
+	case n < 0:
+		return -1
+	case n > 0:
+		return 1
+	}
+	return 0
 }
 
 // TestThePortedLineupPinFiresOnADeclaredRowThatDisturbsIt narrows the gate that
@@ -709,19 +762,52 @@ func TestThePortedLineupPinFiresOnADeclaredRowThatDisturbsIt(t *testing.T) {
 	}{
 		{
 			// The comparison is keyed on the skipped row's NEIGHBOURS, not on
-			// the skipped row: sol keeps 120, the declared row joins it there,
-			// and the source's table says that score is carried by one row.
+			// the skipped row: sol keeps its bench 42, the declared row joins
+			// it there, and the source's table says sol's score (120 on its
+			// scale) is carried by one row.
 			name: "a declared row landing on a ported score",
 			reshape: func(rows []vendorplugin.Model) []vendorplugin.Model {
 				out := vendorplugin.CloneModels(rows)
 				for i := range out {
 					if declaredHereRows[out[i].ID] == "openai" {
-						out[i].Rank.Score = 120
+						out[i].Rank.Score = 42
 					}
 				}
 				return out
 			},
 			expect: `model "gpt-5.6-sol" reports Tied=true and the source's score 120 is carried by 1 of its rows`,
+		},
+		{
+			// The order half: two UNMEASURED openai rows swapped against the
+			// registry. terra (interpolated 38) is dropped under gpt-5.5
+			// (interpolated 28) while the source orders terra (110) above it.
+			name: "two interpolated rows ordered against the registry",
+			reshape: func(rows []vendorplugin.Model) []vendorplugin.Model {
+				out := vendorplugin.CloneModels(rows)
+				for i := range out {
+					if out[i].ID == "gpt-5.6-terra" {
+						out[i].Rank.Score = 27
+					}
+				}
+				return out
+			},
+			expect: `vendor openai scores the unmeasured rows "gpt-5.5" at 28 and "gpt-5.6-terra" at 27, and the source orders them 90 and 110`,
+		},
+		{
+			// The order half must NOT fire on a measured row: luna is measured
+			// (33) and moving it under gpt-5.5 is the bench's business, which
+			// bughunt_test.go reports. Here it must produce no ORDER report.
+			name: "a measured row moved against the registry is not this pin's to report",
+			reshape: func(rows []vendorplugin.Model) []vendorplugin.Model {
+				out := vendorplugin.CloneModels(rows)
+				for i := range out {
+					if out[i].ID == "gpt-5.6-luna" {
+						out[i].Rank.Score = 27
+					}
+				}
+				return out
+			},
+			expect: "",
 		},
 		{
 			// The skip is keyed on the NAME. A row nobody named has to stay in
@@ -740,7 +826,16 @@ func TestThePortedLineupPinFiresOnADeclaredRowThatDisturbsIt(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			requireReport(t, comparePortedLineup(fixture, "openai", vendorRowsWith(t, "openai", tt.reshape)), tt.expect)
+			problems := comparePortedLineup(fixture, "openai", vendorRowsWith(t, "openai", tt.reshape))
+			if tt.expect == "" {
+				for _, problem := range problems {
+					if strings.Contains(problem, "unmeasured rows") {
+						t.Errorf("the order half reported a MEASURED row: %s", problem)
+					}
+				}
+				return
+			}
+			requireReport(t, problems, tt.expect)
 		})
 	}
 }
@@ -770,7 +865,7 @@ func TestTheSourceTiesSurviveThePort(t *testing.T) {
 		// as rows are declared ahead of the board's registry.
 		//
 		// The vendor's fourteen DECLARED rows do carry one tie — `astra` and
-		// `gpt-6-astra`, at 130 — and it is outside this map on purpose: this
+		// `gpt-6-astra`, at 48 — and it is outside this map on purpose: this
 		// map records ties THE SOURCE carries, and the source carries neither
 		// row. That tie is an alias and its identity scoring the same, which
 		// is one model under two names rather than an equality between two.
@@ -815,9 +910,10 @@ func TestTheSourceTiesSurviveThePort(t *testing.T) {
 //
 // CapabilityRank.Validate already refuses an empty basis, so a test that only
 // checked for non-emptiness would be testing the type. What this checks is that
-// the basis carries the fact the position was DERIVED from — the source's own
-// score for that row — so a position invented here cannot borrow the
-// credibility of one that was ported.
+// the basis carries the source's own number for that row — no longer the
+// score, since the re-rank, but the order the interpolated rows keep — so a
+// row's place invented here cannot borrow the credibility of one the registry
+// ordered. The bench half of the evidence is held by bughunt_test.go.
 func TestEveryRankCarriesTheSourceEvidence(t *testing.T) {
 	fixture := loadSourceRegistry(t)
 	scores := map[string]int{}

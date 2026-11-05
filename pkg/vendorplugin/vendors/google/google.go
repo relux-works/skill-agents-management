@@ -9,11 +9,12 @@
 // Seven of these rows are driven by the Gemini CLI and eight by Antigravity.
 // They are ONE VENDOR because the broker — who owns the account, the quota and
 // the billing — is the same, and two RUNTIMES because the harness, the argv
-// grammar and the limit-state identity are not. That split is why the source
-// says a capability rank is comparable within a BROKER rather than within a
-// harness, and why the two runtimes resolve separately: models.go records what
-// this port had to decide when two rows from different harnesses carried the
-// same score.
+// grammar and the limit-state identity are not. That split is why the BROKER,
+// not the harness, is the unit that declares one lineup (scores themselves
+// are comparable across vendors through the cited bench; see
+// vendorplugin.CapabilityRank), and why the two runtimes resolve separately:
+// models.go records what this port had to decide when two rows from different
+// harnesses carried the same score.
 //
 // # No reasoning-effort axis anywhere in this vendor
 //
