@@ -113,8 +113,11 @@ before publishing them. Rebase locally with `git rebase -S` whenever history
 must move; GitHub rebase and squash create different unsigned commit objects
 and are not valid landing mechanisms. Agent co-authorship is allowed through an
 explicit `Co-authored-by` trailer when the task or user requests it and a real,
-intentionally configured agent name and email are available. Keep Ivan Oparin
-as the commit author and never invent an identity or verification address.
+intentionally configured agent name and email are available. A commit keeps its
+real human author: Ivan Oparin on Ivan's lanes, Alexis on Alexis's lanes, each
+with that person's own signing key. When a commit has no model trailer, name the
+producing model in the pull-request body and the landing record. Never invent an
+identity or verification address.
 
 ## Documentation
 
