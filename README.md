@@ -2349,9 +2349,14 @@ or establish OS containment.
   release before supplying `ToolRelease`; this boundary does not probe it.
 - The registry and limits store are caller-supplied inputs in the same trust
   domain. The caller must supply its authoritative registry and store.
-- Both `http_proxy` and `HTTP_PROXY` together, and multi-line environment
-  variables, intentionally remain refused; prepare a compatible environment
-  before Build rather than changing the admitted environment afterwards.
+- The configuration home's contents are in the caller's trust domain. This
+  boundary does not read `config.toml` or `curator-mcp.config.toml`; the launcher
+  must not launch on a home whose MCP configuration names the private token or
+  another reserved name, because the child also receives that token in its own
+  environment.
+- `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` (case-insensitive) refuse in base,
+  fragment, prompt and composed environments, even with `NO_PROXY`. Multi-line
+  variables also refuse; prepare a compatible environment before Build.
 - Supply and check the private token value only in the launcher; the library
   checks its exact name, unique presence and nonempty value, not its authenticity.
   Keep the home and staged executable stable through immediate execution;

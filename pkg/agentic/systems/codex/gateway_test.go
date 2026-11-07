@@ -102,8 +102,7 @@ func TestGatewayBindingRefusals(t *testing.T) {
 	}
 }
 
-// Input aliases, unsupported native commands and mutable pre-admission plans
-// refuse while adjacent fresh/resume cases succeed. Inputs are copied.
+// Input aliases, unsupported native commands and mutable pre-admission plans refuse.
 func TestGatewayAdmissionRefusals(t *testing.T) {
 	for _, native := range [][]string{{"app-server"}, {"--remote", "ws://127.0.0.1:1234"}, {"resume", "--last"}, {"-c", `model_provider="other"`}, {"--profile=alternate"}, {"--config", `"model_providers"."curator-gateway".base_url="http://127.0.0.1:1"`}} {
 		p := gatewayPlan(t, native)
@@ -210,8 +209,7 @@ func TestGatewayRendererRefusesMismatch(t *testing.T) {
 	}
 }
 
-// The environment predicate accepts documented credential/account selectors and
-// exact token injection, but rejects malformed, aliased, duplicated or missing inputs.
+// Valid credentials and token injection pass; malformed, aliased, duplicate, missing-token and proxy inputs refuse.
 func TestGatewayEnvironmentPredicate(t *testing.T) {
 	g := gatewayPolicy{}
 	for _, injected := range []bool{false, true} {
@@ -239,6 +237,29 @@ func TestGatewayEnvironmentPredicate(t *testing.T) {
 			}
 		})
 	}
+	// Proxy refusal also applies to composed and token-injected environments, regardless of loopback bypass.
+	for _, name := range []string{"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Run(name, func(t *testing.T) {
+			for _, injected := range []bool{false, true} {
+				for _, bypass := range []bool{false, true} {
+					control := []string{"DISJOINT=ok", "CODEX_HOME=/private"}
+					if injected {
+						control = append(control, GatewayTokenEnv+"=synthetic")
+					}
+					if bypass {
+						control = append(control, "NO_PROXY=127.0.0.1,::1,localhost")
+					}
+					if err := g.CheckEnvironment(control, injected); err != nil {
+						t.Fatal(err)
+					}
+					if err := g.CheckEnvironment(append(control, name+"=http://proxy.example.invalid:3128"), injected); !errors.Is(err, agentic.ErrCodexGatewayRefused) {
+						t.Fatalf("proxy accepted in composed environment (injected=%v bypass=%v): %v", injected, bypass, err)
+					}
+				}
+			}
+		})
+	}
+
 	// Token rows isolate empty, aliased and missing injection from the name checks.
 	for _, env := range [][]string{{GatewayTokenEnv + "="}, {strings.ToLower(GatewayTokenEnv) + "=alias"}, {"DISJOINT=ok"}} {
 		if err := g.CheckEnvironment(env, true); !errors.Is(err, agentic.ErrCodexGatewayRefused) {

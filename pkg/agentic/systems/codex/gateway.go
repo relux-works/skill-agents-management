@@ -105,6 +105,9 @@ func checkGatewayEnvironment(env []string, injected bool) error {
 			return agentic.ErrCodexGatewayRefused
 		}
 		seen[fold] = true
+		if fold == "HTTP_PROXY" || fold == "HTTPS_PROXY" || fold == "ALL_PROXY" {
+			return agentic.ErrCodexGatewayRefused
+		}
 		if fold == GatewayTokenEnv {
 			if !injected || name != GatewayTokenEnv || value == "" {
 				return agentic.ErrCodexGatewayRefused
