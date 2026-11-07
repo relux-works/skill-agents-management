@@ -2297,6 +2297,8 @@ binding once successfully, preserving original verifiers and executable digests.
 The Codex `Args` constructor renders the provider table and selection. The child
 launcher alone supplies the private token value and verifies the actual final
 binary, argv and environment immediately before execution.
+Both final-plan verifiers also enforce the admitted shape: no attached stdin,
+no stdin bytes and no additional process nodes, including valid multi-node plans.
 
 The supported tuple is Codex 0.164.0 interactive fresh or exact thread resume,
 with an optional single `--no-alt-screen`. The binding uses a loopback HTTP

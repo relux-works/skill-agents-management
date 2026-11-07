@@ -215,3 +215,39 @@ func TestGatewayLimitsRuntimeDistinctFromSystem(t *testing.T) {
 		t.Fatalf("declared runtime suppression was ignored: %v", err)
 	}
 }
+
+// Both final verifiers reject attached stdin, detached bytes and a validated multi-node plan; each row first verifies the unchanged final plan.
+func TestGatewayFinalPlanShapeRefusals(t *testing.T) {
+	for _, kind := range []string{"stdin-attached", "stdin-bytes", "stdin-payload", "nodes"} {
+		t.Run(kind, func(t *testing.T) {
+			req, store, _ := gatewayPolicyFixture(t)
+			final, b := gatewayFinalizeControl(t, gatewayPolicyBuild(t, req, store), agentic.CodexGatewayInputs{})
+			env := append(slices.Clone(final.Plan.Env), b.TokenEnv+"=synthetic")
+			switch kind {
+			case "stdin-attached":
+				final.Plan.Stdin.Attached = true
+			case "stdin-bytes":
+				final.Plan.Stdin.Bytes = []byte("unadmitted bytes")
+			case "stdin-payload":
+				final.Plan.Stdin = agentic.StdinPayload{Attached: true, Bytes: []byte("unadmitted prompt")}
+			case "nodes":
+				n := agentic.PlanNode{ID: "extra", Process: agentic.ProcessPlan{Mode: agentic.LaunchModeExec, Binary: final.Plan.Binary, Argv: []string{"sidecar"}, WorkDir: final.Plan.WorkDir, Home: final.Plan.Home}}
+				n.Plugin.ID, n.Plugin.Kind = "extra", "sidecar"
+				expanded, err := agentic.BuildMultiNodePlan(final.Plan, []agentic.PlanNodeID{"extra"}, n)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(expanded.Nodes) != 2 || expanded.Nodes[0].ID != "extra" || expanded.Nodes[1].ID != agentic.PrimaryPlanNodeID {
+					t.Fatal("fixture did not produce a validated dependency graph")
+				}
+				final.Plan = expanded
+			}
+			if err := final.Plan.VerifyBeforeExec(); !errors.Is(err, agentic.ErrCodexGatewayRefused) {
+				t.Errorf("unadmitted final %s passed VerifyBeforeExec: %v", kind, err)
+			}
+			if err := final.Plan.VerifyCodexGatewayProcess(b.ExecutablePath, final.Plan.Argv, env); !errors.Is(err, agentic.ErrCodexGatewayRefused) {
+				t.Errorf("unadmitted final %s passed VerifyCodexGatewayProcess: %v", kind, err)
+			}
+		})
+	}
+}

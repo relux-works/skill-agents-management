@@ -239,7 +239,7 @@ type codexGatewayVerifier struct {
 }
 
 func (v *codexGatewayVerifier) VerifyBeforeExec(p Plan) error {
-	if gatewayIdentityOf(p) != v.candidate.identity || p.Provenance != v.candidate.built.Plan.Provenance {
+	if gatewayIdentityOf(p) != v.candidate.identity || p.Provenance != v.candidate.built.Plan.Provenance || p.Stdin.Attached || len(p.Stdin.Bytes) != 0 || len(p.Nodes) != 0 {
 		return ErrCodexGatewayRefused
 	}
 	if err := v.expected.verify(p); err != nil {
