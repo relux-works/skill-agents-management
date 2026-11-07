@@ -129,6 +129,11 @@ func AdmitCodexGateway(basis *GatewayAdmissionBasisV1, built PlanWithEnvironment
 		return nil, ErrCodexGatewayRefused
 	}
 	in = CodexGatewayInputs{FragmentEnv: slices.Clone(in.FragmentEnv), PromptEnv: slices.Clone(in.PromptEnv), NativeArgs: slices.Clone(in.NativeArgs), LookupNames: slices.Clone(in.LookupNames)}
+	for _, name := range in.LookupNames {
+		if !validEnvironmentName(name) {
+			return nil, ErrCodexGatewayRefused
+		}
+	}
 	var candidate GatewayCandidateV1
 	err := gatewaybasis.Inspect(basis, func(value any) error {
 		c, ok := value.(GatewayCandidateV1)

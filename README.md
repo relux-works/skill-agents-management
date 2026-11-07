@@ -2290,13 +2290,19 @@ canonical directory causes finalization and both final verifiers to refuse.
 Retargeting the original selector symlink leaves the pinned target unchanged.
 
 The normalized runtime must be the shipped `codex` runtime, using the `codex`
-system and `openai` vendor. Consumer-declared alternate runtimes and routed
-vendor models refuse. Model aliases cannot escape suppression recorded under
-either the requested or launched spelling; existing store keys are unchanged.
+system and `openai` vendor. Operator-declared catalog models
+(`vendorplugin.Model.OperatorDeclared`) are eligible when explicitly requested
+on that shipped tuple; `gpt-6-astra` remains eligible too. Alternate runtime
+declarations and models from a different vendor refuse. Model aliases cannot
+escape suppression recorded under either the requested or launched spelling;
+existing store keys are unchanged.
 
 `AdmitCodexGateway` binds the original plan to copied fragment/prompt environment,
-native arguments and MCP lookup names. Environment names use case-folded
-duplicate detection. Exact-name overlay replacement keeps its normal precedence;
+native arguments and MCP lookup names. Lookup-name grammar is checked at
+admission. Lookup declarations do not add environment entries: an absent name
+needs no `NAME=` placeholder, and the final process verifier does not require
+one. Environment names use case-folded duplicate detection. Exact-name overlay
+replacement keeps its normal precedence;
 case aliases in the fully composed environment refuse inside `Finalize` before
 capability consumption, so a valid retry remains possible. `Finalize` accepts
 the nonsecret runtime binding once successfully, preserving original verifiers
@@ -2306,9 +2312,11 @@ and selection.
 Immediately before execution, call both `VerifyBeforeExec` and
 `VerifyCodexGatewayProcess` with the actual child binary, argv and environment.
 The process verifier requires the final plan's complete environment plus exactly
-one private token entry: no additions, removals, renames or changed values;
-entry order may differ. Both final verifiers reject attached stdin, stdin bytes
-and additional process nodes, including otherwise valid multi-node plans.
+one private token entry: no additions, removals, renames or changed values.
+Comparison is by set with duplicate names refused; entry order may differ,
+including the launcher's sorted-name environment with the token last. Both
+final verifiers reject attached stdin, stdin bytes and additional process
+nodes, including otherwise valid multi-node plans.
 
 The supported tuple remains Codex 0.164.0 interactive fresh or exact thread
 resume, with an optional single `--no-alt-screen`. The binding uses a canonical
