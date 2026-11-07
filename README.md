@@ -2337,7 +2337,9 @@ or establish OS containment.
   this boundary: gateway Build refuses while it is suppressed. Recover with a
   non-gateway launch on that home, or a successful probe by the owner, and record
   that success. Waiting out the window, holding a probe lease or `ClearGroup`
-  alone does not readmit the group.
+  alone does not readmit the group. This module ships no operator command for
+  it: `ClearGroup` and `ObserveSuccess` are library calls, used by the plane
+  that owns the launches on that home.
 
 - Build uses the shipped group table, not `spawn.limits.groups`. Consumers with
   custom groups must not rely on this boundary for their effective group policy.
