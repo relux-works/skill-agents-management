@@ -2,7 +2,9 @@ package agentic_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -247,6 +249,65 @@ func TestGatewayFinalPlanShapeRefusals(t *testing.T) {
 			}
 			if err := final.Plan.VerifyCodexGatewayProcess(b.ExecutablePath, final.Plan.Argv, env); !errors.Is(err, agentic.ErrCodexGatewayRefused) {
 				t.Errorf("unadmitted final %s passed VerifyCodexGatewayProcess: %v", kind, err)
+			}
+		})
+	}
+}
+
+// With a distinct unchanged staged executable, original-only drift refuses before finalization and execution; unchanged originals remain valid.
+func TestGatewayDistinctStagedExecutableRetainsOriginalDigest(t *testing.T) {
+	for _, phase := range []string{"unchanged", "before-finalize", "after-finalize"} {
+		t.Run(phase, func(t *testing.T) {
+			req, store, _ := gatewayPolicyFixture(t)
+			p := gatewayPolicyBuild(t, req, store)
+			a, err := agentic.AdmitCodexGateway(p.GatewayBasis, p, agentic.CodexGatewayInputs{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := gatewayPolicyBinding(t, p)
+			original, err := os.ReadFile(p.Plan.Binary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b.ExecutablePath = filepath.Join(t.TempDir(), "staged")
+			if err := os.WriteFile(b.ExecutablePath, original, 0700); err != nil {
+				t.Fatal(err)
+			}
+			changeOriginal := func() {
+				t.Helper()
+				if err := os.WriteFile(p.Plan.Binary, []byte("changed original only"), 0700); err != nil {
+					t.Fatal(err)
+				}
+				staged, err := os.ReadFile(b.ExecutablePath)
+				if err != nil || sha256.Sum256(staged) != sha256.Sum256(original) {
+					t.Fatalf("staged control changed: %v", err)
+				}
+			}
+			if phase == "before-finalize" {
+				changeOriginal()
+				if out, receipt, err := a.Finalize(b); !errors.Is(err, agentic.ErrCodexGatewayRefused) || receipt != nil || out.Plan.Binary != "" {
+					t.Fatalf("original-only drift finalized with unchanged stage: receipt=%v err=%v", receipt != nil, err)
+				}
+				if err := os.WriteFile(p.Plan.Binary, original, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			final, receipt, err := a.Finalize(b)
+			if err != nil || receipt == nil {
+				t.Fatalf("unchanged stage/original refused or failed attempt consumed basis: %v", err)
+			}
+			env := append(slices.Clone(final.Plan.Env), b.TokenEnv+"=synthetic")
+			if err := final.Plan.VerifyCodexGatewayProcess(b.ExecutablePath, final.Plan.Argv, env); err != nil {
+				t.Fatal(err)
+			}
+			if phase == "after-finalize" {
+				changeOriginal()
+				if err := final.Plan.VerifyBeforeExec(); !errors.Is(err, agentic.ErrCodexGatewayRefused) {
+					t.Errorf("original-only drift passed VerifyBeforeExec with unchanged stage: %v", err)
+				}
+				if err := final.Plan.VerifyCodexGatewayProcess(b.ExecutablePath, final.Plan.Argv, env); !errors.Is(err, agentic.ErrCodexGatewayRefused) {
+					t.Errorf("original-only drift passed final process verification with unchanged stage: %v", err)
+				}
 			}
 		})
 	}
