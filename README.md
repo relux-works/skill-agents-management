@@ -2279,6 +2279,13 @@ current provider-limits verdict. Only a serviceable verdict issues the opaque
 not authority. `LimitsRefusalError` preserves a nonserviceable verdict for the
 caller's existing diagnostics.
 
+The gateway request requires an absolute configuration `Home`. Before building
+the plan or reading limits, admission pins it as `CODEX_HOME`; a conflicting,
+empty, aliased or duplicate initial selector refuses. When the selector is absent,
+the pin replaces Codex's implicit `HOME/.codex` resolution. The selector is owned
+by the capability, so fragment/prompt overlays and final child injection cannot
+change or remove it.
+
 `AdmitCodexGateway` binds that original plan to copied fragment/prompt environment,
 native arguments and MCP lookup names. `Finalize` accepts the nonsecret runtime
 binding once successfully, preserving original verifiers and executable digests.

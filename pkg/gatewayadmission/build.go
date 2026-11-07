@@ -5,6 +5,8 @@ package gatewayadmission
 
 import (
 	"context"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/relux-works/skill-agents-management/internal/gatewaybasis"
@@ -26,10 +28,35 @@ func Build(ctx context.Context, r *vendorplugin.Registry, store *providerlimits.
 	if store == nil || strings.TrimSpace(req.Home) == "" || strings.TrimSpace(req.WorkDir) == "" {
 		return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
 	}
+	// Pin the configuration selector before building or reading limits. Ordinary
+	// Codex ChildEnv does not translate Home into CODEX_HOME on its own.
+	req.Home = filepath.Clean(strings.TrimSpace(req.Home))
+	if !filepath.IsAbs(req.Home) || strings.ContainsAny(req.Home, "\x00\r\n") {
+		return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
+	}
+	seenHome := false
+	for _, entry := range req.Env {
+		name, value, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(name, "CODEX_HOME") {
+			if seenHome || name != "CODEX_HOME" || value != req.Home {
+				return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
+			}
+			seenHome = true
+		}
+	}
+	req.Env = agentic.SetEnvValue(slices.Clone(req.Env), "CODEX_HOME", req.Home)
 	built, err := vendorplugin.BuildLaunchWithEnvironment(ctx, r, req, agentic.LaunchModeInteractive)
 	if err != nil {
 		return agentic.PlanWithEnvironment{}, err
 	}
+	// Carry the selector as owned data in the issued candidate: admission
+	// overlays and the actual child environment must preserve this exact value.
+	pin := "CODEX_HOME=" + req.Home
+	if built.Plan.Home != req.Home || !slices.Contains(built.Plan.Env, pin) {
+		return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
+	}
+	built.OwnedEnv = agentic.SetEnvValue(slices.Clone(built.OwnedEnv), "CODEX_HOME", req.Home)
+	slices.Sort(built.OwnedEnv)
 	verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{Runtime: string(req.Runtime), Model: string(req.Model), Home: req.Home})
 	if err != nil {
 		return agentic.PlanWithEnvironment{}, err
