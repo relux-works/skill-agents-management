@@ -31,7 +31,12 @@ func gatewayPolicyFixture(t *testing.T) (vendorplugin.SpawnRequest, *providerlim
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := vendorplugin.SpawnRequest{Runtime: "codex", Model: "sol", Effort: "high", ToolRelease: "0.164.0", Home: t.TempDir(), WorkDir: t.TempDir(), Env: []string{"PATH=" + bin, "HOME=" + t.TempDir()}}
+	// The ordinary fixture starts at a resolved temp parent; alias tests add their own alternate spelling.
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := vendorplugin.SpawnRequest{Runtime: "codex", Model: "sol", Effort: "high", ToolRelease: "0.164.0", Home: home, WorkDir: t.TempDir(), Env: []string{"PATH=" + bin, "HOME=" + t.TempDir()}}
 	tempDir := t.TempDir()
 	req.TempDir = &tempDir
 	return req, store, layout

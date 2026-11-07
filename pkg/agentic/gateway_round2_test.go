@@ -29,6 +29,11 @@ func TestGatewayCanonicalHomeSpellings(t *testing.T) {
 			if err := os.MkdirAll(real, 0700); err != nil {
 				t.Fatal(err)
 			}
+			resolved, err := filepath.EvalSymlinks(real)
+			if err != nil {
+				t.Fatal(err)
+			}
+			real, parent = resolved, filepath.Dir(resolved)
 			spelling := real
 			switch kind {
 			case "trailing":
@@ -187,6 +192,11 @@ func TestGatewayLimitsSpellingProduct(t *testing.T) {
 				if err := os.Mkdir(real, 0700); err != nil {
 					t.Fatal(err)
 				}
+				resolved, err := filepath.EvalSymlinks(real)
+				if err != nil {
+					t.Fatal(err)
+				}
+				real = resolved
 				alternate := filepath.Join(filepath.Dir(real), "ACCOUNT")
 				x, err := os.Stat(real)
 				if err != nil {
