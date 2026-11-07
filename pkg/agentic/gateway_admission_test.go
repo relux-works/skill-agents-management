@@ -449,6 +449,7 @@ func TestGatewayAdmissionMetadataRefusals(t *testing.T) {
 // no plan or basis. The same request without a record is a nearby valid control.
 func TestGatewayLimitsRefusalPreservesVerdict(t *testing.T) {
 	req, store, _ := gatewayPolicyFixture(t)
+	req.Model = "gpt-6.1-sol"
 	_ = gatewayPolicyBuild(t, req, store)
 	identity, err := providerlimits.IdentityFor("codex", req.Home)
 	if err != nil {

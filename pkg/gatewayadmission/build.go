@@ -57,7 +57,13 @@ func Build(ctx context.Context, r *vendorplugin.Registry, store *providerlimits.
 	}
 	built.OwnedEnv = agentic.SetEnvValue(slices.Clone(built.OwnedEnv), "CODEX_HOME", req.Home)
 	slices.Sort(built.OwnedEnv)
-	verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{Runtime: string(req.Runtime), Model: string(req.Model), Home: req.Home})
+	// Runtime is a declared identity, independent of the agentic system ID.
+	// Model aliases are admission inputs; limits apply to what will launch.
+	runtime, err := vendorplugin.NormalizeRuntimeID(string(req.Runtime))
+	if err != nil {
+		return agentic.PlanWithEnvironment{}, err
+	}
+	verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{Runtime: string(runtime), Model: built.Plan.ModelIdentity.Launched, Home: req.Home})
 	if err != nil {
 		return agentic.PlanWithEnvironment{}, err
 	}

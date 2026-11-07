@@ -2286,6 +2286,11 @@ the pin replaces Codex's implicit `HOME/.codex` resolution. The selector is owne
 by the capability, so fragment/prompt overlays and final child injection cannot
 change or remove it.
 
+Limits use the declared runtime's existing identifier normalization and the
+resolved `ModelIdentity.Launched`, so equivalent runtime spellings and model
+aliases cannot escape a canonical suppression. The runtime ID remains distinct
+from the agentic system ID.
+
 `AdmitCodexGateway` binds that original plan to copied fragment/prompt environment,
 native arguments and MCP lookup names. `Finalize` accepts the nonsecret runtime
 binding once successfully, preserving original verifiers and executable digests.
