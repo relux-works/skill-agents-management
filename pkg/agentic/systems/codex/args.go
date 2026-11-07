@@ -2,10 +2,26 @@ package codex
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
+
+// Render is the gateway policy's fixed contribution through the canonical
+// Codex argv construction file. Caller-supplied arbitrary TOML is never input.
+func (g gatewayPolicy) Render(b agentic.CodexGatewayBinding, original []string) ([]string, error) {
+	r := g.request
+	r.CodexGateway = &b
+	if args, err := Args(r, g.mode); err != nil {
+		return nil, err
+	} else {
+		if len(args) < 4 || !slices.Equal(args[4:], original) {
+			return nil, agentic.ErrCodexGatewayRefused
+		}
+		return args, nil
+	}
+}
 
 // THIS FILE IS THE ONE PLACE CODEX CLI FLAGS ARE SPELLED.
 //
@@ -74,6 +90,11 @@ const yoloAliasFlag = "--yolo"
 // It is the single construction site. Every surface of this plugin that needs
 // codex flags calls it: System.Argv for all four modes, and nothing else.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) {
+	if b := req.CodexGateway; b != nil {
+		if mode != agentic.LaunchModeInteractive || req.LocalProvider != nil || req.CodexRemoteClient != nil || !req.Network.IsZero() || !validGatewayBinding(*b) || !gatewayNativeSuffix(req.NativeArgs) {
+			return nil, agentic.ErrCodexGatewayRefused
+		}
+	}
 	if err := New().ValidateManagedLaunch(req, mode); err != nil {
 		return nil, err
 	}
@@ -193,7 +214,12 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		if tier := strings.TrimSpace(req.ServiceTier); tier != "" {
 			return nil, fmt.Errorf("codex: an interactive launch carries no service tier; %q would reach no override", tier)
 		}
-		args := appendContextConfigOverrides([]string{}, context)
+		args := []string{}
+		if b := req.CodexGateway; b != nil {
+			encoded := fmt.Sprintf(`{name="Curator filtering gateway",base_url=%q,wire_api="responses",requires_openai_auth=true,supports_websockets=false,env_http_headers={%q=%q}}`, b.BaseURL, b.HeaderName, b.TokenEnv)
+			args = append(args, "-c", "model_providers."+b.ProviderID+"="+encoded, "-c", "model_provider="+fmt.Sprintf("%q", b.ProviderID))
+		}
+		args = appendContextConfigOverrides(args, context)
 		args = append(args, fileServerPairs...)
 		args = append(args, context.curatorMCPArgs...)
 		if len(req.AdditionalWritableRoots) > 0 {

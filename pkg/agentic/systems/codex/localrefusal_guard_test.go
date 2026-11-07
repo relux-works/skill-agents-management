@@ -31,6 +31,7 @@ type localRefusalCoverageRow struct {
 // collapsing whitespace, so reformatting alone never breaks the mapping;
 // occurrence disambiguates identical guards in one function in source order.
 var localRefusalCoverageTable = []localRefusalCoverageRow{
+	{file: "pkg/agentic/systems/codex/args.go", function: "gatewayPolicy.Render", guard: "if err != nil", returned: "return nil, err", occurrence: 0, outOfContract: "Gateway Args rejects a nonnil local provider before localProviderArgs. This forwarding retains generic canonical-Args refusals; no LocalProviderRefusal can reach it from an admitted gateway request. Gateway mode and suffix failures have separate executable tests."},
 	{file: "pkg/agentic/systems/codex/args.go", function: "Args", guard: "if err != nil", returned: "return nil, err", occurrence: 0, testName: "TestBuildPlanRefusesLocalProviderBindingAndTransportFailures"},
 	// G23-R1 report-integrity refusals retain executable public-entry witnesses.
 	{file: "pkg/agentic/systems/codex/catalog_launch.go", function: "catalogExecSeal.VerifyBeforeExec", guard: "if err != nil", returned: "return err", occurrence: 0, testName: "TestCarriedSettingsSealRejectsReportTampering"},
