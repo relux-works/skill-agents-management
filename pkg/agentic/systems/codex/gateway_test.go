@@ -223,9 +223,26 @@ func TestGatewayEnvironmentPredicate(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, env := range [][]string{{"malformed"}, {"=empty"}, {"X=line\nbreak"}, {"X=one", "x=two"}, {GatewayTokenEnv + "="}, {strings.ToLower(GatewayTokenEnv) + "=alias"}, {"OPENAI_BASE_URL=other"}, {"CODEX_REMOTE_URL=other"}, {"DISJOINT=ok"}} {
+	// Every selector/name predicate has the otherwise valid token-bearing control.
+	for name, extra := range map[string][]string{
+		"malformed": {"malformed"}, "empty-name": {"=empty"},
+		"newline": {"X=line\nbreak"}, "fold-duplicate": {"X=one", "x=two"},
+		"openai-route": {"OPENAI_BASE_URL=other"}, "codex-route": {"CODEX_REMOTE_URL=other"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			control := []string{"DISJOINT=ok", GatewayTokenEnv + "=synthetic"}
+			if err := g.CheckEnvironment(control, true); err != nil {
+				t.Fatal(err)
+			}
+			if err := g.CheckEnvironment(append(control, extra...), true); !errors.Is(err, agentic.ErrCodexGatewayRefused) {
+				t.Fatal("predicate-specific invalid environment accepted", err)
+			}
+		})
+	}
+	// Token rows isolate empty, aliased and missing injection from the name checks.
+	for _, env := range [][]string{{GatewayTokenEnv + "="}, {strings.ToLower(GatewayTokenEnv) + "=alias"}, {"DISJOINT=ok"}} {
 		if err := g.CheckEnvironment(env, true); !errors.Is(err, agentic.ErrCodexGatewayRefused) {
-			t.Fatal("invalid environment accepted", err)
+			t.Fatal("invalid token accepted", err)
 		}
 	}
 }

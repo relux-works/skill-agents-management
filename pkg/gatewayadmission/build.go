@@ -1,11 +1,11 @@
 // Package gatewayadmission owns current policy admission for a launch-private
 // gateway attempt. Expressibility and observational preflight alone issue no
-// capability: one vendor build and one actual limits-store verdict are required.
+// capability: one vendor build and serviceable actual limits-store verdicts are required.
 package gatewayadmission
 
 import (
 	"context"
-	"path/filepath"
+	"os"
 	"slices"
 	"strings"
 
@@ -28,17 +28,24 @@ func Build(ctx context.Context, r *vendorplugin.Registry, store *providerlimits.
 	if store == nil || strings.TrimSpace(req.Home) == "" || strings.TrimSpace(req.WorkDir) == "" {
 		return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
 	}
-	// Pin the configuration selector before building or reading limits. Ordinary
-	// Codex ChildEnv does not translate Home into CODEX_HOME on its own.
-	req.Home = filepath.Clean(strings.TrimSpace(req.Home))
-	if !filepath.IsAbs(req.Home) || strings.ContainsAny(req.Home, "\x00\r\n") {
+	// Resolve before either planning or limits reads, retaining the requested
+	// spelling for persisted records written under that spelling.
+	requestedHome := req.Home
+	canonical, homeIdentity, err := resolveHome(req.Home)
+	if err != nil {
+		return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
+	}
+	req.Home = canonical
+	runtime, err := r.ResolveRuntime(req.Runtime)
+	if err != nil || runtime.ID != "codex" || runtime.SystemID != "codex" || runtime.VendorID != "openai" {
 		return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
 	}
 	seenHome := false
 	for _, entry := range req.Env {
 		name, value, _ := strings.Cut(entry, "=")
 		if strings.EqualFold(name, "CODEX_HOME") {
-			if seenHome || name != "CODEX_HOME" || value != req.Home {
+			selector, identity, resolveErr := resolveHome(value)
+			if seenHome || name != "CODEX_HOME" || resolveErr != nil || selector != req.Home || !os.SameFile(homeIdentity, identity) {
 				return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
 			}
 			seenHome = true
@@ -57,22 +64,25 @@ func Build(ctx context.Context, r *vendorplugin.Registry, store *providerlimits.
 	}
 	built.OwnedEnv = agentic.SetEnvValue(slices.Clone(built.OwnedEnv), "CODEX_HOME", req.Home)
 	slices.Sort(built.OwnedEnv)
-	// Runtime is a declared identity, independent of the agentic system ID.
-	// Model aliases are admission inputs; limits apply to what will launch.
-	runtime, err := vendorplugin.NormalizeRuntimeID(string(req.Runtime))
-	if err != nil {
-		return agentic.PlanWithEnvironment{}, err
-	}
-	verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{Runtime: string(runtime), Model: built.Plan.ModelIdentity.Launched, Home: req.Home})
-	if err != nil {
-		return agentic.PlanWithEnvironment{}, err
-	}
-	if !verdict.Serviceable() {
-		return agentic.PlanWithEnvironment{}, &LimitsRefusalError{Verdict: verdict}
+	// Read the Cartesian product: either spelling may hold real writer state.
+	for _, home := range []string{req.Home, requestedHome} {
+		for _, model := range []string{built.Plan.ModelIdentity.Launched, built.Plan.ModelIdentity.Requested} {
+			verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{Runtime: string(runtime.ID), Model: model, Home: home})
+			if err != nil {
+				return agentic.PlanWithEnvironment{}, err
+			}
+			if !verdict.Serviceable() {
+				return agentic.PlanWithEnvironment{}, &LimitsRefusalError{Verdict: verdict}
+			}
+		}
 	}
 	candidate, err := agentic.SnapshotGatewayCandidate(built)
 	if err != nil {
 		return agentic.PlanWithEnvironment{}, err
+	}
+	// Bind the captured candidate to the directory resolved before the read.
+	if current, err := os.Stat(req.Home); err != nil || !os.SameFile(homeIdentity, current) {
+		return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
 	}
 	basis, err := gatewaybasis.Issue(candidate)
 	if err != nil {

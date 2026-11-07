@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -51,9 +52,10 @@ type CodexGatewayPlanner interface {
 // Only the internal issuer can place it in a valid basis after current policy
 // admits the launch. Constructing a candidate cannot mint a basis or receipt.
 type GatewayCandidateV1 struct {
-	built    PlanWithEnvironment
-	original RuntimeGatewayBindingV1
-	identity gatewayPlanIdentity
+	built        PlanWithEnvironment
+	original     RuntimeGatewayBindingV1
+	identity     gatewayPlanIdentity
+	homeIdentity os.FileInfo
 }
 
 func SnapshotGatewayCandidate(built PlanWithEnvironment) (GatewayCandidateV1, error) {
@@ -66,6 +68,10 @@ func SnapshotGatewayCandidate(built PlanWithEnvironment) (GatewayCandidateV1, er
 	}
 	if err := p.VerifyBeforeExec(); err != nil {
 		return GatewayCandidateV1{}, err
+	}
+	homeIdentity, err := planningio.Default.Stat(p.Home)
+	if err != nil || !homeIdentity.IsDir() {
+		return GatewayCandidateV1{}, ErrCodexGatewayRefused
 	}
 	var digest string
 	if value, err := gatewayExecutableDigest(p.Binary); err != nil {
@@ -83,7 +89,7 @@ func SnapshotGatewayCandidate(built PlanWithEnvironment) (GatewayCandidateV1, er
 	built.Plan = p
 	built.OwnedEnv = slices.Clone(built.OwnedEnv)
 	built.GatewayBasis = nil
-	return GatewayCandidateV1{built: built, original: RuntimeGatewayBindingV1{ExecutablePath: p.Binary, ExecutableSHA256: digest}, identity: gatewayIdentityOf(p)}, nil
+	return GatewayCandidateV1{built: built, original: RuntimeGatewayBindingV1{ExecutablePath: p.Binary, ExecutableSHA256: digest}, identity: gatewayIdentityOf(p), homeIdentity: homeIdentity}, nil
 }
 
 func (c GatewayCandidateV1) verify(built PlanWithEnvironment) error {
@@ -96,6 +102,9 @@ func (c GatewayCandidateV1) verify(built PlanWithEnvironment) error {
 	}
 	if err := c.built.Plan.VerifyBeforeExec(); err != nil {
 		return err
+	}
+	if current, err := planningio.Default.Stat(c.built.Plan.Home); err != nil || !os.SameFile(c.homeIdentity, current) {
+		return ErrCodexGatewayRefused
 	}
 	return verifyGatewayExecutable(c.original)
 }
@@ -211,6 +220,9 @@ func (a *CodexGatewayAdmission) Finalize(b RuntimeGatewayBindingV1) (PlanWithEnv
 		} else {
 			env = composed
 		}
+		if err := c.built.Plan.codexGatewayPolicy.CheckEnvironment(env, false); err != nil {
+			return err
+		}
 		p := c.built.Plan
 		p.Argv, p.Env = slices.Clone(argv), env
 		if err := rederiveFinalSession(&p, true); err != nil {
@@ -249,7 +261,8 @@ func (v *codexGatewayVerifier) VerifyBeforeExec(p Plan) error {
 }
 
 // VerifyCodexGatewayProcess verifies actual execution inputs after injection.
-// The consumer additionally checks token value and its complete composed env.
+// The actual environment must equal the final plan plus exactly the private
+// token; only its value remains the consumer's responsibility. Order may differ.
 func (p Plan) VerifyCodexGatewayProcess(binary string, argv, env []string) error {
 	v := p.codexGatewayVerifier
 	if v == nil || binary != v.binding.ExecutablePath || !slices.Equal(argv, v.expected.argv) {
@@ -264,22 +277,20 @@ func (p Plan) VerifyCodexGatewayProcess(binary string, argv, env []string) error
 	if err := v.candidate.built.Plan.codexGatewayPolicy.CheckEnvironment(env, true); err != nil {
 		return err
 	}
-	for _, owned := range v.candidate.built.OwnedEnv {
-		name, want, _ := strings.Cut(owned, "=")
-		count := 0
-		for _, entry := range env {
-			n, got, _ := strings.Cut(entry, "=")
-			if n == name {
-				if got != want {
-					return ErrCodexGatewayRefused
-				}
-				count++
-			}
-		}
-		if count != 1 {
-			return ErrCodexGatewayRefused
+	actual := make([]string, 0, len(env))
+	for _, entry := range env {
+		name, _, _ := strings.Cut(entry, "=")
+		if name != v.binding.TokenEnv {
+			actual = append(actual, entry)
 		}
 	}
+	expected := slices.Clone(p.Env)
+	slices.Sort(actual)
+	slices.Sort(expected)
+	if !slices.Equal(actual, expected) {
+		return ErrCodexGatewayRefused
+	}
+
 	return nil
 }
 

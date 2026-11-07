@@ -2273,38 +2273,77 @@ in that document's validation tools section.
 
 ### Interactive Codex gateway admission
 
-`gatewayadmission.Build` builds one interactive vendor request and reads one
-current provider-limits verdict. Only a serviceable verdict issues the opaque
-`GatewayAdmissionBasisV1`; a generic plan or `SnapshotGatewayCandidate` is data,
-not authority. `LimitsRefusalError` preserves a nonserviceable verdict for the
-caller's existing diagnostics.
+`gatewayadmission.Build` builds one interactive vendor request and reads the
+provider-limits verdicts for the canonical and requested home spellings, each
+with the launched and requested model. Only serviceable verdicts issue the
+opaque `GatewayAdmissionBasisV1`; a generic plan or `SnapshotGatewayCandidate`
+is data, not authority. `LimitsRefusalError` preserves the refusing verdict.
 
-The gateway request requires an absolute configuration `Home`. Before building
-the plan or reading limits, admission pins it as `CODEX_HOME`; a conflicting,
-empty, aliased or duplicate initial selector refuses. When the selector is absent,
-the pin replaces Codex's implicit `HOME/.codex` resolution. The selector is owned
-by the capability, so fragment/prompt overlays and final child injection cannot
-change or remove it.
+The gateway requires an existing absolute configuration `Home`. Before planning
+or reading limits, Build resolves every symlink and every component's on-disk
+spelling, pins the canonical path as `CODEX_HOME`, and puts it in `Plan.Home`.
+An initial `CODEX_HOME` value may use any spelling resolving to that directory,
+including a trailing slash or symlink; a different, empty, aliased-name or
+duplicate selector refuses. The canonical selector is owned, and overlays
+cannot redirect it. The capability records directory identity; replacing the
+canonical directory causes finalization and both final verifiers to refuse.
+Retargeting the original selector symlink leaves the pinned target unchanged.
 
-Limits use the declared runtime's existing identifier normalization and the
-resolved `ModelIdentity.Launched`, so equivalent runtime spellings and model
-aliases cannot escape a canonical suppression. The runtime ID remains distinct
-from the agentic system ID.
+The normalized runtime must be the shipped `codex` runtime, using the `codex`
+system and `openai` vendor. Consumer-declared alternate runtimes and routed
+vendor models refuse. Model aliases cannot escape suppression recorded under
+either the requested or launched spelling; existing store keys are unchanged.
 
-`AdmitCodexGateway` binds that original plan to copied fragment/prompt environment,
-native arguments and MCP lookup names. `Finalize` accepts the nonsecret runtime
-binding once successfully, preserving original verifiers and executable digests.
-The Codex `Args` constructor renders the provider table and selection. The child
-launcher alone supplies the private token value and verifies the actual final
-binary, argv and environment immediately before execution.
-Both final-plan verifiers also enforce the admitted shape: no attached stdin,
-no stdin bytes and no additional process nodes, including valid multi-node plans.
+`AdmitCodexGateway` binds the original plan to copied fragment/prompt environment,
+native arguments and MCP lookup names. Environment names use case-folded
+duplicate detection. Exact-name overlay replacement keeps its normal precedence;
+case aliases in the fully composed environment refuse inside `Finalize` before
+capability consumption, so a valid retry remains possible. `Finalize` accepts
+the nonsecret runtime binding once successfully, preserving original verifiers
+and executable digests. The Codex `Args` constructor renders the provider table
+and selection.
 
-The supported tuple is Codex 0.164.0 interactive fresh or exact thread resume,
-with an optional single `--no-alt-screen`. The binding uses a loopback HTTP
-`/chatgpt/backend-api/codex` Responses endpoint, OpenAI authentication enabled,
-WebSockets disabled, and an environment-backed registration header. Native
-provider overrides and reserved environment/MCP aliases refuse. This API does
-not qualify an adapter, authenticate an account, or establish OS containment.
-Run its policy and projection tests with
+Immediately before execution, call both `VerifyBeforeExec` and
+`VerifyCodexGatewayProcess` with the actual child binary, argv and environment.
+The process verifier requires the final plan's complete environment plus exactly
+one private token entry: no additions, removals, renames or changed values;
+entry order may differ. Both final verifiers reject attached stdin, stdin bytes
+and additional process nodes, including otherwise valid multi-node plans.
+
+The supported tuple remains Codex 0.164.0 interactive fresh or exact thread
+resume, with an optional single `--no-alt-screen`. The binding uses a canonical
+loopback HTTP `/chatgpt/backend-api/codex` Responses URL, OpenAI authentication
+enabled, WebSockets disabled, and an environment-backed registration header.
+The whole URL must equal its canonical re-rendering, including no empty query
+or fragment marker. Native provider overrides and reserved environment/MCP
+aliases refuse. This API does not qualify an adapter, authenticate an account,
+or establish OS containment.
+
+#### Consumer duties
+
+- Build uses the shipped group table, not `spawn.limits.groups`. Consumers with
+  custom groups must not rely on this boundary for their effective group policy.
+- Verdicts are read only at Build; finalize promptly. There is no expiry or
+  subsequent limits refresh.
+- The release is a caller-established claim. Establish the actual binary's
+  release before supplying `ToolRelease`; this boundary does not probe it.
+- The registry and limits store are caller-supplied inputs in the same trust
+  domain. The caller must supply its authoritative registry and store.
+- Both `http_proxy` and `HTTP_PROXY` together, and multi-line environment
+  variables, intentionally remain refused; prepare a compatible environment
+  before Build rather than changing the admitted environment afterwards.
+- Supply and check the private token value only in the launcher; the library
+  checks its exact name, unique presence and nonempty value, not its authenticity.
+  Keep the home and staged executable stable through immediate execution;
+  pathname checks are not atomic with exec.
+
+Run the gateway policy/projection tests with
 `go test ./pkg/agentic ./pkg/agentic/systems/codex -run TestGateway -count=1`.
+The fixtures never launch a native agent. For the scoped package checks, use
+`go vet ./internal/gatewaybasis ./pkg/gatewayadmission ./pkg/providerlimits ./pkg/agentic ./pkg/agentic/systems/codex ./pkg/vendorplugin`
+and `go test -count=1 -race` on the same package list; where native execution is
+prohibited, exclude the three installed-native catalog tests using
+`-skip '^(TestLocalCatalogFixtureLoadsInNativeCodex|TestLocalCatalogNativeParityForDuplicateAndAlias|TestLocalCatalogNativeStringLexingCrossCheck)$'`
+and set `CODEX_TEST_BINARY` to an absent fixture path for optional loader tests.
+Store command logs, reviewer overlays and bounded mutation evidence under
+`.temp/pr114-round2/`.

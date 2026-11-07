@@ -58,7 +58,7 @@ func gatewayFinalizeControl(t *testing.T, p agentic.PlanWithEnvironment, in agen
 
 // Initial selectors must agree with the explicit home; an absent selector is pinned before limits and remains independent of HOME defaults.
 func TestGatewayConfigurationHomeBinding(t *testing.T) {
-	for _, kind := range []string{"absent", "matching", "conflicting", "empty", "alias", "duplicate"} {
+	for _, kind := range []string{"absent", "matching", "conflicting", "empty", "alias", "alias-matching", "duplicate"} {
 		t.Run(kind, func(t *testing.T) {
 			req, store, _ := gatewayPolicyFixture(t)
 			req.Model = "gpt-6.1-sol"
@@ -79,6 +79,8 @@ func TestGatewayConfigurationHomeBinding(t *testing.T) {
 				req.Env = append(req.Env, "CODEX_HOME="+other)
 			case "empty":
 				req.Env = append(req.Env, "CODEX_HOME=")
+			case "alias-matching":
+				req.Env = append(req.Env, "codex_home="+req.Home)
 			case "alias":
 				req.Env = append(req.Env, "codex_home="+other)
 			}
@@ -173,48 +175,6 @@ func TestGatewayResolvedLimitsIdentity(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// A fixture declaration running Codex under a different classified runtime reads that runtime's limits, independently of the system's same-home suppression.
-func TestGatewayLimitsRuntimeDistinctFromSystem(t *testing.T) {
-	req, store, _ := gatewayPolicyFixture(t)
-	registry := vendorplugin.NewRegistry(agentic.Default)
-	vendor, ok := vendorplugin.Default.Lookup("openai")
-	if !ok {
-		t.Fatal("missing fixture vendor")
-	}
-	if err := registry.Register(vendor); err != nil {
-		t.Fatal(err)
-	}
-	// This isolated declaration exercises identity separation; it does not run
-	// either CLI or change the default registry's real runtime declarations.
-	if err := registry.DeclareRuntime(vendorplugin.RuntimeDeclaration{ID: "claude", System: "codex", Vendor: "openai", Broker: vendorplugin.BrokerProvenance{Checked: []string{"test fixture"}, Found: "test fixture"}}); err != nil {
-		t.Fatal(err)
-	}
-	req.Runtime, req.Model = "CLAUDE", "gpt-6.1-sol"
-	gatewaySuppressCanonical(t, store, req.Home)
-	p, err := gatewayadmission.Build(context.Background(), registry, store, req)
-	if err != nil {
-		t.Fatalf("system suppression was mistaken for runtime suppression: %v", err)
-	}
-	if p.Plan.System != "codex" {
-		t.Fatal("fixture did not separate runtime from system")
-	}
-	gatewayFinalizeControl(t, p, agentic.CodexGatewayInputs{})
-	identity, err := providerlimits.IdentityFor("claude", req.Home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	obs, ok := providerlimits.ClassifyManaged(providerlimits.ProviderClaude, providerlimits.ManagedSignalUsageLimited).QuotaObservation(providerlimits.Evidence{Model: string(req.Model)})
-	if !ok {
-		t.Fatal("missing fixture runtime quota observation")
-	}
-	if err := store.Observe(identity, providerlimits.MustGroupTable().Group("claude", string(req.Model)), nil, obs); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := gatewayadmission.Build(context.Background(), registry, store, req); !errors.Is(err, agentic.ErrCodexGatewayRefused) || out.GatewayBasis != nil || out.Plan.Binary != "" {
-		t.Fatalf("declared runtime suppression was ignored: %v", err)
 	}
 }
 

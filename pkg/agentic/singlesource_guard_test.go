@@ -292,6 +292,7 @@ var vendorBindingHomes = map[string]string{
 // leftover exemption is a hole waiting for the next function to be given that
 // name.
 var singleSourceAllowlist = map[string]string{
+	singleSourceAllowlistKey("pkg/gatewayadmission/build.go", "func Build"): "The fixed qualified gateway tuple is an admission restriction on an already registry-resolved runtime, not a second dispatch or declaration table. Codex/OpenAI is the sole gateway contract; adding a plugin must not widen it. TestGatewayShippedRuntimeAndVendor exercises both the qualified tuple and declared/routed refusals.",
 	singleSourceAllowlistKey("pkg/providerlimits/groups.go", "func HasClassifier"): "" +
 		"which BROKERS this build ships a rate-limit classifier for. It binds nothing — no runtime, no system, no vendor — and it is not the set of plugins: adding a vendor plugin must NOT add a classifier, because a classifier exists only where a real error shape was captured. Deriving it from the registry is the specific mistake it is written to refuse (see groups.go's own comment and the extraction source's design D4).",
 	singleSourceAllowlistKey("pkg/providerlimits/ladder.go", "var legacyLadderRuntimes"): "" +

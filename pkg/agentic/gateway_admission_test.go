@@ -386,7 +386,7 @@ func TestGatewayFinalProcessRefusals(t *testing.T) {
 			case "argv":
 				final.Plan.Argv = append(slices.Clone(final.Plan.Argv), "changed")
 			case "env":
-				final.Plan.Env = append(slices.Clone(final.Plan.Env), "OTHER=changed")
+				env = append(env, "OTHER=changed")
 			case "owned-value", "owned-missing":
 				if len(final.OwnedEnv) == 0 {
 					t.Fatal("fixture must own environment")

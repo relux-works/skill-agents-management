@@ -123,6 +123,10 @@ func validGatewayBinding(b agentic.CodexGatewayBinding) bool {
 	if ip == nil || !ip.IsLoopback() || err != nil || port < 1 || port > 65535 || u.RawPath != "" || u.Path != "/chatgpt/backend-api/codex" {
 		return false
 	}
+	canonical := (&url.URL{Scheme: "http", Host: u.Host, Path: "/chatgpt/backend-api/codex"}).String()
+	if b.BaseURL != canonical {
+		return false
+	}
 	if len(b.HeaderName) < 1 || len(b.HeaderName) > 64 {
 		return false
 	}
