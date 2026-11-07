@@ -2355,8 +2355,10 @@ or establish OS containment.
   another reserved name, because the child also receives that token in its own
   environment.
 - `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` (case-insensitive) refuse in base,
-  fragment, prompt and composed environments, even with `NO_PROXY`. Multi-line
-  variables also refuse; prepare a compatible environment before Build.
+  fragment, prompt and composed environments, even with `NO_PROXY`. The base layer
+  includes inherited environment, so a launch from a shell with `HTTP_PROXY` set
+  refuses rather than passing it through. Multi-line variables also refuse; prepare
+  a compatible environment before Build.
 - Supply and check the private token value only in the launcher; the library
   checks its exact name, unique presence and nonempty value, not its authenticity.
   Keep the home and staged executable stable through immediate execution;
