@@ -66,7 +66,33 @@ func gatewayNativeSuffix(args []string) bool {
 
 // CheckEnvironment rejects selector aliases and token overlays before they can
 // be collapsed by a map. Only the child-only stage may add the exact token name.
-func (gatewayPolicy) CheckEnvironment(env []string, injected bool) error {
+func (g gatewayPolicy) CheckEnvironment(env []string, injected bool) error {
+	if err := checkGatewayEnvironment(env, injected); err != nil {
+		return err
+	}
+	// Plan-owned MCP lookups have the same authority as explicit LookupNames.
+	var names []string
+	for _, descriptor := range g.request.ContextDescriptors {
+		if descriptor.MCP != nil {
+			for _, server := range descriptor.MCP.Servers {
+				if server.BearerTokenEnvVar != "" {
+					names = append(names, server.BearerTokenEnvVar)
+				}
+			}
+		}
+	}
+	if g.request.Context != nil && g.request.Context.MCP != nil {
+		names = append(names, g.request.Context.MCP.EnvNames...)
+	}
+	for _, name := range names {
+		if err := checkGatewayEnvironment([]string{name + "="}, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkGatewayEnvironment(env []string, injected bool) error {
 	count := 0
 	seen := map[string]bool{}
 	for _, entry := range env {

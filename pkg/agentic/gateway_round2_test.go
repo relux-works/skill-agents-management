@@ -62,7 +62,7 @@ func TestGatewayCanonicalHomeSpellings(t *testing.T) {
 				t.Fatalf("fixture alias: %v", err)
 			}
 			req.Home = spelling
-			// Both directions exercise initial selector identity independently of Home spelling.
+			// Both selectors resolve to the requested alternate Home spelling.
 			for _, selector := range []string{real, spelling} {
 				req.Env = agentic.SetEnvValue(req.Env, "CODEX_HOME", selector)
 				p := gatewayPolicyBuild(t, req, store)

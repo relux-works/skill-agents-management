@@ -262,6 +262,9 @@ func (v *codexGatewayVerifier) VerifyBeforeExec(p Plan) error {
 	if err := v.expected.verify(p); err != nil {
 		return err
 	}
+	if err := v.candidate.built.Plan.codexGatewayPolicy.CheckEnvironment(p.Env, false); err != nil {
+		return err
+	}
 	return v.candidate.verify(v.candidate.built)
 }
 

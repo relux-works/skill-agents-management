@@ -40,6 +40,7 @@ func Build(ctx context.Context, r *vendorplugin.Registry, store *providerlimits.
 	if err != nil || runtime.ID != "codex" || runtime.SystemID != "codex" || runtime.VendorID != "openai" {
 		return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
 	}
+	homes := []string{req.Home, requestedHome}
 	seenHome := false
 	for _, entry := range req.Env {
 		name, value, _ := strings.Cut(entry, "=")
@@ -49,6 +50,7 @@ func Build(ctx context.Context, r *vendorplugin.Registry, store *providerlimits.
 				return agentic.PlanWithEnvironment{}, agentic.ErrCodexGatewayRefused
 			}
 			seenHome = true
+			homes = append(homes, value)
 		}
 	}
 	req.Env = agentic.SetEnvValue(slices.Clone(req.Env), "CODEX_HOME", req.Home)
@@ -64,9 +66,16 @@ func Build(ctx context.Context, r *vendorplugin.Registry, store *providerlimits.
 	}
 	built.OwnedEnv = agentic.SetEnvValue(slices.Clone(built.OwnedEnv), "CODEX_HOME", req.Home)
 	slices.Sort(built.OwnedEnv)
-	// Read the Cartesian product: either spelling may hold real writer state.
-	for _, home := range []string{req.Home, requestedHome} {
-		for _, model := range []string{built.Plan.ModelIdentity.Launched, built.Plan.ModelIdentity.Requested} {
+	// Known aliases are declared by the vendor, never inferred from spelling.
+	models := []string{built.Plan.ModelIdentity.Launched, built.Plan.ModelIdentity.Requested}
+	for _, row := range runtime.Vendor.Models() {
+		if string(row.AliasOf) == built.Plan.ModelIdentity.Launched && !slices.Contains(models, string(row.ID)) {
+			models = append(models, string(row.ID))
+		}
+	}
+	// Read the Cartesian product: every accepted spelling may hold writer state.
+	for _, home := range homes {
+		for _, model := range models {
 			verdict, err := store.AvailabilityFor(providerlimits.VerdictQuery{Runtime: string(runtime.ID), Model: model, Home: home})
 			if err != nil {
 				return agentic.PlanWithEnvironment{}, err

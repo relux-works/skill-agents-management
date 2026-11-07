@@ -2329,6 +2329,16 @@ or establish OS containment.
 
 #### Consumer duties
 
+- Suppressions are keyed by the spelling the writer recorded. Build reads the
+  canonical home, the requested home and the accepted initial CODEX_HOME selector.
+  Another spelling of the same directory, recorded by a writer that did not
+  canonicalize, is not found. Writers should record the canonical home.
+- A suppressed group readmits only after `ObserveSuccess` from a launch outside
+  this boundary: gateway Build refuses while it is suppressed. Recover with a
+  non-gateway launch on that home, or a successful probe by the owner, and record
+  that success. Waiting out the window, holding a probe lease or `ClearGroup`
+  alone does not readmit the group.
+
 - Build uses the shipped group table, not `spawn.limits.groups`. Consumers with
   custom groups must not rely on this boundary for their effective group policy.
 - Verdicts are read only at Build; finalize promptly. There is no expiry or
