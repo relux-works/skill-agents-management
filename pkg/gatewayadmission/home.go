@@ -32,21 +32,9 @@ func resolveHome(home string) (string, os.FileInfo, error) {
 		if err != nil {
 			return "", nil, agentic.ErrCodexGatewayRefused
 		}
-		found := false
-		for _, entry := range entries {
-			// EvalSymlinks already resolved links; do not select a different alias.
-			if entry.Type()&os.ModeSymlink != 0 {
-				continue
-			}
-			info, err := entry.Info()
-			if err != nil {
-				return "", nil, agentic.ErrCodexGatewayRefused
-			}
-			if os.SameFile(target, info) {
-				canonical = filepath.Join(canonical, entry.Name())
-				found = true
-				break
-			}
+		name, found := homeComponent(entries, target)
+		if found {
+			canonical = filepath.Join(canonical, name)
 		}
 		if !found {
 			return "", nil, agentic.ErrCodexGatewayRefused
@@ -57,4 +45,24 @@ func resolveHome(home string) (string, os.FileInfo, error) {
 		return "", nil, agentic.ErrCodexGatewayRefused
 	}
 	return canonical, info, nil
+}
+
+// Match by identity, never by guessed case or Unicode normalization.
+func homeComponent(entries []os.DirEntry, target os.FileInfo) (string, bool) {
+	for _, entry := range entries {
+		// EvalSymlinks already resolved links; do not select a different alias.
+		if entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			// An unrelated sibling can disappear after ReadDir; only a
+			// successfully identified target can supply the component.
+			continue
+		}
+		if os.SameFile(target, info) {
+			return entry.Name(), true
+		}
+	}
+	return "", false
 }
