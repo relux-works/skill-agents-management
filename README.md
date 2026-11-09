@@ -204,6 +204,7 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   | `claude-code` | 2.1.312 | `permission-grammar-v3` | `--dangerously-skip-permissions` |
   | `codex` | 0.153.2 | `permission-grammar-v2` | `--dangerously-bypass-approvals-and-sandbox` |
   | `codex` | 0.164.0 | `permission-grammar-v3` | `--dangerously-bypass-approvals-and-sandbox` |
+  | `codex` | 0.167.0 | `permission-grammar-v3` | `--dangerously-bypass-approvals-and-sandbox` |
   | `muse` | attested build, any release | `permission-grammar-v1` | `--yolo` (help evidence) |
   | `pi` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
   | `pi-native` | 0.84.2 | `permission-grammar-v1` | unsupported (`ErrPermissionModeUnsupported`) |
@@ -212,6 +213,11 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   [Curator's qualification record](https://github.com/relux-works/curator/blob/main/docs/qualification/codex-0.164.0.md)
   ([record PR](https://github.com/relux-works/curator/pull/200)), including
   sanitized help extracts, startup-validation commands and schema observations.
+  The independent [Codex 0.167.0 record](https://github.com/relux-works/curator/blob/618a9e6410d013f1ac3c64198035fca8ce9b5759/docs/qualification/codex-0.167.0.md)
+  repeats that method on the exact macOS arm64 npm binary; no difference was
+  observed in the qualified permission subset. The record is proposed in
+  [Curator draft PR 239](https://github.com/relux-works/curator/pull/239).
+  No model or gateway transport was qualified.
   V3 retains the closed V2 subset and refuses `--yolo`, `--not-so-yolo` and
   attached `-a…` / `-s…` forms under yolo because their interaction with the
   bypass was not qualified. It leaves caller arguments untouched. New or removed
@@ -325,9 +331,9 @@ interactive result.
 | `claude_code` | `claude-code` | `2.1.312` | print | short flag `-p` |
 | `claude_code` | `claude-code` | `2.1.312` | print | equals value `--print=true` |
 | `claude_code` | `claude-code` | `2.1.312` | print | flag followed by a separate prompt |
-| `codex_cli` | `codex` | `0.153.2`, `0.164.0` | exec (`exec` or `e`) | first command token |
-| `codex_cli` | `codex` | `0.153.2`, `0.164.0` | exec (`exec` or `e`) | after an equals-form root option |
-| `codex_cli` | `codex` | `0.153.2`, `0.164.0` | exec (`exec` or `e`) | after a separate-value root option |
+| `codex_cli` | `codex` | `0.153.2`, `0.164.0`, `0.167.0` | exec (`exec` or `e`) | first command token |
+| `codex_cli` | `codex` | `0.153.2`, `0.164.0`, `0.167.0` | exec (`exec` or `e`) | after an equals-form root option |
+| `codex_cli` | `codex` | `0.153.2`, `0.164.0`, `0.167.0` | exec (`exec` or `e`) | after a separate-value root option |
 | `pi` | `pi-native` | `0.84.2` | print | short flag `-p` |
 | `pi` | `pi-native` | `0.84.2` | print | equals value `--print=true` |
 | `pi` | `pi-native` | `0.84.2` | print | flag followed by a separate prompt |
@@ -362,6 +368,8 @@ fails closed even for this reporting API.
 | `codex` | `0.153.2` | `yolo` | plugin-owned mapping | `permission-grammar-v2` |
 | `codex` | `0.164.0` | `native` | no module-owned flag | `permission-grammar-v3` |
 | `codex` | `0.164.0` | `yolo` | plugin-owned mapping | `permission-grammar-v3` |
+| `codex` | `0.167.0` | `native` | no module-owned flag | `permission-grammar-v3` |
+| `codex` | `0.167.0` | `yolo` | plugin-owned mapping | `permission-grammar-v3` |
 | `pi-native` | `0.84.2` | `native` | no module-owned flag | `permission-grammar-v1` |
 | `pi-native` | `0.84.2` | `yolo` | `ErrPermissionModeUnsupported` | — |
 

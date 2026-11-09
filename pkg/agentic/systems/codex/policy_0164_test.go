@@ -201,6 +201,11 @@ func TestCodex0164NeighboursRemainUnverified(t *testing.T) {
 // Inspection of native 0.164.0 plans reports explicit relaxations, keeps
 // restrictive controls, and never treats malformed data as inspected. This does not claim native precedence or managed-policy coverage.
 func TestCodex0164StoredPolicyInspection(t *testing.T) {
+	checkCodexStoredPolicyInspection(t, "0.164.0")
+}
+
+func checkCodexStoredPolicyInspection(t *testing.T, release string) {
+	t.Helper()
 	for _, c := range []struct {
 		name, config, selector string
 		malformed              bool
@@ -213,7 +218,7 @@ func TestCodex0164StoredPolicyInspection(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			req := interactiveRequest(tempSlot(t))
-			req.ToolRelease = "0.164.0"
+			req.ToolRelease = release
 			if err := os.MkdirAll(req.Home, 0o700); err != nil {
 				t.Fatal(err)
 			}

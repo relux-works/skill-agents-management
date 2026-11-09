@@ -21,11 +21,14 @@ import (
 // 0.163.0 and 0.165.0 evidence is recorded in
 // testdata/permission-qualification.md. Unlisted releases still fail closed
 // for mapping and classification.
+// Exact 0.167.0 independently repeats the 0.164.0 method on macOS arm64; see
+// curator/docs/qualification/codex-0.167.0.md. Its qualified subset matches V3.
 var verifiedReleases = []agentic.ReleaseCapability{
 	{Release: "0.153.2", Grammar: agentic.PermissionGrammarV2, YoloSupported: true},
 	{Release: "0.163.0", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 	{Release: "0.164.0", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 	{Release: "0.165.0", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
+	{Release: "0.167.0", Grammar: agentic.PermissionGrammarV3, YoloSupported: true},
 }
 
 // configFlag and configFlagLong are the two spellings of the config
@@ -144,7 +147,7 @@ func classifyCodexNonInteractiveForm(suffix []string, toolRelease string) (agent
 		}
 		name, _, hasValue := nativeargs.SplitFlagValue(el)
 		// Only the historical 0.153.2 row qualified this old scalar option.
-		// Exact 0.163.0, 0.164.0 and 0.165.0 reject it; never infer a command behind it.
+		// All qualified V3 releases reject it; never infer a command behind it.
 		if codexRootOptionTakesValue(name) && (toolRelease == "0.153.2" || name != "--remote-auth-token") {
 			if !hasValue {
 				if i+1 >= len(suffix) || nativeargs.IsSeparator(suffix[i+1]) {
