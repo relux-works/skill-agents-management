@@ -156,10 +156,10 @@ func TestBuildPlanCuratorContextRefusesInvalidFragmentV4(t *testing.T) {
 		{"v3-credential-store", func(c *agentic.CuratorContext) { c.Revision, c.RootContext = agentic.CuratorLaunchFragmentV3, nil }, agentic.ErrCuratorContextMalformed, "credential_store requires launch-env-fragment-v4"},
 		{"v3-root-context", func(c *agentic.CuratorContext) { c.Revision, c.CredentialStore = agentic.CuratorLaunchFragmentV3, nil }, agentic.ErrCuratorContextMalformed, "root_context requires launch-env-fragment-v4"},
 		{"root-not-exclusive", func(c *agentic.CuratorContext) { c.RootContext = &agentic.CuratorRootContext{} }, agentic.ErrCuratorContextMalformed, `root_context must be exactly {"exclusive":true}`},
-		{"store-absent", func(c *agentic.CuratorContext) { c.CredentialStore = nil }, agentic.ErrCuratorContextMalformed, `v4 muse fragments require credential_store exactly {"selection":"file"}`},
+		{"store-absent", func(c *agentic.CuratorContext) { c.CredentialStore = nil }, agentic.ErrCuratorContextMalformed, `v4 muse fragments require credential_store exactly {"selection":"file"} or {"selection":"native"}`},
 		{"store-overrides", func(c *agentic.CuratorContext) {
 			c.CredentialStore = &agentic.CuratorCredentialStore{Selection: agentic.CuratorCredentialStoreFile, ConfigOverrides: map[string]string{}}
-		}, agentic.ErrCuratorContextMalformed, `v4 muse fragments require credential_store exactly {"selection":"file"}`},
+		}, agentic.ErrCuratorContextMalformed, `v4 muse fragments require credential_store exactly {"selection":"file"} or {"selection":"native"}`},
 		{"backend-absent", func(c *agentic.CuratorContext) { delete(c.Env, agentic.CuratorMuseCredentialBackendVariable) }, agentic.ErrCuratorContextMalformed, "v4 muse fragments require TBH_CREDENTIAL_BACKEND=file"},
 		{"backend-keychain", func(c *agentic.CuratorContext) { c.Env[agentic.CuratorMuseCredentialBackendVariable] = "keychain" }, agentic.ErrCuratorContextMalformed, "v4 muse fragments require TBH_CREDENTIAL_BACKEND=file"},
 		{"backend-plus-HOME", func(c *agentic.CuratorContext) { c.Env["HOME"] = "/managed/home" }, agentic.ErrCuratorContextMalformed, "muse fragments must not carry HOME"},

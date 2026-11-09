@@ -212,7 +212,8 @@ func (r *CuratorRootContext) UnmarshalJSON(wire []byte) error {
 type CuratorCredentialSelection string
 
 // CuratorCredentialStore is the v4 typed credential-store policy. Muse
-// requires exactly {"selection":"file"}; codex_cli admits native with no
+// requires exactly {"selection":"file"} or {"selection":"native"}, coupled
+// to its env backend's presence or absence; codex_cli admits native with no
 // overrides, or file/keychain with exactly the matching
 // cli_auth_credentials_store override; every other adapter admits only
 // native. As with CuratorRootContext, an explicit JSON null member is the
@@ -421,9 +422,10 @@ func CuratorMuseHomesFromEnv(env map[string]string) (CuratorMuseHomes, error) {
 }
 
 // CuratorMuseHomesFromV4Env validates a v4 muse fragment env: exactly the
-// four XDG variables of CuratorMuseHomesFromEnv plus the registry constant
-// TBH_CREDENTIAL_BACKEND=file, and nothing else. The XDG shape keeps its one
-// implementation and its diagnostics: everything but the constant is handed
+// four XDG variables of CuratorMuseHomesFromEnv, optionally plus the registry
+// constant TBH_CREDENTIAL_BACKEND=file, and nothing else. Credential-store
+// coupling is checked by validateCuratorCredentialStore. The XDG shape keeps
+// its one implementation and its diagnostics: everything but the constant is handed
 // to CuratorMuseHomesFromEnv, and the constant, which is not a path, is
 // checked last.
 func CuratorMuseHomesFromV4Env(env map[string]string) (CuratorMuseHomes, error) {
@@ -439,7 +441,7 @@ func CuratorMuseHomesFromV4Env(env map[string]string) (CuratorMuseHomes, error) 
 	} else {
 		homes = parsed
 	}
-	if backend, present := env[CuratorMuseCredentialBackendVariable]; !present || backend != CuratorMuseCredentialBackendFile {
+	if backend, present := env[CuratorMuseCredentialBackendVariable]; present && backend != CuratorMuseCredentialBackendFile {
 		return CuratorMuseHomes{}, curatorMalformed("v4 muse fragments require TBH_CREDENTIAL_BACKEND=file")
 	}
 	return homes, nil
@@ -453,6 +455,9 @@ func CuratorMuseHomesFromV4Env(env map[string]string) (CuratorMuseHomes, error) 
 func (c *CuratorContext) MuseHomes() (CuratorMuseHomes, error) {
 	if c == nil || !CuratorFragmentUsesXDGHomes(c.Environment) || c.Revision != CuratorLaunchFragmentV4 {
 		return CuratorMuseHomes{}, curatorMalformed("muse home set requires a v4 muse fragment")
+	}
+	if err := validateCuratorCredentialStore(c); err != nil {
+		return CuratorMuseHomes{}, err
 	}
 	if homes, err := CuratorMuseHomesFromV4Env(c.Env); err != nil {
 		return CuratorMuseHomes{}, err
@@ -672,7 +677,8 @@ func curatorMalformed(reason string) error {
 
 // validateCuratorCredentialStore checks the v4 credential_store policy
 // against its environment (curator-spec environments §10.2). Muse requires
-// exactly {"selection":"file"}. codex_cli admits native with no overrides,
+// exactly {"selection":"file"} with backend=file, or {"selection":"native"}
+// with no backend key. codex_cli admits native with no overrides,
 // or file/keychain with exactly the matching cli_auth_credentials_store
 // override; applying that -c override is not implemented yet, so an
 // agreeing non-native Codex policy refuses as unsupported rather than being
@@ -683,8 +689,20 @@ func validateCuratorCredentialStore(context *CuratorContext) error {
 		if context.Revision != CuratorLaunchFragmentV4 {
 			return nil
 		}
-		if store == nil || store.Selection != CuratorCredentialStoreFile || store.ConfigOverrides != nil {
-			return curatorMalformed("v4 muse fragments require credential_store exactly {\"selection\":\"file\"}")
+		if store == nil || (store.Selection != CuratorCredentialStoreFile && store.Selection != CuratorCredentialStoreNative) || store.ConfigOverrides != nil {
+			return curatorMalformed("v4 muse fragments require credential_store exactly {\"selection\":\"file\"} or {\"selection\":\"native\"}")
+		}
+		backend, present := context.Env[CuratorMuseCredentialBackendVariable]
+		if store.Selection == CuratorCredentialStoreNative && present {
+			return curatorMalformed("v4 muse native credential_store forbids TBH_CREDENTIAL_BACKEND")
+		}
+		// Preserve the XDG shape diagnostics before judging a missing file
+		// backend, including fragments whose entire env has been replaced.
+		if _, err := CuratorMuseHomesFromV4Env(context.Env); err != nil {
+			return err
+		}
+		if store.Selection == CuratorCredentialStoreFile && (!present || backend != CuratorMuseCredentialBackendFile) {
+			return curatorMalformed("v4 muse fragments require TBH_CREDENTIAL_BACKEND=file")
 		}
 		return nil
 	}

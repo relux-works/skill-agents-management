@@ -1082,10 +1082,14 @@ selection; the vendor runtime catalog and its admitted pairs are unchanged.
   every other surface remains exact against the unchanged source golden.
 - **Managed Muse launches require `launch-env-fragment-v4`; the typed root-context fact drives the exclusion.**
   A v3 muse fragment refuses with upgrade guidance (curator-spec environments
-  §10.2, CIP-0017). The v4 env is the four XDG homes plus
-  `TBH_CREDENTIAL_BACKEND=file`, written after the homes and sealed, so an
-  ambient backend never reaches the child; `credential_store` must be exactly
-  `{"selection":"file"}`. When the fragment carries
+  §10.2, CIP-0017). The v4 env admits exactly two coupled credential forms:
+  `credential_store: {"selection":"file"}` with the four XDG homes plus
+  `TBH_CREDENTIAL_BACKEND=file`, or `credential_store: {"selection":"native"}`
+  with exactly the four XDG homes and no backend key. The file backend is
+  written after the homes and sealed; an ambient backend never reaches either
+  child. Native leaves Muse to use the operator's native credential store.
+  Mixed forms, other selections, store overrides and extra env keys refuse.
+  When the fragment carries
   `root_context: {"exclusive":true}`, exec and dry-run add
   `--no-foreign-personal-context` and the TUI adds
   `-c context.foreign_personal_skills=false` after the workspace options, in
