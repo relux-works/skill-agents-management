@@ -463,7 +463,7 @@ func declareModel(vendor vendorplugin.VendorID, row CatalogModel, scale []string
 	model := vendorplugin.Model{
 		ID:          row.ID,
 		Description: vendorplugin.UsageDescription(description),
-		Rank: vendorplugin.CapabilityRank{Score: 1, Basis: []vendorplugin.RankEvidence{{
+		Rank: &vendorplugin.CapabilityRank{Score: 1, Basis: []vendorplugin.RankEvidence{{
 			Source:      catalogEvidenceSource,
 			Observation: "declared by the operator; not benchmarked, never ranked into a lineup",
 		}}},

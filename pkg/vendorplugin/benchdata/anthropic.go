@@ -32,9 +32,9 @@ import "strconv"
 // with nothing behind it but the author's placing. Every score below is now a
 // bench point (planted bugs fixed out of 105, vendorplugin.bench.go): the three
 // rows the leaderboard measured (fable-5-1 43, opus-5 27, opus-4-8 15, each at
-// max) carry the exact count, and every other row carries a value explicitly
+// max) carry the exact count, and every other ranked row carries a value explicitly
 // marked interpolated between two named anchors. The registry's PolicyRank is
-// still quoted on every row, because it is still true of the registry, but it
+// still quoted on every ported row, because it is still true of the registry, but it
 // is quoted as the registry's number on its own scale and never as the score.
 // pkg/vendorplugin/bughunt_test.go holds each score against an independent
 // transcription of the leaderboard.
@@ -105,8 +105,8 @@ var anthropicLineup = RankEvidence{
 // against each other. policyRank is the registry's number and is quoted as
 // such: still true of the registry, the order the interpolated rows keep, and
 // never the score, which is why the sentence says whose scale it is on.
-func anthropicRank(score int, bench RankEvidence, policyRank int, note string, evidence RankEvidence) CapabilityRank {
-	return CapabilityRank{
+func anthropicRank(score int, bench RankEvidence, policyRank int, note string, evidence RankEvidence) *CapabilityRank {
+	return &CapabilityRank{
 		Score: score,
 		Basis: []RankEvidence{
 			bench,
@@ -134,18 +134,18 @@ const anthropicClaudeCLIProbe = "the Claude Code CLI's own model resolution, pro
 // gives: rank's registry entry states "the row carries PolicyRank N" and names
 // the source registry at a commit, which for a row that registry never held is
 // a sentence a reader would open the file and not find.
-func anthropicDeclaredRank(score int, bench RankEvidence, note string, evidence ...RankEvidence) CapabilityRank {
+func anthropicDeclaredRank(score int, bench RankEvidence, note string, evidence ...RankEvidence) *CapabilityRank {
 	return anthropicDeclaredRankFrom(anthropicClaudeCLIProbe, score, bench, note, evidence...)
 }
 
 // declaredRankFrom is declaredRank against a NAMED probe, for a row read off a
 // later CLI than the one claude-opus-5-5 was declared from.
-func anthropicDeclaredRankFrom(probe string, score int, bench RankEvidence, note string, evidence ...RankEvidence) CapabilityRank {
+func anthropicDeclaredRankFrom(probe string, score int, bench RankEvidence, note string, evidence ...RankEvidence) *CapabilityRank {
 	basis := []RankEvidence{
 		bench,
 		{Source: probe, Observation: note},
 	}
-	return CapabilityRank{Score: score, Basis: append(basis, evidence...)}
+	return &CapabilityRank{Score: score, Basis: append(basis, evidence...)}
 }
 
 // claudeCLIProbeSonnet55 is the probe the claude-sonnet-5-5 rows rest on. It is
@@ -168,7 +168,7 @@ func anthropicSonnet55Effort() EffortDeclaration {
 // puts it level with opus-5-5 on agentic work (Terminal-Bench 4.0 70.6% against
 // 66.4%, GDPval-AA 1844 against 1846, CursorBench 4.0 55.5% against 57.8%), so
 // it sits just under opus-5-5's 45 and above fable-5-1's measured 43.
-func anthropicSonnet55Rank(note string, evidence ...RankEvidence) CapabilityRank {
+func anthropicSonnet55Rank(note string, evidence ...RankEvidence) *CapabilityRank {
 	return anthropicDeclaredRankFrom(anthropicClaudeCLIProbeSonnet55, 44,
 		BughuntInterpolated("claude-opus-5-5", "claude-fable-5-1", "unmeasured; Anthropic's card places sonnet-5-5 level with opus-5-5 on agentic benchmarks, so it sits just under it and above fable-5-1's measured 43"),
 		note, evidence...)
@@ -205,7 +205,7 @@ func anthropicHaiku55Effort() EffortDeclaration {
 // alias. Unmeasured on the leaderboard, so INTERPOLATED between two MEASURED
 // anchors: claude-opus-5 (27) above and claude-opus-4-8 (15) below. 22 sits
 // strictly inside and is unique among the anthropic scores (sonnet-5 holds 20).
-func anthropicHaiku55Rank(note string, evidence ...RankEvidence) CapabilityRank {
+func anthropicHaiku55Rank(note string, evidence ...RankEvidence) *CapabilityRank {
 	return anthropicDeclaredRankFrom(anthropicClaudeCLIProbeHaiku55, 22,
 		BughuntInterpolated("claude-opus-5", "claude-opus-4-8", "unmeasured; a current-generation fast tier placed above sonnet-5's interpolated 20 and below opus-5's measured 27, strictly inside the two measured anchors"),
 		note, evidence...)
@@ -223,7 +223,7 @@ func anthropicOpus55Effort() EffortDeclaration {
 // claude-fable-5-1's measured 43, the vendor's strongest measured row, and below
 // gpt-6-astra's measured 48, the leaderboard's top row. 45 sits strictly inside
 // and lands on no ported anthropic score.
-func anthropicOpus55Rank(note string, evidence ...RankEvidence) CapabilityRank {
+func anthropicOpus55Rank(note string, evidence ...RankEvidence) *CapabilityRank {
 	return anthropicDeclaredRank(45,
 		BughuntInterpolated("gpt-6-astra", "claude-fable-5-1", "unmeasured; Anthropic presents opus-5-5 as its new most capable general model, above fable-5-1, and the leaderboard's top row is the only measured anchor above that"),
 		note, evidence...)
@@ -248,7 +248,8 @@ func anthropicEffortNone() EffortDeclaration {
 	return EffortDeclaration{Support: EffortNone}
 }
 
-// models is the declaration itself, most capable first.
+// models is the declaration itself. The explicit-only unmeasured row is not
+// ranked; existing ranked declarations retain their order.
 //
 // `pi-native` membership is CATALOG-VERIFIED, not inferred from the vendor: a
 // row names it only when the id is present in the installed Pi built-in
@@ -260,6 +261,19 @@ func anthropicEffortNone() EffortDeclaration {
 // refused as ErrModelNotDrivenBySystem rather than guessed at. Re-verify the
 // membership against the installed catalog bytes before changing it.
 var anthropicModels = []Model{
+	{
+		ID:          "claude-fable-5-2",
+		Description: "Explicit-only Claude model with confirmed availability; capability has not been measured or ranked",
+		Unmeasured: &UnmeasuredClaim{
+			Kind: "unmeasured", AsOf: "2026-11-10",
+			Source:      "Curator orchestrator probe on ivmbp, 2026-11-10 approximately 00:05Z",
+			Observation: "`claude -p --model claude-fable-5-2 \"reply ok\"` returned ok, exit 0; availability only, no capability measurement",
+		},
+		Lifecycle: LifecycleCurrent,
+		// Declared vocabulary mirrors 5.1; it implies no capability equality.
+		Effort:  anthropicEffortRequired("high", []string{"low", "medium", "high", "xhigh", "max"}),
+		Systems: []string{"claude-code"},
+	},
 	{
 		ID:          "claude-opus-5-5",
 		Description: "The strongest Claude for complex engineering and long agentic runs: multi-file changes, design work and reviews that need the most judgement",

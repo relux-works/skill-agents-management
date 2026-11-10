@@ -331,7 +331,7 @@ func TestRegisterRefusesARankWithNoEvidence(t *testing.T) {
 	for name, rank := range cases {
 		t.Run(name, func(t *testing.T) {
 			vendor := newNarwhal()
-			vendor.models[0].Rank = rank
+			vendor.models[0].Rank = &rank
 
 			if err := vendor.models[0].Validate(); err == nil {
 				t.Fatalf("Model.Validate admitted a model ranked with %s", name)

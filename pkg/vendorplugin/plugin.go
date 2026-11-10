@@ -31,7 +31,15 @@ func CloneModels(models []Model) []Model {
 	out := make([]Model, 0, len(models))
 	for _, model := range models {
 		copied := model
-		copied.Rank.Basis = append([]RankEvidence(nil), model.Rank.Basis...)
+		if model.Rank != nil {
+			rank := *model.Rank
+			rank.Basis = append([]RankEvidence(nil), model.Rank.Basis...)
+			copied.Rank = &rank
+		}
+		if model.Unmeasured != nil {
+			claim := *model.Unmeasured
+			copied.Unmeasured = &claim
+		}
 		copied.Effort.Vocabulary = append([]string(nil), model.Effort.Vocabulary...)
 		if model.Effort.OperatorAccepts != nil {
 			copied.Effort.OperatorAccepts = append([]string(nil), model.Effort.OperatorAccepts...)

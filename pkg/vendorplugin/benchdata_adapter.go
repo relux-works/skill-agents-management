@@ -16,13 +16,20 @@ func ModelsFromBenchdata(facts []benchdata.Model) []Model {
 		}
 		model := Model{
 			ID: ModelID(fact.ID), Description: UsageDescription(fact.Description),
-			Rank: CapabilityRank{Score: fact.Rank.Score}, Lifecycle: Lifecycle(fact.Lifecycle),
+			Lifecycle:    Lifecycle(fact.Lifecycle),
 			Effort:       EffortDeclaration{Support: support, Vocabulary: append([]string(nil), fact.Effort.Vocabulary...), Recommended: fact.Effort.Recommended},
 			SupersededBy: ModelID(fact.SupersededBy), AliasOf: ModelID(fact.AliasOf), Recommended: fact.Recommended,
 			ContextWindowTokens: fact.ContextWindowTokens,
 		}
-		for _, evidence := range fact.Rank.Basis {
-			model.Rank.Basis = append(model.Rank.Basis, RankEvidence{Source: evidence.Source, Observation: evidence.Observation})
+		if fact.Unmeasured != nil {
+			claim := *fact.Unmeasured
+			model.Unmeasured = &claim
+		}
+		if fact.Rank != nil {
+			model.Rank = &CapabilityRank{Score: fact.Rank.Score}
+			for _, evidence := range fact.Rank.Basis {
+				model.Rank.Basis = append(model.Rank.Basis, RankEvidence{Source: evidence.Source, Observation: evidence.Observation})
+			}
 		}
 		for _, system := range fact.Systems {
 			model.Systems = append(model.Systems, agentic.SystemID(system))

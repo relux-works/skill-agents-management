@@ -143,7 +143,7 @@ func resolveAnchor(home []vendorplugin.Model, anchor string) (int, bool) {
 		return 0, true
 	}
 	for _, row := range home {
-		if string(row.ID) == anchor {
+		if string(row.ID) == anchor && row.Rank != nil {
 			return row.Rank.Score, true
 		}
 	}
@@ -163,6 +163,12 @@ func benchProblems(homeName string, home []vendorplugin.Model, model vendorplugi
 		problems = append(problems, fmt.Sprintf("%s row %q: "+format, append([]any{homeName, model.ID}, args...)...))
 	}
 
+	if model.Unmeasured != nil {
+		if err := model.Validate(); err != nil {
+			report("invalid unmeasured claim: %v", err)
+		}
+		return problems // No score or benchmark claim to compare.
+	}
 	var claims []vendorplugin.BughuntClaim
 	for _, evidence := range model.Rank.Basis {
 		if evidence.Source != vendorplugin.BugHuntBenchSource {

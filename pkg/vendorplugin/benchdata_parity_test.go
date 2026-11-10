@@ -40,6 +40,9 @@ func adapterBenchProjection(t *testing.T) ([]benchdata.BugHuntRow, []benchdata.R
 		}
 		sort.Strings(efforts)
 		facts = append(facts, benchdata.RegistryFact{ModelID: string(model.ID), Efforts: efforts})
+		if model.Rank == nil {
+			continue
+		} // Availability-only rows have registry facts but no benchmark rows.
 		index := 0
 		for _, evidence := range model.Rank.Basis {
 			if evidence.Source != vendorplugin.BugHuntBenchSource {
@@ -185,6 +188,8 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 		})
 		fixture.Models = append(fixture.Models, benchdata.RegistryFact{ModelID: id, Efforts: []string{"high", "low", "max", "medium", "minimal", "xhigh"}})
 	}
+	// Fable 5.2 adds a registry fact, with no benchmark row or numeric value.
+	fixture.Models = append(fixture.Models, benchdata.RegistryFact{ModelID: "claude-fable-5-2", Efforts: []string{"high", "low", "max", "medium", "xhigh"}})
 	sort.Slice(fixture.Models, func(i, j int) bool { return fixture.Models[i].ModelID < fixture.Models[j].ModelID })
 	if err := compareBenchRows(rows, historical); err != nil {
 		t.Fatalf("historical export parity: %v", err)
@@ -201,7 +206,7 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 	if len(rows) != 68 || len(keys) != 68 || counts["measured"] != 12 || counts["interpolated"] != 55 || counts["cost"] != 1 {
 		t.Fatalf("claim counts: %d rows, %d keys, %v", len(rows), len(keys), counts)
 	}
-	if len(facts) != 67 {
+	if len(facts) != 68 {
 		t.Fatalf("registry count: %d", len(facts))
 	}
 	// Measured aliases retain shared source origins and remain separate keys.

@@ -4,7 +4,8 @@ package benchdata
 // It contains no registration, validation or launch behavior.
 type Model struct {
 	ID, Description       string
-	Rank                  CapabilityRank
+	Rank                  *CapabilityRank  `json:",omitempty"`
+	Unmeasured            *UnmeasuredClaim `json:",omitempty"`
 	Lifecycle             string
 	Effort                EffortDeclaration
 	SupersededBy, AliasOf string
@@ -12,6 +13,15 @@ type Model struct {
 	ContextWindowTokens   int
 	Pricing               *Pricing
 	Systems               []string
+}
+
+// UnmeasuredClaim records availability without asserting capability or a score.
+// Kind must be "unmeasured"; AsOf is an ISO date, Source attributes the note.
+type UnmeasuredClaim struct {
+	Kind        string
+	AsOf        string
+	Source      string
+	Observation string
 }
 
 // CapabilityRank keeps the score independent of its benchmark observation.
@@ -87,12 +97,16 @@ func cloneModels(models []Model) []Model {
 		m := &out[i]
 		m.Systems = append([]string(nil), m.Systems...)
 		m.Effort.Vocabulary = append([]string(nil), m.Effort.Vocabulary...)
-		m.Rank.Basis = append([]RankEvidence(nil), m.Rank.Basis...)
-		for j := range m.Rank.Basis {
-			if c := m.Rank.Basis[j].claim; c != nil {
-				copy := *c
-				copy.cost = cloneCost(c.cost)
-				m.Rank.Basis[j].claim = &copy
+		m.Unmeasured = clonePtr(m.Unmeasured)
+		m.Rank = clonePtr(m.Rank)
+		if m.Rank != nil {
+			m.Rank.Basis = append([]RankEvidence(nil), m.Rank.Basis...)
+			for j := range m.Rank.Basis {
+				if c := m.Rank.Basis[j].claim; c != nil {
+					copy := *c
+					copy.cost = cloneCost(c.cost)
+					m.Rank.Basis[j].claim = &copy
+				}
 			}
 		}
 		if m.Pricing != nil {

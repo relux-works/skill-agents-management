@@ -50,11 +50,11 @@ func buildModels(cfg Config) []vendorplugin.Model {
 // lowest legal one, which states a tie and nothing else — it is not a bench
 // point and its evidence does not cite the bench, so bughunt_test.go leaves
 // this vendor outside its scope by name.
-func localCapabilityRank(source string) vendorplugin.CapabilityRank {
+func localCapabilityRank(source string) *vendorplugin.CapabilityRank {
 	if source == "" {
 		source = legacyFileName
 	}
-	return vendorplugin.CapabilityRank{
+	return &vendorplugin.CapabilityRank{
 		Score: 1,
 		Basis: []vendorplugin.RankEvidence{{
 			Source:      source,

@@ -48,6 +48,7 @@ const boardModelCount = 45
 // vendor package holds each of these to its own evidence rule — see
 // pkg/vendorplugin/declaredhere_test.go.
 var declaredHereRows = []vendorplugin.ModelID{
+	"claude-fable-5-2", // availability-only, explicit selection; never ranked
 	"gemini-4-argon-high", "gemini-4-argon-medium", "gemini-4-argon-low",
 	"gemini-4-argon", "argon",
 	"gpt-6-astra", "astra",
@@ -184,7 +185,9 @@ var presentationFacts = map[string]func(vendorplugin.Model) vendorplugin.Model{
 		return m
 	},
 	"a capability score re-ranked": func(m vendorplugin.Model) vendorplugin.Model {
-		m.Rank.Score = 1
+		if m.Rank != nil {
+			m.Rank.Score = 1
+		}
 		return m
 	},
 	"a published price corrected": func(m vendorplugin.Model) vendorplugin.Model {

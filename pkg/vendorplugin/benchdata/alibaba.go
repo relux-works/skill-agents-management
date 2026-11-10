@@ -88,8 +88,8 @@ var alibabaLineup = RankEvidence{
 // against each other. policyRank is the registry's number and is quoted as
 // such: still true of the registry, the order the interpolated rows keep, and
 // never the score, which is why the sentence says whose scale it is on.
-func alibabaRank(score int, bench RankEvidence, policyRank int, note string, evidence RankEvidence) CapabilityRank {
-	return CapabilityRank{
+func alibabaRank(score int, bench RankEvidence, policyRank int, note string, evidence RankEvidence) *CapabilityRank {
+	return &CapabilityRank{
 		Score: score,
 		Basis: []RankEvidence{
 			bench,

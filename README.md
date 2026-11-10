@@ -1375,7 +1375,7 @@ The vendor plugin contract, its registry, and the runtime declarations.
   authority stands unchanged.
 - `BuildLaunch` is the module's runtime/vendor compatibility dispatch API. It resolves an
   explicit launch binding, selects the model, validates the effort word against
-  the model's own vocabulary (never substituting the recommendation — no
+  the model's own vocabulary (ranked rows never substitute the recommendation — no
   default is injected anywhere), asks a resolved vendor to build an
   `agentic.LaunchRequest` or projects an explicit system-only declaration
   losslessly, refuses a vendor answer
@@ -1439,9 +1439,9 @@ not ported; see
   the source registry's own `PolicyRank`, hand-ordered decades per vendor with
   nothing behind them but the author's placing. Every score is now a Bug Hunt
   Bench point (`pkg/vendorplugin/bench.go`): a row the leaderboard measured
-  carries the exact fixed/105 count at its best effort setting, an unmeasured
-  row carries a value explicitly marked *interpolated* between two named
-  anchors, and every row cites the bench as a `RankEvidence` source. The
+  carries the exact fixed/105 count at its best effort setting, a ranked but
+  unbenchmarked row carries a value explicitly marked *interpolated* between
+  two named anchors, and every scored row cites the bench as a `RankEvidence` source. The
   registry's `PolicyRank` is still quoted on every ported row — it is still
   true of the registry and it is the ORDER interpolated rows keep — but as the
   registry's number on its own scale, never as the score. See *Rank: a
@@ -1633,7 +1633,7 @@ fixed out of 105 on the leaderboard at <https://bughunt.productcompass.pm/>
 (updated 2026-09-13), verified blind. Higher is more capable, and scores are
 **comparable across vendors only through that cited benchmark**: a measured
 row carries the leaderboard's exact count at its best effort setting, an
-unmeasured row carries a value its own evidence marks *interpolated* between
+ranked but unbenchmarked row carries a value its own evidence marks *interpolated* between
 two named anchors (a row of the same lineup, a leaderboard model, or the bench
 floor), and a comparison that touches an interpolated row inherits that
 interpolation. Two measured rows compare through the leaderboard's own numbers
@@ -1661,6 +1661,23 @@ presentation, not evidence: swapping two equal declarations swaps their
 positions without a single observation having changed, which is exactly why it
 is not a field. A score with no `Basis` behind it is still refused — that rule
 did not move, because it was never about the position.
+
+A compiled row may instead declare `Unmeasured` with `Kind: "unmeasured"`,
+a dated, attributed availability observation, and **no `Rank` at all**.
+`Rank` is now an optional `*CapabilityRank`; exactly one alternative is required.
+Consumers reading raw model lists must check it before dereferencing.
+A numeric rank on an unmeasured row (including score 0) refuses with
+`ErrRankInvalid`; score 0 also remains invalid for ranked rows.
+
+Unmeasured rows never enter `Lineup`, ordering, ties, or its default/top pick.
+They require the exact explicit model id and cannot be aliases, alias targets,
+or display recommendations. For an explicit unmeasured model only, omitted
+effort resolves to the row's declared recommendation; supplied effort still
+must belong to its vocabulary. Existing ranked effort rules remain unchanged.
+`claude-fable-5-2` is claude-code only, with low/medium/high/xhigh/max and
+recommended high. Its availability note attributes Curator's 2026-11-10
+approximately 00:05Z probe; it asserts no benchmark or capability equality.
+See [the schema decision](docs/unmeasured-ranking-claims.md).
 
 Identifier normalization for all three id kinds lives once, in
 `internal/ident`. Two folds that agree today and drift tomorrow is the

@@ -78,6 +78,7 @@ import (
 // Code CLI. Each pair is one model under two names, and each pair's shared
 // score is legal for the reason the astra pair's is.
 var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
+	"claude-fable-5-2":      "anthropic",
 	"gemini-4-argon-high":   "google",
 	"gemini-4-argon-medium": "google",
 	"gemini-4-argon-low":    "google",
@@ -255,6 +256,15 @@ func TestEveryDeclaredHereRowRestsOnTheVendorCatalog(t *testing.T) {
 // that keeps the searched-for token in place and changes what the basis claims.
 func declaredHereEvidenceProblems(id vendorplugin.ModelID, model vendorplugin.Model) []string {
 	var problems []string
+	if model.Unmeasured != nil {
+		if err := model.Validate(); err != nil {
+			return []string{err.Error()}
+		}
+		if !strings.Contains(model.Unmeasured.Source, "Curator orchestrator") {
+			return []string{"unmeasured row lacks attributed probe"}
+		}
+		return nil // Availability-only claim, with no source PolicyRank or benchmark assertion.
+	}
 	if err := model.Rank.Validate(); err != nil {
 		return append(problems, fmt.Sprintf("declared-here model %q: %v", id, err))
 	}
@@ -366,6 +376,10 @@ func TestADeclaredRowMayNotTieAPortedOne(t *testing.T) {
 		added, declared := declaredHereModel(t, id)
 		if !declared {
 			continue // reported by TestEveryDeclaredHereRowIsDeclared
+		}
+		if added.Unmeasured != nil {
+			// No rank is present; exclusion before tie counting has its own negative control.
+			continue
 		}
 		plugin, _ := vendorplugin.Default.Lookup(vendor)
 		for _, other := range plugin.Models() {

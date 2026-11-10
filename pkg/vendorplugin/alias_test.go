@@ -32,7 +32,7 @@ func aliasModels() []Model {
 		ID:          "narwhal-deep",
 		Description: "the identity row",
 		Lifecycle:   LifecycleCurrent,
-		Rank:        CapabilityRank{Score: 20, Basis: []RankEvidence{{Source: "alias fixture", Observation: "the identity"}}},
+		Rank:        &CapabilityRank{Score: 20, Basis: []RankEvidence{{Source: "alias fixture", Observation: "the identity"}}},
 		Effort: EffortDeclaration{
 			Support:     agentic.EffortSupportRequired,
 			Vocabulary:  []string{"shallow", "deep"},
@@ -220,7 +220,7 @@ func TestTheAliasGateAdmitsALegalAlias(t *testing.T) {
 // that ever becomes wrong, this test is the one that has to change.
 func TestTheAliasGateIgnoresTheFactsItDoesNotCover(t *testing.T) {
 	models := aliasModels()
-	models[1].Rank = CapabilityRank{Score: 1, Basis: []RankEvidence{{Source: "the bound", Observation: "a deliberately different score"}}}
+	models[1].Rank = &CapabilityRank{Score: 1, Basis: []RankEvidence{{Source: "the bound", Observation: "a deliberately different score"}}}
 	models[1].Lifecycle = LifecycleLegacy
 	models[1].SupersededBy = "narwhal-deep"
 	models[1].ContextWindowTokens = 4096

@@ -117,7 +117,8 @@ harness — are still one vendor declaration with no core change.
 A vendor plugin's interface, at minimum:
 
 - **Models** — the model list, each with:
-  - a capability SCORE (a Bug Hunt Bench point, comparable across vendors only
+  - either an explicit-only unmeasured claim (dated, attributed availability, no rank),
+    or a capability SCORE (a Bug Hunt Bench point, comparable across vendors only
     through that cited benchmark; every row's evidence says whether the count
     was measured or interpolated; ranking is never policy; ties are legal
     because two models really can be equal, and the total order some callers
@@ -130,7 +131,8 @@ A vendor plugin's interface, at minimum:
     meaning for its empty value: no window recorded is not a window of zero, and
     no contract registered is not free use,
   - its reasoning-effort vocabulary and recommended effort (effort is a
-    required per-model axis; no defaults are injected anywhere),
+    required per-model axis; explicit unmeasured models alone use the declared
+    recommendation when effort is omitted),
   - optionally, `AliasOf`: the model identity this row is a short spelling of.
     An alias is a real row — admitted, ranked, displayed and audited under its
     own id — that EXECUTES under the target. It is declared, never derived: no

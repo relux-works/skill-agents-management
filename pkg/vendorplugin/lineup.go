@@ -52,11 +52,12 @@ type RankedModel struct {
 //
 // Operator-declared rows (Model.OperatorDeclared) are left out: they carry no
 // observed score, so they are never ranked and never picked by a lineup
-// fallback. They stay admissible when a caller names them explicitly.
+// fallback. Unmeasured claims are also excluded before sorting and tie counting.
+// Both stay admissible when a caller names the exact model explicitly.
 func Lineup(models []Model) []RankedModel {
 	listed := make([]Model, 0, len(models))
 	for _, model := range models {
-		if !model.OperatorDeclared {
+		if !model.OperatorDeclared && model.Unmeasured == nil && model.Rank != nil {
 			listed = append(listed, model)
 		}
 	}

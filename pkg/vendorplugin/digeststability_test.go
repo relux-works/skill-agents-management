@@ -76,7 +76,9 @@ var digestMutants = map[string]func(vendorplugin.Model) vendorplugin.Model{
 		return m
 	},
 	"every capability score flattened to one": func(m vendorplugin.Model) vendorplugin.Model {
-		m.Rank.Score = 1
+		if m.Rank != nil {
+			m.Rank.Score = 1
+		}
 		return m
 	},
 	"every usage description replaced": func(m vendorplugin.Model) vendorplugin.Model {

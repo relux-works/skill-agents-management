@@ -158,7 +158,7 @@ func newNarwhal() *narwhalVendor {
 				ID:          "narwhal-deep",
 				Description: "long-horizon reasoning over unfamiliar code; the expensive one",
 				Lifecycle:   LifecycleCurrent,
-				Rank: CapabilityRank{
+				Rank: &CapabilityRank{
 					Score: 20,
 					Basis: []RankEvidence{{
 						Source:      "narwhal internal eval 2026-07",
@@ -176,7 +176,7 @@ func newNarwhal() *narwhalVendor {
 				ID:          "narwhal-flat",
 				Description: "cheap single-file edits and formatting passes",
 				Lifecycle:   LifecycleCurrent,
-				Rank: CapabilityRank{
+				Rank: &CapabilityRank{
 					Score: 10,
 					Basis: []RankEvidence{{
 						Source:      "narwhal internal eval 2026-07",

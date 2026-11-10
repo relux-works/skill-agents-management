@@ -142,9 +142,9 @@ type RankEvidence struct {
 // evidence for it.
 //
 // Scores are comparable across vendors ONLY through the cited benchmark. Every
-// row is anchored on one leaderboard (BugHuntBenchSource, bench.go): a measured
+// scored row is anchored on one leaderboard (BugHuntBenchSource, bench.go): a measured
 // row carries the exact fixed/105 count at its best effort setting, an
-// unmeasured row carries a value explicitly marked "interpolated" between two
+// ranked but unbenchmarked row carries a value explicitly marked "interpolated" between two
 // named anchors, and the common scale is what makes "openai's gpt-6-astra at
 // 48 stands above anthropic's claude-fable-5-1 at 43" a finding of the bench
 // rather than this module's opinion. The comparison is only as good as the
@@ -459,13 +459,9 @@ func (p *Pricing) Clone() *Pricing {
 // their own owners: this package refuses an effort word outside the
 // vocabulary, and agentic.BuildPlan refuses a system that cannot carry one.
 //
-// Recommended is a DECLARATION, not a default. Nothing in this package
-// substitutes it for a missing effort: invariant 4 of docs/architecture.md
-// makes effort required-or-absent precisely so that no default is injected
-// anywhere, and a launch that silently ran at the vendor's recommendation
-// instead of the operator's choice is the wrong-cost launch that invariant
-// exists to close. The recommendation reaches the operator through the refusal
-// text instead.
+// Recommended supplies the omitted effort only for an explicitly selected
+// unmeasured model. Ranked models require the caller's effort and report the
+// recommendation in refusal text instead.
 type EffortDeclaration struct {
 	Support     agentic.EffortSupport
 	Vocabulary  []string
@@ -606,14 +602,16 @@ func sameWords(left, right []string) bool {
 //     NOT an explicit zero-byte budget; a present value must be positive.
 //   - Pricing nil: no billing contract was registered. It is NOT free use.
 //
-// The two fields with NO legal empty value are Lifecycle and Rank, and both
-// refuse their zero value at registration rather than rendering it.
+// Lifecycle is required. Exactly one of Rank and Unmeasured must be present;
+// a ranked row still refuses a zero or negative score.
 type Model struct {
 	ID          ModelID
 	Description UsageDescription
-	Rank        CapabilityRank
-	Lifecycle   Lifecycle
-	Effort      EffortDeclaration
+	Rank        *CapabilityRank `json:",omitempty"`
+	// Unmeasured is mutually exclusive with Rank and admits exact explicit selection only.
+	Unmeasured *UnmeasuredClaim `json:",omitempty"`
+	Lifecycle  Lifecycle
+	Effort     EffortDeclaration
 
 	// SupersededBy names the successor model when the vendor records an
 	// unambiguous same-family replacement, and is empty otherwise. A row that
@@ -649,8 +647,8 @@ type Model struct {
 
 	// Recommended is the vendor's DISPLAY pick, and never a launch default.
 	// Nothing in this module substitutes a recommended model for an unstated
-	// one, for the same reason EffortDeclaration.Recommended is never
-	// substituted for a missing effort: a launch that silently ran the display
+	// one. EffortDeclaration.Recommended supplies only the explicit unmeasured
+	// model exception documented on that type: a launch that silently ran the display
 	// pick instead of the operator's choice is the wrong-cost launch.
 	//
 	// At most one of a vendor's models may carry it PER AGENTIC SYSTEM, which
@@ -726,7 +724,7 @@ func (m Model) Validate() error {
 	if err := m.Description.Validate(); err != nil {
 		return fmt.Errorf("model %q: %w", m.ID, err)
 	}
-	if err := m.Rank.Validate(); err != nil {
+	if err := m.validateRankingClaim(); err != nil {
 		return fmt.Errorf("model %q: %w", m.ID, err)
 	}
 	if err := m.Lifecycle.Validate(); err != nil {
@@ -889,6 +887,9 @@ func checkAliases(models []Model) error {
 		if !targetDeclared {
 			return fmt.Errorf("%w: model %q is an alias of %q and no model in the same lineup answers to that id; a launch would substitute an identity this registry does not declare",
 				ErrAliasInvalid, model.ID, model.AliasOf)
+		}
+		if target.Unmeasured != nil {
+			return fmt.Errorf("%w: unmeasured model %q requires its exact id", ErrAliasInvalid, target.ID)
 		}
 		if target.AliasOf != "" {
 			return fmt.Errorf("%w: model %q is an alias of %q, which is itself an alias of %q; resolution is one hop and a chain would launch the middle of it",

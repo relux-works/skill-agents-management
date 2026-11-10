@@ -295,7 +295,7 @@ func TestTheHaikuRowsDeclareTheOwnerCapAndTheProbedAxis(t *testing.T) {
 	}
 	// The tie is the alias and its identity and nothing else.
 	for id, model := range rows {
-		if id != "claude-haiku-5-5" && id != "haiku" && model.Rank.Score == 22 {
+		if id != "claude-haiku-5-5" && id != "haiku" && model.Rank != nil && model.Rank.Score == 22 {
 			t.Errorf("%s also scores 22; the haiku pair must tie only itself", id)
 		}
 	}

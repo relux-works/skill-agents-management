@@ -95,6 +95,9 @@ func allModels() []Model {
 func BugHuntRows() []BugHuntRow {
 	rows := []BugHuntRow{}
 	for _, model := range allModels() {
+		if model.Rank == nil {
+			continue
+		} // Availability-only claims are not benchmark observations.
 		index := 0
 		for _, evidence := range model.Rank.Basis {
 			c := evidence.claim

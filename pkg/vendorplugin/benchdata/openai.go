@@ -165,8 +165,8 @@ const openaiCodexCatalogGPT61 = "the OpenAI Codex CLI model catalog, read with `
 // such: it is still true of the registry, it is the order every interpolated
 // row keeps, and it must never be mistaken for the score, which is why the
 // sentence says whose scale it is on.
-func openaiRank(score int, bench RankEvidence, policyRank int, note string, evidence RankEvidence) CapabilityRank {
-	return CapabilityRank{
+func openaiRank(score int, bench RankEvidence, policyRank int, note string, evidence RankEvidence) *CapabilityRank {
+	return &CapabilityRank{
 		Score: score,
 		Basis: []RankEvidence{
 			bench,
@@ -189,7 +189,7 @@ func openaiRank(score int, bench RankEvidence, policyRank int, note string, evid
 // a declared row cannot borrow it. The bench claim is carried by both: the
 // leaderboard measured gpt-6-astra, and the bench is the one source a
 // declared row and a ported row share.
-func openaiDeclaredRank(score int, bench RankEvidence, note string, evidence ...RankEvidence) CapabilityRank {
+func openaiDeclaredRank(score int, bench RankEvidence, note string, evidence ...RankEvidence) *CapabilityRank {
 	return openaiDeclaredRankFrom(openaiCodexCatalog, score, bench, note, evidence...)
 }
 
@@ -197,18 +197,18 @@ func openaiDeclaredRank(score int, bench RankEvidence, note string, evidence ...
 // rests on a later read than the one gpt-6-astra was declared from. Each read
 // is its own constant so a reader chasing a row's evidence lands on the binary
 // version and the date that row was actually read off.
-func openaiDeclaredRankFrom(catalog string, score int, bench RankEvidence, note string, evidence ...RankEvidence) CapabilityRank {
+func openaiDeclaredRankFrom(catalog string, score int, bench RankEvidence, note string, evidence ...RankEvidence) *CapabilityRank {
 	basis := []RankEvidence{
 		bench,
 		{Source: catalog, Observation: note},
 	}
-	return CapabilityRank{Score: score, Basis: append(basis, evidence...)}
+	return &CapabilityRank{Score: score, Basis: append(basis, evidence...)}
 }
 
 // withCost appends a cost observation to a rank. It is a separate step rather
 // than a parameter of rank so the capability claim stays the first bench
 // entry and a cost reading can never be the only bench evidence a row has.
-func openaiWithCost(r CapabilityRank, cost RankEvidence) CapabilityRank {
+func openaiWithCost(r *CapabilityRank, cost RankEvidence) *CapabilityRank {
 	r.Basis = append(r.Basis, cost)
 	return r
 }
@@ -264,7 +264,7 @@ func openaiSol61Effort() EffortDeclaration {
 // and the gpt-6-sol it supersedes (46). The catalog lists it at priority 1,
 // ahead of astra, but calls it a workhorse and astra "Frontier intelligence";
 // placing it above astra would be a capability claim nothing measured.
-func openaiSol61Rank(note string, evidence ...RankEvidence) CapabilityRank {
+func openaiSol61Rank(note string, evidence ...RankEvidence) *CapabilityRank {
 	return openaiDeclaredRankFrom(openaiCodexCatalogGPT61, 47,
 		BughuntInterpolated("gpt-6-astra", "gpt-6-sol", "unmeasured; the newer sol generation, placed above the gpt-6-sol it supersedes and below the measured astra head"),
 		note, evidence...)
@@ -286,13 +286,13 @@ func openaiLunaEffort() EffortDeclaration {
 // gpt-6-luna (3) above gpt-5.6-sol (4). sol takes 46 inside astra's 48 and
 // gpt-5.6-sol's 42; luna takes 44 inside sol's 46 and gpt-5.6-sol's 42. Neither
 // value lands on a ported row's score (TestADeclaredRowMayNotTieAPortedOne).
-func openaiSolRank(note string, evidence ...RankEvidence) CapabilityRank {
+func openaiSolRank(note string, evidence ...RankEvidence) *CapabilityRank {
 	return openaiDeclaredRankFrom(openaiCodexCatalogGPT6, 46,
 		BughuntInterpolated("gpt-6-astra", "gpt-5.6-sol", "unmeasured; the catalog places gpt-6-sol at priority 2, below gpt-6-astra and above gpt-5.6-sol"),
 		note, evidence...)
 }
 
-func openaiLunaRank(note string, evidence ...RankEvidence) CapabilityRank {
+func openaiLunaRank(note string, evidence ...RankEvidence) *CapabilityRank {
 	return openaiDeclaredRankFrom(openaiCodexCatalogGPT6, 44,
 		BughuntInterpolated("gpt-6-sol", "gpt-5.6-sol", "unmeasured; the catalog places gpt-6-luna at priority 3, below gpt-6-sol and above gpt-5.6-sol"),
 		note, evidence...)

@@ -650,7 +650,7 @@ func TestBuildLaunchValidatesDeclarationOwnedModelAndEffortFacts(t *testing.T) {
 			ID:          "declared-reasoner",
 			Description: "a declaration-owned model used to prove effort validation",
 			Lifecycle:   LifecycleCurrent,
-			Rank: CapabilityRank{Score: 10, Basis: []RankEvidence{{
+			Rank: &CapabilityRank{Score: 10, Basis: []RankEvidence{{
 				Source: "test fixture", Observation: "the system-only binding carries this row",
 			}}},
 			Effort: EffortDeclaration{

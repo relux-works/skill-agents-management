@@ -284,7 +284,7 @@ func compareBoardFacts(fixture boardFacts, rows map[vendorplugin.ModelID]vendorp
 		}
 		delete(remaining, id)
 
-		if !quotesPolicyRank(got.Rank, want.PolicyRank) {
+		if !quotesPolicyRank(*got.Rank, want.PolicyRank) {
 			report("model %q quotes no board PolicyRank %d in its rank basis; the score is a bench value and the board's number is the order evidence, so a row that stops quoting it has no source for its place", want.ID, want.PolicyRank)
 		}
 		if string(got.Lifecycle) != want.Lifecycle {

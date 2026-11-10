@@ -162,8 +162,8 @@ OBSERVED healthy verdict is serviceable, and "checked and found nothing",
    display recommendation, context window, price): none of them reaches the
    digest, and eight mutants prove it rather than a comment asserting it.
 4. **Effort is per-model and required.** Vocabularies live on the model row;
-   TRANSPORT (argv / stdin / none) lives on the system plugin. No default is
-   injected at any call site, and a refusal names the model, the runtime, the
+   TRANSPORT (argv / stdin / none) lives on the system plugin. For an explicitly named unmeasured model only, omitted effort uses the row
+   recommendation. Ranked rows inject no default, and a refusal names the model, the runtime, the
    accepted vocabulary and the recommendation — enough to pick a valid effort
    from the error text. It cannot name a config key, because the config is the
    consumer's; naming it is the consumer's half of the same error.

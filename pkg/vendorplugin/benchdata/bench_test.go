@@ -108,17 +108,25 @@ func TestModelDeclarationsAreIndependentCopies(t *testing.T) {
 		beforeRows, _ := json.Marshal(BugHuntRows())
 		for i := range models {
 			m := &models[i]
-			m.ID, m.AliasOf, m.Rank.Score = "mutated", "mutated", -1
+			m.ID, m.AliasOf = "mutated", "mutated"
+			if m.Rank != nil {
+				m.Rank.Score = -1
+			}
+			if m.Unmeasured != nil {
+				m.Unmeasured.Source = "mutated"
+			}
 			m.Systems[0] = "mutated"
 			for j := range m.Effort.Vocabulary {
 				m.Effort.Vocabulary[j] = "mutated"
 			}
-			for j := range m.Rank.Basis {
-				m.Rank.Basis[j].Observation = "mutated"
-				if c := m.Rank.Basis[j].claim; c != nil {
-					c.kind = "mutated"
-					if c.cost != nil {
-						*c.cost.USD = -1
+			if m.Rank != nil {
+				for j := range m.Rank.Basis {
+					m.Rank.Basis[j].Observation = "mutated"
+					if c := m.Rank.Basis[j].claim; c != nil {
+						c.kind = "mutated"
+						if c.cost != nil {
+							*c.cost.USD = -1
+						}
 					}
 				}
 			}

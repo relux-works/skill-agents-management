@@ -172,8 +172,8 @@ func MuseModels() []Model {
 	// no measured gap. Both wonder rows share it: the leaderboard cannot
 	// separate them, no source says either is stronger, and equal scores are
 	// legal ties (RankedModel.Tied reports them), not a claim of equal ability.
-	wonderRank := func() CapabilityRank {
-		return CapabilityRank{Score: 34, Basis: []RankEvidence{
+	wonderRank := func() *CapabilityRank {
+		return &CapabilityRank{Score: 34, Basis: []RankEvidence{
 			BughuntInterpolated("claude-fable-5-1", "muse-spark-1.3-contributor", "unmeasured; a later release of the muse line placed just above the measured muse-spark-1.3 (33) and below the measured claude-fable-5-1 (43), with the score only its position, not a measurement"),
 			{
 				Source:      museCatalog146,
@@ -185,7 +185,7 @@ func MuseModels() []Model {
 		{
 			ID:                  "muse-spark-1.3-contributor",
 			Description:         "The Muse Spark 1.3 contributor harness: a local-first runtime whose broker this module has looked for and never established; pick it only where that unresolved binding is acceptable",
-			Rank:                CapabilityRank{Score: 33, Basis: []RankEvidence{measured13, source, alias}},
+			Rank:                &CapabilityRank{Score: 33, Basis: []RankEvidence{measured13, source, alias}},
 			Lifecycle:           LifecycleCurrent,
 			Effort:              spark13Effort(),
 			Recommended:         true,
@@ -203,7 +203,7 @@ func MuseModels() []Model {
 			// agentic.BuildPlan substitutes the target before argv; this row
 			// stays admissible, rankable and auditable under its own id.
 			AliasOf:             "muse-spark-1.3-contributor",
-			Rank:                CapabilityRank{Score: 33, Basis: []RankEvidence{measured13, source, alias}},
+			Rank:                &CapabilityRank{Score: 33, Basis: []RankEvidence{measured13, source, alias}},
 			Lifecycle:           LifecycleCurrent,
 			Effort:              spark13Effort(),
 			ContextWindowTokens: contextWindow,
@@ -212,7 +212,7 @@ func MuseModels() []Model {
 		{
 			ID:           "muse-spark-1.2-contributor",
 			Description:  "Previous-generation Muse Spark contributor harness, for a run pinned to it; prefer muse-spark-1.3-contributor for new work",
-			Rank:         CapabilityRank{Score: 10, Basis: []RankEvidence{interpolated12, source, alias}},
+			Rank:         &CapabilityRank{Score: 10, Basis: []RankEvidence{interpolated12, source, alias}},
 			Lifecycle:    LifecycleLegacy,
 			SupersededBy: "muse-spark-1.3-contributor",
 			// EffortSupportNone, kept exactly as ported. 1.2 has no
@@ -243,7 +243,7 @@ func MuseModels() []Model {
 			// id, and it carries the identity's score and axis because it is
 			// the same model reached by two names.
 			AliasOf: "muse-wonder-1.0-contributor",
-			Rank: CapabilityRank{Score: 34, Basis: append(wonderRank().Basis, RankEvidence{
+			Rank: &CapabilityRank{Score: 34, Basis: append(wonderRank().Basis, RankEvidence{
 				Source:      "the rows' own ids",
 				Observation: "muse-wonder is recorded as an alias of muse-wonder-1.0-contributor rather than as a second model, so the equal scores are an identity rather than a judgement nobody could defend",
 			})},

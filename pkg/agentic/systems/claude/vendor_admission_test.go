@@ -33,7 +33,7 @@ func (*permissionAdmissionVendor) Models() []vendorplugin.Model {
 		ID:          permissionAdmissionModel,
 		Description: "a fixture model for vendor admission tests",
 		Lifecycle:   vendorplugin.LifecycleCurrent,
-		Rank: vendorplugin.CapabilityRank{Score: 1, Basis: []vendorplugin.RankEvidence{{
+		Rank: &vendorplugin.CapabilityRank{Score: 1, Basis: []vendorplugin.RankEvidence{{
 			Source: "test fixture", Observation: "one model row exercises the real vendor admission path",
 		}}},
 		Effort: vendorplugin.EffortDeclaration{

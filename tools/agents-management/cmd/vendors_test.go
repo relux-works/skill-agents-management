@@ -148,7 +148,7 @@ func (v stubVendor) Models() []vendorplugin.Model {
 		ID:          "stub-1",
 		Description: "the only model this stub declares",
 		Lifecycle:   vendorplugin.LifecycleCurrent,
-		Rank: vendorplugin.CapabilityRank{
+		Rank: &vendorplugin.CapabilityRank{
 			Score: 1,
 			Basis: []vendorplugin.RankEvidence{{
 				Source:      "this test",

@@ -375,11 +375,11 @@ func float64Ptr(value float64) *float64 { return &value }
 // three-way tie, and a clear bottom.
 func TestLineupDerivesATotalOrderFromScoresWithTies(t *testing.T) {
 	models := []Model{
-		{ID: "top", Rank: CapabilityRank{Score: 90}},
-		{ID: "tied-a", Rank: CapabilityRank{Score: 50}},
-		{ID: "tied-b", Rank: CapabilityRank{Score: 50}},
-		{ID: "tied-c", Rank: CapabilityRank{Score: 50}},
-		{ID: "bottom", Rank: CapabilityRank{Score: 10}},
+		{ID: "top", Rank: &CapabilityRank{Score: 90}},
+		{ID: "tied-a", Rank: &CapabilityRank{Score: 50}},
+		{ID: "tied-b", Rank: &CapabilityRank{Score: 50}},
+		{ID: "tied-c", Rank: &CapabilityRank{Score: 50}},
+		{ID: "bottom", Rank: &CapabilityRank{Score: 10}},
 	}
 	// Declared out of score order, so the ordering cannot pass by accident of
 	// the input already being sorted.
@@ -412,8 +412,8 @@ func TestLineupDerivesATotalOrderFromScoresWithTies(t *testing.T) {
 // lineup must not be able to rebind a model for the whole process.
 func TestLineupDoesNotReachTheDeclarationThroughItsAnswer(t *testing.T) {
 	models := []Model{
-		{ID: "a", Rank: CapabilityRank{Score: 20, Basis: []RankEvidence{{Source: "s", Observation: "o"}}}, Systems: []agentic.SystemID{"pangolin"}},
-		{ID: "b", Rank: CapabilityRank{Score: 10, Basis: []RankEvidence{{Source: "s", Observation: "o"}}}, Systems: []agentic.SystemID{"pangolin"}},
+		{ID: "a", Rank: &CapabilityRank{Score: 20, Basis: []RankEvidence{{Source: "s", Observation: "o"}}}, Systems: []agentic.SystemID{"pangolin"}},
+		{ID: "b", Rank: &CapabilityRank{Score: 10, Basis: []RankEvidence{{Source: "s", Observation: "o"}}}, Systems: []agentic.SystemID{"pangolin"}},
 	}
 	ranked := Lineup(models)
 	ranked[0].Model.ID = "scribbled"
@@ -446,7 +446,7 @@ func TestDeclaringModelsOnAResolvedRuntimeIsRefused(t *testing.T) {
 		Models: []Model{{
 			ID:          "narwhal-deep",
 			Description: "a model this declaration has no business declaring",
-			Rank:        CapabilityRank{Score: 10, Basis: []RankEvidence{{Source: "this test", Observation: "the only row"}}},
+			Rank:        &CapabilityRank{Score: 10, Basis: []RankEvidence{{Source: "this test", Observation: "the only row"}}},
 			Lifecycle:   LifecycleCurrent,
 			Systems:     []agentic.SystemID{"pangolin"},
 		}},
@@ -489,14 +489,14 @@ func TestAVendorUnresolvedRuntimesRowsAreHeldToTheSameStandard(t *testing.T) {
 				{
 					ID:          "orphan-one",
 					Description: "the first row of a runtime nobody owns",
-					Rank:        CapabilityRank{Score: 10, Basis: []RankEvidence{{Source: "this test", Observation: "declared first"}}},
+					Rank:        &CapabilityRank{Score: 10, Basis: []RankEvidence{{Source: "this test", Observation: "declared first"}}},
 					Lifecycle:   LifecycleCurrent,
 					Systems:     []agentic.SystemID{"pangolin"},
 				},
 				{
 					ID:          "orphan-two",
 					Description: "the second row of a runtime nobody owns",
-					Rank:        CapabilityRank{Score: 10, Basis: []RankEvidence{{Source: "this test", Observation: "declared second"}}},
+					Rank:        &CapabilityRank{Score: 10, Basis: []RankEvidence{{Source: "this test", Observation: "declared second"}}},
 					Lifecycle:   LifecycleCurrent,
 					Systems:     []agentic.SystemID{"pangolin"},
 				},

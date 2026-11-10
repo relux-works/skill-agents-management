@@ -897,7 +897,9 @@ func TestTheSourceTiesSurviveThePort(t *testing.T) {
 		}
 		scoreOf := map[vendorplugin.ModelID]int{}
 		for _, model := range plugin.Models() {
-			scoreOf[model.ID] = model.Rank.Score
+			if model.Rank != nil {
+				scoreOf[model.ID] = model.Rank.Score
+			}
 		}
 		for _, group := range groups {
 			first, known := scoreOf[vendorplugin.ModelID(group[0])]
@@ -939,6 +941,12 @@ func TestEveryRankCarriesTheSourceEvidence(t *testing.T) {
 	for vendor := range portedVendors {
 		plugin, _ := vendorplugin.Default.Lookup(vendor)
 		for _, model := range plugin.Models() {
+			if model.Unmeasured != nil {
+				if err := model.Validate(); err != nil {
+					t.Error(err)
+				}
+				continue // The full-set pin and explicit-only tests account for this availability claim.
+			}
 			if err := model.Rank.Validate(); err != nil {
 				t.Errorf("vendor %s model %q: %v", vendor, model.ID, err)
 				continue

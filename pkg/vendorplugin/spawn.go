@@ -524,9 +524,12 @@ func selectModel(binding launchBinding, id ModelID) (Model, error) {
 }
 
 // resolveEffort validates the caller's effort word against the MODEL's
-// vocabulary. It never supplies one.
+// vocabulary. Only an explicit unmeasured row supplies its declared recommendation.
 func resolveEffort(runtimeID RuntimeID, model Model, raw string) (string, error) {
 	effort := strings.TrimSpace(raw)
+	if effort == "" && model.Unmeasured != nil {
+		effort = model.Effort.Recommended
+	}
 	switch model.Effort.Support {
 	case agentic.EffortSupportRequired:
 		if effort == "" {

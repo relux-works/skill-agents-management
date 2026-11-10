@@ -105,8 +105,8 @@ var googleAgyCatalogue = RankEvidence{
 // against each other. policyRank is the registry's number and is quoted as
 // such: still true of the registry, the order the interpolated rows keep, and
 // never the score, which is why the sentence says whose scale it is on.
-func googleRank(score int, bench RankEvidence, policyRank int, note string, evidence RankEvidence) CapabilityRank {
-	return CapabilityRank{
+func googleRank(score int, bench RankEvidence, policyRank int, note string, evidence RankEvidence) *CapabilityRank {
+	return &CapabilityRank{
 		Score: score,
 		Basis: []RankEvidence{
 			bench,
@@ -134,12 +134,12 @@ const googleOperatorDeclaration = "operator declaration of 2026-09-23 naming gem
 // declaredRank builds a capability rank for a row NO capture of the board's
 // registry contains. It never quotes a source PolicyRank, because the source
 // registry holds no row for it.
-func googleDeclaredRank(score int, bench RankEvidence, note string, declaration ...string) CapabilityRank {
+func googleDeclaredRank(score int, bench RankEvidence, note string, declaration ...string) *CapabilityRank {
 	source := googleOperatorDeclaration
 	if len(declaration) != 0 {
 		source = declaration[0]
 	}
-	return CapabilityRank{Score: score, Basis: []RankEvidence{
+	return &CapabilityRank{Score: score, Basis: []RankEvidence{
 		bench,
 		{Source: source, Observation: note},
 	}}

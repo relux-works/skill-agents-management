@@ -536,7 +536,7 @@ func systemOnlyAuthorityDeclaration() RuntimeDeclaration {
 		return Model{
 			ID:                  id,
 			Description:         UsageDescription("system-only authority row " + id),
-			Rank:                CapabilityRank{Score: score, Basis: []RankEvidence{{Source: "test", Observation: "authority fixture"}}},
+			Rank:                &CapabilityRank{Score: score, Basis: []RankEvidence{{Source: "test", Observation: "authority fixture"}}},
 			Lifecycle:           LifecycleCurrent,
 			Effort:              EffortDeclaration{Support: agentic.EffortSupportRequired, Vocabulary: []string{"low", "high"}, Recommended: "high"},
 			ContextWindowTokens: 32_768,
