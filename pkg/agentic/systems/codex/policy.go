@@ -134,16 +134,28 @@ func permissionMapping(toolRelease string, mode agentic.PermissionMode) (agentic
 }
 
 func classifyCodexNonInteractiveForm(suffix []string, toolRelease string) (agentic.NonInteractiveForm, error) {
+	command, unknown := codexRootCommand(suffix, toolRelease)
+	if unknown != "" {
+		return agentic.NonInteractiveFormNone, fmt.Errorf("%w: codex root flag %q", agentic.ErrNativeArgsClassificationIndeterminate, unknown)
+	}
+	if command == "exec" || command == "e" {
+		return agentic.NonInteractiveFormExec, nil
+	}
+	return agentic.NonInteractiveFormNone, nil
+}
+
+// codexRootCommand shares the release-qualified root option arities with the
+// exec classifier. It reports an unknown option as metadata, not a refusal:
+// ordinary native launches still forward unknown suffixes. An option value or
+// text after -- cannot become a command.
+func codexRootCommand(suffix []string, toolRelease string) (command, unknownFlag string) {
 	for i := 0; i < len(suffix); i++ {
 		el := suffix[i]
 		if nativeargs.IsSeparator(el) {
-			return agentic.NonInteractiveFormNone, nil
+			return "", ""
 		}
 		if !nativeargs.IsFlagElement(el) {
-			if el == "exec" || el == "e" {
-				return agentic.NonInteractiveFormExec, nil
-			}
-			return agentic.NonInteractiveFormNone, nil
+			return el, ""
 		}
 		name, _, hasValue := nativeargs.SplitFlagValue(el)
 		// Only the historical 0.153.2 row qualified this old scalar option.
@@ -151,7 +163,7 @@ func classifyCodexNonInteractiveForm(suffix []string, toolRelease string) (agent
 		if codexRootOptionTakesValue(name) && (toolRelease == "0.153.2" || name != "--remote-auth-token") {
 			if !hasValue {
 				if i+1 >= len(suffix) || nativeargs.IsSeparator(suffix[i+1]) {
-					return agentic.NonInteractiveFormNone, nil
+					return "", ""
 				}
 				i++
 			}
@@ -162,10 +174,10 @@ func classifyCodexNonInteractiveForm(suffix []string, toolRelease string) (agent
 			// release-pinned arity, a following "exec" could be an option value
 			// rather than a subcommand, so this suffix does not establish a known
 			// form.
-			return agentic.NonInteractiveFormNone, fmt.Errorf("%w: codex root flag %q", agentic.ErrNativeArgsClassificationIndeterminate, name)
+			return "", name
 		}
 	}
-	return agentic.NonInteractiveFormNone, nil
+	return "", ""
 }
 
 func codexRootOptionTakesValue(name string) bool {

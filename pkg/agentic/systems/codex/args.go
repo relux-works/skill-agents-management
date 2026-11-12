@@ -229,11 +229,19 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 				args = append(args, "-c", "sandbox_workspace_write.writable_roots="+roots)
 			}
 		}
-		args = appendModelSelection(args, req, mode)
-		// With the tier refused above, appendReasoningAndTier contributes the
-		// effort override alone — the same spelling the other two grammars use,
-		// from the same fragment, so the three cannot drift.
-		args = appendReasoningAndTier(args, req)
+		// Queue sends a message to an existing thread, whose model, effort
+		// and execution policy are already selected. Codex 0.167.0 rejects
+		// launch-only model and bypass flags on this command. Keep validated
+		// context configuration and the native suffix; never strip caller args.
+		command, _ := codexRootCommand(req.NativeArgs, req.ToolRelease)
+		queue := command == "queue"
+		if !queue {
+			args = appendModelSelection(args, req, mode)
+			// With the tier refused above, appendReasoningAndTier contributes the
+			// effort override alone — the same spelling the other two grammars use,
+			// from the same fragment, so the three cannot drift.
+			args = appendReasoningAndTier(args, req)
+		}
 		if context.permission != agentic.PermissionModeYolo {
 			// Native forwards the caller's arguments with no inspection
 			// at all: the raw contract is unchanged and no claim is made
@@ -265,6 +273,9 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]string, error) 
 		} else {
 			if err := scanNativePolicy(req.NativeArgs, mapping.Grammar); err != nil {
 				return nil, fmt.Errorf("codex: %w", err)
+			}
+			if queue {
+				return append(args, nativeArgsSuffix(req)...), nil
 			}
 			return append(append(args, mapping.Flag), nativeArgsSuffix(req)...), nil
 		}
