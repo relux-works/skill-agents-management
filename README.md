@@ -141,7 +141,11 @@ logs and tables go under `.temp/`. CR validation runs `make vet` and `make test`
   optional typed permission-mode member (`LaunchRequest.PermissionMode`,
   curator-spec Decision 0018), and the caller's native
   arguments forwarded verbatim after everything the module spells
-  (`LaunchRequest.NativeArgs` — the item after that). `LaunchRequest.ContextDescriptors`
+  (`LaunchRequest.NativeArgs` — the item after that). Codex `queue` inherits
+  the existing thread's model, effort and execution policy; the module omits
+  its launch selectors for that command and preserves the caller suffix.
+  Ordinary starts and resumes retain explicit model selection.
+  `LaunchRequest.ContextDescriptors`
   carries semantic MCP server, additional system-prompt and permission values;
   Claude and Codex validate conflicts and own provider rendering behind
   `BuildPlan`. Callers do not spell those provider arguments. Unknown,
