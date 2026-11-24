@@ -83,8 +83,23 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode, binary string) ([]
 		if len(req.Prompt) != 0 || strings.TrimSpace(req.PromptPath) != "" {
 			return nil, fmt.Errorf("agy: %w: interactive mode carries no assignment prompt", agentic.ErrParameterNotInteractive)
 		}
-		if err := validateInteractiveArgs(req.NativeArgs); err != nil {
-			return nil, err
+		conflict := ""
+		for index, token := range req.NativeArgs {
+			if token == "--" && index+1 < len(req.NativeArgs) {
+				conflict = "positional arguments after --"
+				break
+			}
+		}
+		for _, index := range nativeargs.FlagIndexes(req.NativeArgs) {
+			token := req.NativeArgs[index]
+			name, _, _ := nativeargs.SplitFlagValue(token)
+			if (!strings.HasPrefix(name, "--") && strings.HasPrefix(name, "-p")) || name == "--model" || name == "-m" || name == "--prompt" || name == "--print" || name == "--output-format" || name == "--print-timeout" || name == "--mode" || name == "--disable-slash-commands" || name == "--add-dir" {
+				conflict = name
+				break
+			}
+		}
+		if conflict != "" {
+			return nil, fmt.Errorf("agy: %w: native argument %q conflicts with the interactive launch grammar", agentic.ErrNativePolicyConflict, conflict)
 		}
 		var args []string
 		if model := strings.TrimSpace(req.Model.ID); model != "" {
@@ -124,31 +139,6 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode, binary string) ([]
 		}
 	}
 	return args, nil
-}
-
-// validateInteractiveArgs keeps the user-selected model and interactive
-// terminal grammar from being replaced by a native headless or exec-only
-// switch. Every other native argument remains an unchanged suffix.
-func validateInteractiveArgs(args []string) error {
-	conflict := ""
-	for index, token := range args {
-		if token == "--" && index+1 < len(args) {
-			conflict = "positional arguments after --"
-			break
-		}
-	}
-	for _, index := range nativeargs.FlagIndexes(args) {
-		token := args[index]
-		name, _, _ := nativeargs.SplitFlagValue(token)
-		if (!strings.HasPrefix(name, "--") && strings.HasPrefix(name, "-p")) || name == "--model" || name == "-m" || name == "--prompt" || name == "--print" || name == "--output-format" || name == "--print-timeout" || name == "--mode" || name == "--disable-slash-commands" || name == "--add-dir" {
-			conflict = name
-			break
-		}
-	}
-	if conflict != "" {
-		return fmt.Errorf("agy: %w: native argument %q conflicts with the interactive launch grammar", agentic.ErrNativePolicyConflict, conflict)
-	}
-	return nil
 }
 
 // assignmentText reads the assignment a launch carries.
