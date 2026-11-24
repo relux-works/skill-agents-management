@@ -6,7 +6,7 @@
 //
 // # One vendor, two harnesses
 //
-// Seven of these rows are driven by the Gemini CLI and eight by Antigravity.
+// Seven of these rows are driven by the Gemini CLI and eighteen by Antigravity.
 // They are ONE VENDOR because the broker — who owns the account, the quota and
 // the billing — is the same, and two RUNTIMES because the harness, the argv
 // grammar and the limit-state identity are not. That split is why the BROKER,
