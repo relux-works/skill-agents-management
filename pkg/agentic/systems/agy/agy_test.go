@@ -27,8 +27,8 @@ func TestTheDeclarationIsWhatTheSourceRegistered(t *testing.T) {
 	if normalized, err := agentic.NormalizeSystemID(string(systemID)); err != nil || normalized != systemID {
 		t.Errorf("the plugin id does not normalize to itself: %q -> %q (%v)", systemID, normalized, err)
 	}
-	if !caps.SupportsMode(agentic.LaunchModeExec) || !caps.SupportsMode(agentic.LaunchModeDryRun) {
-		t.Errorf("the source registers agy with a BuildCommand and a DryRunArgs; declared modes are %v", caps.LaunchModes)
+	if !caps.SupportsMode(agentic.LaunchModeExec) || !caps.SupportsMode(agentic.LaunchModeDryRun) || !caps.SupportsMode(agentic.LaunchModeInteractive) {
+		t.Errorf("the source registers agy with exec and dry-run surfaces, and the sourced CLI supports interactive sessions; declared modes are %v", caps.LaunchModes)
 	}
 	if caps.SupportsMode(agentic.LaunchModeManagedSession) {
 		t.Error("agy declares a managed-session surface the source has no builder for and the goldens do not cover")
@@ -77,8 +77,8 @@ func TestThePluginRegistersIntoTheDefaultRegistry(t *testing.T) {
 // report a probe failure, and a registration that shelled out to `agy
 // --version` would make importing this package start processes. So the
 // registered value is the one that can build a DRY RUN and refuses to build an
-// exec launch, and a launcher that needs to launch builds its own registry
-// around NewWithRuntime.
+// exec or interactive launch, and a launcher that needs to launch builds its
+// own registry around NewWithRuntime.
 func TestTheDefaultRegistryHoldsThePreflightlessValue(t *testing.T) {
 	sys, ok := agentic.Default.Lookup(systemID)
 	if !ok {
@@ -93,6 +93,9 @@ func TestTheDefaultRegistryHoldsThePreflightlessValue(t *testing.T) {
 	}
 	if _, err := agentic.BuildPlan(agentic.Default, launchRequest(t, "assignment"), agentic.LaunchModeExec); !errors.Is(err, ErrRuntimeNotPreflighted) {
 		t.Errorf("an exec plan was built through the DEFAULT registry with no preflight (err=%v); the gate is not reachable from the production registration path", err)
+	}
+	if _, err := agentic.BuildPlan(agentic.Default, launchRequest(t, ""), agentic.LaunchModeInteractive); !errors.Is(err, ErrRuntimeNotPreflighted) {
+		t.Errorf("an interactive plan was built through the DEFAULT registry with no preflight (err=%v); the launcher would exec the bare placeholder", err)
 	}
 }
 

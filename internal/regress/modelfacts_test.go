@@ -49,6 +49,7 @@ const boardModelCount = 45
 // pkg/vendorplugin/declaredhere_test.go.
 var declaredHereRows = []vendorplugin.ModelID{
 	"claude-fable-5-2", // availability-only, explicit selection; never ranked
+	"gemini-4-neon-xhigh", "gemini-4-neon-high", "gemini-4-neon-medium", "gemini-4-neon-low",
 	"gemini-4-argon-high", "gemini-4-argon-medium", "gemini-4-argon-low",
 	"gemini-4-argon", "argon",
 	"gpt-6-astra", "astra",

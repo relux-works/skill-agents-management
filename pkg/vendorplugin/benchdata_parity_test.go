@@ -190,6 +190,11 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 	}
 	// Fable 5.2 adds a registry fact, with no benchmark row or numeric value.
 	fixture.Models = append(fixture.Models, benchdata.RegistryFact{ModelID: "claude-fable-5-2", Efforts: []string{"high", "low", "max", "medium", "xhigh"}})
+	// Neon adds four availability-only rows; their effort suffixes stay in the
+	// model ids, so they add registry facts but no benchmark rows.
+	for _, id := range []string{"gemini-4-neon-xhigh", "gemini-4-neon-high", "gemini-4-neon-medium", "gemini-4-neon-low"} {
+		fixture.Models = append(fixture.Models, benchdata.RegistryFact{ModelID: id, Efforts: []string{"none"}})
+	}
 	// The current Codex CLI cache adds five availability-only rows. They have
 	// effort vocabularies but no benchmark claim, so only registry facts grow.
 	for _, id := range []string{"codex-auto-review", "gpt-6.1-terra", "gpt-6.2-astra", "gpt-6.2-sol", "gpt-reserve"} {
@@ -211,7 +216,7 @@ func TestBenchdataParityWithAdaptersAndPinnedExport(t *testing.T) {
 	if len(rows) != 68 || len(keys) != 68 || counts["measured"] != 12 || counts["interpolated"] != 55 || counts["cost"] != 1 {
 		t.Fatalf("claim counts: %d rows, %d keys, %v", len(rows), len(keys), counts)
 	}
-	if len(facts) != 73 {
+	if len(facts) != 77 {
 		t.Fatalf("registry count: %d", len(facts))
 	}
 	// Measured aliases retain shared source origins and remain separate keys.

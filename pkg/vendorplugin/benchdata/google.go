@@ -173,8 +173,54 @@ func googleEffortNone() EffortDeclaration {
 	return EffortDeclaration{Support: EffortNone}
 }
 
-// models is the declaration itself, most capable first.
+const googleNeonCatalogSource = "Google Antigravity model catalog " +
+	"(https://antigravity.google/docs/models, checked 2026-11-24); " +
+	"Antigravity CLI 1.5.16 model list (checked 2026-11-24)"
+
+func googleNeonUnmeasured(id, level string) *UnmeasuredClaim {
+	return &UnmeasuredClaim{
+		Kind:        "unmeasured",
+		AsOf:        "2026-11-24",
+		Source:      googleNeonCatalogSource,
+		Observation: "the model list names " + id + " for Gemini 4 Neon at " + level + " thinking; capability has not been measured or ranked",
+	}
+}
+
+// googleModels lists current availability-only rows first, then ranked rows in
+// capability order.
 var googleModels = []Model{
+	{
+		ID:          "gemini-4-neon-xhigh",
+		Description: "Gemini 4 Neon with Extra (xhigh) thinking",
+		Unmeasured:  googleNeonUnmeasured("gemini-4-neon-xhigh", "Extra (xhigh)"),
+		Lifecycle:   LifecycleCurrent,
+		Effort:      googleEffortNone(),
+		Systems:     []string{"antigravity"},
+	},
+	{
+		ID:          "gemini-4-neon-high",
+		Description: "Gemini 4 Neon with high thinking",
+		Unmeasured:  googleNeonUnmeasured("gemini-4-neon-high", "high"),
+		Lifecycle:   LifecycleCurrent,
+		Effort:      googleEffortNone(),
+		Systems:     []string{"antigravity"},
+	},
+	{
+		ID:          "gemini-4-neon-medium",
+		Description: "Gemini 4 Neon with medium thinking",
+		Unmeasured:  googleNeonUnmeasured("gemini-4-neon-medium", "medium"),
+		Lifecycle:   LifecycleCurrent,
+		Effort:      googleEffortNone(),
+		Systems:     []string{"antigravity"},
+	},
+	{
+		ID:          "gemini-4-neon-low",
+		Description: "Gemini 4 Neon with low thinking",
+		Unmeasured:  googleNeonUnmeasured("gemini-4-neon-low", "low"),
+		Lifecycle:   LifecycleCurrent,
+		Effort:      googleEffortNone(),
+		Systems:     []string{"antigravity"},
+	},
 	{
 		ID:          "gemini-4-argon-high",
 		Description: "Preview Antigravity frontier model pinned to high effort; not publicly released yet",

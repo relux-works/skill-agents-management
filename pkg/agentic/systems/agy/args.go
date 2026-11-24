@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/relux-works/skill-agents-management/internal/nativeargs"
 	"github.com/relux-works/skill-agents-management/pkg/agentic"
 )
 
@@ -19,7 +20,7 @@ import (
 // fails the build if a second site in this module starts spelling agy flags —
 // proving it can by narrowing itself onto this file's own Args.
 //
-// # The two modes differ in exactly ONE argument: the prompt
+// # Exec and dry-run differ in exactly ONE argument: the prompt
 //
 // agy takes the assignment as argv TEXT — the value of `--print` — not as a
 // file path and not on stdin. A real launch reads the assignment and passes its
@@ -57,7 +58,7 @@ const (
 // Args builds the agy argv for one launch mode, excluding the binary.
 //
 // It is the single construction site. Every surface of this plugin that needs
-// agy flags calls it: System.Argv for both modes, and nothing else.
+// agy flags calls it: System.Argv for every supported mode, and nothing else.
 //
 // binary is the executable the launch will run, and it is a parameter rather
 // than something resolved here because the budget below measures the WHOLE
@@ -65,7 +66,8 @@ const (
 // a check that measured only the arguments would admit a command the kernel
 // rejects whenever the executable path is long.
 //
-// The ORDER is the source's, verbatim.
+// The exec/dry-run order is the source's, verbatim. The interactive order is
+// the sourced native grammar pinned in interactive_test.go.
 func Args(req agentic.LaunchRequest, mode agentic.LaunchMode, binary string) ([]string, error) {
 	var prompt string
 	switch mode {
@@ -77,6 +79,33 @@ func Args(req agentic.LaunchRequest, mode agentic.LaunchMode, binary string) ([]
 		prompt = assignment
 	case agentic.LaunchModeDryRun:
 		prompt = promptPlaceholder
+	case agentic.LaunchModeInteractive:
+		if len(req.Prompt) != 0 || strings.TrimSpace(req.PromptPath) != "" {
+			return nil, fmt.Errorf("agy: %w: interactive mode carries no assignment prompt", agentic.ErrParameterNotInteractive)
+		}
+		conflict := ""
+		for index, token := range req.NativeArgs {
+			if token == "--" && index+1 < len(req.NativeArgs) {
+				conflict = "positional arguments after --"
+				break
+			}
+		}
+		for _, index := range nativeargs.FlagIndexes(req.NativeArgs) {
+			token := req.NativeArgs[index]
+			name, _, _ := nativeargs.SplitFlagValue(token)
+			if (!strings.HasPrefix(name, "--") && strings.HasPrefix(name, "-p")) || name == "--model" || name == "-m" || name == "--prompt" || name == "--print" || name == "--output-format" || name == "--print-timeout" || name == "--mode" || name == "--disable-slash-commands" || name == "--add-dir" {
+				conflict = name
+				break
+			}
+		}
+		if conflict != "" {
+			return nil, fmt.Errorf("agy: %w: native argument %q conflicts with the interactive launch grammar", agentic.ErrNativePolicyConflict, conflict)
+		}
+		var args []string
+		if model := strings.TrimSpace(req.Model.ID); model != "" {
+			args = append(args, "--model", model)
+		}
+		return append(args, req.NativeArgs...), nil
 	default:
 		return nil, fmt.Errorf("agy: unsupported launch mode %s", mode)
 	}

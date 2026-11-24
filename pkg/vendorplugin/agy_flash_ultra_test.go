@@ -54,9 +54,8 @@ func TestTheGeminiFlashSpellingLaunchesTheAgyFlashHead(t *testing.T) {
 	}
 }
 
-// TestTheAgyLineupIsFlashOnly now pins Flash plus Argon: the runtime indexes no
-// Pro row, and a launch of a retired id is refused as an unknown model.
-func TestTheAgyLineupIsFlashOnly(t *testing.T) {
+// TestTheAgyLineupIsFlashArgonAndNeon pins the runtime's complete model list.
+func TestTheAgyLineupIsFlashArgonAndNeon(t *testing.T) {
 	registry := isolatedRegistry(t, nil)
 	resolved, err := registry.ResolveRuntime("agy")
 	if err != nil {
@@ -66,6 +65,7 @@ func TestTheAgyLineupIsFlashOnly(t *testing.T) {
 		"gemini-3.8-flash-high": true, "gemini-flash": true, "gemini-3.7-flash-high": true,
 		"gemini-3.6-flash-high": true, "gemini-3.6-flash-medium": true, "gemini-3.6-flash-low": true,
 		"gemini-3.5-flash-high": true, "gemini-3.5-flash-medium": true, "gemini-3.5-flash-low": true,
+		"gemini-4-neon-xhigh": true, "gemini-4-neon-high": true, "gemini-4-neon-medium": true, "gemini-4-neon-low": true,
 		"gemini-4-argon-high": true, "gemini-4-argon-medium": true, "gemini-4-argon-low": true,
 		"gemini-4-argon": true, "argon": true,
 	}

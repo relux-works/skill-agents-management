@@ -79,6 +79,10 @@ import (
 // score is legal for the reason the astra pair's is.
 var declaredHereRows = map[vendorplugin.ModelID]vendorplugin.VendorID{
 	"claude-fable-5-2":      "anthropic",
+	"gemini-4-neon-xhigh":   "google",
+	"gemini-4-neon-high":    "google",
+	"gemini-4-neon-medium":  "google",
+	"gemini-4-neon-low":     "google",
 	"gemini-4-argon-high":   "google",
 	"gemini-4-argon-medium": "google",
 	"gemini-4-argon-low":    "google",
@@ -179,10 +183,15 @@ var declaredHereCatalogEvidence = map[vendorplugin.VendorID]string{
 	"google":    "operator declaration",
 }
 
+const googleNeonCatalogEvidence = "Google Antigravity model catalog " +
+	"(https://antigravity.google/docs/models, checked 2026-11-24); " +
+	"Antigravity CLI 1.5.16 model list (checked 2026-11-24)"
+
 // declaredHereUnmeasuredCatalogEvidence pins the source accepted for
 // availability-only rows that come from a model catalog rather than a probe.
 var declaredHereUnmeasuredCatalogEvidence = map[vendorplugin.VendorID]string{
 	"openai": "OpenAI Codex CLI models_cache.json (codex-cli 0.167.0, read 2026-11-24)",
+	"google": googleNeonCatalogEvidence,
 }
 
 // portedScoreObservation is the sentence rank() puts on a PORTED row. A
