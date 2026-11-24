@@ -3,9 +3,10 @@
 // It is a port of the agy half of skill-project-management's spawn adapter
 // table (tools/board-cli/internal/spawn), proven against the launch-surface
 // goldens that repository's own harness captured at commit
-// ed4878123061b39fdae67160f6b5632117b48a2f. Two goldens cover it — agy/exec and
-// agy/dry-run — and parity_test.go drives both through the real
-// agentic.Registry and agentic.BuildPlan.
+// ed4878123061b39fdae67160f6b5632117b48a2f. The two captured goldens cover
+// agy/exec and agy/dry-run; parity_test.go drives them through the real
+// agentic.Registry and agentic.BuildPlan. The separately sourced interactive
+// argv is pinned in interactive_test.go from docs/antigravity-cli.md.
 //
 // # What is hard about agy, stated where a reader meets it
 //
@@ -17,8 +18,8 @@
 //     onto one mode-less resolution plus one mode-aware refusal.
 //   - THE EFFORT IS IN THE MODEL ID. Antigravity has no effort flag, and the
 //     port must not invent one; see the section below.
-//   - The assignment is argv TEXT, which is why this is the only ported system
-//     with an ARG_MAX budget (args.go).
+//   - In exec mode, the assignment is argv TEXT, which is why this is the only
+//     ported system with an ARG_MAX budget (args.go).
 //   - NO environment filter. env.go says what that leaks and why it is not
 //     fixed here.
 //
@@ -88,13 +89,13 @@ type System struct {
 // This is the value the default registry holds, and it is the honest one for a
 // process that has not run the probe: it can build a dry run (which reports the
 // placeholder binary, exactly as the source's BuildArgs does) and it REFUSES to
-// build an exec launch.
+// build an exec or interactive launch.
 func New() *System { return &System{} }
 
 // NewWithRuntime returns the plugin bound to a preflight's result.
 //
 // It is what a launcher constructs after ProbeAgyRuntime succeeds, and it is
-// the only way an exec plan for agy can be built at all.
+// the only way an exec or interactive plan for agy can be built.
 func NewWithRuntime(runtime Runtime) *System { return &System{runtime: runtime} }
 
 // init registers the plugin into the default registry, which is the
@@ -135,6 +136,7 @@ func (*System) Capabilities() agentic.Capabilities {
 		LaunchModes: []agentic.LaunchMode{
 			agentic.LaunchModeExec,
 			agentic.LaunchModeDryRun,
+			agentic.LaunchModeInteractive,
 		},
 		// NONE, and the package comment argues it: the effort is a suffix of
 		// the model id, buildAgyArgs never references an effort value, and
@@ -176,9 +178,9 @@ func (s *System) ResolveBinary(agentic.LaunchRequest) (string, error) {
 //
 // It carries TWO refusals a caller must not be able to walk past:
 //
-//  1. An EXEC launch with no preflight evidence. This is the source's
-//     resolveAgyBinary hard failure, relocated to the one surface that knows
-//     the mode. Without it, an exec plan would carry the bare `agy`
+//  1. An EXEC or INTERACTIVE launch with no preflight evidence. This is the
+//     source's resolveAgyBinary hard failure, relocated to the one surface
+//     that knows the mode. Without it, a real launch would carry the bare `agy`
 //     placeholder and a launcher would exec whatever PATH happened to hold —
 //     which the source refuses precisely because agy has no PATH fallback.
 //  2. An argv that exceeds the conservative ARG_MAX budget. That one is Args'
@@ -187,7 +189,7 @@ func (s *System) Argv(req agentic.LaunchRequest, mode agentic.LaunchMode) ([]str
 	if !s.Capabilities().SupportsMode(mode) {
 		return nil, fmt.Errorf("agy: launch mode %s is not declared by this system", mode)
 	}
-	if mode == agentic.LaunchModeExec && s.runtime.IsZero() {
+	if (mode == agentic.LaunchModeExec || mode == agentic.LaunchModeInteractive) && s.runtime.IsZero() {
 		return nil, notPreflighted()
 	}
 	return Args(req, mode, s.binary())

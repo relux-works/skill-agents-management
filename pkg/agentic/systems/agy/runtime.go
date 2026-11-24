@@ -71,22 +71,22 @@ import (
 //
 // The core's ResolveBinary takes NO MODE — deliberately, because that is what
 // guarantees a dry run reports the launch's real target and cannot drift from
-// it. So the two source functions map onto one resolution plus one mode-aware
-// refusal:
+// it. So the source resolution maps onto one resolution plus mode-aware
+// refusals:
 //
 //   - ResolveBinary answers the evidence's executable when there is one and the
-//     placeholder when there is not. With evidence, both modes agree, which is
-//     the anti-drift property intact.
-//   - System.Argv REFUSES an exec launch that has no evidence
+//     placeholder when there is not. With evidence, every mode resolves the
+//     same binary, which keeps the anti-drift property intact.
+//   - System.Argv REFUSES an exec or interactive launch that has no evidence
 //     (ErrRuntimeNotPreflighted), because Argv is the one surface that knows
-//     the mode. BuildPlan calls it, so an exec plan against the placeholder can
-//     never be handed to a caller — which is precisely what resolveAgyBinary's
-//     hard failure prevents in the source. A validating gate must not get
-//     weaker across a move.
+//     the mode. BuildPlan calls it, so neither real-launch plan can carry the
+//     placeholder. That preserves resolveAgyBinary's hard failure for exec and
+//     applies it to the newly supported interactive session.
 //
 // agy/dry-run's golden records the literal "agy" as its binary, because the
 // source's capture supplied no AgyRuntime. That fixture is the placeholder
-// branch; the exec fixture, whose config carries evidence, is the other.
+// branch; the exec fixture carries evidence. Interactive launches also require
+// evidence because they start the same preflight-selected executable.
 
 // Runtime is the part of the Antigravity preflight's result a launch plan
 // needs: the exact executable the probe selected.
@@ -105,8 +105,8 @@ type Runtime struct {
 // IsZero reports whether no preflight evidence was supplied.
 func (r Runtime) IsZero() bool { return strings.TrimSpace(r.Executable) == "" }
 
-// ErrRuntimeNotPreflighted is returned when an EXEC launch is built against a
-// plugin that carries no preflight evidence.
+// ErrRuntimeNotPreflighted is returned when an EXEC or INTERACTIVE launch is
+// built against a plugin that carries no preflight evidence.
 //
 // It is the port of the source's AgyCapabilityError with code
 // AgyCapabilityMissingBinary — "agy runtime was not resolved before command

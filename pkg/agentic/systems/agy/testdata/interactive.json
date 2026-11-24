@@ -1,0 +1,18 @@
+{
+  "source": {
+    "url": "https://codelabs.developers.google.com/antigravity-cli-hands-on",
+    "title": "Hands-on with Antigravity CLI",
+    "cli_version": "1.1.27",
+    "checked": "2026-11-24"
+  },
+  "binary": "/preflighted/agy",
+  "model_id": "gemini-3.6-flash-high",
+  "native_args": [
+    "--dangerously-skip-permissions"
+  ],
+  "argv": [
+    "--model",
+    "gemini-3.6-flash-high",
+    "--dangerously-skip-permissions"
+  ]
+}
